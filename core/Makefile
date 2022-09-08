@@ -2,12 +2,15 @@
 include common.mk
 
 SUBDIRS =
-#SRCS    = base_pic3d.cpp expic3d1.cpp
-SRCS    = exchunk3d.cpp
+SRCS    = exchunk3d.cpp expic3d.cpp main.cpp
 OBJS    = $(SRCS:%.cpp=%.o)
 DEPS    = $(SRCS:%.cpp=%.d)
 
 default: $(OBJS)
+
+# main
+main.out: $(OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS) -L../ -lnix
 
 ### clean
 clean :

@@ -24,10 +24,8 @@ public:
   using Chunk::Ubx;
   using Chunk::Uby;
   using Chunk::Ubz;
-
   using Chunk::RecvMode;
   using Chunk::SendMode;
-
   using Chunk::mpibufvec;
 
   enum PackMode {
@@ -88,6 +86,10 @@ public:
   virtual void set_boundary_begin(const int mode = 0) override;
 
   virtual void set_boundary_end(const int mode = 0) override;
+
+  virtual void push(const float64 delt) override
+  {
+  }
 };
 
 // Local Variables:

@@ -116,7 +116,7 @@ DEFINE_MEMBER(void, allocate_memory)(const int Np, const int Ns)
   this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, sizeof(float64) * 6);
   this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, sizeof(float64) * 4);
   this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, sizeof(float64) * Ns * 10);
-  this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(float64) * Ns * np * 7);
+  this->set_mpi_buffer(mpibufvec[BoundaryParticle], sizeof(int), sizeof(float64) * Ns * np * 7);
 }
 
 DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer)
