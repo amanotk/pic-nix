@@ -5,18 +5,127 @@
   template <int Nb>                                                                                \
   type ExPIC3D<Nb>::name
 
+DEFINE_MEMBER(void, parse_cfg)()
+{
+  // read configuration file
+  {
+    std::ifstream f(cfg_file.c_str());
+    cfg_json = json::parse(f, nullptr, true, true);
+  }
+
+  // parameters
+  {
+    parameters = cfg_json["parameter"];
+
+    int nx = parameters["Nx"].get<int>();
+    int ny = parameters["Ny"].get<int>();
+    int nz = parameters["Nz"].get<int>();
+    int cx = parameters["Cx"].get<int>();
+    int cy = parameters["Cy"].get<int>();
+    int cz = parameters["Cz"].get<int>();
+
+    // check dimensions
+    if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
+      ERRORPRINT("Number of grid must be divisible by number of chunk\n"
+                 "Nx, Ny, Nz = [%4d, %4d, %4d]\n"
+                 "Cx, Cy, Cz = [%4d, %4d, %4d]\n",
+                 nx, ny, nz, cx, cy, cz);
+      this->finalize(-1);
+      exit(-1);
+    }
+
+    // global number of grid
+    ndims[0] = nz;
+    ndims[1] = ny;
+    ndims[2] = nx;
+    ndims[3] = ndims[0] * ndims[1] * ndims[2];
+
+    // global number of chunk
+    cdims[0] = cz;
+    cdims[1] = cy;
+    cdims[2] = cx;
+    cdims[3] = cdims[0] * cdims[1] * cdims[2];
+
+    // global domain size
+    xlim[0] = 0;
+    xlim[1] = delh * ndims[2];
+    xlim[2] = xlim[1] - xlim[0];
+    ylim[0] = 0;
+    ylim[1] = delh * ndims[1];
+    ylim[2] = ylim[1] - ylim[0];
+    zlim[0] = 0;
+    zlim[1] = delh * ndims[0];
+    zlim[2] = zlim[1] - zlim[0];
+
+    // other parameters
+    tmax = parameters["tmax"].get<float64>();
+    delt = parameters["delt"].get<float64>();
+    delh = parameters["delt"].get<float64>();
+    cc   = parameters["cc"].get<float64>();
+  }
+
+  // diagnostic
+  {
+    json diagnostic = cfg_json["diagnostic"];
+
+    datadir           = diagnostic.get<std::string>();
+    prefix_field      = diagnostic.get<std::string>();
+    interval_field    = diagnostic.get<int>();
+    prefix_particle   = diagnostic.get<std::string>();
+    interval_particle = diagnostic.get<int>();
+  }
+}
+
+DEFINE_MEMBER(void, write_allchunk)
+(MPI_File &fh, json &dataset, size_t &disp, const char *name, const char *desc,
+ const int size, const int ndim, const int *dims, const int mode)
+{
+  MPI_Request req[numchunk];
+
+  // json metadata
+  jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+
+  // buffer size (assuming constant)
+  int bufsize = chunkvec[0]->pack_diagnostic(mode, nullptr);
+
+  for (int i = 0; i < numchunk; i++) {
+    // pack
+    assert(bufsize == chunkvec[i]->pack_diagnostic(mode, sendbuf.get()));
+
+    // write
+    size_t chunkdisp = disp + bufsize * chunkvec[i]->get_id();
+    jsonio::write_contiguous_at(&fh, &disp, sendbuf.get(), bufsize, 1, &req[i]);
+  }
+
+  // wait
+  MPI_Waitall(numchunk, req, MPI_STATUS_IGNORE);
+
+  // update pointer
+  disp += size;
+}
+
 DEFINE_MEMBER(void, initialize)(int argc, char **argv)
 {
-  // default initialize()
-  BaseApp::initialize(argc, argv);
+  // parse command line arguments
+  this->parse_cmd(argc, argv);
 
-  // additional parameters
-  interval = cfg_json["interval"].get();
-  prefix   = cfg_json["prefix"].get();
-  cc       = cfg_json["cc"].get();
-  //interval = cfg_json["interval"].template get<int>();
-  //prefix   = cfg_json["prefix"].template get<std::string>();
-  //cc       = cfg_json["cc"].template get<float64>();
+  // parse configuration file
+  this->parse_cfg();
+
+  // some initial setup
+  curstep     = 0;
+  curtime     = 0.0;
+  periodic[0] = 1;
+  periodic[1] = 1;
+  periodic[2] = 1;
+  this->initialize_mpi_default(&argc, &argv);
+  this->initialize_chunkmap();
+  balancer.reset(new Balancer());
+
+  // buffer allocation
+  bufsize = 1024 * 16;
+  sendbuf.resize(bufsize);
+  recvbuf.resize(bufsize);
 
   // set auxiliary information for chunk
   for (int i = 0; i < numchunk; i++) {
@@ -31,10 +140,10 @@ DEFINE_MEMBER(void, initialize)(int argc, char **argv)
   }
 
   // set MPI communicator for each mode
-  for(int mode=0; mode < Chunk::NumBoundaryMode; mode++) {
+  for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
     MPI_Comm comm;
     MPI_Comm_dup(MPI_COMM_WORLD, &comm);
-    for(int i=0; i < numchunk; i++) {
+    for (int i = 0; i < numchunk; i++) {
       chunkvec[i]->set_mpi_communicator(mode, comm);
     }
   }
@@ -89,25 +198,30 @@ DEFINE_MEMBER(void, push)()
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
 {
-  if (curstep % interval != 0) {
-    return;
+  if (curstep % interval_field != 0) {
+    diagnostic_field();
   }
+}
+
+DEFINE_MEMBER(void, diagnostic_field)()
+{
+  const int nz = ndims[0] / cdims[0];
+  const int ny = ndims[1] / cdims[1];
+  const int nx = ndims[2] / cdims[2];
+  const int ns = Ns;
+  const int nc = cdims[3];
 
   // filename
-  std::string filename = prefix + tfm::format("%05d", curstep);
-  std::string fn_json  = filename + ".json";
-  std::string fn_data  = filename + ".data";
+  std::string fn_prefix = tfm::format("%s/%s_%05d", datadir, prefix_field, curstep);
+  std::string fn_json   = fn_prefix + ".json";
+  std::string fn_data   = fn_prefix + ".data";
 
-  json     json_root;
-  json     json_chunkmap;
-  json     json_dataset;
+  json json_root;
+  json json_chunkmap;
+  json json_dataset;
 
   MPI_File fh;
   size_t   disp;
-  int      bufsize;
-  int      ndim    = 5;
-  int      dims[5] = {cdims[3], ndims[0] / cdims[0], ndims[1] / cdims[1], ndims[2] / cdims[2], 6};
-  int      size    = dims[0] * dims[1] * dims[2] * dims[3] * dims[4] * sizeof(float64);
 
   // open file
   jsonio::open_file(fn_data.c_str(), &fh, &disp, "w");
@@ -115,27 +229,43 @@ DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
   // save chunkmap
   chunkmap->save(json_chunkmap, &fh, &disp);
 
-  // json metadata
-  jsonio::put_metadata(json_dataset, "uf", "f8", "", disp, size, ndim, dims);
+  //
+  // electromagnetic field
+  //
+  {
+    const char name[] = "uf";
+    const char desc[]  = "electromagnetic field";
+    const int  ndim    = 5;
+    const int  dims[5] = {nc, nz, ny, nx, 6};
+    const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-  // assume buffer size for each chunk is equal
-  bufsize = chunkvec[0]->pack(Chunk::PackEmfQuery, nullptr);
-  for (int i = 0; i < numchunk; i++) {
-    assert(bufsize == chunkvec[i]->pack(Chunk::PackEmfQuery, nullptr));
+    write_allchunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackEmf);
   }
-  sendbuf.resize(bufsize);
-  disp += bufsize * chunkvec[0]->get_id();
 
-  // write data for each chunk
-  for (int i = 0; i < numchunk; i++) {
-    MPI_Request req;
+  //
+  // current
+  //
+  {
+    const char name[] = "uj";
+    const char desc[]  = "current";
+    const int  ndim    = 5;
+    const int  dims[5] = {nc, nz, ny, nx, 4};
+    const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-    chunkvec[i]->pack(Chunk::PackEmf, sendbuf.get());
+    write_allchunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackCur);
+  }
 
-    jsonio::write_contiguous_at(&fh, &disp, sendbuf.get(), bufsize, 1, &req);
-    disp += bufsize;
+  //
+  // moment
+  //
+  {
+    const char name[] = "um";
+    const char desc[]  = "moment";
+    const int  ndim    = 6;
+    const int  dims[5] = {nc, ns, nz, ny, nx, 10};
+    const int  size    = nc * ns * nz * ny * nx * 10 * sizeof(float64);
 
-    MPI_Wait(&req, MPI_STATUS_IGNORE);
+    write_allchunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackMom);
   }
 
   jsonio::close_file(&fh);

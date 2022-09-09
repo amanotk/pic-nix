@@ -41,12 +41,6 @@ DEFINE_MEMBER(int, pack)(const int mode, void *buffer)
       count += up[is]->pack(&ptr[count], false);
     }
     break;
-  case PackEmf:
-    ERRORPRINT("Invalid call\n");
-    break;
-  case PackEmfQuery:
-    ERRORPRINT("Invalid call\n");
-    break;
   default:
     ERRORPRINT("No such packing mode\n");
     break;
@@ -72,12 +66,6 @@ DEFINE_MEMBER(int, unpack)(const int mode, void *buffer)
     for (int is = 0; is < Ns; is++) {
       count += up[is]->unpack(&ptr[count], false);
     }
-    break;
-  case PackEmf:
-    ERRORPRINT("Invalid call\n");
-    break;
-  case PackEmfQuery:
-    ERRORPRINT("Invalid call\n");
     break;
   default:
     ERRORPRINT("No such unpacking mode\n");
@@ -154,6 +142,26 @@ DEFINE_MEMBER(int, pack_diagnostic_emf)(void *buffer, const bool query)
   auto Iy = xt::range(Lby, Uby + 1);
   auto Ix = xt::range(Lbx, Ubx + 1);
   auto uu = xt::view(uf, Iz, Iy, Ix, xt::all());
+
+  // packing
+  std::copy(uu.begin(), uu.end(), buf);
+
+  return sizeof(float64) * size;
+}
+
+DEFINE_MEMBER(int, pack_diagnostic_cur)(void *buffer, const bool query)
+{
+  size_t   size = dims[2] * dims[1] * dims[0] * uj.shape(3);
+  float64 *buf  = static_cast<float64 *>(buffer);
+
+  if (query) {
+    return sizeof(float64) * size;
+  }
+
+  auto Iz = xt::range(Lbz, Ubz + 1);
+  auto Iy = xt::range(Lby, Uby + 1);
+  auto Ix = xt::range(Lbx, Ubx + 1);
+  auto uu = xt::view(uj, Iz, Iy, Ix, xt::all());
 
   // packing
   std::copy(uu.begin(), uu.end(), buf);

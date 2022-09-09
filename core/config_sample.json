@@ -1,0 +1,44 @@
+{
+	"diagnostic": {
+		"datadir": "./",
+		"prefix_field": "field",
+		"interval_field": 100,
+		"prefix_particle": "particle",
+		"interval_particle": 10000
+	},
+	"parameter": {
+		"Nx": 32,
+		"Ny": 32,
+		"Nz": 32,
+		"Cx": 1,
+		"Cy": 1,
+		"Cz": 1,
+		"tmax": 1.0,
+		"delt": 1.0,
+		"delh": 1.0,
+		"cc": 1.0,
+		"Bx": 1.0,
+		"By": 0.0,
+		"Bz": 0.0,
+		"Ex": 0.0,
+		"Ey": 0.0,
+		"Ez": 0.0,
+		"Ns": 2,
+		"particles": [
+			{
+				"Nppc": 10,
+				"w_p": 1.0,
+				"w_c": -0.5,
+				"v_t": 1.0,
+				"v_d": 0.0
+			},
+			{
+				"Nppc": 10,
+				"w_p": 1.0,
+				"w_c": 0.5,
+				"v_t": 1.0,
+				"v_d": 0.0
+			}
+		]
+	}
+}

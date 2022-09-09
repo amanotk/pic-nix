@@ -33,8 +33,10 @@ public:
     PackAll      = 1,
     PackEmfQuery = 2,
     PackEmf      = 3,
-    PackMomQuery = 4,
-    PackMom      = 5,
+    PackCurQuery = 4,
+    PackCur      = 5,
+    PackMomQuery = 6,
+    PackMom      = 7,
   };
 
   enum BoundaryMode {
@@ -68,6 +70,8 @@ public:
   virtual int pack_diagnostic(const int mode, void *buffer);
 
   virtual int pack_diagnostic_emf(void *buffer, const bool query);
+
+  virtual int pack_diagnostic_cur(void *buffer, const bool query);
 
   virtual int pack_diagnostic_mom(void *buffer, const bool query);
 
