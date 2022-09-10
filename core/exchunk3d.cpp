@@ -5,71 +5,50 @@
   template <int Nb>                                                                                \
   type ExChunk3D<Nb>::name
 
-DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id)
+DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), Ns(1)
 {
+  // initialize MPI buffer
+  mpibufvec.resize(NumBoundaryMode);
+  for (int i = 0; i < NumBoundaryMode; i++) {
+    mpibufvec[i] = std::make_shared<MpiBuffer>();
+  }
 }
 
 DEFINE_MEMBER(, ~ExChunk3D)()
 {
 }
 
-DEFINE_MEMBER(int, pack)(const int mode, void *buffer)
+DEFINE_MEMBER(int, pack)(void *buffer, const int address)
 {
   using common::memcpy_count;
 
-  int   count = 0;
-  char *ptr   = static_cast<char *>(buffer);
+  int count = address;
 
-  switch (mode) {
-  case PackAllQuery:
-    count += Chunk::pack(Chunk::PackAllQuery, &ptr[count]);
-    count += memcpy_count(&ptr[count], uf.data(), uf.size() * sizeof(float64), true);
-    count += memcpy_count(&ptr[count], uj.data(), uj.size() * sizeof(float64), true);
-    count += memcpy_count(&ptr[count], &cc, sizeof(float64), true);
-    // particle
-    for (int is = 0; is < Ns; is++) {
-      count += up[is]->pack(&ptr[count], true);
-    }
-    break;
-  case PackAll:
-    count += Chunk::pack(Chunk::PackAll, &ptr[count]);
-    count += memcpy_count(&ptr[count], uf.data(), uf.size() * sizeof(float64), false);
-    count += memcpy_count(&ptr[count], uj.data(), uj.size() * sizeof(float64), false);
-    count += memcpy_count(&ptr[count], &cc, sizeof(float64), false);
-    // particle
-    for (int is = 0; is < Ns; is++) {
-      count += up[is]->pack(&ptr[count], false);
-    }
-    break;
-  default:
-    ERRORPRINT("No such packing mode\n");
-    break;
+  count += Chunk::pack(buffer, count);
+  count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
+  count += memcpy_count(buffer, uj.data(), uj.size() * sizeof(float64), count, 0);
+  count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
+  // particle
+  for (int is = 0; is < Ns; is++) {
+    count += up[is]->pack(buffer, count);
   }
 
   return count;
 }
 
-DEFINE_MEMBER(int, unpack)(const int mode, void *buffer)
+DEFINE_MEMBER(int, unpack)(void *buffer, const int address)
 {
   using common::memcpy_count;
 
-  int   count = 0;
-  char *ptr   = static_cast<char *>(buffer);
+  int count = address;
 
-  switch (mode) {
-  case PackAll:
-    count += Chunk::unpack(Chunk::PackAll, &ptr[count]);
-    count += memcpy_count(uf.data(), &ptr[count], uf.size() * sizeof(float64), false);
-    count += memcpy_count(uj.data(), &ptr[count], uj.size() * sizeof(float64), false);
-    count += memcpy_count(&cc, &ptr[count], sizeof(float64), false);
-    // particle
-    for (int is = 0; is < Ns; is++) {
-      count += up[is]->unpack(&ptr[count], false);
-    }
-    break;
-  default:
-    ERRORPRINT("No such unpacking mode\n");
-    break;
+  count += Chunk::unpack(buffer, count);
+  count += memcpy_count(uf.data(), buffer, uf.size() * sizeof(float64), 0, count);
+  count += memcpy_count(uj.data(), buffer, uj.size() * sizeof(float64), 0, count);
+  count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
+  // particle
+  for (int is = 0; is < Ns; is++) {
+    count += up[is]->unpack(buffer, count);
   }
 
   return count;
@@ -97,101 +76,65 @@ DEFINE_MEMBER(void, allocate_memory)(const int Np, const int Ns)
     up.push_back(std::make_shared<Particle>(Np, nz * ny * nx));
   }
 
-  // initialize MPI buffer
-  for (int i = 0; i < NumBoundaryMode; i++) {
-    mpibufvec.push_back(std::make_shared<PtrMpiBuffer>());
-  }
+  // allocate MPI buffer
   this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, sizeof(float64) * 6);
   this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, sizeof(float64) * 4);
   this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, sizeof(float64) * Ns * 10);
   this->set_mpi_buffer(mpibufvec[BoundaryParticle], sizeof(int), sizeof(float64) * Ns * np * 7);
 }
 
-DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer)
+DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer, const int address)
 {
   switch (mode) {
   case PackEmf:
-    return pack_diagnostic_emf(buffer, false);
+    return pack_diagnostic_field(buffer, address, uf);
     break;
-  case PackEmfQuery:
-    return pack_diagnostic_emf(buffer, true);
+  case PackCur:
+    return pack_diagnostic_field(buffer, address, uj);
     break;
-  case PackMom:
-    return pack_diagnostic_mom(buffer, false);
-    break;
-  case PackMomQuery:
-    return pack_diagnostic_mom(buffer, true);
+  case PackMom: {
+    // reshape into 4D array
+    std::vector<size_t> shape(4);
+    shape[0]   = um.shape(0);
+    shape[1]   = um.shape(1);
+    shape[2]   = um.shape(2);
+    shape[3]   = um.shape(3) * um.shape(4);
+    T_field vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
+    return pack_diagnostic_field(buffer, address, vv);
+  } break;
+  case PackParticle:
+    ERRORPRINT("Not implemented yet\n");
     break;
   default:
-    ERRORPRINT("No such pack mode exists!\n");
+    ERRORPRINT("No such pack mode exists\n");
     break;
   }
   return 0;
 }
 
-DEFINE_MEMBER(int, pack_diagnostic_emf)(void *buffer, const bool query)
+DEFINE_MEMBER(int, pack_diagnostic_field)(void *buffer, const int address, T_field &u)
 {
-  size_t   size = dims[2] * dims[1] * dims[0] * uf.shape(3);
-  float64 *buf  = static_cast<float64 *>(buffer);
+  size_t size = dims[2] * dims[1] * dims[0] * u.shape(3);
 
-  if (query) {
+  if (buffer == nullptr) {
     return sizeof(float64) * size;
   }
 
   auto Iz = xt::range(Lbz, Ubz + 1);
   auto Iy = xt::range(Lby, Uby + 1);
   auto Ix = xt::range(Lbx, Ubx + 1);
-  auto uu = xt::view(uf, Iz, Iy, Ix, xt::all());
+  auto vv = xt::view(u, Iz, Iy, Ix, xt::all());
 
   // packing
-  std::copy(uu.begin(), uu.end(), buf);
-
-  return sizeof(float64) * size;
-}
-
-DEFINE_MEMBER(int, pack_diagnostic_cur)(void *buffer, const bool query)
-{
-  size_t   size = dims[2] * dims[1] * dims[0] * uj.shape(3);
-  float64 *buf  = static_cast<float64 *>(buffer);
-
-  if (query) {
-    return sizeof(float64) * size;
-  }
-
-  auto Iz = xt::range(Lbz, Ubz + 1);
-  auto Iy = xt::range(Lby, Uby + 1);
-  auto Ix = xt::range(Lbx, Ubx + 1);
-  auto uu = xt::view(uj, Iz, Iy, Ix, xt::all());
-
-  // packing
-  std::copy(uu.begin(), uu.end(), buf);
-
-  return sizeof(float64) * size;
-}
-
-DEFINE_MEMBER(int, pack_diagnostic_mom)(void *buffer, const bool query)
-{
-  size_t   size = dims[2] * dims[1] * dims[0] * um.shape(3) * um.shape(4);
-  float64 *buf  = static_cast<float64 *>(buffer);
-
-  if (query) {
-    return sizeof(float64) * size;
-  }
-
-  auto Iz = xt::range(Lbz, Ubz + 1);
-  auto Iy = xt::range(Lby, Uby + 1);
-  auto Ix = xt::range(Lbx, Ubx + 1);
-  auto uu = xt::view(um, Iz, Iy, Ix, xt::all());
-
-  // packing
-  std::copy(uu.begin(), uu.end(), buf);
+  char *ptr = &static_cast<char *>(buffer)[address];
+  std::copy(vv.begin(), vv.end(), ptr);
 
   return sizeof(float64) * size;
 }
 
 DEFINE_MEMBER(void, setup)(const float64 cc, const float64 delh, const int offset[3])
 {
-  this->set_coordinate(delh, offset);
+  // this->set_coordinate(delh, offset);
 
   // speed of light
   this->cc = cc;
@@ -262,13 +205,16 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
   case BoundaryCur:
     this->begin_bc_exchange(mpibufvec[mode], uj);
     break;
-  case BoundaryMom:
+  case BoundaryMom: {
     // reshape into 4D array
-    auto shape = um.shape();
-    auto uflat = xt::ravel(um);
-    uflat.reshape({shape[0], shape[1], shape[2], shape[3] * shape[4]});
-    this->begin_bc_exchange(mpibufvec[mode], uflat);
-    break;
+    std::vector<size_t> shape(4);
+    shape[0]   = um.shape(0);
+    shape[1]   = um.shape(1);
+    shape[2]   = um.shape(2);
+    shape[3]   = um.shape(3) * um.shape(4);
+    T_field vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
+    this->begin_bc_exchange(mpibufvec[mode], vv);
+  } break;
   case BoundaryParticle:
     // particle injection should be placed here
     this->begin_bc_exchange(mpibufvec[mode], up);
@@ -290,13 +236,16 @@ DEFINE_MEMBER(void, set_boundary_end)(const int mode)
   case BoundaryCur:
     this->end_bc_exchange(mpibufvec[mode], uj, true); // append
     break;
-  case BoundaryMom:
+  case BoundaryMom: {
     // reshape into 4D array
-    auto shape = um.shape();
-    auto uflat = xt::ravel(um);
-    uflat.reshape({shape[0], shape[1], shape[2], shape[3] * shape[4]});
-    this->end_bc_exchange(mpibufvec[mode], uflat, true); // append
-    break;
+    std::vector<size_t> shape(4);
+    shape[0]   = um.shape(0);
+    shape[1]   = um.shape(1);
+    shape[2]   = um.shape(2);
+    shape[3]   = um.shape(3) * um.shape(4);
+    T_field vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
+    this->end_bc_exchange(mpibufvec[mode], vv, true); // append
+  } break;
   case BoundaryParticle:
     this->end_bc_exchange(mpibufvec[mode], up);
     break;
@@ -309,6 +258,7 @@ DEFINE_MEMBER(void, set_boundary_end)(const int mode)
 // implementation for specific shape functions
 #include "exchunk3d_1st.cpp"
 
+template class ExChunk3D<1>;
 // Local Variables:
 // c-file-style   : "gnu"
 // c-file-offsets : ((innamespace . 0) (inline-open . 0))

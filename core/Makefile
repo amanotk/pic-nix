@@ -10,7 +10,7 @@ default: $(OBJS)
 
 # main
 main.out: $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS) -L../ -lnix
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS) -L../nix -lnix
 
 ### clean
 clean :

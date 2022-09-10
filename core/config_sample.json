@@ -1,6 +1,10 @@
 {
 	"diagnostic": {
 		"datadir": "./",
+		"prefix_load": "load",
+		"interval_load": 1,
+		"prefix_history": "history",
+		"interval_history": 1,
 		"prefix_field": "field",
 		"interval_field": 100,
 		"prefix_particle": "particle",
@@ -13,7 +17,6 @@
 		"Cx": 1,
 		"Cy": 1,
 		"Cz": 1,
-		"tmax": 1.0,
 		"delt": 1.0,
 		"delh": 1.0,
 		"cc": 1.0,

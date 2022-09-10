@@ -42,35 +42,44 @@ protected:
   using BaseApp::recvbuf;
 
   int         Ns;                ///< number of species
-  json        parameters;        ///< parameters
   std::string datadir;           ///< data output directory
-  std::string prefix_field;      ///< output filename prefix
-  int         interval_field;    ///< data output interval
-  std::string prefix_particle;   ///< output filename prefix
-  int         interval_particle; ///< data output interval
+  std::string prefix_load;       ///< output filename prefix for load
+  std::string prefix_history;    ///< output filename prefix for history
+  std::string prefix_field;      ///< output filename prefix for field
+  std::string prefix_particle;   ///< output filename prefix for particle
+  int         interval_load;     ///< data output interval for load
+  int         interval_history;  ///< data output interval for history
+  int         interval_field;    ///< data output interval for field
+  int         interval_particle; ///< data output interval for particle
 
-  virtual void parse_cfg();
+  virtual void parse_cfg() override;
 
-  virtual void write_allchunk(MPI_File &fh, json &dataset, size_t &disp, const char *name,
-                              const char *desc, const int size, const int ndim, const int *dims,
-                              const int mode);
+  virtual void write_field_chunk(MPI_File &fh, json &dataset, size_t &disp, const char *name,
+                                 const char *desc, const int size, const int ndim, const int *dims,
+                                 const int mode);
+
+  virtual void diagnostic_load();
+
+  virtual void diagnostic_history();
 
   virtual void diagnostic_field();
 
   virtual void diagnostic_particle();
+
+  virtual void wait_bc_exchange(std::set<int> &queue, const int mode);
+
+  virtual void initialize(int argc, char **argv) override;
+
+  virtual void setup() override;
 
 public:
   ExPIC3D(int argc, char **argv) : BaseApp(argc, argv)
   {
   }
 
-  virtual void initialize(int argc, char **argv) override;
-
   virtual void push() override;
 
   virtual void diagnostic(std::ostream &out) override;
-
-  virtual void wait_bc_exchange(std::set<int> &queue, const int mode);
 };
 
 // Local Variables:

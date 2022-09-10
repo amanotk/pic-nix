@@ -15,14 +15,14 @@ DEFINE_MEMBER(void, parse_cfg)()
 
   // parameters
   {
-    parameters = cfg_json["parameter"];
+    json parameter = cfg_json["parameter"];
 
-    int nx = parameters["Nx"].get<int>();
-    int ny = parameters["Ny"].get<int>();
-    int nz = parameters["Nz"].get<int>();
-    int cx = parameters["Cx"].get<int>();
-    int cy = parameters["Cy"].get<int>();
-    int cz = parameters["Cz"].get<int>();
+    int nx = parameter["Nx"].get<int>();
+    int ny = parameter["Ny"].get<int>();
+    int nz = parameter["Nz"].get<int>();
+    int cx = parameter["Cx"].get<int>();
+    int cy = parameter["Cy"].get<int>();
+    int cz = parameter["Cz"].get<int>();
 
     // check dimensions
     if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
@@ -58,27 +58,30 @@ DEFINE_MEMBER(void, parse_cfg)()
     zlim[2] = zlim[1] - zlim[0];
 
     // other parameters
-    tmax = parameters["tmax"].get<float64>();
-    delt = parameters["delt"].get<float64>();
-    delh = parameters["delt"].get<float64>();
-    cc   = parameters["cc"].get<float64>();
+    delt = parameter["delt"].get<float64>();
+    delh = parameter["delt"].get<float64>();
+    cc   = parameter["cc"].get<float64>();
   }
 
   // diagnostic
   {
     json diagnostic = cfg_json["diagnostic"];
 
-    datadir           = diagnostic.get<std::string>();
-    prefix_field      = diagnostic.get<std::string>();
-    interval_field    = diagnostic.get<int>();
-    prefix_particle   = diagnostic.get<std::string>();
-    interval_particle = diagnostic.get<int>();
+    datadir           = diagnostic["datadir"].get<std::string>();
+    prefix_load       = diagnostic["prefix_load"].get<std::string>();
+    interval_load     = diagnostic["interval_load"].get<int>();
+    prefix_history    = diagnostic["prefix_history"].get<std::string>();
+    interval_history  = diagnostic["interval_history"].get<int>();
+    prefix_field      = diagnostic["prefix_field"].get<std::string>();
+    interval_field    = diagnostic["interval_field"].get<int>();
+    prefix_particle   = diagnostic["prefix_particle"].get<std::string>();
+    interval_particle = diagnostic["interval_particle"].get<int>();
   }
 }
 
-DEFINE_MEMBER(void, write_allchunk)
-(MPI_File &fh, json &dataset, size_t &disp, const char *name, const char *desc,
- const int size, const int ndim, const int *dims, const int mode)
+DEFINE_MEMBER(void, write_field_chunk)
+(MPI_File &fh, json &dataset, size_t &disp, const char *name, const char *desc, const int size,
+ const int ndim, const int *dims, const int mode)
 {
   MPI_Request req[numchunk];
 
@@ -86,15 +89,15 @@ DEFINE_MEMBER(void, write_allchunk)
   jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
 
   // buffer size (assuming constant)
-  int bufsize = chunkvec[0]->pack_diagnostic(mode, nullptr);
+  int bufsize = chunkvec[0]->pack_diagnostic(mode, nullptr, 0);
 
   for (int i = 0; i < numchunk; i++) {
     // pack
-    assert(bufsize == chunkvec[i]->pack_diagnostic(mode, sendbuf.get()));
+    assert(bufsize == chunkvec[i]->pack_diagnostic(mode, sendbuf.get(), 0));
 
     // write
     size_t chunkdisp = disp + bufsize * chunkvec[i]->get_id();
-    jsonio::write_contiguous_at(&fh, &disp, sendbuf.get(), bufsize, 1, &req[i]);
+    jsonio::write_contiguous_at(&fh, &chunkdisp, sendbuf.get(), bufsize, 1, &req[i]);
   }
 
   // wait
@@ -102,6 +105,131 @@ DEFINE_MEMBER(void, write_allchunk)
 
   // update pointer
   disp += size;
+}
+
+DEFINE_MEMBER(void, diagnostic_load)()
+{
+}
+
+DEFINE_MEMBER(void, diagnostic_history)()
+{
+  if (thisrank == 0) {
+    tfm::format(std::cout, "step = %8d, time = %15.6e\n", curstep, curtime);
+  }
+}
+
+DEFINE_MEMBER(void, diagnostic_field)()
+{
+  const int nz = ndims[0] / cdims[0];
+  const int ny = ndims[1] / cdims[1];
+  const int nx = ndims[2] / cdims[2];
+  const int ns = Ns;
+  const int nc = cdims[3];
+
+  // filename
+  std::string fn_prefix = tfm::format("%s/%s_%05d", datadir, prefix_field, curstep);
+  std::string fn_json   = fn_prefix + ".json";
+  std::string fn_data   = fn_prefix + ".data";
+
+  json json_root;
+  json json_chunkmap;
+  json json_dataset;
+
+  MPI_File fh;
+  size_t   disp;
+
+  // open file
+  jsonio::open_file(fn_data.c_str(), &fh, &disp, "w");
+
+  // save chunkmap
+  chunkmap->save(json_chunkmap, &fh, &disp);
+
+  //
+  // electromagnetic field
+  //
+  {
+    const char name[]  = "uf";
+    const char desc[]  = "electromagnetic field";
+    const int  ndim    = 5;
+    const int  dims[5] = {nc, nz, ny, nx, 6};
+    const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
+
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackEmf);
+  }
+
+  //
+  // current
+  //
+  {
+    const char name[]  = "uj";
+    const char desc[]  = "current";
+    const int  ndim    = 5;
+    const int  dims[5] = {nc, nz, ny, nx, 4};
+    const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
+
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackCur);
+  }
+
+  //
+  // moment
+  //
+  {
+    const char name[]  = "um";
+    const char desc[]  = "moment";
+    const int  ndim    = 6;
+    const int  dims[6] = {nc, nz, ny, nx, ns, 10};
+    const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
+
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackMom);
+  }
+
+  jsonio::close_file(&fh);
+
+  //
+  // output json file
+  //
+
+  // meta data
+  json_root["meta"] = {{"endian", common::get_endian_flag()},
+                       {"rawfile", fn_data},
+                       {"order", 1},
+                       {"time", curtime},
+                       {"step", curstep}};
+  // chunkmap
+  json_root["chunkmap"] = json_chunkmap;
+  // dataset
+  json_root["dataset"] = json_dataset;
+
+  if (thisrank == 0) {
+    std::ofstream ofs(fn_json);
+    ofs << std::setw(2) << json_root;
+    ofs.close();
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
+DEFINE_MEMBER(void, diagnostic_particle)()
+{
+}
+
+DEFINE_MEMBER(void, wait_bc_exchange)(std::set<int> &queue, const int mode)
+{
+  int recvmode = Chunk::RecvMode | mode;
+
+  while (queue.empty() == false) {
+    // find chunk for unpacking
+    auto iter = std::find_if(queue.begin(), queue.end(),
+                             [&](int i) { return chunkvec[i]->set_boundary_query(recvmode); });
+
+    // not found
+    if (iter == queue.end()) {
+      continue;
+    }
+
+    // unpack
+    chunkvec[*iter]->set_boundary_end(mode);
+    queue.erase(*iter);
+  }
 }
 
 DEFINE_MEMBER(void, initialize)(int argc, char **argv)
@@ -149,15 +277,23 @@ DEFINE_MEMBER(void, initialize)(int argc, char **argv)
   }
 }
 
+DEFINE_MEMBER(void, setup)()
+{
+}
+
 DEFINE_MEMBER(void, push)()
 {
+  curtime += delt;
+  curstep++;
+  return;
+
   std::set<int> bc_queue_uf;
   std::set<int> bc_queue_uj;
   std::set<int> bc_queue_up;
 
   for (int i = 0; i < numchunk; i++) {
     // push B for a half step
-    chunkvec[i]->psh_mfd(0.5 * delt);
+    chunkvec[i]->push_mfd(0.5 * delt);
 
     // push particle
     chunkvec[i]->push_velocity(delt);
@@ -173,7 +309,7 @@ DEFINE_MEMBER(void, push)()
     bc_queue_up.insert(i);
 
     // push B for a half step
-    chunkvec[i]->psh_mfd(0.5 * delt);
+    chunkvec[i]->push_mfd(0.5 * delt);
   }
 
   // wait for current boundary exchange
@@ -181,7 +317,7 @@ DEFINE_MEMBER(void, push)()
 
   for (int i = 0; i < numchunk; i++) {
     // push E
-    chunkvec[i]->psh_efd(delt);
+    chunkvec[i]->push_efd(delt);
 
     // begin boundary exchange for field
     chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
@@ -198,121 +334,24 @@ DEFINE_MEMBER(void, push)()
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
 {
-  if (curstep % interval_field != 0) {
+  if (curstep % interval_load == 0) {
+    diagnostic_load();
+  }
+
+  if (curstep % interval_history == 0) {
+    diagnostic_history();
+  }
+
+  if (curstep % interval_field == 0) {
     diagnostic_field();
   }
-}
 
-DEFINE_MEMBER(void, diagnostic_field)()
-{
-  const int nz = ndims[0] / cdims[0];
-  const int ny = ndims[1] / cdims[1];
-  const int nx = ndims[2] / cdims[2];
-  const int ns = Ns;
-  const int nc = cdims[3];
-
-  // filename
-  std::string fn_prefix = tfm::format("%s/%s_%05d", datadir, prefix_field, curstep);
-  std::string fn_json   = fn_prefix + ".json";
-  std::string fn_data   = fn_prefix + ".data";
-
-  json json_root;
-  json json_chunkmap;
-  json json_dataset;
-
-  MPI_File fh;
-  size_t   disp;
-
-  // open file
-  jsonio::open_file(fn_data.c_str(), &fh, &disp, "w");
-
-  // save chunkmap
-  chunkmap->save(json_chunkmap, &fh, &disp);
-
-  //
-  // electromagnetic field
-  //
-  {
-    const char name[] = "uf";
-    const char desc[]  = "electromagnetic field";
-    const int  ndim    = 5;
-    const int  dims[5] = {nc, nz, ny, nx, 6};
-    const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
-
-    write_allchunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackEmf);
-  }
-
-  //
-  // current
-  //
-  {
-    const char name[] = "uj";
-    const char desc[]  = "current";
-    const int  ndim    = 5;
-    const int  dims[5] = {nc, nz, ny, nx, 4};
-    const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
-
-    write_allchunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackCur);
-  }
-
-  //
-  // moment
-  //
-  {
-    const char name[] = "um";
-    const char desc[]  = "moment";
-    const int  ndim    = 6;
-    const int  dims[5] = {nc, ns, nz, ny, nx, 10};
-    const int  size    = nc * ns * nz * ny * nx * 10 * sizeof(float64);
-
-    write_allchunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackMom);
-  }
-
-  jsonio::close_file(&fh);
-
-  //
-  // output json file
-  //
-
-  // meta data
-  json_root["meta"] = {{"endian", common::get_endian_flag()},
-                       {"rawfile", fn_data},
-                       {"order", 1},
-                       {"time", curtime},
-                       {"step", curstep}};
-  // chunkmap
-  json_root["chunkmap"] = json_chunkmap;
-  // dataset
-  json_root["dataset"] = json_dataset;
-
-  if (thisrank == 0) {
-    std::ofstream ofs(fn_json);
-    ofs << std::setw(2) << json_root;
-    ofs.close();
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
-}
-
-DEFINE_MEMBER(void, wait_bc_exchange)(std::set<int> &queue, const int mode)
-{
-  int recvmode = Chunk::RecvMode | mode;
-
-  while (queue.empty() == false) {
-    // find chunk for unpacking
-    auto iter = std::find_if(queue.begin(), queue.end(),
-                             [&](int i) { return chunkvec[i]->set_boundary_query(recvmode); });
-
-    // not found
-    if (iter == queue.end()) {
-      continue;
-    }
-
-    // unpack
-    chunkvec[*iter]->set_boundary_end(mode);
-    queue.erase(*iter);
+  if (curstep % interval_particle == 0) {
+    diagnostic_particle();
   }
 }
 
+template class ExPIC3D<1>;
 // Local Variables:
 // c-file-style   : "gnu"
 // c-file-offsets : ((innamespace . 0) (inline-open . 0))

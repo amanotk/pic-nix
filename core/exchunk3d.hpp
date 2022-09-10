@@ -16,7 +16,10 @@ class ExChunk3D : public Chunk3D<Nb>
 {
 public:
   using Chunk        = Chunk3D<Nb>;
+  using MpiBuffer    = typename Chunk3D<Nb>::MpiBuffer;
   using PtrMpiBuffer = typename Chunk3D<Nb>::PtrMpiBuffer;
+  using T_field      = xt::xtensor<float64, 4>;
+  using T_moment     = xt::xtensor<float64, 5>;
   using Chunk::dims;
   using Chunk::Lbx;
   using Chunk::Lby;
@@ -29,14 +32,10 @@ public:
   using Chunk::mpibufvec;
 
   enum PackMode {
-    PackAllQuery = 0,
-    PackAll      = 1,
-    PackEmfQuery = 2,
-    PackEmf      = 3,
-    PackCurQuery = 4,
-    PackCur      = 5,
-    PackMomQuery = 6,
-    PackMom      = 7,
+    PackEmf      = 0,
+    PackCur      = 1,
+    PackMom      = 2,
+    PackParticle = 3,
   };
 
   enum BoundaryMode {
@@ -50,30 +49,26 @@ public:
 protected:
   int Ns; ///< number of particle species
 
-  ParticleVec             up; ///< list of particles
-  xt::xtensor<float64, 4> uf; ///< electromagnetic field
-  xt::xtensor<float64, 4> uj; ///< current density
-  xt::xtensor<float64, 5> um; ///< particle moment
-  float64                 cc; ///< speed of light
+  ParticleVec up; ///< list of particles
+  T_field     uf; ///< electromagnetic field
+  T_field     uj; ///< current density
+  T_moment    um; ///< particle moment
+  float64     cc; ///< speed of light
 
 public:
   ExChunk3D(const int dims[3], const int id = 0);
 
   virtual ~ExChunk3D() override;
 
-  virtual int pack(const int mode, void *buffer) override;
+  virtual int pack(void *buffer, const int address) override;
 
-  virtual int unpack(const int mode, void *buffer) override;
+  virtual int unpack(void *buffer, const int address) override;
 
   virtual void allocate_memory(const int Np, const int Ns);
 
-  virtual int pack_diagnostic(const int mode, void *buffer);
+  virtual int pack_diagnostic(const int mode, void *buffer, const int address);
 
-  virtual int pack_diagnostic_emf(void *buffer, const bool query);
-
-  virtual int pack_diagnostic_cur(void *buffer, const bool query);
-
-  virtual int pack_diagnostic_mom(void *buffer, const bool query);
+  virtual int pack_diagnostic_field(void *buffer, const int address, T_field &u);
 
   virtual void setup(const float64 cc, const float64 delh, const int offset[3]);
 
