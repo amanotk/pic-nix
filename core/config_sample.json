@@ -1,6 +1,6 @@
 {
 	"diagnostic": {
-		"datadir": "./",
+		"datadir": ".",
 		"prefix_load": "load",
 		"interval_load": 1,
 		"prefix_history": "history",

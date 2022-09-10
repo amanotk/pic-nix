@@ -154,7 +154,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
     const int  dims[5] = {nc, nz, ny, nx, 6};
     const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackEmf);
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::PackEmf);
   }
 
   //
@@ -167,7 +167,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
     const int  dims[5] = {nc, nz, ny, nx, 4};
     const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackCur);
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::PackCur);
   }
 
   //
@@ -180,7 +180,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
     const int  dims[6] = {nc, nz, ny, nx, ns, 10};
     const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, ndims, Chunk::PackMom);
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::PackMom);
   }
 
   jsonio::close_file(&fh);

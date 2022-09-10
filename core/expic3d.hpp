@@ -73,7 +73,7 @@ protected:
   virtual void setup() override;
 
 public:
-  ExPIC3D(int argc, char **argv) : BaseApp(argc, argv)
+  ExPIC3D(int argc, char **argv) : BaseApp(argc, argv), Ns(1)
   {
   }
 
