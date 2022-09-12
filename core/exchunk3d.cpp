@@ -2,7 +2,7 @@
 #include "exchunk3d.hpp"
 
 #define DEFINE_MEMBER(type, name)                                                                  \
-  template <int Order>                                                                                \
+  template <int Order>                                                                             \
   type ExChunk3D<Order>::name
 
 DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), Ns(1)
@@ -117,7 +117,7 @@ DEFINE_MEMBER(int, pack_diagnostic_field)(void *buffer, const int address, T_fie
 
   // packing
   char *ptr = &static_cast<char *>(buffer)[address];
-  std::copy(vv.begin(), vv.end(), ptr);
+  std::copy(vv.begin(), vv.end(), reinterpret_cast<float64 *>(ptr));
 
   return sizeof(float64) * size;
 }
@@ -204,7 +204,7 @@ DEFINE_MEMBER(void, setup)(json &config)
       mt.seed(random_seed);
       for (int ip = 0; ip < up[is]->Np; ip++) {
         float64 *ptcl = &up[is]->xu(ip, 0);
-        int64   *id64 = reinterpret_cast<int64 *>(ptcl);
+        int64 *  id64 = reinterpret_cast<int64 *>(ptcl);
 
         ptcl[0] = uniform(mt) * xlim[2] + xlim[0];
         ptcl[1] = uniform(mt) * ylim[2] + ylim[0];
