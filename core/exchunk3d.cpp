@@ -2,8 +2,8 @@
 #include "exchunk3d.hpp"
 
 #define DEFINE_MEMBER(type, name)                                                                  \
-  template <int Nb>                                                                                \
-  type ExChunk3D<Nb>::name
+  template <int Order>                                                                                \
+  type ExChunk3D<Order>::name
 
 DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), Ns(1)
 {
@@ -215,6 +215,9 @@ DEFINE_MEMBER(void, setup)(json &config)
         id64[6] = id + ip;
       }
     }
+
+    // initial sort
+    this->sort_particle(up);
 
     // allocate MPI buffer for particle
     this->set_mpi_buffer(mpibufvec[BoundaryParticle], sizeof(int) * Ns,

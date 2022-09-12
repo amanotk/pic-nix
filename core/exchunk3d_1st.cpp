@@ -10,18 +10,17 @@
 DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
 {
   const float64 rc    = 1 / cc;
-  const float64 delh  = this->delh;
   const float64 rdh   = 1 / delh;
   const float64 dh2   = 0.5 * delh;
-  const float64 ximin = this->xlim[0] + dh2;
-  const float64 xhmin = this->xlim[0];
-  const float64 yimin = this->ylim[0] + dh2;
-  const float64 yhmin = this->ylim[0];
-  const float64 zimin = this->zlim[0] + dh2;
-  const float64 zhmin = this->zlim[0];
+  const float64 ximin = xlim[0] + dh2;
+  const float64 xhmin = xlim[0];
+  const float64 yimin = ylim[0] + dh2;
+  const float64 yhmin = ylim[0];
+  const float64 zimin = zlim[0] + dh2;
+  const float64 zhmin = zlim[0];
 
   for (int is = 0; is < Ns; is++) {
-    std::shared_ptr<Particle> p = up[is];
+    PtrParticle p = up[is];
 
     // loop over particle
     float64 dt1 = 0.5 * p->q / p->m * delt;
@@ -82,7 +81,7 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
   const float64 rc = 1 / cc;
 
   for (int is = 0; is < Ns; is++) {
-    std::shared_ptr<Particle> p = up[is];
+    PtrParticle p = up[is];
 
     // loop over particle
     for (int ip = 0; ip < p->Np; ip++) {
@@ -99,25 +98,27 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
       xu[1] += xu[4] * dt;
       xu[2] += xu[5] * dt;
     }
+
+    // count
+    count_particle(p, 0, p->Np - 1, true);
   }
 }
 
 DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
 {
   const float64 rc    = 1 / cc;
-  const float64 delh  = this->delh;
   const float64 rdh   = 1 / delh;
   const float64 dh2   = 0.5 * delh;
   const float64 dhdt  = delh / delt;
-  const float64 ximin = this->xlim[0] + dh2;
-  const float64 yimin = this->ylim[0] + dh2;
-  const float64 zimin = this->zlim[0] + dh2;
+  const float64 ximin = xlim[0] + dh2;
+  const float64 yimin = ylim[0] + dh2;
+  const float64 zimin = zlim[0] + dh2;
 
   // clear charge/current density
   uj.fill(0);
 
   for (int is = 0; is < Ns; is++) {
-    std::shared_ptr<Particle> p = up[is];
+    PtrParticle p = up[is];
 
     // loop over particle
     for (int ip = 0; ip < p->Np; ip++) {

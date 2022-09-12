@@ -2,8 +2,8 @@
 #include "expic3d.hpp"
 
 #define DEFINE_MEMBER(type, name)                                                                  \
-  template <int Nb>                                                                                \
-  type ExPIC3D<Nb>::name
+  template <int Order>                                                                             \
+  type ExPIC3D<Order>::name
 
 DEFINE_MEMBER(void, parse_cfg)()
 {
@@ -306,7 +306,6 @@ DEFINE_MEMBER(void, setup)()
 
 DEFINE_MEMBER(void, rebuild_chunkmap)()
 {
-#if 0
   BaseApp::rebuild_chunkmap();
 
   // set MPI communicator for each mode
@@ -315,12 +314,10 @@ DEFINE_MEMBER(void, rebuild_chunkmap)()
       chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
     }
   }
-#endif
 }
 
 DEFINE_MEMBER(void, push)()
 {
-#if 0
   std::set<int> bc_queue_uf;
   std::set<int> bc_queue_uj;
   std::set<int> bc_queue_up;
@@ -361,7 +358,7 @@ DEFINE_MEMBER(void, push)()
   // wait for particle and field boundary exchange
   wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
   wait_bc_exchange(bc_queue_uf, Chunk::BoundaryEmf);
-#endif
+
   curtime += delt;
   curstep++;
 }

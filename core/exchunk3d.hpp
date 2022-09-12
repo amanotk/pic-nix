@@ -10,17 +10,22 @@
 #include "nix/particle.hpp"
 #include "nix/xtensorall.hpp"
 
+// trick to map from order of shape function to number of boundary margins
+template <int Order>
+struct BaseChunk3D;
+
 ///
-template <int Nb>
-class ExChunk3D : public Chunk3D<Nb>
+template <int Order>
+class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
   using json         = common::json;
-  using Chunk        = Chunk3D<Nb>;
-  using MpiBuffer    = typename Chunk3D<Nb>::MpiBuffer;
-  using PtrMpiBuffer = typename Chunk3D<Nb>::PtrMpiBuffer;
   using T_field      = xt::xtensor<float64, 4>;
   using T_moment     = xt::xtensor<float64, 5>;
+  using Chunk        = typename BaseChunk3D<Order>::ChunkType;
+  using MpiBuffer    = typename Chunk::MpiBuffer;
+  using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
+  using Chunk::boundary_margin;
   using Chunk::dims;
   using Chunk::Lbx;
   using Chunk::Lby;
@@ -39,6 +44,10 @@ public:
   using Chunk::SendMode;
   using Chunk::mpibufvec;
 
+  // boundary margin
+  static constexpr int Nb = boundary_margin;
+
+  // mode for diagnostic
   enum DiagnosticMode {
     DiagnosticEmf      = 0,
     DiagnosticCur      = 1,
@@ -46,12 +55,13 @@ public:
     DiagnosticParticle = 3,
   };
 
+  // mode for boundary exchange
   enum BoundaryMode {
     BoundaryEmf      = 0,
     BoundaryCur      = 1,
     BoundaryMom      = 2,
     BoundaryParticle = 3,
-    NumBoundaryMode  = 4,
+    NumBoundaryMode  = 4, // number of mode
   };
 
 protected:
@@ -92,6 +102,24 @@ public:
   virtual void set_boundary_begin(const int mode = 0) override;
 
   virtual void set_boundary_end(const int mode = 0) override;
+};
+
+// first-order shape function requires 2 boundary margins
+template <>
+struct BaseChunk3D<1> {
+  using ChunkType = Chunk3D<2>;
+};
+
+// second-order shape function requires 2 boundary margins
+template <>
+struct BaseChunk3D<2> {
+  using ChunkType = Chunk3D<2>;
+};
+
+// third-order shape function requires 3 boundary margins
+template <>
+struct BaseChunk3D<3> {
+  using ChunkType = Chunk3D<3>;
 };
 
 // Local Variables:

@@ -8,13 +8,13 @@
 #include "nix/jsonio.hpp"
 
 //
-template <int Nb>
-class ExPIC3D : public Application<ExChunk3D<Nb>, ChunkMap<3>>
+template <int Order>
+class ExPIC3D : public Application<ExChunk3D<Order>, ChunkMap<3>>
 {
 private:
   using json       = nlohmann::ordered_json;
-  using BaseApp    = Application<ExChunk3D<Nb>, ChunkMap<3>>;
-  using Chunk      = ExChunk3D<Nb>;
+  using BaseApp    = Application<ExChunk3D<Order>, ChunkMap<3>>;
+  using Chunk      = ExChunk3D<Order>;
   using MpiCommVec = std::vector<MPI_Comm>;
 
 protected:
