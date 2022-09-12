@@ -61,6 +61,7 @@ DEFINE_MEMBER(void, parse_cfg)()
     delt = parameter["delt"].get<float64>();
     delh = parameter["delt"].get<float64>();
     cc   = parameter["cc"].get<float64>();
+    Ns   = parameter["Ns"].get<int>();
   }
 
   // diagnostic
@@ -90,6 +91,10 @@ DEFINE_MEMBER(void, write_field_chunk)
 
   // buffer size (assuming constant)
   int bufsize = chunkvec[0]->pack_diagnostic(mode, nullptr, 0);
+  if (bufsize > sendbuf.size) {
+    sendbuf.resize(bufsize);
+    recvbuf.resize(bufsize);
+  }
 
   for (int i = 0; i < numchunk; i++) {
     // pack
@@ -107,18 +112,18 @@ DEFINE_MEMBER(void, write_field_chunk)
   disp += size;
 }
 
-DEFINE_MEMBER(void, diagnostic_load)()
+DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out)
 {
 }
 
-DEFINE_MEMBER(void, diagnostic_history)()
+DEFINE_MEMBER(void, diagnostic_history)(std::ostream &out)
 {
   if (thisrank == 0) {
-    tfm::format(std::cout, "step = %8d, time = %15.6e\n", curstep, curtime);
+    tfm::format(out, "step = %8d, time = %15.6e\n", curstep, curtime);
   }
 }
 
-DEFINE_MEMBER(void, diagnostic_field)()
+DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
 {
   const int nz = ndims[0] / cdims[0];
   const int ny = ndims[1] / cdims[1];
@@ -127,7 +132,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
   const int nc = cdims[3];
 
   // filename
-  std::string fn_prefix = tfm::format("%s/%s_%05d", datadir, prefix_field, curstep);
+  std::string fn_prefix = tfm::format("%s/%s_%06d", datadir, prefix_field, curstep);
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
@@ -154,7 +159,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
     const int  dims[5] = {nc, nz, ny, nx, 6};
     const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::PackEmf);
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticEmf);
   }
 
   //
@@ -167,7 +172,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
     const int  dims[5] = {nc, nz, ny, nx, 4};
     const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::PackCur);
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticCur);
   }
 
   //
@@ -180,7 +185,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
     const int  dims[6] = {nc, nz, ny, nx, ns, 10};
     const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::PackMom);
+    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticMom);
   }
 
   jsonio::close_file(&fh);
@@ -208,7 +213,7 @@ DEFINE_MEMBER(void, diagnostic_field)()
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
-DEFINE_MEMBER(void, diagnostic_particle)()
+DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out)
 {
 }
 
@@ -267,26 +272,55 @@ DEFINE_MEMBER(void, initialize)(int argc, char **argv)
     chunkvec[i]->set_global_context(offset, ndims);
   }
 
-  // set MPI communicator for each mode
+  // communicators
+  mpicommvec.resize(Chunk::NumBoundaryMode);
   for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
     MPI_Comm comm;
     MPI_Comm_dup(MPI_COMM_WORLD, &comm);
-    for (int i = 0; i < numchunk; i++) {
-      chunkvec[i]->set_mpi_communicator(mode, comm);
-    }
+    mpicommvec[mode] = comm;
   }
 }
 
 DEFINE_MEMBER(void, setup)()
 {
+  // set MPI communicator for each mode
+  for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
+    }
+  }
+
+  // setup for each chunk with boundary condition
+  {
+    std::set<int> bc_queue;
+
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->setup(cfg_json["parameter"]);
+      chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
+      bc_queue.insert(i);
+    }
+
+    wait_bc_exchange(bc_queue, Chunk::BoundaryEmf);
+  }
+}
+
+DEFINE_MEMBER(void, rebuild_chunkmap)()
+{
+#if 0
+  BaseApp::rebuild_chunkmap();
+
+  // set MPI communicator for each mode
+  for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
+    }
+  }
+#endif
 }
 
 DEFINE_MEMBER(void, push)()
 {
-  curtime += delt;
-  curstep++;
-  return;
-
+#if 0
   std::set<int> bc_queue_uf;
   std::set<int> bc_queue_uj;
   std::set<int> bc_queue_up;
@@ -327,7 +361,7 @@ DEFINE_MEMBER(void, push)()
   // wait for particle and field boundary exchange
   wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
   wait_bc_exchange(bc_queue_uf, Chunk::BoundaryEmf);
-
+#endif
   curtime += delt;
   curstep++;
 }
@@ -335,19 +369,19 @@ DEFINE_MEMBER(void, push)()
 DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
 {
   if (curstep % interval_load == 0) {
-    diagnostic_load();
+    diagnostic_load(out);
   }
 
   if (curstep % interval_history == 0) {
-    diagnostic_history();
+    diagnostic_history(out);
   }
 
   if (curstep % interval_field == 0) {
-    diagnostic_field();
+    diagnostic_field(out);
   }
 
   if (curstep % interval_particle == 0) {
-    diagnostic_particle();
+    diagnostic_particle(out);
   }
 }
 

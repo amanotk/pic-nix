@@ -15,6 +15,7 @@ template <int Nb>
 class ExChunk3D : public Chunk3D<Nb>
 {
 public:
+  using json         = common::json;
   using Chunk        = Chunk3D<Nb>;
   using MpiBuffer    = typename Chunk3D<Nb>::MpiBuffer;
   using PtrMpiBuffer = typename Chunk3D<Nb>::PtrMpiBuffer;
@@ -27,15 +28,22 @@ public:
   using Chunk::Ubx;
   using Chunk::Uby;
   using Chunk::Ubz;
+  using Chunk::xc;
+  using Chunk::yc;
+  using Chunk::zc;
+  using Chunk::delh;
+  using Chunk::xlim;
+  using Chunk::ylim;
+  using Chunk::zlim;
   using Chunk::RecvMode;
   using Chunk::SendMode;
   using Chunk::mpibufvec;
 
-  enum PackMode {
-    PackEmf      = 0,
-    PackCur      = 1,
-    PackMom      = 2,
-    PackParticle = 3,
+  enum DiagnosticMode {
+    DiagnosticEmf      = 0,
+    DiagnosticCur      = 1,
+    DiagnosticMom      = 2,
+    DiagnosticParticle = 3,
   };
 
   enum BoundaryMode {
@@ -47,13 +55,12 @@ public:
   };
 
 protected:
-  int Ns; ///< number of particle species
-
+  int         Ns; ///< number of particle species
+  float64     cc; ///< speed of light
   ParticleVec up; ///< list of particles
   T_field     uf; ///< electromagnetic field
   T_field     uj; ///< current density
   T_moment    um; ///< particle moment
-  float64     cc; ///< speed of light
 
 public:
   ExChunk3D(const int dims[3], const int id = 0);
@@ -64,13 +71,13 @@ public:
 
   virtual int unpack(void *buffer, const int address) override;
 
-  virtual void allocate_memory(const int Np, const int Ns);
+  virtual void allocate();
 
   virtual int pack_diagnostic(const int mode, void *buffer, const int address);
 
   virtual int pack_diagnostic_field(void *buffer, const int address, T_field &u);
 
-  virtual void setup(const float64 cc, const float64 delh, const int offset[3]);
+  virtual void setup(json &config) override;
 
   virtual void push_efd(const float64 delt);
 
@@ -85,10 +92,6 @@ public:
   virtual void set_boundary_begin(const int mode = 0) override;
 
   virtual void set_boundary_end(const int mode = 0) override;
-
-  virtual void push(const float64 delt) override
-  {
-  }
 };
 
 // Local Variables:

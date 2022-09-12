@@ -12,9 +12,10 @@ template <int Nb>
 class ExPIC3D : public Application<ExChunk3D<Nb>, ChunkMap<3>>
 {
 private:
-  using json    = nlohmann::ordered_json;
-  using BaseApp = Application<ExChunk3D<Nb>, ChunkMap<3>>;
-  using Chunk   = ExChunk3D<Nb>;
+  using json       = nlohmann::ordered_json;
+  using BaseApp    = Application<ExChunk3D<Nb>, ChunkMap<3>>;
+  using Chunk      = ExChunk3D<Nb>;
+  using MpiCommVec = std::vector<MPI_Comm>;
 
 protected:
   using BaseApp::cfg_file;
@@ -51,6 +52,7 @@ protected:
   int         interval_history;  ///< data output interval for history
   int         interval_field;    ///< data output interval for field
   int         interval_particle; ///< data output interval for particle
+  MpiCommVec  mpicommvec;        ///< MPI Communicators
 
   virtual void parse_cfg() override;
 
@@ -58,19 +60,21 @@ protected:
                                  const char *desc, const int size, const int ndim, const int *dims,
                                  const int mode);
 
-  virtual void diagnostic_load();
+  virtual void diagnostic_load(std::ostream &out);
 
-  virtual void diagnostic_history();
+  virtual void diagnostic_history(std::ostream &out);
 
-  virtual void diagnostic_field();
+  virtual void diagnostic_field(std::ostream &out);
 
-  virtual void diagnostic_particle();
+  virtual void diagnostic_particle(std::ostream &out);
 
   virtual void wait_bc_exchange(std::set<int> &queue, const int mode);
 
   virtual void initialize(int argc, char **argv) override;
 
   virtual void setup() override;
+
+  virtual void rebuild_chunkmap() override;
 
 public:
   ExPIC3D(int argc, char **argv) : BaseApp(argc, argv), Ns(1)
