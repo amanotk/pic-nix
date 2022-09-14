@@ -132,7 +132,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   const int nc = cdims[3];
 
   // filename
-  std::string fn_prefix = tfm::format("%s/%s_%06d", datadir, prefix_field, curstep);
+  std::string fn_prefix = tfm::format("%s_%06d", prefix_field, curstep);
+  std::string dirname   = tfm::format("%s/", datadir);
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
@@ -144,7 +145,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   size_t   disp;
 
   // open file
-  jsonio::open_file(fn_data.c_str(), &fh, &disp, "w");
+  jsonio::open_file((dirname + fn_data).c_str(), &fh, &disp, "w");
 
   // save chunkmap
   chunkmap->save_json(obj_chunkmap);
@@ -206,7 +207,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   root["dataset"] = obj_dataset;
 
   if (thisrank == 0) {
-    std::ofstream ofs(fn_json);
+    std::ofstream ofs(dirname + fn_json);
     ofs << std::setw(2) << root;
     ofs.close();
   }

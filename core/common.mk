@@ -2,6 +2,7 @@
 
 # base directory
 BASEDIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
+NIXDIR  := ../nix
 
 # include compilers
 include $(BASEDIR)/compiler.mk
