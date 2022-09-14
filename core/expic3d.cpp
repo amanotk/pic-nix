@@ -59,7 +59,7 @@ DEFINE_MEMBER(void, parse_cfg)()
 
     // other parameters
     delt = parameter["delt"].get<float64>();
-    delh = parameter["delt"].get<float64>();
+    delh = parameter["delh"].get<float64>();
     cc   = parameter["cc"].get<float64>();
     Ns   = parameter["Ns"].get<int>();
   }
@@ -136,9 +136,9 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
-  json json_root;
-  json json_chunkmap;
-  json json_dataset;
+  json root;
+  json obj_chunkmap;
+  json obj_dataset;
 
   MPI_File fh;
   size_t   disp;
@@ -147,7 +147,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   jsonio::open_file(fn_data.c_str(), &fh, &disp, "w");
 
   // save chunkmap
-  chunkmap->save(json_chunkmap, &fh, &disp);
+  chunkmap->save_json(obj_chunkmap);
 
   //
   // electromagnetic field
@@ -159,7 +159,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[5] = {nc, nz, ny, nx, 6};
     const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticEmf);
+    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticEmf);
   }
 
   //
@@ -172,7 +172,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[5] = {nc, nz, ny, nx, 4};
     const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticCur);
+    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticCur);
   }
 
   //
@@ -185,7 +185,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[6] = {nc, nz, ny, nx, ns, 10};
     const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
 
-    write_field_chunk(fh, json_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticMom);
+    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticMom);
   }
 
   jsonio::close_file(&fh);
@@ -195,19 +195,19 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   //
 
   // meta data
-  json_root["meta"] = {{"endian", common::get_endian_flag()},
-                       {"rawfile", fn_data},
-                       {"order", 1},
-                       {"time", curtime},
-                       {"step", curstep}};
+  root["meta"] = {{"endian", common::get_endian_flag()},
+                  {"rawfile", fn_data},
+                  {"order", 1},
+                  {"time", curtime},
+                  {"step", curstep}};
   // chunkmap
-  json_root["chunkmap"] = json_chunkmap;
+  root["chunkmap"] = obj_chunkmap;
   // dataset
-  json_root["dataset"] = json_dataset;
+  root["dataset"] = obj_dataset;
 
   if (thisrank == 0) {
     std::ofstream ofs(fn_json);
-    ofs << std::setw(2) << json_root;
+    ofs << std::setw(2) << root;
     ofs.close();
   }
   MPI_Barrier(MPI_COMM_WORLD);
@@ -306,8 +306,9 @@ DEFINE_MEMBER(void, setup)()
 
 DEFINE_MEMBER(void, rebuild_chunkmap)()
 {
+#if 0
   BaseApp::rebuild_chunkmap();
-
+#endif
   // set MPI communicator for each mode
   for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
     for (int i = 0; i < numchunk; i++) {

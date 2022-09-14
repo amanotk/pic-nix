@@ -19,6 +19,8 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
   const float64 zimin = zlim[0] + dh2;
   const float64 zhmin = zlim[0];
 
+  float64 etime = common::etime();
+
   for (int is = 0; is < Ns; is++) {
     PtrParticle p = up[is];
 
@@ -74,11 +76,16 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
       Particle::push_buneman_boris(&xu[3], emf);
     }
   }
+
+  // store computation time
+  this->load[LoadParticle] += common::etime() - etime;
 }
 
 DEFINE_MEMBER1(void, push_position)(const float64 delt)
 {
   const float64 rc = 1 / cc;
+
+  float64 etime = common::etime();
 
   for (int is = 0; is < Ns; is++) {
     PtrParticle p = up[is];
@@ -102,6 +109,9 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
     // count
     count_particle(p, 0, p->Np - 1, true);
   }
+
+  // store computation time
+  this->load[LoadParticle] += common::etime() - etime;
 }
 
 DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
@@ -113,6 +123,8 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
   const float64 ximin = xlim[0] + dh2;
   const float64 yimin = ylim[0] + dh2;
   const float64 zimin = zlim[0] + dh2;
+
+  float64 etime = common::etime();
 
   // clear charge/current density
   uj.fill(0);
@@ -171,4 +183,7 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       }
     }
   }
+
+  // store computation time
+  this->load[LoadCur] += common::etime() - etime;
 }

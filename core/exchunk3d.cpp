@@ -12,6 +12,8 @@ DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), N
   for (int i = 0; i < NumBoundaryMode; i++) {
     mpibufvec[i] = std::make_shared<MpiBuffer>();
   }
+
+  this->load.resize(NumLoadMode);
 }
 
 DEFINE_MEMBER(, ~ExChunk3D)()
@@ -249,7 +251,7 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
   }
 
   // store computation time
-  this->load += common::etime() - etime;
+  this->load[LoadEmf] += common::etime() - etime;
 }
 
 DEFINE_MEMBER(void, push_mfd)(const float64 delt)
@@ -273,7 +275,7 @@ DEFINE_MEMBER(void, push_mfd)(const float64 delt)
   }
 
   // store computation time
-  this->load += common::etime() - etime;
+  this->load[LoadEmf] += common::etime() - etime;
 }
 
 DEFINE_MEMBER(void, set_boundary_begin)(const int mode)

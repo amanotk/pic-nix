@@ -55,6 +55,14 @@ public:
     DiagnosticParticle = 3,
   };
 
+  // mode for load
+  enum LoadMode {
+    LoadEmf      = 0,
+    LoadCur      = 1,
+    LoadParticle = 2,
+    NumLoadMode  = 3, // number of mode
+  };
+
   // mode for boundary exchange
   enum BoundaryMode {
     BoundaryEmf      = 0,
