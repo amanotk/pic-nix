@@ -214,6 +214,8 @@ def create_vds(hdffile, chunkmap, chunked, dataset, verbose=True):
             # determine data shape assuming 3D chunk
             #
             csh = list(srcdata[0].shape)
+            if len(csh) < 3: # ignore dataset with dimensions < 3
+                continue
             gsh = csh.copy()
             gsh[0] = csh[0] * chunkid.shape[0]
             gsh[1] = csh[1] * chunkid.shape[1]

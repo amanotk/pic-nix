@@ -49,10 +49,14 @@ public:
 
   // mode for diagnostic
   enum DiagnosticMode {
-    DiagnosticEmf      = 0,
-    DiagnosticCur      = 1,
-    DiagnosticMom      = 2,
-    DiagnosticParticle = 3,
+    DiagnosticZ        = 0,
+    DiagnosticY        = 1,
+    DiagnosticX        = 2,
+    DiagnosticEmf      = 3,
+    DiagnosticCur      = 4,
+    DiagnosticMom      = 5,
+    DiagnosticParticle = 6,
+    NumDiagnosticMode  = 7,
   };
 
   // mode for load
@@ -94,6 +98,8 @@ public:
   virtual int pack_diagnostic(const int mode, void *buffer, const int address);
 
   virtual int pack_diagnostic_field(void *buffer, const int address, T_field &u);
+
+  virtual int pack_diagnostic_coord(void *buffer, const int address, const int dir);
 
   virtual void setup(json &config) override;
 

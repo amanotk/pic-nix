@@ -78,6 +78,15 @@ DEFINE_MEMBER(void, allocate)()
 DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer, const int address)
 {
   switch (mode) {
+  case DiagnosticZ:
+    return pack_diagnostic_coord(buffer, address, 0);
+    break;
+  case DiagnosticY:
+    return pack_diagnostic_coord(buffer, address, 1);
+    break;
+  case DiagnosticX:
+    return pack_diagnostic_coord(buffer, address, 2);
+    break;
   case DiagnosticEmf:
     return pack_diagnostic_field(buffer, address, uf);
     break;
@@ -106,10 +115,11 @@ DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer, const int addr
 
 DEFINE_MEMBER(int, pack_diagnostic_field)(void *buffer, const int address, T_field &u)
 {
-  size_t size = dims[2] * dims[1] * dims[0] * u.shape(3);
+  size_t size  = dims[2] * dims[1] * dims[0] * u.shape(3);
+  int    count = address + sizeof(float64) * size;
 
   if (buffer == nullptr) {
-    return sizeof(float64) * size;
+    return count;
   }
 
   auto Iz = xt::range(Lbz, Ubz + 1);
@@ -121,7 +131,38 @@ DEFINE_MEMBER(int, pack_diagnostic_field)(void *buffer, const int address, T_fie
   char *ptr = &static_cast<char *>(buffer)[address];
   std::copy(vv.begin(), vv.end(), reinterpret_cast<float64 *>(ptr));
 
-  return sizeof(float64) * size;
+  return count;
+}
+
+DEFINE_MEMBER(int, pack_diagnostic_coord)(void *buffer, const int address, const int dir)
+{
+  size_t size  = dims[dir];
+  int    count = address + sizeof(float64) * size;
+
+  if (buffer == nullptr) {
+    return count;
+  }
+
+  float64 *ptr = reinterpret_cast<float64 *>(static_cast<char *>(buffer) + address);
+
+  switch (dir) {
+  case 0: {
+    auto zz = xt::view(zc, xt::range(Lbz, Ubz + 1));
+    std::copy(zz.begin(), zz.end(), ptr);
+  } break;
+  case 1: {
+    auto yy = xt::view(yc, xt::range(Lby, Uby + 1));
+    std::copy(yy.begin(), yy.end(), ptr);
+  } break;
+  case 2: {
+    auto xx = xt::view(xc, xt::range(Lbx, Ubx + 1));
+    std::copy(xx.begin(), xx.end(), ptr);
+  } break;
+  default:
+    break;
+  }
+
+  return count;
 }
 
 DEFINE_MEMBER(void, setup)(json &config)

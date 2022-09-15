@@ -92,24 +92,27 @@ DEFINE_MEMBER(void, write_field_chunk)
 
   // buffer size (assuming constant)
   int bufsize = chunkvec[0]->pack_diagnostic(mode, nullptr, 0);
-  if (bufsize > sendbuf.size) {
-    sendbuf.resize(bufsize);
-    recvbuf.resize(bufsize);
+  if (sendbuf.size < numchunk * bufsize) {
+    sendbuf.resize(bufsize * numchunk);
+    recvbuf.resize(bufsize * numchunk);
   }
 
-  for (int i = 0; i < numchunk; i++) {
+  // write for each chunk
+  char *sendptr = sendbuf.get();
+  for (int i = 0, pos = 0; i < numchunk; i++) {
     // pack
-    assert(bufsize == chunkvec[i]->pack_diagnostic(mode, sendbuf.get(), 0));
+    assert(bufsize + pos == chunkvec[i]->pack_diagnostic(mode, sendptr, pos));
 
     // write
     size_t chunkdisp = disp + bufsize * chunkvec[i]->get_id();
-    jsonio::write_contiguous_at(&fh, &chunkdisp, sendbuf.get(), bufsize, 1, &req[i]);
+    char * chunkptr  = &sendptr[pos];
+    jsonio::write_contiguous_at(&fh, &chunkdisp, chunkptr, bufsize, 1, &req[i]);
 
-    MPI_Wait(&req[i], MPI_STATUS_IGNORE);
+    pos += bufsize;
   }
 
   // wait
-  //MPI_Waitall(numchunk, req, MPI_STATUS_IGNORE);
+  MPI_Waitall(numchunk, req, MPI_STATUS_IGNORE);
 
   // update pointer
   disp += size;
@@ -152,6 +155,39 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
 
   // save chunkmap
   chunkmap->save_json(obj_chunkmap);
+
+  //
+  // coordinate
+  //
+  {
+    const char name[]  = "xc";
+    const char desc[]  = "x coordinate";
+    const int  ndim    = 2;
+    const int  dims[2] = {nc, nx};
+    const int  size    = nc * nx * sizeof(float64);
+
+    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticX);
+  }
+
+  {
+    const char name[]  = "yc";
+    const char desc[]  = "y coordinate";
+    const int  ndim    = 2;
+    const int  dims[2] = {nc, ny};
+    const int  size    = nc * ny * sizeof(float64);
+
+    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticY);
+  }
+
+  {
+    const char name[]  = "zc";
+    const char desc[]  = "z coordinate";
+    const int  ndim    = 2;
+    const int  dims[2] = {nc, nz};
+    const int  size    = nc * nz * sizeof(float64);
+
+    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticZ);
+  }
 
   //
   // electromagnetic field
