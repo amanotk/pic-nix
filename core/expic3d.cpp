@@ -143,18 +143,14 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
-  json root;
-  json obj_chunkmap;
-  json obj_dataset;
-
   MPI_File fh;
   size_t   disp;
+  json     root;
+  json     cmap;
+  json     dataset;
 
   // open file
   jsonio::open_file((dirname + fn_data).c_str(), &fh, &disp, "w");
-
-  // save chunkmap
-  chunkmap->save_json(obj_chunkmap);
 
   //
   // coordinate
@@ -166,7 +162,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[2] = {nc, nx};
     const int  size    = nc * nx * sizeof(float64);
 
-    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticX);
+    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticX);
   }
 
   {
@@ -176,7 +172,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[2] = {nc, ny};
     const int  size    = nc * ny * sizeof(float64);
 
-    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticY);
+    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticY);
   }
 
   {
@@ -186,7 +182,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[2] = {nc, nz};
     const int  size    = nc * nz * sizeof(float64);
 
-    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticZ);
+    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticZ);
   }
 
   //
@@ -199,7 +195,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[5] = {nc, nz, ny, nx, 6};
     const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticEmf);
+    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticEmf);
   }
 
   //
@@ -212,7 +208,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[5] = {nc, nz, ny, nx, 4};
     const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticCur);
+    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticCur);
   }
 
   //
@@ -225,7 +221,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     const int  dims[6] = {nc, nz, ny, nx, ns, 10};
     const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
 
-    write_field_chunk(fh, obj_dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticMom);
+    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticMom);
   }
 
   jsonio::close_file(&fh);
@@ -233,24 +229,32 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   //
   // output json file
   //
+  {
+    json root;
+    json cmap;
 
-  // meta data
-  root["meta"] = {{"endian", common::get_endian_flag()},
-                  {"rawfile", fn_data},
-                  {"order", 1},
-                  {"time", curtime},
-                  {"step", curstep}};
-  // chunkmap
-  root["chunkmap"] = obj_chunkmap;
-  // dataset
-  root["dataset"] = obj_dataset;
+    // convert chunkmap into json
+    chunkmap->save_json(cmap);
 
-  if (thisrank == 0) {
-    std::ofstream ofs(dirname + fn_json);
-    ofs << std::setw(2) << root;
-    ofs.close();
+    // meta data
+    root["meta"] = {{"endian", common::get_endian_flag()},
+                    {"rawfile", fn_data},
+                    {"order", 1},
+                    {"time", curtime},
+                    {"step", curstep}};
+    // chunkmap
+    root["chunkmap"] = cmap;
+    // dataset
+    root["dataset"] = dataset;
+
+    if (thisrank == 0) {
+      std::ofstream ofs(dirname + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
   }
-  MPI_Barrier(MPI_COMM_WORLD);
 }
 
 DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out)
