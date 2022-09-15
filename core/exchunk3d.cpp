@@ -254,7 +254,7 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
   this->load[LoadEmf] += common::etime() - etime;
 }
 
-DEFINE_MEMBER(void, push_mfd)(const float64 delt)
+DEFINE_MEMBER(void, push_bfd)(const float64 delt)
 {
   const float64 delh = this->delh;
   const float64 cfl  = cc * delt / delh;
@@ -290,7 +290,7 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
     this->begin_bc_exchange(mpibufvec[mode], uf);
     break;
   case BoundaryCur:
-    this->begin_bc_exchange(mpibufvec[mode], uj);
+    this->begin_bc_exchange(mpibufvec[mode], uj, true);
     break;
   case BoundaryMom: {
     // reshape into 4D array
@@ -300,7 +300,7 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
     shape[2]   = um.shape(2);
     shape[3]   = um.shape(3) * um.shape(4);
     T_field vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
-    this->begin_bc_exchange(mpibufvec[mode], vv);
+    this->begin_bc_exchange(mpibufvec[mode], vv, true);
   } break;
   case BoundaryParticle:
     // particle injection should be placed here
@@ -318,10 +318,10 @@ DEFINE_MEMBER(void, set_boundary_end)(const int mode)
 
   switch (mode) {
   case BoundaryEmf:
-    this->end_bc_exchange(mpibufvec[mode], uf, false);
+    this->end_bc_exchange(mpibufvec[mode], uf);
     break;
   case BoundaryCur:
-    this->end_bc_exchange(mpibufvec[mode], uj, true); // append
+    this->end_bc_exchange(mpibufvec[mode], uj, true);
     break;
   case BoundaryMom: {
     // reshape into 4D array
@@ -331,7 +331,7 @@ DEFINE_MEMBER(void, set_boundary_end)(const int mode)
     shape[2]   = um.shape(2);
     shape[3]   = um.shape(3) * um.shape(4);
     T_field vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
-    this->end_bc_exchange(mpibufvec[mode], vv, true); // append
+    this->end_bc_exchange(mpibufvec[mode], vv, true);
   } break;
   case BoundaryParticle:
     this->end_bc_exchange(mpibufvec[mode], up);

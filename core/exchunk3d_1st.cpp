@@ -22,10 +22,10 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
   float64 etime = common::etime();
 
   for (int is = 0; is < Ns; is++) {
-    PtrParticle p = up[is];
+    PtrParticle p   = up[is];
+    float64     dt1 = 0.5 * p->q / p->m * delt;
 
     // loop over particle
-    float64 dt1 = 0.5 * p->q / p->m * delt;
     for (int ip = 0; ip < p->Np; ip++) {
       float64 wix[2] = {0};
       float64 whx[2] = {0};
@@ -131,6 +131,7 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
 
   for (int is = 0; is < Ns; is++) {
     PtrParticle p = up[is];
+    float64     q = p->q;
 
     // loop over particle
     for (int ip = 0; ip < p->Np; ip++) {
@@ -149,9 +150,9 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       int iz0 = Particle::digitize(xv[2], zimin, rdh) + Lbz;
 
       // weights
-      Particle::S1(xv[0], ximin + ix0 * delh, delh, &ss[0][0][1]);
-      Particle::S1(xv[1], yimin + iy0 * delh, delh, &ss[0][1][1]);
-      Particle::S1(xv[2], zimin + iz0 * delh, delh, &ss[0][2][1]);
+      Particle::S1(xv[0], ximin + ix0 * delh, delh, &ss[0][0][1], q);
+      Particle::S1(xv[1], yimin + iy0 * delh, delh, &ss[0][1][1], q);
+      Particle::S1(xv[2], zimin + iz0 * delh, delh, &ss[0][2][1], q);
 
       //
       // -*- weights after move -*-
@@ -162,9 +163,9 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       int iz1 = Particle::digitize(xu[2], zimin, rdh) + Lbz;
 
       // weights
-      Particle::S1(xu[0], ximin + ix1 * delh, delh, &ss[1][0][1 + ix1 - ix0]);
-      Particle::S1(xu[1], yimin + iy1 * delh, delh, &ss[1][1][1 + iy1 - iy0]);
-      Particle::S1(xu[2], zimin + iz1 * delh, delh, &ss[1][2][1 + iz1 - iz0]);
+      Particle::S1(xu[0], ximin + ix1 * delh, delh, &ss[1][0][1 + ix1 - ix0], q);
+      Particle::S1(xu[1], yimin + iy1 * delh, delh, &ss[1][1][1 + iy1 - iy0], q);
+      Particle::S1(xu[2], zimin + iz1 * delh, delh, &ss[1][2][1 + iz1 - iz0], q);
 
       //
       // -*- accumulate current via density decomposition -*-

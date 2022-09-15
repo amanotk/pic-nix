@@ -17,12 +17,19 @@ DEFINE_MEMBER(void, parse_cfg)()
   {
     json parameter = cfg_json["parameter"];
 
+    // number of grids and chunks
     int nx = parameter["Nx"].get<int>();
     int ny = parameter["Ny"].get<int>();
     int nz = parameter["Nz"].get<int>();
     int cx = parameter["Cx"].get<int>();
     int cy = parameter["Cy"].get<int>();
     int cz = parameter["Cz"].get<int>();
+
+    // other parameters
+    delt = parameter["delt"].get<float64>();
+    delh = parameter["delh"].get<float64>();
+    cc   = parameter["cc"].get<float64>();
+    Ns   = parameter["Ns"].get<int>();
 
     // check dimensions
     if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
@@ -56,12 +63,6 @@ DEFINE_MEMBER(void, parse_cfg)()
     zlim[0] = 0;
     zlim[1] = delh * ndims[0];
     zlim[2] = zlim[1] - zlim[0];
-
-    // other parameters
-    delt = parameter["delt"].get<float64>();
-    delh = parameter["delh"].get<float64>();
-    cc   = parameter["cc"].get<float64>();
-    Ns   = parameter["Ns"].get<int>();
   }
 
   // diagnostic
@@ -103,10 +104,12 @@ DEFINE_MEMBER(void, write_field_chunk)
     // write
     size_t chunkdisp = disp + bufsize * chunkvec[i]->get_id();
     jsonio::write_contiguous_at(&fh, &chunkdisp, sendbuf.get(), bufsize, 1, &req[i]);
+
+    MPI_Wait(&req[i], MPI_STATUS_IGNORE);
   }
 
   // wait
-  MPI_Waitall(numchunk, req, MPI_STATUS_IGNORE);
+  //MPI_Waitall(numchunk, req, MPI_STATUS_IGNORE);
 
   // update pointer
   disp += size;
@@ -133,7 +136,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
 
   // filename
   std::string fn_prefix = tfm::format("%s_%06d", prefix_field, curstep);
-  std::string dirname   = tfm::format("%s/", datadir);
+  std::string dirname   = datadir + "/";
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
@@ -326,7 +329,7 @@ DEFINE_MEMBER(void, push)()
 
   for (int i = 0; i < numchunk; i++) {
     // push B for a half step
-    chunkvec[i]->push_mfd(0.5 * delt);
+    chunkvec[i]->push_bfd(0.5 * delt);
 
     // push particle
     chunkvec[i]->push_velocity(delt);
@@ -337,12 +340,12 @@ DEFINE_MEMBER(void, push)()
 
     // begin boundary exchange for current and particles
     chunkvec[i]->set_boundary_begin(Chunk::BoundaryCur);
-    chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
     bc_queue_uj.insert(i);
+    chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
     bc_queue_up.insert(i);
 
     // push B for a half step
-    chunkvec[i]->push_mfd(0.5 * delt);
+    chunkvec[i]->push_bfd(0.5 * delt);
   }
 
   // wait for current boundary exchange

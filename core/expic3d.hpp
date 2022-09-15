@@ -84,6 +84,11 @@ public:
   virtual void push() override;
 
   virtual void diagnostic(std::ostream &out) override;
+
+  virtual void finalize(int cleanup = 0) override
+  {
+    BaseApp::finalize(1);
+  }
 };
 
 // Local Variables:
