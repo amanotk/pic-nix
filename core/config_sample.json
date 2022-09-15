@@ -1,15 +1,27 @@
 {
-	"diagnostic": {
-		"datadir": ".",
-		"prefix_load": "load",
-		"interval_load": 1,
-		"prefix_history": "history",
-		"interval_history": 1,
-		"prefix_field": "field",
-		"interval_field": 100,
-		"prefix_particle": "particle",
-		"interval_particle": 10000
-	},
+	"diagnostic": [
+		{
+			"name": "load",
+			"path": ".",
+			"prefix": "load",
+			"interval": 1,
+			"options": null
+		},
+		{
+			"name": "field",
+			"path": ".",
+			"prefix": "field",
+			"interval": 10,
+			"options": null
+		},
+		{
+			"name": "particle",
+			"path": ".",
+			"prefix": "particle",
+			"interval": 1000,
+			"options": null
+		}
+	],
 	"parameter": {
 		"Nx": 32,
 		"Ny": 32,
@@ -31,7 +43,7 @@
 			{
 				"np": 10,
 				"ro": 1.0e-0,
-				"qm":-1.0e-0,
+				"qm": -1.0e-0,
 				"vt": 1.0e-0
 			},
 			{

@@ -26,10 +26,10 @@ DEFINE_MEMBER(void, parse_cfg)()
     int cz = parameter["Cz"].get<int>();
 
     // other parameters
+    Ns   = parameter["Ns"].get<int>();
+    cc   = parameter["cc"].get<float64>();
     delt = parameter["delt"].get<float64>();
     delh = parameter["delh"].get<float64>();
-    cc   = parameter["cc"].get<float64>();
-    Ns   = parameter["Ns"].get<int>();
 
     // check dimensions
     if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
@@ -65,19 +65,9 @@ DEFINE_MEMBER(void, parse_cfg)()
     zlim[2] = zlim[1] - zlim[0];
   }
 
-  // diagnostic
-  {
-    json diagnostic = cfg_json["diagnostic"];
-
-    datadir           = diagnostic["datadir"].get<std::string>();
-    prefix_load       = diagnostic["prefix_load"].get<std::string>();
-    interval_load     = diagnostic["interval_load"].get<int>();
-    prefix_history    = diagnostic["prefix_history"].get<std::string>();
-    interval_history  = diagnostic["interval_history"].get<int>();
-    prefix_field      = diagnostic["prefix_field"].get<std::string>();
-    interval_field    = diagnostic["interval_field"].get<int>();
-    prefix_particle   = diagnostic["prefix_particle"].get<std::string>();
-    interval_particle = diagnostic["interval_particle"].get<int>();
+  // check diagnostic
+  if (cfg_json["diagnostic"].is_array() == false) {
+    ERRORPRINT("Invalid diagnostic\n");
   }
 }
 
@@ -118,18 +108,11 @@ DEFINE_MEMBER(void, write_field_chunk)
   disp += size;
 }
 
-DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out)
+DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out, json &obj)
 {
 }
 
-DEFINE_MEMBER(void, diagnostic_history)(std::ostream &out)
-{
-  if (thisrank == 0) {
-    tfm::format(out, "step = %8d, time = %15.6e\n", curstep, curtime);
-  }
-}
-
-DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
+DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
 {
   const int nz = ndims[0] / cdims[0];
   const int ny = ndims[1] / cdims[1];
@@ -137,9 +120,17 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   const int ns = Ns;
   const int nc = cdims[3];
 
+  // console message
+  if (thisrank == 0) {
+    tfm::format(out, "step = %8d, time = %15.6e\n", curstep, curtime);
+  }
+
+  // get parameters from json
+  std::string prefix = obj.value("prefix", "field");
+  std::string path   = obj.value("path", ".") + "/";
+
   // filename
-  std::string fn_prefix = tfm::format("%s_%06d", prefix_field, curstep);
-  std::string dirname   = datadir + "/";
+  std::string fn_prefix = tfm::format("%s_%06d", prefix, curstep);
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
@@ -150,7 +141,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   json     dataset;
 
   // open file
-  jsonio::open_file((dirname + fn_data).c_str(), &fh, &disp, "w");
+  jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
 
   //
   // coordinate
@@ -248,7 +239,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
     root["dataset"] = dataset;
 
     if (thisrank == 0) {
-      std::ofstream ofs(dirname + fn_json);
+      std::ofstream ofs(path + fn_json);
       ofs << std::setw(2) << root;
       ofs.close();
     }
@@ -257,7 +248,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out)
   }
 }
 
-DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out)
+DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out, json &obj)
 {
 }
 
@@ -410,20 +401,40 @@ DEFINE_MEMBER(void, push)()
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
 {
-  if (curstep % interval_load == 0) {
-    diagnostic_load(out);
-  }
+  json diagnostic = cfg_json["diagnostic"];
 
-  if (curstep % interval_history == 0) {
-    diagnostic_history(out);
-  }
+  // iterate over diagnostics
+  for (json::iterator it = diagnostic.begin(); it != diagnostic.end(); ++it) {
+    json        obj = *it;
+    std::string name;
+    int         interval;
 
-  if (curstep % interval_field == 0) {
-    diagnostic_field(out);
-  }
+    try {
+      name     = obj["name"].get<std::string>();
+      interval = obj["interval"].get<int>();
+    } catch (json::exception &e) {
+      std::string msg = tfm::format("Error in diagnostic (ignored)\n%s\n", e.what());
+      ERRORPRINT(msg.c_str());
+      continue;
+    }
 
-  if (curstep % interval_particle == 0) {
-    diagnostic_particle(out);
+    if (curstep % interval != 0)
+      continue;
+
+    //
+    // call specific diagnostic routines
+    //
+    if (name == "load") {
+      diagnostic_load(out, obj);
+    }
+
+    if (name == "field") {
+      diagnostic_field(out, obj);
+    }
+
+    if (name == "particle") {
+      diagnostic_particle(out, obj);
+    }
   }
 }
 

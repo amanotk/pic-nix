@@ -113,6 +113,8 @@ public:
 
   virtual void deposit_current(const float64 delt);
 
+  virtual void deposit_moment();
+
   virtual void set_boundary_begin(const int mode = 0) override;
 
   virtual void set_boundary_end(const int mode = 0) override;

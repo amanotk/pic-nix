@@ -42,17 +42,8 @@ protected:
   using BaseApp::sendbuf;
   using BaseApp::recvbuf;
 
-  int         Ns;                ///< number of species
-  std::string datadir;           ///< data output directory
-  std::string prefix_load;       ///< output filename prefix for load
-  std::string prefix_history;    ///< output filename prefix for history
-  std::string prefix_field;      ///< output filename prefix for field
-  std::string prefix_particle;   ///< output filename prefix for particle
-  int         interval_load;     ///< data output interval for load
-  int         interval_history;  ///< data output interval for history
-  int         interval_field;    ///< data output interval for field
-  int         interval_particle; ///< data output interval for particle
-  MpiCommVec  mpicommvec;        ///< MPI Communicators
+  int        Ns;         ///< number of species
+  MpiCommVec mpicommvec; ///< MPI Communicators
 
   virtual void parse_cfg() override;
 
@@ -60,13 +51,11 @@ protected:
                                  const char *desc, const int size, const int ndim, const int *dims,
                                  const int mode);
 
-  virtual void diagnostic_load(std::ostream &out);
+  virtual void diagnostic_load(std::ostream &out, json &obj);
 
-  virtual void diagnostic_history(std::ostream &out);
+  virtual void diagnostic_field(std::ostream &out, json &obj);
 
-  virtual void diagnostic_field(std::ostream &out);
-
-  virtual void diagnostic_particle(std::ostream &out);
+  virtual void diagnostic_particle(std::ostream &out, json &obj);
 
   virtual void wait_bc_exchange(std::set<int> &queue, const int mode);
 

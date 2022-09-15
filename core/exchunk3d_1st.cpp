@@ -22,11 +22,11 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
   float64 etime = common::etime();
 
   for (int is = 0; is < Ns; is++) {
-    PtrParticle p   = up[is];
-    float64     dt1 = 0.5 * p->q / p->m * delt;
+    PtrParticle ps  = up[is];
+    float64     dt1 = 0.5 * ps->q / ps->m * delt;
 
     // loop over particle
-    for (int ip = 0; ip < p->Np; ip++) {
+    for (int ip = 0; ip < ps->Np; ip++) {
       float64 wix[2] = {0};
       float64 whx[2] = {0};
       float64 wiy[2] = {0};
@@ -35,7 +35,7 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
       float64 whz[2] = {0};
       float64 emf[6] = {0};
 
-      float64 *xu  = &p->xu(ip, 0);
+      float64 *xu  = &ps->xu(ip, 0);
       float64  gam = Particle::lorentz_factor(xu[3], xu[4], xu[5], rc);
       float64  dt2 = dt1 * rc / gam;
 
@@ -88,12 +88,12 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
   float64 etime = common::etime();
 
   for (int is = 0; is < Ns; is++) {
-    PtrParticle p = up[is];
+    PtrParticle ps = up[is];
 
     // loop over particle
-    for (int ip = 0; ip < p->Np; ip++) {
-      float64 *xu  = &p->xu(ip, 0);
-      float64 *xv  = &p->xv(ip, 0);
+    for (int ip = 0; ip < ps->Np; ip++) {
+      float64 *xu  = &ps->xu(ip, 0);
+      float64 *xv  = &ps->xv(ip, 0);
       float64  gam = Particle::lorentz_factor(xu[3], xu[4], xu[5], rc);
       float64  dt  = delt / gam;
 
@@ -107,7 +107,7 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
     }
 
     // count
-    count_particle(p, 0, p->Np - 1, true);
+    count_particle(ps, 0, ps->Np - 1, true);
   }
 
   // store computation time
@@ -130,16 +130,16 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
   uj.fill(0);
 
   for (int is = 0; is < Ns; is++) {
-    PtrParticle p = up[is];
-    float64     q = p->q;
+    PtrParticle ps = up[is];
+    float64     qs = ps->q;
 
     // loop over particle
-    for (int ip = 0; ip < p->Np; ip++) {
+    for (int ip = 0; ip < ps->Np; ip++) {
       float64 ss[2][3][4]     = {0};
       float64 cur[4][4][4][4] = {0};
 
-      float64 *xv = &p->xv(ip, 0);
-      float64 *xu = &p->xu(ip, 0);
+      float64 *xv = &ps->xv(ip, 0);
+      float64 *xu = &ps->xu(ip, 0);
 
       //
       // -*- weights before move -*-
@@ -150,9 +150,9 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       int iz0 = Particle::digitize(xv[2], zimin, rdh) + Lbz;
 
       // weights
-      Particle::S1(xv[0], ximin + ix0 * delh, delh, &ss[0][0][1], q);
-      Particle::S1(xv[1], yimin + iy0 * delh, delh, &ss[0][1][1], q);
-      Particle::S1(xv[2], zimin + iz0 * delh, delh, &ss[0][2][1], q);
+      Particle::S1(xv[0], ximin + ix0 * delh, delh, &ss[0][0][1], qs);
+      Particle::S1(xv[1], yimin + iy0 * delh, delh, &ss[0][1][1], qs);
+      Particle::S1(xv[2], zimin + iz0 * delh, delh, &ss[0][2][1], qs);
 
       //
       // -*- weights after move -*-
@@ -163,9 +163,9 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       int iz1 = Particle::digitize(xu[2], zimin, rdh) + Lbz;
 
       // weights
-      Particle::S1(xu[0], ximin + ix1 * delh, delh, &ss[1][0][1 + ix1 - ix0], q);
-      Particle::S1(xu[1], yimin + iy1 * delh, delh, &ss[1][1][1 + iy1 - iy0], q);
-      Particle::S1(xu[2], zimin + iz1 * delh, delh, &ss[1][2][1 + iz1 - iz0], q);
+      Particle::S1(xu[0], ximin + ix1 * delh, delh, &ss[1][0][1 + ix1 - ix0], qs);
+      Particle::S1(xu[1], yimin + iy1 * delh, delh, &ss[1][1][1 + iy1 - iy0], qs);
+      Particle::S1(xu[2], zimin + iz1 * delh, delh, &ss[1][2][1 + iz1 - iz0], qs);
 
       //
       // -*- accumulate current via density decomposition -*-
@@ -187,4 +187,74 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
 
   // store computation time
   this->load[LoadCur] += common::etime() - etime;
+}
+
+DEFINE_MEMBER1(void, deposit_moment)()
+{
+  const float64 rc    = 1 / cc;
+  const float64 rdh   = 1 / delh;
+  const float64 dh2   = 0.5 * delh;
+  const float64 ximin = xlim[0] + dh2;
+  const float64 yimin = ylim[0] + dh2;
+  const float64 zimin = zlim[0] + dh2;
+
+  // clear moment
+  um.fill(0);
+
+  for (int is = 0; is < Ns; is++) {
+    PtrParticle ps = up[is];
+    float64     ms = ps->m;
+
+    // loop over particle
+    for (int ip = 0; ip < ps->Np; ip++) {
+      float64 wx[2]            = {0};
+      float64 wy[2]            = {0};
+      float64 wz[2]            = {0};
+      float64 mom[2][2][2][10] = {0};
+
+      float64 *xu = &ps->xu(ip, 0);
+
+      // grid indices
+      int ix = Particle::digitize(xu[0], ximin, rdh) + Lbx;
+      int iy = Particle::digitize(xu[1], yimin, rdh) + Lby;
+      int iz = Particle::digitize(xu[2], zimin, rdh) + Lbz;
+
+      // weights
+      Particle::S1(xu[0], ximin + ix * delh, delh, wx, ms);
+      Particle::S1(xu[1], yimin + iy * delh, delh, wy, ms);
+      Particle::S1(xu[2], zimin + iz * delh, delh, wz, ms);
+
+      // deposit to local array (this step is not necessary for scalar version)
+      for (int jz = 0; jz < 2; jz++) {
+        for (int jy = 0; jy < 2; jy++) {
+          for (int jx = 0; jx < 2; jx++) {
+            float64 ww = wz[jz] * wy[jy] * wx[jx];
+
+            // FIXME; requires relativistic correction
+            mom[jz][jy][jx][0] = ww;
+            mom[jz][jy][jx][1] = ww * xu[3];
+            mom[jz][jy][jx][2] = ww * xu[4];
+            mom[jz][jy][jx][3] = ww * xu[5];
+            mom[jz][jy][jx][4] = ww * xu[3] * xu[3];
+            mom[jz][jy][jx][5] = ww * xu[4] * xu[4];
+            mom[jz][jy][jx][6] = ww * xu[5] * xu[5];
+            mom[jz][jy][jx][7] = ww * xu[3] * xu[4];
+            mom[jz][jy][jx][8] = ww * xu[3] * xu[5];
+            mom[jz][jy][jx][9] = ww * xu[4] * xu[5];
+          }
+        }
+      }
+
+      // deposit to global array
+      for (int jz = 0; jz < 2; jz++) {
+        for (int jy = 0; jy < 2; jy++) {
+          for (int jx = 0; jx < 2; jx++) {
+            for (int k = 0; k < 10; k++) {
+              um(iz + jz, iy + jy, ix + jx, k) += mom[jz][jy][jx][k];
+            }
+          }
+        }
+      }
+    }
+  }
 }
