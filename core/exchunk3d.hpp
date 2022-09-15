@@ -20,12 +20,9 @@ class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
   using json         = common::json;
-  using T_field      = xt::xtensor<float64, 4>;
-  using T_moment     = xt::xtensor<float64, 5>;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
-  using Chunk::boundary_margin;
   using Chunk::dims;
   using Chunk::Lbx;
   using Chunk::Lby;
@@ -40,12 +37,10 @@ public:
   using Chunk::xlim;
   using Chunk::ylim;
   using Chunk::zlim;
-  using Chunk::RecvMode;
-  using Chunk::SendMode;
   using Chunk::mpibufvec;
 
   // boundary margin
-  static constexpr int Nb = boundary_margin;
+  static constexpr int Nb = Chunk::boundary_margin;
 
   // mode for diagnostic
   enum DiagnosticMode {
@@ -77,12 +72,12 @@ public:
   };
 
 protected:
-  int         Ns; ///< number of particle species
-  float64     cc; ///< speed of light
-  ParticleVec up; ///< list of particles
-  T_field     uf; ///< electromagnetic field
-  T_field     uj; ///< current density
-  T_moment    um; ///< particle moment
+  int                     Ns; ///< number of particle species
+  float64                 cc; ///< speed of light
+  ParticleVec             up; ///< list of particles
+  xt::xtensor<float64, 4> uf; ///< electromagnetic field
+  xt::xtensor<float64, 4> uj; ///< current density
+  xt::xtensor<float64, 5> um; ///< particle moment
 
 public:
   ExChunk3D(const int dims[3], const int id = 0);
@@ -96,10 +91,6 @@ public:
   virtual void allocate();
 
   virtual int pack_diagnostic(const int mode, void *buffer, const int address);
-
-  virtual int pack_diagnostic_field(void *buffer, const int address, T_field &u);
-
-  virtual int pack_diagnostic_coord(void *buffer, const int address, const int dir);
 
   virtual void setup(json &config) override;
 

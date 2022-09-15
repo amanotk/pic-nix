@@ -5,6 +5,10 @@
   template <int Order>                                                                             \
   type ExPIC3D<Order>::name
 
+DEFINE_MEMBER(, ExPIC3D)(int argc, char **argv) : BaseApp(argc, argv), Ns(1)
+{
+}
+
 DEFINE_MEMBER(void, parse_cfg)()
 {
   // read configuration file
@@ -71,43 +75,6 @@ DEFINE_MEMBER(void, parse_cfg)()
   }
 }
 
-DEFINE_MEMBER(void, write_field_chunk)
-(MPI_File &fh, json &dataset, size_t &disp, const char *name, const char *desc, const int size,
- const int ndim, const int *dims, const int mode)
-{
-  MPI_Request req[numchunk];
-
-  // json metadata
-  jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-
-  // buffer size (assuming constant)
-  int bufsize = chunkvec[0]->pack_diagnostic(mode, nullptr, 0);
-  if (sendbuf.size < numchunk * bufsize) {
-    sendbuf.resize(bufsize * numchunk);
-    recvbuf.resize(bufsize * numchunk);
-  }
-
-  // write for each chunk
-  char *sendptr = sendbuf.get();
-  for (int i = 0, pos = 0; i < numchunk; i++) {
-    // pack
-    assert(bufsize + pos == chunkvec[i]->pack_diagnostic(mode, sendptr, pos));
-
-    // write
-    size_t chunkdisp = disp + bufsize * chunkvec[i]->get_id();
-    char * chunkptr  = &sendptr[pos];
-    jsonio::write_contiguous_at(&fh, &chunkdisp, chunkptr, bufsize, 1, &req[i]);
-
-    pos += bufsize;
-  }
-
-  // wait
-  MPI_Waitall(numchunk, req, MPI_STATUS_IGNORE);
-
-  // update pointer
-  disp += size;
-}
-
 DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out, json &obj)
 {
 }
@@ -136,8 +103,6 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
 
   MPI_File fh;
   size_t   disp;
-  json     root;
-  json     cmap;
   json     dataset;
 
   // open file
@@ -153,7 +118,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[2] = {nc, nx};
     const int  size    = nc * nx * sizeof(float64);
 
-    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticX);
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticX);
   }
 
   {
@@ -163,7 +129,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[2] = {nc, ny};
     const int  size    = nc * ny * sizeof(float64);
 
-    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticY);
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticY);
   }
 
   {
@@ -173,7 +140,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[2] = {nc, nz};
     const int  size    = nc * nz * sizeof(float64);
 
-    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticZ);
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticZ);
   }
 
   //
@@ -186,7 +154,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[5] = {nc, nz, ny, nx, 6};
     const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticEmf);
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticEmf);
   }
 
   //
@@ -199,7 +168,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[5] = {nc, nz, ny, nx, 4};
     const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticCur);
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticCur);
   }
 
   //
@@ -212,7 +182,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[6] = {nc, nz, ny, nx, ns, 10};
     const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
 
-    write_field_chunk(fh, dataset, disp, name, desc, size, ndim, dims, Chunk::DiagnosticMom);
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticMom);
   }
 
   jsonio::close_file(&fh);
@@ -250,26 +221,6 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
 
 DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out, json &obj)
 {
-}
-
-DEFINE_MEMBER(void, wait_bc_exchange)(std::set<int> &queue, const int mode)
-{
-  int recvmode = Chunk::RecvMode | mode;
-
-  while (queue.empty() == false) {
-    // find chunk for unpacking
-    auto iter = std::find_if(queue.begin(), queue.end(),
-                             [&](int i) { return chunkvec[i]->set_boundary_query(recvmode); });
-
-    // not found
-    if (iter == queue.end()) {
-      continue;
-    }
-
-    // unpack
-    chunkvec[*iter]->set_boundary_end(mode);
-    queue.erase(*iter);
-  }
 }
 
 DEFINE_MEMBER(void, initialize)(int argc, char **argv)
@@ -335,7 +286,7 @@ DEFINE_MEMBER(void, setup)()
       bc_queue.insert(i);
     }
 
-    wait_bc_exchange(bc_queue, Chunk::BoundaryEmf);
+    this->wait_bc_exchange(bc_queue, Chunk::BoundaryEmf);
   }
 }
 
@@ -380,7 +331,7 @@ DEFINE_MEMBER(void, push)()
   }
 
   // wait for current boundary exchange
-  wait_bc_exchange(bc_queue_uj, Chunk::BoundaryCur);
+  this->wait_bc_exchange(bc_queue_uj, Chunk::BoundaryCur);
 
   for (int i = 0; i < numchunk; i++) {
     // push E
@@ -392,8 +343,8 @@ DEFINE_MEMBER(void, push)()
   }
 
   // wait for particle and field boundary exchange
-  wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
-  wait_bc_exchange(bc_queue_uf, Chunk::BoundaryEmf);
+  this->wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
+  this->wait_bc_exchange(bc_queue_uf, Chunk::BoundaryEmf);
 
   curtime += delt;
   curstep++;
