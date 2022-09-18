@@ -44,14 +44,15 @@ public:
 
   // mode for diagnostic
   enum DiagnosticMode {
-    DiagnosticZ        = 0,
-    DiagnosticY        = 1,
-    DiagnosticX        = 2,
-    DiagnosticEmf      = 3,
-    DiagnosticCur      = 4,
-    DiagnosticMom      = 5,
-    DiagnosticParticle = 6,
-    NumDiagnosticMode  = 7,
+    DiagnosticLoad     = 0,
+    DiagnosticX        = 1,
+    DiagnosticY        = 2,
+    DiagnosticZ        = 3,
+    DiagnosticEmf      = 4,
+    DiagnosticCur      = 5,
+    DiagnosticMom      = 6,
+    DiagnosticParticle = 7,
+    NumDiagnosticMode  = 8,
   };
 
   // mode for load

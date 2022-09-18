@@ -77,6 +77,98 @@ DEFINE_MEMBER(void, parse_cfg)()
 
 DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out, json &obj)
 {
+  // get parameters from json
+  std::string prefix = obj.value("prefix", "load");
+  std::string path   = obj.value("path", ".") + "/";
+
+  // filename
+  std::string fn_json = prefix + ".json";
+  std::string fn_data = prefix + ".data";
+
+  MPI_File fh;
+  size_t   disp;
+
+  //
+  // initial setup
+  //
+  if (curstep == 0) {
+    // data file
+    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    jsonio::close_file(&fh);
+
+    // json file
+    if (thisrank == 0) {
+      const char name[]  = "load";
+      const char desc[]  = "chunk work load";
+      const int  ndim    = 3;
+      const int  dims[3] = {0, cdims[3], Chunk::NumLoadMode};
+      const int  size    = 0;
+
+      json root;
+      json dataset;
+
+      // meta data
+      root["meta"] = {{"endian", common::get_endian_flag()},
+                      {"rawfile", fn_data},
+                      {"order", 1},
+                      {"header", {"field push", "current deposit", "particle push"}}};
+
+      // dataset
+      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+      root["dataset"] = dataset;
+
+      std::ofstream ofs(path + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+
+  //
+  // output data file
+  //
+  {
+    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "a");
+
+    this->write_chunk_all(fh, disp, Chunk::DiagnosticLoad);
+
+    jsonio::close_file(&fh);
+  }
+
+  //
+  // output json file
+  //
+  {
+    json root;
+
+    // read json file
+    {
+      std::ifstream ifs(path + fn_json);
+      ifs >> root;
+    }
+
+    // modify shape and size
+    std::vector<int> shape = root["dataset"]["load"]["shape"];
+    shape[0]++;
+
+    root["dataset"]["load"]["shape"] = shape;
+    root["dataset"]["load"]["size"]  = shape[0] * shape[1] * shape[2] * sizeof(float64);
+
+    // write
+    if (thisrank == 0) {
+      std::ofstream ofs(path + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+
+  // reset
+  for (int i = 0; i < numchunk; i++) {
+    chunkvec[i]->reset_load();
+  }
 }
 
 DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
@@ -105,7 +197,6 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
   size_t   disp;
   json     dataset;
 
-  // open file
   jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
 
   //

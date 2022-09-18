@@ -15,6 +15,8 @@ FMT_CHUNKID = "%.8d"
 
 def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
     jsondir = os.path.dirname(jsonfile)
+    if jsondir == "":
+        jsondir = "."
 
     if hdffile is None:
         hdffile = os.path.splitext(jsonfile)[0] + ".h5"

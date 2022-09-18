@@ -13,7 +13,9 @@ DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), N
     mpibufvec[i] = std::make_shared<MpiBuffer>();
   }
 
+  // reset load
   this->load.resize(NumLoadMode);
+  this->reset_load();
 }
 
 DEFINE_MEMBER(, ~ExChunk3D)()
@@ -78,6 +80,9 @@ DEFINE_MEMBER(void, allocate)()
 DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer, const int address)
 {
   switch (mode) {
+  case DiagnosticLoad:
+    return this->pack_diagnostic_load(buffer, address);
+    break;
   case DiagnosticX:
     return this->pack_diagnostic_coord(buffer, address, 2);
     break;
@@ -96,10 +101,11 @@ DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer, const int addr
   case DiagnosticMom: {
     // reshape into 4D array
     std::vector<size_t> shape(4);
-    shape[0]   = um.shape(0);
-    shape[1]   = um.shape(1);
-    shape[2]   = um.shape(2);
-    shape[3]   = um.shape(3) * um.shape(4);
+    shape[0] = um.shape(0);
+    shape[1] = um.shape(1);
+    shape[2] = um.shape(2);
+    shape[3] = um.shape(3) * um.shape(4);
+
     xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
     return this->pack_diagnostic_field(buffer, address, vv);
   } break;
@@ -283,10 +289,11 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
   case BoundaryMom: {
     // reshape into 4D array
     std::vector<size_t> shape(4);
-    shape[0]   = um.shape(0);
-    shape[1]   = um.shape(1);
-    shape[2]   = um.shape(2);
-    shape[3]   = um.shape(3) * um.shape(4);
+    shape[0] = um.shape(0);
+    shape[1] = um.shape(1);
+    shape[2] = um.shape(2);
+    shape[3] = um.shape(3) * um.shape(4);
+
     xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
     this->begin_bc_exchange(mpibufvec[mode], vv, true);
   } break;
@@ -314,10 +321,11 @@ DEFINE_MEMBER(void, set_boundary_end)(const int mode)
   case BoundaryMom: {
     // reshape into 4D array
     std::vector<size_t> shape(4);
-    shape[0]   = um.shape(0);
-    shape[1]   = um.shape(1);
-    shape[2]   = um.shape(2);
-    shape[3]   = um.shape(3) * um.shape(4);
+    shape[0] = um.shape(0);
+    shape[1] = um.shape(1);
+    shape[2] = um.shape(2);
+    shape[3] = um.shape(3) * um.shape(4);
+
     xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
     this->end_bc_exchange(mpibufvec[mode], vv, true);
   } break;
