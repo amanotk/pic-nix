@@ -51,8 +51,8 @@ public:
     DiagnosticEmf      = 4,
     DiagnosticCur      = 5,
     DiagnosticMom      = 6,
-    DiagnosticParticle = 7,
-    NumDiagnosticMode  = 8,
+    DiagnosticParticle = 10,
+    DiagnosticCustom   = 20,
   };
 
   // mode for load

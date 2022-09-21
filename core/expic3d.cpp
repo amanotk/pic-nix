@@ -312,6 +312,75 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
 
 DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out, json &obj)
 {
+  const int nz = ndims[0] / cdims[0];
+  const int ny = ndims[1] / cdims[1];
+  const int nx = ndims[2] / cdims[2];
+  const int ns = Ns;
+  const int nc = cdims[3];
+
+  // get parameters from json
+  std::string prefix = obj.value("prefix", "particle");
+  std::string path   = obj.value("path", ".") + "/";
+
+  // filename
+  std::string fn_prefix = tfm::format("%s_%06d", prefix, curstep);
+  std::string fn_json   = fn_prefix + ".json";
+  std::string fn_data   = fn_prefix + ".data";
+
+  MPI_File fh;
+  size_t   disp;
+  json     dataset;
+
+  jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+
+  //
+  // for each particle
+  //
+  for (int is = 0; is < Ns; is++) {
+    // write particles
+    size_t disp0 = disp;
+    int    mode  = Chunk::DiagnosticParticle + is;
+    this->write_chunk_all(fh, disp, mode);
+
+    // meta data
+    {
+      std::string name = tfm::format("up%02d", is);
+      std::string desc = tfm::format("particle species %02d", is);
+
+      const int Np      = (disp - disp0) / (Particle::Nc * sizeof(float64));
+      const int ndim    = 2;
+      const int dims[2] = {Np, Particle::Nc};
+      const int size    = Np * Particle::Nc * sizeof(float64);
+
+      jsonio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, size, ndim, dims);
+    }
+  }
+
+  jsonio::close_file(&fh);
+
+  //
+  // output json file
+  //
+  {
+    json root;
+
+    // meta data
+    root["meta"] = {{"endian", common::get_endian_flag()},
+                    {"rawfile", fn_data},
+                    {"order", 1},
+                    {"time", curtime},
+                    {"step", curstep}};
+    // dataset
+    root["dataset"] = dataset;
+
+    if (thisrank == 0) {
+      std::ofstream ofs(path + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
 }
 
 DEFINE_MEMBER(void, initialize)(int argc, char **argv)
@@ -383,9 +452,8 @@ DEFINE_MEMBER(void, setup)()
 
 DEFINE_MEMBER(void, rebuild_chunkmap)()
 {
-#if 0
   BaseApp::rebuild_chunkmap();
-#endif
+
   // set MPI communicator for each mode
   for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
     for (int i = 0; i < numchunk; i++) {

@@ -48,13 +48,15 @@ DEFINE_MEMBER(int, unpack)(void *buffer, const int address)
   int count = address;
 
   count += Chunk::unpack(buffer, count);
-  count += memcpy_count(&Ns, buffer, sizeof(int), count, 0);
-  count += memcpy_count(&cc, buffer, sizeof(float64), count, 0);
+  count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
+  count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
   allocate(); // allocate memory for unpacking
   count += memcpy_count(uf.data(), buffer, uf.size() * sizeof(float64), 0, count);
   count += memcpy_count(uj.data(), buffer, uj.size() * sizeof(float64), 0, count);
   // particle (automatically allocate memory)
+  up.resize(Ns);
   for (int is = 0; is < Ns; is++) {
+    up[is] = std::make_shared<Particle>();
     count += up[is]->unpack(buffer, count);
   }
 
@@ -109,12 +111,16 @@ DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void *buffer, const int addr
     xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
     return this->pack_diagnostic_field(buffer, address, vv);
   } break;
-  case DiagnosticParticle:
-    ERRORPRINT("Not implemented yet\n");
-    break;
   default:
     break;
   }
+
+  // pack a specific particle species
+  if (mode >= DiagnosticParticle && mode < DiagnosticCustom) {
+    int is = mode - DiagnosticParticle;
+    return this->pack_diagnostic_particle(buffer, address, up[is]);
+  }
+
   return 0;
 }
 
