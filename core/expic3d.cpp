@@ -5,7 +5,8 @@
   template <int Order>                                                                             \
   type ExPIC3D<Order>::name
 
-DEFINE_MEMBER(, ExPIC3D)(int argc, char **argv) : BaseApp(argc, argv), Ns(1)
+DEFINE_MEMBER(, ExPIC3D)
+(int argc, char **argv) : BaseApp(argc, argv), Ns(1), rebuild_interval(1)
 {
 }
 
@@ -15,6 +16,17 @@ DEFINE_MEMBER(void, parse_cfg)()
   {
     std::ifstream f(cfg_file.c_str());
     cfg_json = json::parse(f, nullptr, true, true);
+  }
+
+  // application
+  {
+    json application = cfg_json["application"];
+
+    if (application["debug"].get<bool>() == true) {
+      this->retcode = 1;
+    }
+
+    rebuild_interval = application["rebuild_interval"].get<int>();
   }
 
   // parameters
@@ -273,6 +285,20 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     const int  dims[6] = {nc, nz, ny, nx, ns, 10};
     const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
 
+    // calculate moment
+    {
+      std::set<int> queue;
+
+      for (int i = 0; i < numchunk; i++) {
+        chunkvec[i]->deposit_moment();
+        chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
+        queue.insert(i);
+      }
+
+      this->wait_bc_exchange(queue, Chunk::BoundaryMom);
+    }
+
+    // write
     jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
     this->write_chunk_all(fh, disp, Chunk::DiagnosticMom);
   }
@@ -452,6 +478,9 @@ DEFINE_MEMBER(void, setup)()
 
 DEFINE_MEMBER(void, rebuild_chunkmap)()
 {
+  if (curstep % rebuild_interval != 0)
+    return;
+
   BaseApp::rebuild_chunkmap();
 
   // set MPI communicator for each mode

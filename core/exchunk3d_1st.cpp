@@ -40,20 +40,20 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
       float64  dt2 = dt1 * rc / gam;
 
       // grid indices
-      int ix = Particle::digitize(xu[0], ximin, rdh) + Lbx;
-      int hx = Particle::digitize(xu[0], xhmin, rdh) + Lbx;
-      int iy = Particle::digitize(xu[1], yimin, rdh) + Lby;
-      int hy = Particle::digitize(xu[1], yhmin, rdh) + Lby;
-      int iz = Particle::digitize(xu[2], zimin, rdh) + Lbz;
-      int hz = Particle::digitize(xu[2], zhmin, rdh) + Lbz;
+      int ix = Particle::digitize(xu[0], ximin, rdh);
+      int hx = Particle::digitize(xu[0], xhmin, rdh);
+      int iy = Particle::digitize(xu[1], yimin, rdh);
+      int hy = Particle::digitize(xu[1], yhmin, rdh);
+      int iz = Particle::digitize(xu[2], zimin, rdh);
+      int hz = Particle::digitize(xu[2], zhmin, rdh);
 
       // weights
-      Particle::S1(xu[0], ximin + ix * delh, delh, wix);
-      Particle::S1(xu[0], xhmin + hx * delh, delh, whx);
-      Particle::S1(xu[1], yimin + iy * delh, delh, wiy);
-      Particle::S1(xu[1], yhmin + hy * delh, delh, why);
-      Particle::S1(xu[2], zimin + iz * delh, delh, wiz);
-      Particle::S1(xu[2], zhmin + hz * delh, delh, whz);
+      Particle::S1(xu[0], ximin + ix * delh, rdh, wix);
+      Particle::S1(xu[0], xhmin + hx * delh, rdh, whx);
+      Particle::S1(xu[1], yimin + iy * delh, rdh, wiy);
+      Particle::S1(xu[1], yhmin + hy * delh, rdh, why);
+      Particle::S1(xu[2], zimin + iz * delh, rdh, wiz);
+      Particle::S1(xu[2], zhmin + hz * delh, rdh, whz);
 
       //
       // calculate electromagnetic field at particle position
@@ -65,6 +65,12 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
       // * By => half-integer for z, x, full-integer for y
       // * Bz => half-integer for x, y, full-integer for z
       //
+      ix += Lbx;
+      iy += Lby;
+      iz += Lbz;
+      hx += Lbx;
+      hy += Lby;
+      hz += Lbz;
       emf[0] = Particle::interp3d1(uf, iz, iy, hx, 0, wiz, wiy, whx, dt1);
       emf[1] = Particle::interp3d1(uf, iz, hy, ix, 1, wiz, why, wix, dt1);
       emf[2] = Particle::interp3d1(uf, hz, iy, ix, 2, whz, wiy, wix, dt1);
@@ -145,40 +151,43 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       // -*- weights before move -*-
       //
       // grid indices
-      int ix0 = Particle::digitize(xv[0], ximin, rdh) + Lbx;
-      int iy0 = Particle::digitize(xv[1], yimin, rdh) + Lby;
-      int iz0 = Particle::digitize(xv[2], zimin, rdh) + Lbz;
+      int ix0 = Particle::digitize(xv[0], ximin, rdh);
+      int iy0 = Particle::digitize(xv[1], yimin, rdh);
+      int iz0 = Particle::digitize(xv[2], zimin, rdh);
 
       // weights
-      Particle::S1(xv[0], ximin + ix0 * delh, delh, &ss[0][0][1], qs);
-      Particle::S1(xv[1], yimin + iy0 * delh, delh, &ss[0][1][1], qs);
-      Particle::S1(xv[2], zimin + iz0 * delh, delh, &ss[0][2][1], qs);
+      Particle::S1(xv[0], ximin + ix0 * delh, rdh, &ss[0][0][1]);
+      Particle::S1(xv[1], yimin + iy0 * delh, rdh, &ss[0][1][1]);
+      Particle::S1(xv[2], zimin + iz0 * delh, rdh, &ss[0][2][1]);
 
       //
       // -*- weights after move -*-
       //
       // grid indices
-      int ix1 = Particle::digitize(xu[0], ximin, rdh) + Lbx;
-      int iy1 = Particle::digitize(xu[1], yimin, rdh) + Lby;
-      int iz1 = Particle::digitize(xu[2], zimin, rdh) + Lbz;
+      int ix1 = Particle::digitize(xu[0], ximin, rdh);
+      int iy1 = Particle::digitize(xu[1], yimin, rdh);
+      int iz1 = Particle::digitize(xu[2], zimin, rdh);
 
       // weights
-      Particle::S1(xu[0], ximin + ix1 * delh, delh, &ss[1][0][1 + ix1 - ix0], qs);
-      Particle::S1(xu[1], yimin + iy1 * delh, delh, &ss[1][1][1 + iy1 - iy0], qs);
-      Particle::S1(xu[2], zimin + iz1 * delh, delh, &ss[1][2][1 + iz1 - iz0], qs);
+      Particle::S1(xu[0], ximin + ix1 * delh, rdh, &ss[1][0][1 + ix1 - ix0]);
+      Particle::S1(xu[1], yimin + iy1 * delh, rdh, &ss[1][1][1 + iy1 - iy0]);
+      Particle::S1(xu[2], zimin + iz1 * delh, rdh, &ss[1][2][1 + iz1 - iz0]);
 
       //
       // -*- accumulate current via density decomposition -*-
       //
       Particle::esirkepov3d1(dhdt, ss, cur);
 
+      ix0 += Lbx;
+      iy0 += Lby;
+      iz0 += Lbz;
       for (int jz = 0; jz < 4; jz++) {
         for (int jy = 0; jy < 4; jy++) {
           for (int jx = 0; jx < 4; jx++) {
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 0) += cur[jz][jy][jx][0];
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 1) += cur[jz][jy][jx][1];
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 2) += cur[jz][jy][jx][2];
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 3) += cur[jz][jy][jx][3];
+            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 0) += qs * cur[jz][jy][jx][0];
+            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 1) += qs * cur[jz][jy][jx][1];
+            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 2) += qs * cur[jz][jy][jx][2];
+            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 3) += qs * cur[jz][jy][jx][3];
           }
         }
       }
@@ -215,20 +224,20 @@ DEFINE_MEMBER1(void, deposit_moment)()
       float64 *xu = &ps->xu(ip, 0);
 
       // grid indices
-      int ix = Particle::digitize(xu[0], ximin, rdh) + Lbx;
-      int iy = Particle::digitize(xu[1], yimin, rdh) + Lby;
-      int iz = Particle::digitize(xu[2], zimin, rdh) + Lbz;
+      int ix = Particle::digitize(xu[0], ximin, rdh);
+      int iy = Particle::digitize(xu[1], yimin, rdh);
+      int iz = Particle::digitize(xu[2], zimin, rdh);
 
       // weights
-      Particle::S1(xu[0], ximin + ix * delh, delh, wx, ms);
-      Particle::S1(xu[1], yimin + iy * delh, delh, wy, ms);
-      Particle::S1(xu[2], zimin + iz * delh, delh, wz, ms);
+      Particle::S1(xu[0], ximin + ix * delh, rdh, wx);
+      Particle::S1(xu[1], yimin + iy * delh, rdh, wy);
+      Particle::S1(xu[2], zimin + iz * delh, rdh, wz);
 
       // deposit to local array (this step is not necessary for scalar version)
       for (int jz = 0; jz < 2; jz++) {
         for (int jy = 0; jy < 2; jy++) {
           for (int jx = 0; jx < 2; jx++) {
-            float64 ww = wz[jz] * wy[jy] * wx[jx];
+            float64 ww = ms * wz[jz] * wy[jy] * wx[jx];
 
             // FIXME; requires relativistic correction
             mom[jz][jy][jx][0] = ww;
@@ -246,11 +255,14 @@ DEFINE_MEMBER1(void, deposit_moment)()
       }
 
       // deposit to global array
+      ix += Lbx;
+      iy += Lby;
+      iz += Lbz;
       for (int jz = 0; jz < 2; jz++) {
         for (int jy = 0; jy < 2; jy++) {
           for (int jx = 0; jx < 2; jx++) {
             for (int k = 0; k < 10; k++) {
-              um(iz + jz, iy + jy, ix + jx, k) += mom[jz][jy][jx][k];
+              um(iz + jz, iy + jy, ix + jx, is, k) += mom[jz][jy][jx][k];
             }
           }
         }

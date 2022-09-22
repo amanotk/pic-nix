@@ -1,4 +1,8 @@
 {
+	"application": {
+		"debug": false,
+		"rebuild_interval": 10
+	},
 	"diagnostic": [
 		{
 			"name": "load",

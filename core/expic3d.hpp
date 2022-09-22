@@ -40,8 +40,9 @@ protected:
   using BaseApp::sendbuf;
   using BaseApp::recvbuf;
 
-  int        Ns;         ///< number of species
-  MpiCommVec mpicommvec; ///< MPI Communicators
+  int        rebuild_interval; ///< interval for rebuild_chankmap
+  int        Ns;               ///< number of species
+  MpiCommVec mpicommvec;       ///< MPI Communicators
 
   virtual void parse_cfg() override;
 

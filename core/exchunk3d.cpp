@@ -292,17 +292,9 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
   case BoundaryCur:
     this->begin_bc_exchange(mpibufvec[mode], uj, true);
     break;
-  case BoundaryMom: {
-    // reshape into 4D array
-    std::vector<size_t> shape(4);
-    shape[0] = um.shape(0);
-    shape[1] = um.shape(1);
-    shape[2] = um.shape(2);
-    shape[3] = um.shape(3) * um.shape(4);
-
-    xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
-    this->begin_bc_exchange(mpibufvec[mode], vv, true);
-  } break;
+  case BoundaryMom:
+    this->begin_bc_exchange(mpibufvec[mode], um, true);
+    break;
   case BoundaryParticle:
     // particle injection should be placed here
     this->begin_bc_exchange(mpibufvec[mode], up);
@@ -324,17 +316,9 @@ DEFINE_MEMBER(void, set_boundary_end)(const int mode)
   case BoundaryCur:
     this->end_bc_exchange(mpibufvec[mode], uj, true);
     break;
-  case BoundaryMom: {
-    // reshape into 4D array
-    std::vector<size_t> shape(4);
-    shape[0] = um.shape(0);
-    shape[1] = um.shape(1);
-    shape[2] = um.shape(2);
-    shape[3] = um.shape(3) * um.shape(4);
-
-    xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
-    this->end_bc_exchange(mpibufvec[mode], vv, true);
-  } break;
+  case BoundaryMom:
+    this->end_bc_exchange(mpibufvec[mode], um, true);
+    break;
   case BoundaryParticle:
     this->end_bc_exchange(mpibufvec[mode], up);
     break;
