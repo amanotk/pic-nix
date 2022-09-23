@@ -423,7 +423,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char **argv)
   periodic[0] = 1;
   periodic[1] = 1;
   periodic[2] = 1;
-  this->initialize_mpi_default(&argc, &argv);
+  this->initialize_mpi(&argc, &argv);
   this->initialize_chunkmap();
   balancer.reset(new Balancer());
 
