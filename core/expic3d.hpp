@@ -12,7 +12,7 @@ template <int Order>
 class ExPIC3D : public Application<ExChunk3D<Order>, ChunkMap<3>>
 {
 protected:
-  using json       = nlohmann::ordered_json;
+  using json       = nix::json;
   using BaseApp    = Application<ExChunk3D<Order>, ChunkMap<3>>;
   using Chunk      = ExChunk3D<Order>;
   using MpiCommVec = std::vector<MPI_Comm>;

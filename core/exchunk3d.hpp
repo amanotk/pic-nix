@@ -4,9 +4,9 @@
 
 #include "nix/buffer.hpp"
 #include "nix/chunk3d.hpp"
-#include "nix/common.hpp"
 #include "nix/debug.hpp"
 #include "nix/jsonio.hpp"
+#include "nix/nix.hpp"
 #include "nix/particle.hpp"
 #include "nix/xtensorall.hpp"
 
@@ -19,7 +19,7 @@ template <int Order>
 class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
-  using json         = common::json;
+  using json         = nix::json;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;

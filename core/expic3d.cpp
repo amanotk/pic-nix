@@ -120,7 +120,7 @@ DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out, json &obj)
       json dataset;
 
       // meta data
-      root["meta"] = {{"endian", common::get_endian_flag()},
+      root["meta"] = {{"endian", nix::get_endian_flag()},
                       {"rawfile", fn_data},
                       {"order", 1},
                       {"header", {"field push", "current deposit", "particle push"}}};
@@ -316,7 +316,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
     chunkmap->save_json(cmap);
 
     // meta data
-    root["meta"] = {{"endian", common::get_endian_flag()},
+    root["meta"] = {{"endian", nix::get_endian_flag()},
                     {"rawfile", fn_data},
                     {"order", 1},
                     {"time", curtime},
@@ -391,7 +391,7 @@ DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out, json &obj)
     json root;
 
     // meta data
-    root["meta"] = {{"endian", common::get_endian_flag()},
+    root["meta"] = {{"endian", nix::get_endian_flag()},
                     {"rawfile", fn_data},
                     {"order", 1},
                     {"time", curtime},
