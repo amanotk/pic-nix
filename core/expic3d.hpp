@@ -36,7 +36,6 @@ protected:
   using BaseApp::periodic;
   using BaseApp::nprocess;
   using BaseApp::thisrank;
-  using BaseApp::bufsize;
   using BaseApp::sendbuf;
   using BaseApp::recvbuf;
 

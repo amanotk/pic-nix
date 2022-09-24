@@ -428,7 +428,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char **argv)
   balancer.reset(new Balancer());
 
   // buffer allocation
-  bufsize = 1024 * 16;
+  int bufsize = 1024 * 16;
   sendbuf.resize(bufsize);
   recvbuf.resize(bufsize);
 
