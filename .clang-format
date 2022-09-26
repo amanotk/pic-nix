@@ -10,3 +10,5 @@ AllowShortLoopsOnASingleLine: false
 AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Linux
 ColumnLimit: 100
+PointerAlignment: Left
+SortUsingDeclarations: false

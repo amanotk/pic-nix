@@ -7,13 +7,19 @@
 #include "nix/chunkmap.hpp"
 #include "nix/jsonio.hpp"
 
+using namespace nix::typedefs;
+using nix::json;
+using nix::Balancer;
+using nix::Particle;
+using nix::ParticleVec;
+using nix::PtrParticle;
+
 //
 template <int Order>
-class ExPIC3D : public Application<ExChunk3D<Order>, ChunkMap<3>>
+class ExPIC3D : public nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>
 {
 protected:
-  using json       = nix::json;
-  using BaseApp    = Application<ExChunk3D<Order>, ChunkMap<3>>;
+  using BaseApp    = nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>;
   using Chunk      = ExChunk3D<Order>;
   using MpiCommVec = std::vector<MPI_Comm>;
   using BaseApp::cfg_file;
@@ -45,24 +51,24 @@ protected:
 
   virtual void parse_cfg() override;
 
-  virtual void diagnostic_load(std::ostream &out, json &obj);
+  virtual void diagnostic_load(std::ostream& out, json& obj);
 
-  virtual void diagnostic_field(std::ostream &out, json &obj);
+  virtual void diagnostic_field(std::ostream& out, json& obj);
 
-  virtual void diagnostic_particle(std::ostream &out, json &obj);
+  virtual void diagnostic_particle(std::ostream& out, json& obj);
 
-  virtual void initialize(int argc, char **argv) override;
+  virtual void initialize(int argc, char** argv) override;
 
   virtual void setup() override;
 
   virtual void rebuild_chunkmap() override;
 
 public:
-  ExPIC3D(int argc, char **argv);
+  ExPIC3D(int argc, char** argv);
 
   virtual void push() override;
 
-  virtual void diagnostic(std::ostream &out) override;
+  virtual void diagnostic(std::ostream& out) override;
 };
 
 // Local Variables:

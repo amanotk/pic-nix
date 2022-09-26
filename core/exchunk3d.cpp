@@ -232,7 +232,7 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
   const float64 delh = this->delh;
   const float64 cfl  = cc * delt / delh;
 
-  float64 etime = nix::etime();
+  float64 etime = nix::wall_clock();
 
   for (int iz = Lbz - 1; iz <= Ubz; iz++) {
     for (int iy = Lby - 1; iy <= Uby; iy++) {
@@ -251,7 +251,7 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
   }
 
   // store computation time
-  this->load[LoadEmf] += nix::etime() - etime;
+  this->load[LoadEmf] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER(void, push_bfd)(const float64 delt)
@@ -259,7 +259,7 @@ DEFINE_MEMBER(void, push_bfd)(const float64 delt)
   const float64 delh = this->delh;
   const float64 cfl  = cc * delt / delh;
 
-  float64 etime = nix::etime();
+  float64 etime = nix::wall_clock();
 
   for (int iz = Lbz; iz <= Ubz + 1; iz++) {
     for (int iy = Lby; iy <= Uby + 1; iy++) {
@@ -275,7 +275,7 @@ DEFINE_MEMBER(void, push_bfd)(const float64 delt)
   }
 
   // store computation time
-  this->load[LoadEmf] += nix::etime() - etime;
+  this->load[LoadEmf] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER(void, set_boundary_begin)(const int mode)

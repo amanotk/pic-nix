@@ -10,6 +10,12 @@
 #include "nix/particle.hpp"
 #include "nix/xtensorall.hpp"
 
+using namespace nix::typedefs;
+using nix::json;
+using nix::Particle;
+using nix::ParticleVec;
+using nix::PtrParticle;
+
 // trick to map from order of shape function to number of boundary margins
 template <int Order>
 struct BaseChunk3D;
@@ -19,7 +25,6 @@ template <int Order>
 class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
-  using json         = nix::json;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
@@ -85,15 +90,15 @@ public:
 
   virtual ~ExChunk3D() override;
 
-  virtual int pack(void *buffer, const int address) override;
+  virtual int pack(void* buffer, const int address) override;
 
-  virtual int unpack(void *buffer, const int address) override;
+  virtual int unpack(void* buffer, const int address) override;
 
   virtual void allocate();
 
-  virtual int pack_diagnostic(const int mode, void *buffer, const int address);
+  virtual int pack_diagnostic(const int mode, void* buffer, const int address);
 
-  virtual void setup(json &config) override;
+  virtual void setup(json& config) override;
 
   virtual void push_efd(const float64 delt);
 
@@ -115,19 +120,19 @@ public:
 // first-order shape function requires 2 boundary margins
 template <>
 struct BaseChunk3D<1> {
-  using ChunkType = Chunk3D<2>;
+  using ChunkType = nix::Chunk3D<2>;
 };
 
 // second-order shape function requires 2 boundary margins
 template <>
 struct BaseChunk3D<2> {
-  using ChunkType = Chunk3D<2>;
+  using ChunkType = nix::Chunk3D<2>;
 };
 
 // third-order shape function requires 3 boundary margins
 template <>
 struct BaseChunk3D<3> {
-  using ChunkType = Chunk3D<3>;
+  using ChunkType = nix::Chunk3D<3>;
 };
 
 // Local Variables:
