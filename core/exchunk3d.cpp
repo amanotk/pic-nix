@@ -18,10 +18,6 @@ DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), N
   this->reset_load();
 }
 
-DEFINE_MEMBER(, ~ExChunk3D)()
-{
-}
-
 DEFINE_MEMBER(int, pack)(void *buffer, const int address)
 {
   using nix::memcpy_count;

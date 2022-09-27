@@ -88,8 +88,6 @@ protected:
 public:
   ExChunk3D(const int dims[3], const int id = 0);
 
-  virtual ~ExChunk3D() override;
-
   virtual int pack(void* buffer, const int address) override;
 
   virtual int unpack(void* buffer, const int address) override;

@@ -23,7 +23,7 @@ DEFINE_MEMBER(void, parse_cfg)()
     json application = cfg_json["application"];
 
     if (application["debug"].get<bool>() == true) {
-      this->retcode = 1;
+      this->cleanup = 1;
     }
 
     rebuild_interval = application["rebuild_interval"].get<int>();
