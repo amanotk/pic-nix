@@ -111,34 +111,6 @@ DEFINE_MEMBER(void, diagnostic_load)(std::ostream& out, json& obj)
     // data file
     jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
     jsonio::close_file(&fh);
-
-    // json file
-    if (thisrank == 0) {
-      const char name[]  = "load";
-      const char desc[]  = "chunk work load";
-      const int  ndim    = 3;
-      const int  dims[3] = {0, cdims[3], Chunk::NumLoadMode};
-      const int  size    = 0;
-
-      json root;
-      json dataset;
-
-      // meta data
-      root["meta"] = {{"endian", nix::get_endian_flag()},
-                      {"rawfile", fn_data},
-                      {"order", 1},
-                      {"header", {"field push", "current deposit", "particle push"}}};
-
-      // dataset
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      root["dataset"] = dataset;
-
-      std::ofstream ofs(path + fn_json);
-      ofs << std::setw(2) << root;
-      ofs.close();
-    }
-
-    MPI_Barrier(MPI_COMM_WORLD);
   }
 
   //
@@ -153,28 +125,36 @@ DEFINE_MEMBER(void, diagnostic_load)(std::ostream& out, json& obj)
   }
 
   //
-  // output json file
+  // output json file : overwrite existing file
   //
   {
+    const int  numload = (curstep + 1) / obj["interval"].get<int>();
+    const char name[]  = "load";
+    const char desc[]  = "chunk work load";
+    const int  ndim    = 3;
+    const int  dims[3] = {numload, cdims[3], Chunk::NumLoadMode};
+    const int  size    = dims[0] * dims[1] * dims[2] * sizeof(float64);
+
+    // always point to the beginning of the file
+    disp = 0;
+
     json root;
+    json dataset;
 
-    // read json file
-    {
-      std::ifstream ifs(path + fn_json);
-      ifs >> root;
-    }
+    // meta data
+    root["meta"] = {{"endian", nix::get_endian_flag()},
+                    {"rawfile", fn_data},
+                    {"order", 1},
+                    {"header", {"field push", "current deposit", "particle push"}}};
 
-    // modify shape and size
-    std::vector<int> shape = root["dataset"]["load"]["shape"];
-    shape[0]++;
-
-    root["dataset"]["load"]["shape"] = shape;
-    root["dataset"]["load"]["size"]  = shape[0] * shape[1] * shape[2] * sizeof(float64);
+    // dataset
+    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+    root["dataset"] = dataset;
 
     // write
     if (thisrank == 0) {
       std::ofstream ofs(path + fn_json);
-      ofs << std::setw(2) << root;
+      ofs << std::setw(2) << root << std::flush;
       ofs.close();
     }
 
@@ -482,7 +462,7 @@ DEFINE_MEMBER(void, setup)()
 
 DEFINE_MEMBER(void, rebuild_chunkmap)()
 {
-  if (curstep % rebuild_interval != 0)
+  if (curstep != 0 && curstep % rebuild_interval != 0)
     return;
 
   BaseApp::rebuild_chunkmap();
