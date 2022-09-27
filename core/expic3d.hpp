@@ -34,7 +34,9 @@ protected:
   using BaseApp::curtime;
   using BaseApp::tmax;
   using BaseApp::delt;
-  using BaseApp::delh;
+  using BaseApp::delx;
+  using BaseApp::dely;
+  using BaseApp::delz;
   using BaseApp::cc;
   using BaseApp::xlim;
   using BaseApp::ylim;

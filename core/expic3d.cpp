@@ -6,7 +6,7 @@
   type ExPIC3D<Order>::name
 
 DEFINE_MEMBER(, ExPIC3D)
-(int argc, char **argv) : BaseApp(argc, argv), Ns(1), rebuild_interval(1)
+(int argc, char** argv) : BaseApp(argc, argv), Ns(1), rebuild_interval(1)
 {
 }
 
@@ -42,10 +42,14 @@ DEFINE_MEMBER(void, parse_cfg)()
     int cz = parameter["Cz"].get<int>();
 
     // other parameters
+    float64 delh = parameter["delh"].get<float64>();
+
     Ns   = parameter["Ns"].get<int>();
     cc   = parameter["cc"].get<float64>();
     delt = parameter["delt"].get<float64>();
-    delh = parameter["delh"].get<float64>();
+    delx = delh;
+    dely = delh;
+    delz = delh;
 
     // check dimensions
     if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
@@ -71,13 +75,13 @@ DEFINE_MEMBER(void, parse_cfg)()
 
     // global domain size
     xlim[0] = 0;
-    xlim[1] = delh * ndims[2];
+    xlim[1] = delx * ndims[2];
     xlim[2] = xlim[1] - xlim[0];
     ylim[0] = 0;
-    ylim[1] = delh * ndims[1];
+    ylim[1] = dely * ndims[1];
     ylim[2] = ylim[1] - ylim[0];
     zlim[0] = 0;
-    zlim[1] = delh * ndims[0];
+    zlim[1] = delz * ndims[0];
     zlim[2] = zlim[1] - zlim[0];
   }
 
@@ -87,7 +91,7 @@ DEFINE_MEMBER(void, parse_cfg)()
   }
 }
 
-DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out, json &obj)
+DEFINE_MEMBER(void, diagnostic_load)(std::ostream& out, json& obj)
 {
   // get parameters from json
   std::string prefix = obj.value("prefix", "load");
@@ -183,7 +187,7 @@ DEFINE_MEMBER(void, diagnostic_load)(std::ostream &out, json &obj)
   }
 }
 
-DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
+DEFINE_MEMBER(void, diagnostic_field)(std::ostream& out, json& obj)
 {
   const int nz = ndims[0] / cdims[0];
   const int ny = ndims[1] / cdims[1];
@@ -336,7 +340,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream &out, json &obj)
   }
 }
 
-DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out, json &obj)
+DEFINE_MEMBER(void, diagnostic_particle)(std::ostream& out, json& obj)
 {
   const int nz = ndims[0] / cdims[0];
   const int ny = ndims[1] / cdims[1];
@@ -409,7 +413,7 @@ DEFINE_MEMBER(void, diagnostic_particle)(std::ostream &out, json &obj)
   }
 }
 
-DEFINE_MEMBER(void, initialize)(int argc, char **argv)
+DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 {
   // parse command line arguments
   this->parse_cmd(argc, argv);
@@ -425,7 +429,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char **argv)
   periodic[2] = 1;
   this->initialize_mpi(&argc, &argv);
   this->initialize_chunkmap();
-  balancer.reset(new Balancer());
+  balancer = std::make_unique<Balancer>();
 
   // buffer allocation
   int bufsize = 1024 * 16;
@@ -538,7 +542,7 @@ DEFINE_MEMBER(void, push)()
   curstep++;
 }
 
-DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
+DEFINE_MEMBER(void, diagnostic)(std::ostream& out)
 {
   json diagnostic = cfg_json["diagnostic"];
 
@@ -551,7 +555,7 @@ DEFINE_MEMBER(void, diagnostic)(std::ostream &out)
     try {
       name     = obj["name"].get<std::string>();
       interval = obj["interval"].get<int>();
-    } catch (json::exception &e) {
+    } catch (json::exception& e) {
       std::string msg = tfm::format("Error in diagnostic (ignored)\n%s\n", e.what());
       ERRORPRINT(msg.c_str());
       continue;

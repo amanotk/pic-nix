@@ -38,7 +38,9 @@ public:
   using Chunk::xc;
   using Chunk::yc;
   using Chunk::zc;
-  using Chunk::delh;
+  using Chunk::delx;
+  using Chunk::dely;
+  using Chunk::delz;
   using Chunk::xlim;
   using Chunk::ylim;
   using Chunk::zlim;

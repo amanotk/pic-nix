@@ -7,7 +7,7 @@ using App = ExPIC3D<1>;
 //
 // main
 //
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
   App app(argc, argv);
   return app.main(std::cout);
