@@ -266,8 +266,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream& out, json& obj)
     const char name[]  = "um";
     const char desc[]  = "moment";
     const int  ndim    = 6;
-    const int  dims[6] = {nc, nz, ny, nx, ns, 10};
-    const int  size    = nc * nz * ny * nx * ns * 10 * sizeof(float64);
+    const int  dims[6] = {nc, nz, ny, nx, ns, 11};
+    const int  size    = nc * nz * ny * nx * ns * 11 * sizeof(float64);
 
     // calculate moment
     {

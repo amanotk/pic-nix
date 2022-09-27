@@ -206,12 +206,7 @@ DEFINE_MEMBER1(void, deposit_moment)()
 {
   //
   // This computes moment quantities for each grid points. Computed moments are
-  // the mass density and some components of the relativistic energy-momentum
-  // tensor all in laboratory frame.
-  //
-  // In the non-relativistic limit, temperatures as defined in the rest frame of each species may be
-  // calculated from the calculated moments. On the other hand, the relativistically correct energy
-  // density cannot be obtained from them.
+  // the mass density and the relativistic energy-momentum in laboratory frame.
   //
   const float64 rc    = 1 / cc;
   const float64 rdx   = 1 / delx;
@@ -233,7 +228,7 @@ DEFINE_MEMBER1(void, deposit_moment)()
       float64 wx[2]            = {0};
       float64 wy[2]            = {0};
       float64 wz[2]            = {0};
-      float64 mom[2][2][2][10] = {0};
+      float64 mom[2][2][2][11] = {0};
 
       float64* xu = &ps->xu(ip, 0);
 
@@ -255,27 +250,29 @@ DEFINE_MEMBER1(void, deposit_moment)()
             float64 gm = Particle::lorentz_factor(xu[3], xu[4], xu[5], rc);
 
             //
-            // 0: mass density
-            // 1: x-component of momentum density : T^{0,1}
-            // 2: y-component of momentum density : T^{0,2}
-            // 3: z-component of momentum density : T^{0,3}
-            // 4: xx-component of pressure tensor : T^{1,1}
-            // 5: yy-component of pressure tensor : T^{2,2}
-            // 6: zz-component of pressure tensor : T^{3,3}
-            // y: xy-component of pressure tensor : T^{1,2}
-            // 8: xz-component of pressure tensor : T^{1,3}
-            // 9: yz-component of pressure tensor : T^{2,3}
+            //  0: mass density
+            //  1: tx-component T^{0,1} (x-component of momentum density)
+            //  2: ty-component T^{0,2} (y-component of momentum density)
+            //  3: tz-component T^{0,3} (z-component of momentum density)
+            //  4: tt-component T^{0,0} (energy density / c)
+            //  5: xx-component T^{1,1}
+            //  6: yy-component T^{2,2}
+            //  7: zz-component T^{3,3}
+            //  8: xy-component T^{1,2}
+            //  9: xz-component T^{1,3}
+            // 10: yz-component T^{2,3}
             //
-            mom[jz][jy][jx][0] = ww;
-            mom[jz][jy][jx][1] = ww * xu[3];
-            mom[jz][jy][jx][2] = ww * xu[4];
-            mom[jz][jy][jx][3] = ww * xu[5];
-            mom[jz][jy][jx][4] = ww * xu[3] * xu[3] / gm;
-            mom[jz][jy][jx][5] = ww * xu[4] * xu[4] / gm;
-            mom[jz][jy][jx][6] = ww * xu[5] * xu[5] / gm;
-            mom[jz][jy][jx][7] = ww * xu[3] * xu[4] / gm;
-            mom[jz][jy][jx][8] = ww * xu[3] * xu[5] / gm;
-            mom[jz][jy][jx][9] = ww * xu[4] * xu[5] / gm;
+            mom[jz][jy][jx][0]  = ww;
+            mom[jz][jy][jx][1]  = ww * xu[3];
+            mom[jz][jy][jx][2]  = ww * xu[4];
+            mom[jz][jy][jx][3]  = ww * xu[5];
+            mom[jz][jy][jx][4]  = ww * gm * cc;
+            mom[jz][jy][jx][5]  = ww * xu[3] * xu[3] / gm;
+            mom[jz][jy][jx][6]  = ww * xu[4] * xu[4] / gm;
+            mom[jz][jy][jx][7]  = ww * xu[5] * xu[5] / gm;
+            mom[jz][jy][jx][8]  = ww * xu[3] * xu[4] / gm;
+            mom[jz][jy][jx][9]  = ww * xu[3] * xu[5] / gm;
+            mom[jz][jy][jx][10] = ww * xu[4] * xu[5] / gm;
           }
         }
       }
@@ -287,7 +284,7 @@ DEFINE_MEMBER1(void, deposit_moment)()
       for (int jz = 0; jz < 2; jz++) {
         for (int jy = 0; jy < 2; jy++) {
           for (int jx = 0; jx < 2; jx++) {
-            for (int k = 0; k < 10; k++) {
+            for (int k = 0; k < 11; k++) {
               um(iz + jz, iy + jy, ix + jx, is, k) += mom[jz][jy][jx][k];
             }
           }

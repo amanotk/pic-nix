@@ -69,7 +69,7 @@ DEFINE_MEMBER(void, allocate)()
   // memory allocation
   uf.resize({nz, ny, nx, 6});
   uj.resize({nz, ny, nx, 4});
-  um.resize({nz, ny, nx, ns, 10});
+  um.resize({nz, ny, nx, ns, 11});
   uf.fill(0);
   uj.fill(0);
   um.fill(0);
@@ -160,7 +160,7 @@ DEFINE_MEMBER(void, setup)(json& config)
     // allocate MPI buffer for field
     this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, sizeof(float64) * 6);
     this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, sizeof(float64) * 4);
-    this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, sizeof(float64) * Ns * 10);
+    this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, sizeof(float64) * Ns * 11);
   }
 
   //
