@@ -6,7 +6,7 @@
   type ExPIC3D<Order>::name
 
 DEFINE_MEMBER(, ExPIC3D)
-(int argc, char** argv) : BaseApp(argc, argv), Ns(1), rebuild_interval(1)
+(int argc, char** argv) : BaseApp(argc, argv), Ns(1)
 {
 }
 
@@ -25,8 +25,6 @@ DEFINE_MEMBER(void, parse_cfg)()
     if (application["debug"].get<bool>() == true) {
       this->cleanup = 1;
     }
-
-    rebuild_interval = application["rebuild_interval"].get<int>();
   }
 
   // parameters
@@ -159,11 +157,6 @@ DEFINE_MEMBER(void, diagnostic_load)(std::ostream& out, json& obj)
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-  }
-
-  // reset
-  for (int i = 0; i < numchunk; i++) {
-    chunkvec[i]->reset_load();
   }
 }
 
@@ -460,19 +453,19 @@ DEFINE_MEMBER(void, setup)()
   }
 }
 
-DEFINE_MEMBER(void, rebuild_chunkmap)()
+DEFINE_MEMBER(bool, rebuild_chunkmap)()
 {
-  if (curstep != 0 && curstep % rebuild_interval != 0)
-    return;
-
-  BaseApp::rebuild_chunkmap();
-
-  // set MPI communicator for each mode
-  for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
-    for (int i = 0; i < numchunk; i++) {
-      chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
+  if (BaseApp::rebuild_chunkmap()) {
+    // set MPI communicator for each mode
+    for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
+      for (int i = 0; i < numchunk; i++) {
+        chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
+      }
     }
+    return true;
   }
+
+  return false;
 }
 
 DEFINE_MEMBER(void, push)()

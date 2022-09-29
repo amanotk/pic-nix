@@ -47,7 +47,6 @@ protected:
   using BaseApp::sendbuf;
   using BaseApp::recvbuf;
 
-  int        rebuild_interval; ///< interval for rebuild_chankmap
   int        Ns;               ///< number of species
   MpiCommVec mpicommvec;       ///< MPI Communicators
 
@@ -63,7 +62,7 @@ protected:
 
   virtual void setup() override;
 
-  virtual void rebuild_chunkmap() override;
+  virtual bool rebuild_chunkmap() override;
 
 public:
   ExPIC3D(int argc, char** argv);
