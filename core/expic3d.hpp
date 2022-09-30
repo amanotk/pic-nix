@@ -14,7 +14,19 @@ using nix::Particle;
 using nix::ParticleVec;
 using nix::PtrParticle;
 
-//
+///
+/// @brief Application for 3D Explicit PIC Simulations
+/// @tparam Order order of shape function
+///
+/// This class takes care of initialization of various objects (ChunkMap, Balancer, etc.) and a main
+/// loop for explicit PIC simulations. Core numerical solvers are implemented in a chunk class, and
+/// this class only deals with the management of a collection of chunks.
+///
+/// A problem specific application class must be defined by deriving this class, which should
+/// override the virtual factory method create_chunk() to return a pointer to a problem specific
+/// chunk instance. In addition, custom diagnostics routines may also be implemented through the
+/// virtual method diagnostic().
+///
 template <int Order>
 class ExPIC3D : public nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>
 {
@@ -47,8 +59,8 @@ protected:
   using BaseApp::sendbuf;
   using BaseApp::recvbuf;
 
-  int        Ns;               ///< number of species
-  MpiCommVec mpicommvec;       ///< MPI Communicators
+  int        Ns;         ///< number of species
+  MpiCommVec mpicommvec; ///< MPI Communicators
 
   virtual void parse_cfg() override;
 
@@ -63,6 +75,8 @@ protected:
   virtual void setup() override;
 
   virtual bool rebuild_chunkmap() override;
+
+  virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], const int id) override;
 
 public:
   ExPIC3D(int argc, char** argv);

@@ -21,6 +21,28 @@ template <int Order>
 struct BaseChunk3D;
 
 ///
+/// @brief Chunk for 3D Explicit PIC Simulations
+/// @tparam Order order of shape function
+///
+/// This class implements the standard explicit FDTD PIC simulation scheme. The order of shape
+/// function is given as a template parameter, so that specific implementation should be provided
+/// through explicit instantiation.
+///
+/// Problem specific codes should be provided by making a derived class which implements the
+/// following virtual methods (if the default ones are not appropriate):
+///
+/// - setup()
+///   physics-wise initial condition (both for particles and fields)
+/// - set_boundary_physical()
+///   non-periodic boundary condition for fields
+/// - set_boundary_particle()
+///   non-periodic boundary condition for particles
+/// - inject_particle()
+///   particle injection into the system
+///
+/// In addition, custom diagnostics routines may also be implemented depending on the needs of
+/// applications.
+///
 template <int Order>
 class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {

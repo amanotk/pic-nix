@@ -397,9 +397,6 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   // some initial setup
   curstep     = 0;
   curtime     = 0.0;
-  periodic[0] = 1;
-  periodic[1] = 1;
-  periodic[2] = 1;
   this->initialize_mpi(&argc, &argv);
   this->initialize_chunkmap();
   balancer = std::make_unique<Balancer>();
@@ -452,7 +449,6 @@ DEFINE_MEMBER(void, setup)()
     this->wait_bc_exchange(bc_queue, Chunk::BoundaryEmf);
   }
 }
-
 DEFINE_MEMBER(bool, rebuild_chunkmap)()
 {
   if (BaseApp::rebuild_chunkmap()) {
@@ -513,6 +509,11 @@ DEFINE_MEMBER(void, push)()
 
   curtime += delt;
   curstep++;
+}
+
+DEFINE_MEMBER(std::unique_ptr<ExChunk3D<Order>>, create_chunk)(const int dims[], const int id)
+{
+  return std::make_unique<ExChunk3D<Order>>(dims, id);
 }
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream& out)

@@ -97,15 +97,7 @@ DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void* buffer, const int addr
     return this->pack_diagnostic_field(buffer, address, uj);
     break;
   case DiagnosticMom: {
-    // reshape into 4D array
-    std::vector<size_t> shape(4);
-    shape[0] = um.shape(0);
-    shape[1] = um.shape(1);
-    shape[2] = um.shape(2);
-    shape[3] = um.shape(3) * um.shape(4);
-
-    xt::xtensor<float64, 4> vv = xt::adapt(um.data(), um.size(), xt::no_ownership(), shape);
-    return this->pack_diagnostic_field(buffer, address, vv);
+    return this->pack_diagnostic_field(buffer, address, um);
   } break;
   default:
     break;
@@ -298,7 +290,7 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
     this->begin_bc_exchange(mpibufvec[mode], um, true);
     break;
   case BoundaryParticle:
-    // particle injection should be placed here
+    this->inject_particle(up);
     this->begin_bc_exchange(mpibufvec[mode], up);
     break;
   default:
