@@ -6,7 +6,7 @@
   type ExPIC3D<Order>::name
 
 DEFINE_MEMBER(, ExPIC3D)
-(int argc, char** argv) : BaseApp(argc, argv), Ns(1)
+(int argc, char** argv) : BaseApp(argc, argv), Ns(1), momstep(-1)
 {
 }
 
@@ -168,11 +168,6 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream& out, json& obj)
   const int ns = Ns;
   const int nc = cdims[3];
 
-  // console message
-  if (thisrank == 0) {
-    tfm::format(out, "step = %8d, time = %15.6e\n", curstep, curtime);
-  }
-
   // get parameters from json
   std::string prefix = obj.value("prefix", "field");
   std::string path   = obj.value("path", ".") + "/";
@@ -262,18 +257,8 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream& out, json& obj)
     const int  dims[6] = {nc, nz, ny, nx, ns, 11};
     const int  size    = nc * nz * ny * nx * ns * 11 * sizeof(float64);
 
-    // calculate moment
-    {
-      std::set<int> queue;
-
-      for (int i = 0; i < numchunk; i++) {
-        chunkvec[i]->deposit_moment();
-        chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
-        queue.insert(i);
-      }
-
-      this->wait_bc_exchange(queue, Chunk::BoundaryMom);
-    }
+    // calculate moment if not cached
+    calculate_moment();
 
     // write
     jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
@@ -386,6 +371,114 @@ DEFINE_MEMBER(void, diagnostic_particle)(std::ostream& out, json& obj)
   }
 }
 
+DEFINE_MEMBER(void, calculate_moment)()
+{
+  if (curstep == momstep)
+    return;
+
+  std::set<int> queue;
+
+  for (int i = 0; i < numchunk; i++) {
+    chunkvec[i]->deposit_moment();
+    chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
+    queue.insert(i);
+  }
+
+  this->wait_bc_exchange(queue, Chunk::BoundaryMom);
+
+  // cache
+  momstep = curstep;
+}
+
+DEFINE_MEMBER(void, diagnostic_history)(std::ostream& out, json& obj)
+{
+  std::vector<float64> history(Ns + 4);
+
+  // clear
+  std::fill(history.begin(), history.end(), 0.0);
+
+  // calculate moment if not cached
+  calculate_moment();
+
+  // calculate divergence error and energy
+  for (int i = 0; i < numchunk; i++) {
+    float64 div_e     = 0;
+    float64 div_b     = 0;
+    float64 ene_e     = 0;
+    float64 ene_b     = 0;
+    float64 ene_p[Ns] = {0};
+
+    chunkvec[i]->get_diverror(div_e, div_b);
+    chunkvec[i]->get_energy(ene_e, ene_b, ene_p);
+
+    history[0] += div_e;
+    history[1] += div_b;
+    history[2] += ene_e;
+    history[3] += ene_b;
+    for (int is = 0; is < Ns; is++) {
+      history[is + 4] += ene_p[is];
+    }
+  }
+
+  {
+    void* sndptr = history.data();
+    void* rcvptr = nullptr;
+
+    if (thisrank == 0) {
+      sndptr = MPI_IN_PLACE;
+      rcvptr = history.data();
+    }
+
+    MPI_Reduce(sndptr, rcvptr, Ns + 4, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  }
+
+  // output from root
+  if (thisrank == 0) {
+    // get parameters from json
+    std::string prefix = obj.value("prefix", "history");
+    std::string path   = obj.value("path", ".") + "/";
+    std::string msg    = "";
+
+    // initial call
+    if (curstep == 0) {
+      // header
+      msg += tfm::format("# %8s %15s", "step", "time");
+      msg += tfm::format(" %15s", "div(E)");
+      msg += tfm::format(" %15s", "div(B)");
+      msg += tfm::format(" %15s", "E^2/2");
+      msg += tfm::format(" %15s", "B^2/2");
+      for (int is = 0; is < Ns; is++) {
+        msg += tfm::format("    Particle #%02d", is);
+      }
+      msg += "\n";
+
+      // clear file
+      std::ofstream ofs(path + prefix + ".txt", nix::text_write);
+      ofs.close();
+    }
+
+    msg += tfm::format("  %8d %15.6e", curstep, curtime);
+    msg += tfm::format(" %15.6e", history[0]);
+    msg += tfm::format(" %15.6e", history[1]);
+    msg += tfm::format(" %15.6e", history[2]);
+    msg += tfm::format(" %15.6e", history[3]);
+    for (int is = 0; is < Ns; is++) {
+      msg += tfm::format(" %15.6e", history[is + 4]);
+    }
+    msg += "\n";
+
+    // output to steam
+    out << msg << std::flush;
+
+    // append to file
+    {
+      std::ofstream ofs(path + prefix + ".txt", nix::text_append);
+      ofs << msg << std::flush;
+      ofs.close();
+    }
+  }
+}
+
 DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 {
   // parse command line arguments
@@ -395,8 +488,8 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   this->parse_cfg();
 
   // some initial setup
-  curstep     = 0;
-  curtime     = 0.0;
+  curstep = 0;
+  curtime = 0.0;
   this->initialize_mpi(&argc, &argv);
   this->initialize_chunkmap();
   balancer = std::make_unique<Balancer>();
@@ -541,6 +634,10 @@ DEFINE_MEMBER(void, diagnostic)(std::ostream& out)
     //
     // call specific diagnostic routines
     //
+    if (name == "history") {
+      diagnostic_history(out, obj);
+    }
+
     if (name == "load") {
       diagnostic_load(out, obj);
     }

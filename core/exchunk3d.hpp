@@ -122,6 +122,10 @@ public:
 
   virtual void setup(json& config) override;
 
+  virtual void get_energy(float64& efd, float64& bfd, float64 particle[]);
+
+  virtual void get_diverror(float64& efd, float64& bfd);
+
   virtual void push_efd(const float64 delt);
 
   virtual void push_bfd(const float64 delt);

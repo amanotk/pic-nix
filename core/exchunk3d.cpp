@@ -219,6 +219,67 @@ DEFINE_MEMBER(void, setup)(json& config)
   }
 }
 
+DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
+{
+  // clear
+  efd = 0.0;
+  bfd = 0.0;
+  std::fill(particle, particle + Ns, 0.0);
+
+  // electromagnetic energy
+  for (int iz = Lbz; iz <= Ubz; iz++) {
+    for (int iy = Lby; iy <= Uby; iy++) {
+      for (int ix = Lbx; ix <= Ubx; ix++) {
+        efd +=
+            0.5 * (uf(iz, iy, ix, 0) * uf(iz, iy, ix, 0) + uf(iz, iy, ix, 1) * uf(iz, iy, ix, 1) +
+                   uf(iz, iy, ix, 2) * uf(iz, iy, ix, 2));
+        bfd +=
+            0.5 * (uf(iz, iy, ix, 3) * uf(iz, iy, ix, 3) + uf(iz, iy, ix, 4) * uf(iz, iy, ix, 4) +
+                   uf(iz, iy, ix, 5) * uf(iz, iy, ix, 5));
+      }
+    }
+  }
+  efd *= delx * dely * delz;
+  bfd *= delx * dely * delz;
+
+  // particle energy for each species
+  for (int iz = Lbz; iz <= Ubz; iz++) {
+    for (int iy = Lby; iy <= Uby; iy++) {
+      for (int ix = Lbx; ix <= Ubx; ix++) {
+        for (int is = 0; is < Ns; is++) {
+          // rest mass energy is subtracted
+          particle[is] += um(iz, iy, ix, is, 4) * cc - um(iz, iy, ix, is, 0) * cc * cc;
+        }
+      }
+    }
+  }
+}
+
+DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
+{
+  const float64 rdx = 1 / delx;
+  const float64 rdy = 1 / dely;
+  const float64 rdz = 1 / delz;
+
+  efd = 0;
+  bfd = 0;
+
+  for (int iz = Lbz; iz <= Ubz; iz++) {
+    for (int iy = Lby; iy <= Uby; iy++) {
+      for (int ix = Lbx; ix <= Ubx; ix++) {
+        // div(E) - rho
+        efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+               (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
+               (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+        // div(B)
+        bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+               (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
+               (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+      }
+    }
+  }
+}
+
 DEFINE_MEMBER(void, push_efd)(const float64 delt)
 {
   const float64 cflx = cc * delt / delx;

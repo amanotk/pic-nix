@@ -60,6 +60,7 @@ protected:
   using BaseApp::recvbuf;
 
   int        Ns;         ///< number of species
+  int        momstep;    ///< step at which moment quantities are cached
   MpiCommVec mpicommvec; ///< MPI Communicators
 
   virtual void parse_cfg() override;
@@ -69,6 +70,10 @@ protected:
   virtual void diagnostic_field(std::ostream& out, json& obj);
 
   virtual void diagnostic_particle(std::ostream& out, json& obj);
+
+  virtual void diagnostic_history(std::ostream& out, json& obj);
+
+  virtual void calculate_moment();
 
   virtual void initialize(int argc, char** argv) override;
 
