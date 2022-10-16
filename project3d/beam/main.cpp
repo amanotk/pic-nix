@@ -14,7 +14,8 @@ public:
 
   virtual void setup(json& config) override
   {
-    float64 delh = config["delh"].get<float64>();
+    float64 bvec[3] = {0};
+    float64 delh    = config["delh"].get<float64>();
 
     Ns   = config["Ns"].get<int>();
     cc   = config["cc"].get<float64>();
@@ -32,6 +33,12 @@ public:
       float64 Bx = config["Bx"].get<float64>();
       float64 By = config["By"].get<float64>();
       float64 Bz = config["Bz"].get<float64>();
+      float64 B0 = sqrt(Bx * Bx + By * By + Bz * Bz);
+
+      // magnetic field unit vector
+      bvec[0] = Bx / B0;
+      bvec[1] = By / B0;
+      bvec[2] = Bz / B0;
 
       // memory allocation
       allocate();
@@ -86,6 +93,7 @@ public:
         float64 ro = particle[is]["ro"].get<float64>();
         float64 qm = particle[is]["qm"].get<float64>();
         float64 vt = particle[is]["vt"].get<float64>();
+        float64 vd = particle[is]["vd"].get<float64>();
 
         npmax = std::max(npmax, np);
         id *= this->myid;
@@ -103,9 +111,9 @@ public:
           ptcl[0] = uniform(mt) * xlim[2] + xlim[0];
           ptcl[1] = uniform(mt) * ylim[2] + ylim[0];
           ptcl[2] = uniform(mt) * zlim[2] + zlim[0];
-          ptcl[3] = normal(mt) * vt;
-          ptcl[4] = normal(mt) * vt;
-          ptcl[5] = normal(mt) * vt;
+          ptcl[3] = normal(mt) * vt + bvec[0] * vd;
+          ptcl[4] = normal(mt) * vt + bvec[1] * vd;
+          ptcl[5] = normal(mt) * vt + bvec[2] * vd;
           id64[6] = id + ip;
         }
       }
