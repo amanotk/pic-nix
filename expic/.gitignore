@@ -1,0 +1,5 @@
+compiler.mk
+*.o
+*.d
+*.a
+main.out
