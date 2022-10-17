@@ -13,7 +13,29 @@ _DEBUG = True
 FMT_CHUNKID = "%.8d"
 
 
+def doit_parallel(files, datadir, verbose):
+    "Parallel execution of json2hdf5 for given list of files"
+    try:
+        import tqdm
+    except:
+        tqdm = None
+
+    from concurrent import futures
+    # IMPORTANT: use process pool rather than thread pool for performance
+    with futures.ProcessPoolExecutor() as executor:
+        future_list = []
+        for f in files:
+            if os.path.exists(f) and os.path.splitext(f)[1] == ".json":
+                future = executor.submit(json2hdf5, f, datadir=datadir, verbose=verbose)
+                future_list.append(future)
+        if tqdm is not None: # show progress bar if tqdm is available
+            progress_bar = tqdm.tqdm(total=len(future_list), desc="Generating HDF5")
+            for future in futures.as_completed(future_list):
+                progress_bar.update(1)
+
+
 def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
+    "Generate HDF5 file from given JSON file"
     jsondir = os.path.dirname(jsonfile)
     if jsondir == "":
         jsondir = "."
@@ -61,7 +83,7 @@ def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
     #
     # create hdf5
     #
-    with h5py.File(hdffile, "w") as h5fp:
+    with h5py.File(hdffile, "w", libver="latest") as h5fp:
         pass
 
     # create dataset
@@ -84,7 +106,8 @@ def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
 def add_dataset(
     obj, hdffile, datafile, extpath, byteorder, order, group="", verbose=True
 ):
-    with h5py.File(hdffile, "r+") as h5fp, open(datafile, "r") as datafp:
+    "Add dataset to HDF5 file"
+    with h5py.File(hdffile, "r+", libver="latest") as h5fp, open(datafile, "r") as datafp:
         # attribute
         attribute = obj.get("attribute", [])
         for attr_name in attribute:
@@ -114,11 +137,12 @@ def add_dataset(
 
 
 def add_chunkmap(obj, hdffile, group="", verbose=True):
+    "Add chunkmap to HDF5 file"
     chunkmap = obj.get("chunkmap", None)
     if chunkmap is None:
         return False
 
-    with h5py.File(hdffile, "r+") as h5fp:
+    with h5py.File(hdffile, "r+", libver="latest") as h5fp:
         for ds_name in ("rank", "coord", "chunkid"):
             if not ds_name in chunkmap:
                 continue
@@ -135,12 +159,14 @@ def add_chunkmap(obj, hdffile, group="", verbose=True):
 
 
 def is_chunked_dataset(dataset, cshape):
+    "Return true if the given dataset is chunked one"
     dshape = dataset.shape
     status = dshape[0] == np.prod(cshape)
     return status
 
 
 def is_external_contiguous(external):
+    "Return true if the external tuple describes contiguous block in disk"
     status = True
     filename, offset, size = external[0]
     for ext in external[1:]:
@@ -152,8 +178,9 @@ def is_external_contiguous(external):
 
 
 def create_chunked_dataset(hdffile, chunkmap, chunked, verbose=True):
+    "Create chunked dataset"
     chunked_dataset = []
-    with h5py.File(hdffile, "r+") as h5fp:
+    with h5py.File(hdffile, "r+", libver="latest") as h5fp:
         cmap = h5fp.get(chunkmap, None)
         csh = cmap.get("chunkid")[()].shape
         for name, data in h5fp.items():
@@ -202,8 +229,9 @@ def create_chunked_dataset(hdffile, chunkmap, chunked, verbose=True):
 
 
 def create_vds(hdffile, chunkmap, chunked, dataset, verbose=True):
+    "Create VDS from given chunked datasets"
     group = "vds"
-    with h5py.File(hdffile, "r+") as h5fp:
+    with h5py.File(hdffile, "r+", libver="latest") as h5fp:
         # get chunk ID and coordinate
         chunkid = h5fp.get("/".join([chunkmap, "chunkid"]))[()]
         coord = h5fp.get("/".join([chunkmap, "coord"]))[()]
@@ -249,6 +277,7 @@ def create_vds(hdffile, chunkmap, chunked, dataset, verbose=True):
 
 
 def read_data(fp, obj, byteorder):
+    "Read data content from disk"
     offset = obj["offset"]
     datatype = byteorder + obj["datatype"]
     shape = obj["shape"]
@@ -261,6 +290,7 @@ def read_data(fp, obj, byteorder):
 
 
 def read_info(obj, byteorder):
+    "Read offset, datasize, datatype, and shape of given data"
     offset = obj["offset"]
     datatype = byteorder + obj["datatype"]
     shape = obj["shape"]
@@ -269,6 +299,7 @@ def read_info(obj, byteorder):
 
 
 def report_error(msg):
+    "Print error message"
     print("Error: {}".format(msg))
     if _DEBUG:
         raise ValueError(msg)
@@ -294,6 +325,4 @@ if __name__ == "__main__":
         help="print verbose messages",
     )
     options, args = parser.parse_args()
-    for f in args:
-        if os.path.exists(f) and os.path.splitext(f)[1] == ".json":
-            json2hdf5(f, datadir=options.datadir, verbose=options.verbose)
+    doit_parallel(args, options.datadir, options.verbose)
