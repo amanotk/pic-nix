@@ -564,6 +564,9 @@ DEFINE_MEMBER(void, push)()
   std::set<int> bc_queue_up;
 
   for (int i = 0; i < numchunk; i++) {
+    // reset load
+    chunkvec[i]->reset_load();
+
     // push B for a half step
     chunkvec[i]->push_bfd(0.5 * delt);
 

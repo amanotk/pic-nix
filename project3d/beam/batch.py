@@ -168,4 +168,4 @@ def summary_plot(xc, uf, um, up, **kwargs):
 
 
 if __name__ == "__main__":
-    doit_parallel("config.json")
+    doit_parallel(sys.argv[1])

@@ -14,8 +14,7 @@ public:
 
   virtual void setup(json& config) override
   {
-    float64 bvec[3] = {0};
-    float64 delh    = config["delh"].get<float64>();
+    float64 delh = config["delh"].get<float64>();
 
     Ns   = config["Ns"].get<int>();
     cc   = config["cc"].get<float64>();
@@ -34,11 +33,6 @@ public:
       float64 By = config["By"].get<float64>();
       float64 Bz = config["Bz"].get<float64>();
       float64 B0 = sqrt(Bx * Bx + By * By + Bz * Bz);
-
-      // magnetic field unit vector
-      bvec[0] = Bx / B0;
-      bvec[1] = By / B0;
-      bvec[2] = Bz / B0;
 
       // memory allocation
       allocate();
@@ -68,7 +62,8 @@ public:
     {
       // random number generators
       int                                     random_seed = 0;
-      std::mt19937                            mt(0);
+      std::mt19937                            mtp(0);
+      std::mt19937                            mtv(0);
       std::uniform_real_distribution<float64> uniform(0.0, 1.0);
       std::normal_distribution<float64>       normal(0.0, 1.0);
 
@@ -82,6 +77,7 @@ public:
       int  npmax    = 0;
       json particle = config["particle"];
 
+      mtv.seed(random_seed);
       up.resize(Ns);
       for (int is = 0; is < Ns; is++) {
         int     nz = dims[0] + 2 * Nb;
@@ -93,7 +89,9 @@ public:
         float64 ro = particle[is]["ro"].get<float64>();
         float64 qm = particle[is]["qm"].get<float64>();
         float64 vt = particle[is]["vt"].get<float64>();
-        float64 vd = particle[is]["vd"].get<float64>();
+        float64 vx = particle[is]["vx"].get<float64>();
+        float64 vy = particle[is]["vy"].get<float64>();
+        float64 vz = particle[is]["vz"].get<float64>();
 
         npmax = std::max(npmax, np);
         id *= this->myid;
@@ -103,17 +101,17 @@ public:
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
 
-        mt.seed(random_seed);
+        mtp.seed(random_seed); // for charge neutrality
         for (int ip = 0; ip < up[is]->Np; ip++) {
           float64* ptcl = &up[is]->xu(ip, 0);
           int64*   id64 = reinterpret_cast<int64*>(ptcl);
 
-          ptcl[0] = uniform(mt) * xlim[2] + xlim[0];
-          ptcl[1] = uniform(mt) * ylim[2] + ylim[0];
-          ptcl[2] = uniform(mt) * zlim[2] + zlim[0];
-          ptcl[3] = normal(mt) * vt + bvec[0] * vd;
-          ptcl[4] = normal(mt) * vt + bvec[1] * vd;
-          ptcl[5] = normal(mt) * vt + bvec[2] * vd;
+          ptcl[0] = uniform(mtp) * xlim[2] + xlim[0];
+          ptcl[1] = uniform(mtp) * ylim[2] + ylim[0];
+          ptcl[2] = uniform(mtp) * zlim[2] + zlim[0];
+          ptcl[3] = normal(mtv) * vt + vx;
+          ptcl[4] = normal(mtv) * vt + vy;
+          ptcl[5] = normal(mtv) * vt + vz;
           id64[6] = id + ip;
         }
       }
