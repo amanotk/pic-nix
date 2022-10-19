@@ -256,15 +256,16 @@ def create_vds(hdffile, chunkmap, chunked, dataset, verbose=True):
             # create VirtualLayout object and assign chunks
             layout = h5py.VirtualLayout(shape=gsh, dtype=dtype)
             for iz in range(chunkid.shape[0]):
-                cz = coord[iz, 2]
-                zslice = slice(cz * csh[0], (cz + 1) * csh[0])
                 for iy in range(chunkid.shape[1]):
-                    cy = coord[iy, 1]
-                    yslice = slice(cy * csh[1], (cy + 1) * csh[1])
                     for ix in range(chunkid.shape[2]):
-                        cx = coord[ix, 0]
+                        ii = chunkid[iz, iy, ix]
+                        cx = coord[ii, 0]
+                        cy = coord[ii, 1]
+                        cz = coord[ii, 2]
                         xslice = slice(cx * csh[2], (cx + 1) * csh[2])
-                        src = h5py.VirtualSource(srcdata[chunkid[iz, iy, ix]])
+                        yslice = slice(cy * csh[1], (cy + 1) * csh[1])
+                        zslice = slice(cz * csh[0], (cz + 1) * csh[0])
+                        src = h5py.VirtualSource(srcdata[ii])
                         layout[zslice, yslice, xslice, :] = src
             # create VirtualDataset using the layout
             vds_name = "/".join([group, ds])
