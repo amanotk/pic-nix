@@ -93,7 +93,7 @@ public:
         float64 vy = particle[is]["vy"].get<float64>();
         float64 vz = particle[is]["vz"].get<float64>();
 
-        npmax = std::max(npmax, np);
+        npmax = std::max(npmax, 2*np);
         id *= this->myid;
 
         up[is]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
@@ -121,7 +121,7 @@ public:
 
       // allocate MPI buffer for particle
       this->set_mpi_buffer(mpibufvec[BoundaryParticle], sizeof(int) * Ns,
-                           sizeof(float64) * Ns * npmax * 7);
+                           sizeof(float64) * Ns * npmax * Particle::Nc);
     }
   }
 };

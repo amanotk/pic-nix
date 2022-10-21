@@ -577,11 +577,9 @@ DEFINE_MEMBER(void, push)()
     // calculate current
     chunkvec[i]->deposit_current(delt);
 
-    // begin boundary exchange for current and particles
+    // begin boundary exchange for current
     chunkvec[i]->set_boundary_begin(Chunk::BoundaryCur);
     bc_queue_uj.insert(i);
-    chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
-    bc_queue_up.insert(i);
 
     // push B for a half step
     chunkvec[i]->push_bfd(0.5 * delt);
@@ -599,17 +597,20 @@ DEFINE_MEMBER(void, push)()
     bc_queue_uf.insert(i);
   }
 
-  // wait for particle and field boundary exchange
-  this->wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
+  // wait for field boundary exchange
   this->wait_bc_exchange(bc_queue_uf, Chunk::BoundaryEmf);
+
+  for (int i = 0; i < numchunk; i++) {
+    // begin boundary exchange for particle
+    chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
+    bc_queue_up.insert(i);
+  }
+
+  // wait for particle boundary exchange
+  this->wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
 
   curtime += delt;
   curstep++;
-}
-
-DEFINE_MEMBER(std::unique_ptr<ExChunk3D<Order>>, create_chunk)(const int dims[], const int id)
-{
-  return std::make_unique<ExChunk3D<Order>>(dims, id);
 }
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream& out)
