@@ -2,4 +2,9 @@ compiler.mk
 *.o
 *.d
 *.a
-main.out
+*.out
+*.data
+*.mp4
+*.stdout
+*.stderr
+__pycache__

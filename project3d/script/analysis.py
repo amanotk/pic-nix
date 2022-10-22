@@ -20,6 +20,9 @@ class Run(object):
         self.Nx = cfg["parameter"]["Nx"]
         self.Ny = cfg["parameter"]["Ny"]
         self.Nz = cfg["parameter"]["Nz"]
+        self.Cx = cfg["parameter"]["Cx"]
+        self.Cy = cfg["parameter"]["Cy"]
+        self.Cz = cfg["parameter"]["Cz"]
         self.delt = cfg["parameter"]["delt"]
         self.delh = cfg["parameter"]["delh"]
         for diagnostic in cfg["diagnostic"]:
@@ -49,12 +52,15 @@ class Run(object):
         Ny = self.Ny
         Nx = self.Nx
         uf = np.zeros((Nt, Nz, Ny, Nx, 6), dtype=np.float64)
+        uj = np.zeros((Nt, Nz, Ny, Nx, 4), dtype=np.float64)
         um = np.zeros((Nt, Nz, Ny, Nx, Ns, 11), dtype=np.float64)
         for i in range(Nt):
             with h5py.File(self.file_field[i], "r") as h5fp:
                 uf[i, ...] = h5fp.get("/vds/uf")[()]
+                uj[i, ...] = h5fp.get("/vds/uj")[()]
                 um[i, ...] = h5fp.get("/vds/um")[()]
         self.uf = uf
+        self.uj = uj
         self.um = um
 
     def read_field_at(self, step):
@@ -62,12 +68,11 @@ class Run(object):
         Nz = self.Nz
         Ny = self.Ny
         Nx = self.Nx
-        uf = np.zeros((Nz, Ny, Nx, 6), dtype=np.float64)
-        um = np.zeros((Nz, Ny, Nx, Ns, 11), dtype=np.float64)
         with h5py.File(self.file_field[step], "r") as h5fp:
             uf = h5fp.get("/vds/uf")[()]
+            uj = h5fp.get("/vds/uf")[()]
             um = h5fp.get("/vds/um")[()]
-        return uf, um
+        return uf, uj, um
 
     def read_particle_at(self, step):
         Ns = self.Ns
@@ -77,6 +82,15 @@ class Run(object):
                 dsname = "/up{:02d}".format(i)
                 up.append(h5fp.get(dsname)[()])
         return up
+
+    def read_chunkmap_at(self, step):
+        with h5py.File(self.file_field[step], "r") as h5fp:
+            rank = h5fp.get("/chunkmap/rank")[()]
+            coord = h5fp.get("/chunkmap/coord")[()]
+        cdelx = self.Nx // self.Cx * self.delh
+        cdely = self.Ny // self.Cy * self.delh
+        cdelz = self.Nz // self.Cz * self.delh
+        return rank, coord, cdelx, cdely, cdelz
 
 
 class Histogram2D:
@@ -99,10 +113,57 @@ class Histogram2D:
         raise ValueError("Invalid argument")
 
     def pcolormesh_args(self):
-        x = 0.5*(self.xedges[+1:] + self.xedges[:-1])
-        y = 0.5*(self.yedges[+1:] + self.yedges[:-1])
-        X, Y = np.broadcast_arrays(x[:,None], y[None,:])
+        x = 0.5 * (self.xedges[+1:] + self.xedges[:-1])
+        y = 0.5 * (self.yedges[+1:] + self.yedges[:-1])
+        X, Y = np.broadcast_arrays(x[:, None], y[None, :])
         return X, Y, self.density
+
+
+def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
+    import matplotlib as mpl
+
+    cx = coord[:, 0]
+    Nx = np.max(cx) + 1
+    yy = np.zeros((Nx,), dtype=np.int32)
+    yy[cx] = rank
+    ix = np.argwhere(yy[+1:] - yy[:-1] != 0)[:,0]
+    for i in ix:
+        ax.axvline(delx * i, color=colors, lw=0.5)
+
+
+def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
+    import matplotlib as mpl
+
+    cx = coord[:, 0]
+    cy = coord[:, 1]
+    Nx = np.max(cx) + 1
+    Ny = np.max(cy) + 1
+    ix = np.arange(Nx)
+    iy = np.arange(Ny)
+    zz = np.zeros((Ny, Nx), dtype=np.int32)
+    zz[cy, cx] = rank
+    Ix, Iy = np.broadcast_arrays(ix[None, :], iy[:, None])
+    diffx = np.where(zz[:, +1:] - zz[:, :-1] == 0, 0, 1)
+    diffy = np.where(zz[+1:, :] - zz[:-1, :] == 0, 0, 1)
+    # vertical
+    xsegments = np.zeros((Ny, Nx - 1, 2, 2), dtype=np.float64)
+    xsegments[:, :, 0, 0] = delx * Ix[:, +1:]
+    xsegments[:, :, 0, 1] = dely * Iy[:, +1:]
+    xsegments[:, :, 1, 0] = delx * Ix[:, +1:]
+    xsegments[:, :, 1, 1] = dely * (Iy[:, +1:] + 1)
+    # horizontal
+    ysegments = np.zeros((Ny - 1, Nx, 2, 2), dtype=np.float64)
+    ysegments[:, :, 0, 0] = delx * Ix[+1:, :]
+    ysegments[:, :, 0, 1] = dely * Iy[+1:, :]
+    ysegments[:, :, 1, 0] = delx * (Ix[+1:, :] + 1)
+    ysegments[:, :, 1, 1] = dely * Iy[+1:, :]
+    # line segments
+    segments = xsegments.reshape(Ny * (Nx - 1), 2, 2)
+    xlines = mpl.collections.LineCollection(segments, linewidths=diffx.flat, colors=colors)
+    ax.add_collection(xlines)
+    segments = ysegments.reshape((Ny - 1) * Nx, 2, 2)
+    ylines = mpl.collections.LineCollection(segments, linewidths=diffy.flat, colors=colors)
+    ax.add_collection(ylines)
 
 
 def get_wk_spectrum(f, delt=1.0, delh=1.0):

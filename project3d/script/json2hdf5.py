@@ -21,6 +21,7 @@ def doit_parallel(files, datadir, verbose):
         tqdm = None
 
     from concurrent import futures
+
     # IMPORTANT: use process pool rather than thread pool for performance
     with futures.ProcessPoolExecutor() as executor:
         future_list = []
@@ -28,7 +29,7 @@ def doit_parallel(files, datadir, verbose):
             if os.path.exists(f) and os.path.splitext(f)[1] == ".json":
                 future = executor.submit(json2hdf5, f, datadir=datadir, verbose=verbose)
                 future_list.append(future)
-        if tqdm is not None: # show progress bar if tqdm is available
+        if tqdm is not None:  # show progress bar if tqdm is available
             progress_bar = tqdm.tqdm(total=len(future_list), desc="Generating HDF5")
             for future in futures.as_completed(future_list):
                 progress_bar.update(1)
@@ -103,9 +104,7 @@ def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
         print("done !")
 
 
-def add_dataset(
-    obj, hdffile, datafile, extpath, byteorder, order, group="", verbose=True
-):
+def add_dataset(obj, hdffile, datafile, extpath, byteorder, order, group="", verbose=True):
     "Add dataset to HDF5 file"
     with h5py.File(hdffile, "r+", libver="latest") as h5fp, open(datafile, "r") as datafp:
         # attribute
@@ -151,9 +150,7 @@ def add_chunkmap(obj, hdffile, group="", verbose=True):
             h5fp.create_dataset(name, data=data)
             if verbose:
                 print('  - dataset "{}" has been created '.format(name), end="")
-                print(
-                    'with dtype = "{}" and shape = "{}"'.format(data.dtype, data.shape)
-                )
+                print('with dtype = "{}" and shape = "{}"'.format(data.dtype, data.shape))
 
     return True
 
@@ -244,7 +241,7 @@ def create_vds(hdffile, chunkmap, chunked, dataset, verbose=True):
             # determine data shape assuming 3D chunk
             #
             csh = list(srcdata[0].shape)
-            if len(csh) < 3: # ignore dataset with dimensions < 3
+            if len(csh) < 3:  # ignore dataset with dimensions < 3
                 continue
             gsh = csh.copy()
             gsh[0] = csh[0] * chunkid.shape[0]
