@@ -334,7 +334,7 @@ def summary_plot_weibel(xc, yc, uf, uj, um, **kwargs):
         ax.set_ylabel(r"$y$")
         # plot chunk distribution
         if plot_chunk:
-            analysis.plot_chunk_dist2d(ax, coord, rank, cdelx, cdely, colors="w")
+            analysis.plot_chunk_dist2d(ax, coord, rank, cdelx, cdely, colors="gray")
     figure.suptitle(r"$t = {:6.2f}$".format(time), x=0.5, y=0.98)
 
     ## save
