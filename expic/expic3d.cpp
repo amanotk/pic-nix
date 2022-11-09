@@ -89,77 +89,6 @@ DEFINE_MEMBER(void, parse_cfg)()
   }
 }
 
-DEFINE_MEMBER(void, diagnostic_load)(std::ostream& out, json& obj)
-{
-  // get parameters from json
-  std::string prefix = obj.value("prefix", "load");
-  std::string path   = obj.value("path", ".") + "/";
-
-  // filename
-  std::string fn_json = prefix + ".json";
-  std::string fn_data = prefix + ".data";
-
-  MPI_File fh;
-  size_t   disp;
-
-  //
-  // initial setup
-  //
-  if (curstep == 0) {
-    // data file
-    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
-    jsonio::close_file(&fh);
-  }
-
-  //
-  // output data file
-  //
-  {
-    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "a");
-
-    this->write_chunk_all(fh, disp, Chunk::DiagnosticLoad);
-
-    jsonio::close_file(&fh);
-  }
-
-  //
-  // output json file : overwrite existing file
-  //
-  {
-    const int  numload = (curstep + 1) / obj["interval"].get<int>();
-    const char name[]  = "load";
-    const char desc[]  = "chunk work load";
-    const int  ndim    = 3;
-    const int  dims[3] = {numload, cdims[3], Chunk::NumLoadMode};
-    const int  size    = dims[0] * dims[1] * dims[2] * sizeof(float64);
-
-    // always point to the beginning of the file
-    disp = 0;
-
-    json root;
-    json dataset;
-
-    // meta data
-    root["meta"] = {{"endian", nix::get_endian_flag()},
-                    {"rawfile", fn_data},
-                    {"order", 1},
-                    {"header", {"field push", "current deposit", "particle push"}}};
-
-    // dataset
-    jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-    root["dataset"] = dataset;
-
-    // write
-    if (thisrank == 0) {
-      std::ofstream ofs(path + fn_json);
-      ofs << std::setw(2) << root << std::flush;
-      ofs.close();
-    }
-
-    MPI_Barrier(MPI_COMM_WORLD);
-  }
-}
-
 DEFINE_MEMBER(void, diagnostic_field)(std::ostream& out, json& obj)
 {
   const int nz = ndims[0] / cdims[0];
@@ -402,10 +331,10 @@ DEFINE_MEMBER(void, diagnostic_history)(std::ostream& out, json& obj)
 
   // calculate divergence error and energy
   for (int i = 0; i < numchunk; i++) {
-    float64 div_e     = 0;
-    float64 div_b     = 0;
-    float64 ene_e     = 0;
-    float64 ene_b     = 0;
+    float64 div_e = 0;
+    float64 div_b = 0;
+    float64 ene_e = 0;
+    float64 ene_b = 0;
     float64 ene_p[Ns];
 
     chunkvec[i]->get_diverror(div_e, div_b);
@@ -563,6 +492,10 @@ DEFINE_MEMBER(void, push)()
   std::set<int> bc_queue_uj;
   std::set<int> bc_queue_up;
 
+  float64 wclock1, wclock2;
+
+  wclock1 = nix::wall_clock();
+
   for (int i = 0; i < numchunk; i++) {
     // reset load
     chunkvec[i]->reset_load();
@@ -611,6 +544,11 @@ DEFINE_MEMBER(void, push)()
 
   curtime += delt;
   curstep++;
+
+  wclock2 = nix::wall_clock();
+
+  // log
+  log_json["push"] = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
 }
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream& out)
@@ -640,10 +578,6 @@ DEFINE_MEMBER(void, diagnostic)(std::ostream& out)
     //
     if (name == "history") {
       diagnostic_history(out, obj);
-    }
-
-    if (name == "load") {
-      diagnostic_load(out, obj);
     }
 
     if (name == "field") {

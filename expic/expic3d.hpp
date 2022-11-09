@@ -36,6 +36,7 @@ protected:
   using MpiCommVec = std::vector<MPI_Comm>;
   using BaseApp::cfg_file;
   using BaseApp::cfg_json;
+  using BaseApp::log_json;
   using BaseApp::balancer;
   using BaseApp::numchunk;
   using BaseApp::chunkvec;
@@ -64,8 +65,6 @@ protected:
   MpiCommVec mpicommvec; ///< MPI Communicators
 
   virtual void parse_cfg() override;
-
-  virtual void diagnostic_load(std::ostream& out, json& obj);
 
   virtual void diagnostic_field(std::ostream& out, json& obj);
 

@@ -1,11 +1,14 @@
 {
 	"application": {
 		"debug": false,
+		"log": {
+			"path": ".",
+			"prefix": "log",
+			"level": 0,
+			"options": null
+		},
 		"rebuild": {
-			"interval" : 20,
-			"loglevel" : 1,
-			"prefix" : "rebuild",
-			"path" : ".",
+			"interval": 20,
 			"options": null
 		}
 	},
@@ -15,13 +18,6 @@
 			"path": ".",
 			"prefix": "history",
 			"interval": 10,
-			"options": null
-		},
-		{
-			"name": "load",
-			"path": ".",
-			"prefix": "load",
-			"interval": 1,
 			"options": null
 		},
 		{
