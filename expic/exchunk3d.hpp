@@ -119,7 +119,7 @@ public:
 
   virtual void allocate();
 
-  virtual void reset_load();
+  virtual void reset_load() override;
 
   virtual int pack_diagnostic(const int mode, void* buffer, const int address) override;
 
