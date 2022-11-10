@@ -542,13 +542,14 @@ DEFINE_MEMBER(void, push)()
   // wait for particle boundary exchange
   this->wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
 
-  curtime += delt;
-  curstep++;
-
   wclock2 = nix::wall_clock();
 
   // log
-  log_json["push"] = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+  {
+    json push     = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+    json log_step = {{"push", push}};
+    this->append_log_step(log_step);
+  }
 }
 
 DEFINE_MEMBER(void, diagnostic)(std::ostream& out)

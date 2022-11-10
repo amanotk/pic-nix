@@ -10,6 +10,7 @@ import glob
 
 class Run(object):
     def __init__(self, cfgfile):
+        self.dirname = os.path.dirname(cfgfile)
         self.read_config(cfgfile)
         self.read_coord(self.file_field)
 
@@ -27,7 +28,7 @@ class Run(object):
         self.delh = cfg["parameter"]["delh"]
         for diagnostic in cfg["diagnostic"]:
             prefix = diagnostic["prefix"]
-            path = diagnostic["path"]
+            path = os.sep.join([self.dirname, diagnostic["path"]])
             interval = diagnostic["interval"]
             file = sorted(glob.glob(os.sep.join([path, prefix]) + "*.h5"))
             # field

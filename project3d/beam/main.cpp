@@ -14,10 +14,13 @@ public:
 
   virtual void setup(json& config) override
   {
-    float64 delh = config["delh"].get<float64>();
+    float64 delh;
+
+    field_load = config.value("field_load", 1.0);
 
     Ns   = config["Ns"].get<int>();
     cc   = config["cc"].get<float64>();
+    delh = config["delh"].get<float64>();
     delx = delh;
     dely = delh;
     delz = delh;
@@ -67,11 +70,15 @@ public:
       std::uniform_real_distribution<float64> uniform(0.0, 1.0);
       std::normal_distribution<float64>       normal(0.0, 1.0);
 
-      // seed
-      if (config["seed_type"].is_null() || config["seed_type"].get<std::string>() == "random") {
-        random_seed = std::random_device()();
-      } else {
-        random_seed = this->myid; // chunk ID
+      // random seed
+      {
+        std::string seed_type = config.value("seed_type", "random");
+
+        if (seed_type == "random") {
+          random_seed = std::random_device()();
+        } else if (seed_type == "chunkid") {
+          random_seed = this->myid; // chunk ID
+        }
       }
 
       int  npmax    = 0;
@@ -93,7 +100,7 @@ public:
         float64 vy = particle[is]["vy"].get<float64>();
         float64 vz = particle[is]["vz"].get<float64>();
 
-        npmax = std::max(npmax, 2*np);
+        npmax = std::max(npmax, 2 * np);
         id *= this->myid;
 
         up[is]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);

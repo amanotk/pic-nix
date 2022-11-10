@@ -4,6 +4,7 @@
 		"log": {
 			"path": ".",
 			"prefix": "log",
+			"interval": 10.0,
 			"level": 0,
 			"options": null
 		},
@@ -73,6 +74,7 @@
 				"vz": 0.0
 			}
 		],
-		"seed_type": "random"
+		"seed_type": "random",
+		"field_load": 1.0
 	}
 }

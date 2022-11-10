@@ -86,10 +86,9 @@ public:
 
   // mode for load
   enum LoadMode {
-    LoadEmf      = 0,
-    LoadCur      = 1,
-    LoadParticle = 2,
-    NumLoadMode  = 3, // number of mode
+    LoadField    = 0,
+    LoadParticle = 1,
+    NumLoadMode  = 2, // number of mode
   };
 
   // mode for boundary exchange
@@ -102,6 +101,8 @@ public:
   };
 
 protected:
+  float64 field_load; ///< field load per grid point (normalized to particle load)
+
   int                     Ns; ///< number of particle species
   float64                 cc; ///< speed of light
   ParticleVec             up; ///< list of particles
@@ -118,7 +119,9 @@ public:
 
   virtual void allocate();
 
-  virtual int pack_diagnostic(const int mode, void* buffer, const int address);
+  virtual void reset_load();
+
+  virtual int pack_diagnostic(const int mode, void* buffer, const int address) override;
 
   virtual void setup(json& config) override;
 

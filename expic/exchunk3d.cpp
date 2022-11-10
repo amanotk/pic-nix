@@ -5,7 +5,8 @@
   template <int Order>                                                                             \
   type ExChunk3D<Order>::name
 
-DEFINE_MEMBER(, ExChunk3D)(const int dims[3], const int id) : Chunk(dims, id), Ns(1)
+DEFINE_MEMBER(, ExChunk3D)
+(const int dims[3], const int id) : Chunk(dims, id), Ns(1), field_load(1.0)
 {
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
@@ -25,6 +26,7 @@ DEFINE_MEMBER(int, pack)(void* buffer, const int address)
   int count = address;
 
   count += Chunk::pack(buffer, count);
+  count += memcpy_count(buffer, &field_load, sizeof(float64), count, 0);
   count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
   count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
   count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
@@ -44,6 +46,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, const int address)
   int count = address;
 
   count += Chunk::unpack(buffer, count);
+  count += memcpy_count(&field_load, buffer, sizeof(float64), 0, count);
   count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
   count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
   allocate(); // allocate memory for unpacking
@@ -73,6 +76,17 @@ DEFINE_MEMBER(void, allocate)()
   uf.fill(0);
   uj.fill(0);
   um.fill(0);
+}
+
+DEFINE_MEMBER(void, reset_load)()
+{
+  const int Ng = dims[0] * dims[1] * dims[2];
+
+  this->load[LoadField]    = field_load;
+  this->load[LoadParticle] = 0;
+  for (int is = 0; is < up.size(); is++) {
+    this->load[LoadParticle] += up[is]->Np / Ng;
+  }
 }
 
 DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void* buffer, const int address)
@@ -184,8 +198,6 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
   const float64 cfly = cc * delt / dely;
   const float64 cflz = cc * delt / delz;
 
-  float64 etime = nix::wall_clock();
-
   for (int iz = Lbz - 1; iz <= Ubz; iz++) {
     for (int iy = Lby - 1; iy <= Uby; iy++) {
       for (int ix = Lbx - 1; ix <= Ubx; ix++) {
@@ -201,9 +213,6 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
       }
     }
   }
-
-  // store computation time
-  this->load[LoadEmf] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER(void, push_bfd)(const float64 delt)
@@ -211,8 +220,6 @@ DEFINE_MEMBER(void, push_bfd)(const float64 delt)
   const float64 cflx = cc * delt / delx;
   const float64 cfly = cc * delt / dely;
   const float64 cflz = cc * delt / delz;
-
-  float64 etime = nix::wall_clock();
 
   for (int iz = Lbz; iz <= Ubz + 1; iz++) {
     for (int iy = Lby; iy <= Uby + 1; iy++) {
@@ -226,9 +233,6 @@ DEFINE_MEMBER(void, push_bfd)(const float64 delt)
       }
     }
   }
-
-  // store computation time
-  this->load[LoadEmf] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER(void, set_boundary_begin)(const int mode)

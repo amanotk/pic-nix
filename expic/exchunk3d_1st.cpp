@@ -20,8 +20,6 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
   const float64 zimin = zlim[0] + 0.5 * delz;
   const float64 zhmin = zlim[0];
 
-  float64 etime = nix::wall_clock();
-
   for (int is = 0; is < Ns; is++) {
     PtrParticle ps  = up[is];
     float64     dt1 = 0.5 * ps->q / ps->m * delt;
@@ -83,16 +81,11 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
       Particle::push_buneman_boris(&xu[3], emf);
     }
   }
-
-  // store computation time
-  this->load[LoadParticle] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER1(void, push_position)(const float64 delt)
 {
   const float64 rc = 1 / cc;
-
-  float64 etime = nix::wall_clock();
 
   for (int is = 0; is < Ns; is++) {
     PtrParticle ps = up[is];
@@ -116,9 +109,6 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
     // count
     count_particle(ps, 0, ps->Np - 1, true);
   }
-
-  // store computation time
-  this->load[LoadParticle] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
@@ -133,8 +123,6 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
   const float64 ximin = xlim[0] + 0.5 * delx;
   const float64 yimin = ylim[0] + 0.5 * dely;
   const float64 zimin = zlim[0] + 0.5 * delz;
-
-  float64 etime = nix::wall_clock();
 
   // clear charge/current density
   uj.fill(0);
@@ -197,9 +185,6 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
       }
     }
   }
-
-  // store computation time
-  this->load[LoadCur] += nix::wall_clock() - etime;
 }
 
 DEFINE_MEMBER1(void, deposit_moment)()
