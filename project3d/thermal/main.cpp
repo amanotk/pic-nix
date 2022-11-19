@@ -14,10 +14,12 @@ public:
 
   virtual void setup(json& config) override
   {
-    float64 delh = config["delh"].get<float64>();
+    float64 delt;
+    float64 delh;
 
     Ns   = config["Ns"].get<int>();
     cc   = config["cc"].get<float64>();
+    delh = config["delh"].get<float64>();
     delx = delh;
     dely = delh;
     delz = delh;
@@ -50,9 +52,9 @@ public:
       }
 
       // allocate MPI buffer for field
-      this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, sizeof(float64) * 6);
-      this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, sizeof(float64) * 4);
-      this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, sizeof(float64) * Ns * 11);
+      this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, 0, sizeof(float64) * 6);
+      this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, 0, sizeof(float64) * 4);
+      this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 11);
     }
 
     //
@@ -87,7 +89,7 @@ public:
         float64 qm = particle[is]["qm"].get<float64>();
         float64 vt = particle[is]["vt"].get<float64>();
 
-        npmax = std::max(npmax, np);
+        npmax = std::max(npmax, static_cast<int>(np * cc * delt / delh));
         id *= this->myid;
 
         up[is]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
@@ -114,8 +116,8 @@ public:
       this->sort_particle(up);
 
       // allocate MPI buffer for particle
-      this->set_mpi_buffer(mpibufvec[BoundaryParticle], sizeof(int) * Ns,
-                           sizeof(float64) * Ns * npmax * 7);
+      this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(int) * Ns,
+                           Ns * npmax * sizeof(float64) * Particle::Nc);
     }
   }
 };
