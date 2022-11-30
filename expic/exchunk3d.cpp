@@ -6,7 +6,7 @@
   type ExChunk3D<Order>::name
 
 DEFINE_MEMBER(, ExChunk3D)
-(const int dims[3], const int id) : Chunk(dims, id), Ns(1), field_load(1.0)
+(const int dims[3], int id) : Chunk(dims, id), Ns(1), field_load(1.0)
 {
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
@@ -19,7 +19,7 @@ DEFINE_MEMBER(, ExChunk3D)
   this->reset_load();
 }
 
-DEFINE_MEMBER(int, pack)(void* buffer, const int address)
+DEFINE_MEMBER(int, pack)(void* buffer, int address)
 {
   using nix::memcpy_count;
 
@@ -39,7 +39,7 @@ DEFINE_MEMBER(int, pack)(void* buffer, const int address)
   return count;
 }
 
-DEFINE_MEMBER(int, unpack)(void* buffer, const int address)
+DEFINE_MEMBER(int, unpack)(void* buffer, int address)
 {
   using nix::memcpy_count;
 
@@ -89,7 +89,7 @@ DEFINE_MEMBER(void, reset_load)()
   }
 }
 
-DEFINE_MEMBER(int, pack_diagnostic)(const int mode, void* buffer, const int address)
+DEFINE_MEMBER(int, pack_diagnostic)(int mode, void* buffer, int address)
 {
   switch (mode) {
   case DiagnosticLoad:
@@ -192,7 +192,7 @@ DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
   }
 }
 
-DEFINE_MEMBER(void, push_efd)(const float64 delt)
+DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
   const float64 cflx = cc * delt / delx;
   const float64 cfly = cc * delt / dely;
@@ -215,7 +215,7 @@ DEFINE_MEMBER(void, push_efd)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER(void, push_bfd)(const float64 delt)
+DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
   const float64 cflx = cc * delt / delx;
   const float64 cfly = cc * delt / dely;
@@ -235,29 +235,29 @@ DEFINE_MEMBER(void, push_bfd)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
+DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
   // physical boundary
   this->set_boundary_physical(mode);
 
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<value_type>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<value_type>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<value_type>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<value_type>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
     this->inject_particle(up);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
@@ -268,26 +268,26 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
   }
 }
 
-DEFINE_MEMBER(void, set_boundary_end)(const int mode)
+DEFINE_MEMBER(void, set_boundary_end)(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<value_type>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<value_type>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<value_type>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<value_type>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }

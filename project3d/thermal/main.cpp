@@ -127,7 +127,7 @@ class MainApplication : public ExPIC3D<order>
 public:
   using ExPIC3D<order>::ExPIC3D; // inherit constructors
 
-  std::unique_ptr<ExChunk3D<order>> create_chunk(const int dims[], const int id) override
+  std::unique_ptr<ExChunk3D<order>> create_chunk(const int dims[], int id) override
   {
     return std::make_unique<MainChunk>(dims, id);
   }

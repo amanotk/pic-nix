@@ -80,7 +80,7 @@ protected:
 
   virtual bool rebuild_chunkmap() override;
 
-  virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], const int id) override = 0;
+  virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], int id) override = 0;
 
 public:
   ExPIC3D(int argc, char** argv);

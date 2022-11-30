@@ -421,7 +421,9 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   curtime = 0.0;
   this->initialize_mpi(&argc, &argv);
   this->initialize_chunkmap();
-  balancer = std::make_unique<Balancer>();
+
+  // load balancer
+  balancer = this->create_balancer();
 
   // buffer allocation
   int bufsize = 1024 * 16;

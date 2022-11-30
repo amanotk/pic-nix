@@ -49,7 +49,7 @@ template <int Order>
 class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
-  using value_type   = ExChunk3D<Order>;
+  using this_type    = ExChunk3D<Order>;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
@@ -114,17 +114,17 @@ protected:
   xt::xtensor<float64, 5> um; ///< particle moment
 
 public:
-  ExChunk3D(const int dims[3], const int id = 0);
+  ExChunk3D(const int dims[3], int id = 0);
 
-  virtual int pack(void* buffer, const int address) override;
+  virtual int pack(void* buffer, int address) override;
 
-  virtual int unpack(void* buffer, const int address) override;
+  virtual int unpack(void* buffer, int address) override;
 
   virtual void allocate();
 
   virtual void reset_load() override;
 
-  virtual int pack_diagnostic(const int mode, void* buffer, const int address) override;
+  virtual int pack_diagnostic(int mode, void* buffer, int address) override;
 
   virtual void setup(json& config) override;
 
@@ -132,21 +132,21 @@ public:
 
   virtual void get_diverror(float64& efd, float64& bfd);
 
-  virtual void push_efd(const float64 delt);
+  virtual void push_efd(float64 delt);
 
-  virtual void push_bfd(const float64 delt);
+  virtual void push_bfd(float64 delt);
 
-  virtual void push_velocity(const float64 delt);
+  virtual void push_velocity(float64 delt);
 
-  virtual void push_position(const float64 delt);
+  virtual void push_position(float64 delt);
 
-  virtual void deposit_current(const float64 delt);
+  virtual void deposit_current(float64 delt);
 
   virtual void deposit_moment();
 
-  virtual void set_boundary_begin(const int mode = 0) override;
+  virtual void set_boundary_begin(int mode = 0) override;
 
-  virtual void set_boundary_end(const int mode = 0) override;
+  virtual void set_boundary_end(int mode = 0) override;
 };
 
 // first-order shape function requires 2 boundary margins
