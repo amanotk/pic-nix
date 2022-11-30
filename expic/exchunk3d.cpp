@@ -241,19 +241,27 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
   this->set_boundary_physical(mode);
 
   switch (mode) {
-  case BoundaryEmf:
-    this->begin_bc_exchange(mpibufvec[mode], uf);
+  case BoundaryEmf: {
+    auto halo = nix::XtensorHaloField3D<value_type>(uf, *this);
+    this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
-  case BoundaryCur:
-    this->begin_bc_exchange(mpibufvec[mode], uj, true);
+  }
+  case BoundaryCur: {
+    auto halo = nix::XtensorHaloCurrent3D<value_type>(uj, *this);
+    this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
-  case BoundaryMom:
-    this->begin_bc_exchange(mpibufvec[mode], um, true);
+  }
+  case BoundaryMom: {
+    auto halo = nix::XtensorHaloMoment3D<value_type>(um, *this);
+    this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
-  case BoundaryParticle:
+  }
+  case BoundaryParticle: {
+    auto halo = nix::XtensorHaloParticle3D<value_type>(up, *this);
     this->inject_particle(up);
-    this->begin_bc_exchange(mpibufvec[mode], up);
+    this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
+  }
   default:
     ERRORPRINT("No such boundary mode exists!\n");
     break;
@@ -263,18 +271,26 @@ DEFINE_MEMBER(void, set_boundary_begin)(const int mode)
 DEFINE_MEMBER(void, set_boundary_end)(const int mode)
 {
   switch (mode) {
-  case BoundaryEmf:
-    this->end_bc_exchange(mpibufvec[mode], uf);
+  case BoundaryEmf: {
+    auto halo = nix::XtensorHaloField3D<value_type>(uf, *this);
+    this->end_bc_exchange(mpibufvec[mode], halo);
     break;
-  case BoundaryCur:
-    this->end_bc_exchange(mpibufvec[mode], uj, true);
+  }
+  case BoundaryCur: {
+    auto halo = nix::XtensorHaloCurrent3D<value_type>(uj, *this);
+    this->end_bc_exchange(mpibufvec[mode], halo);
     break;
-  case BoundaryMom:
-    this->end_bc_exchange(mpibufvec[mode], um, true);
+  }
+  case BoundaryMom: {
+    auto halo = nix::XtensorHaloMoment3D<value_type>(um, *this);
+    this->end_bc_exchange(mpibufvec[mode], halo);
     break;
-  case BoundaryParticle:
-    this->end_bc_exchange(mpibufvec[mode], up);
+  }
+  case BoundaryParticle: {
+    auto halo = nix::XtensorHaloParticle3D<value_type>(up, *this);
+    this->end_bc_exchange(mpibufvec[mode], halo);
     break;
+  }
   default:
     ERRORPRINT("No such boundary mode exists!\n");
     break;

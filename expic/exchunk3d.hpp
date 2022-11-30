@@ -10,6 +10,8 @@
 #include "nix/particle.hpp"
 #include "nix/xtensorall.hpp"
 
+#include "nix/xtensor_halo3d.hpp"
+
 using namespace nix::typedefs;
 using nix::json;
 using nix::Particle;
@@ -47,6 +49,7 @@ template <int Order>
 class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
+  using value_type   = ExChunk3D<Order>;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
