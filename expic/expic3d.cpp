@@ -490,59 +490,58 @@ DEFINE_MEMBER(bool, rebuild_chunkmap)()
 
 DEFINE_MEMBER(void, push)()
 {
-  std::set<int> bc_queue_uf;
-  std::set<int> bc_queue_uj;
-  std::set<int> bc_queue_up;
-
   float64 wclock1, wclock2;
 
   wclock1 = nix::wall_clock();
 
-  for (int i = 0; i < numchunk; i++) {
-    // reset load
-    chunkvec[i]->reset_load();
+#pragma omp parallel
+  {
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      // reset load
+      chunkvec[i]->reset_load();
 
-    // push B for a half step
-    chunkvec[i]->push_bfd(0.5 * delt);
+      // push B for a half step
+      chunkvec[i]->push_bfd(0.5 * delt);
 
-    // push particle
-    chunkvec[i]->push_velocity(delt);
-    chunkvec[i]->push_position(delt);
+      // push particle
+      chunkvec[i]->push_velocity(delt);
+      chunkvec[i]->push_position(delt);
 
-    // calculate current
-    chunkvec[i]->deposit_current(delt);
+      // calculate current
+      chunkvec[i]->deposit_current(delt);
 
-    // begin boundary exchange for current
-    chunkvec[i]->set_boundary_begin(Chunk::BoundaryCur);
-    bc_queue_uj.insert(i);
+      // begin boundary exchange for current
+      chunkvec[i]->set_boundary_begin(Chunk::BoundaryCur);
 
-    // push B for a half step
-    chunkvec[i]->push_bfd(0.5 * delt);
+      // begin boundary exchange for particle
+      chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
+
+      // push B for a half step
+      chunkvec[i]->push_bfd(0.5 * delt);
+    }
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_boundary_end(Chunk::BoundaryCur);
+
+      // push E
+      chunkvec[i]->push_efd(delt);
+
+      // begin boundary exchange for field
+      chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
+    }
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_boundary_end(Chunk::BoundaryParticle);
+    }
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
+    }
   }
-
-  // wait for current boundary exchange
-  this->wait_bc_exchange(bc_queue_uj, Chunk::BoundaryCur);
-
-  for (int i = 0; i < numchunk; i++) {
-    // push E
-    chunkvec[i]->push_efd(delt);
-
-    // begin boundary exchange for field
-    chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
-    bc_queue_uf.insert(i);
-  }
-
-  // wait for field boundary exchange
-  this->wait_bc_exchange(bc_queue_uf, Chunk::BoundaryEmf);
-
-  for (int i = 0; i < numchunk; i++) {
-    // begin boundary exchange for particle
-    chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
-    bc_queue_up.insert(i);
-  }
-
-  // wait for particle boundary exchange
-  this->wait_bc_exchange(bc_queue_up, Chunk::BoundaryParticle);
 
   wclock2 = nix::wall_clock();
 
