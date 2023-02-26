@@ -7,4 +7,5 @@ compiler.mk
 *.mp4
 *.stdout
 *.stderr
+build
 __pycache__
