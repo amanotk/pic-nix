@@ -33,7 +33,7 @@ class ExPIC3D : public nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>
 protected:
   using BaseApp    = nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>;
   using Chunk      = ExChunk3D<Order>;
-  using MpiCommVec = std::vector<MPI_Comm>;
+  using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
   using BaseApp::cfg_file;
   using BaseApp::cfg_json;
   using BaseApp::log_json;
@@ -75,6 +75,8 @@ protected:
   virtual void calculate_moment();
 
   virtual void initialize(int argc, char** argv) override;
+
+  virtual void set_chunk_communicator();
 
   virtual void setup() override;
 

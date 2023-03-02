@@ -442,23 +442,37 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
     chunkvec[i]->set_global_context(offset, ndims);
   }
 
-  // communicators
-  mpicommvec.resize(Chunk::NumBoundaryMode);
+  // initialize communicators
   for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
-    MPI_Comm comm;
-    MPI_Comm_dup(MPI_COMM_WORLD, &comm);
-    mpicommvec[mode] = comm;
+    for (int iz = 0; iz < 3; iz++) {
+      for (int iy = 0; iy < 3; iy++) {
+        for (int ix = 0; ix < 3; ix++) {
+          MPI_Comm_dup(MPI_COMM_WORLD, &mpicommvec(mode, iz, iy, ix));
+        }
+      }
+    }
+  }
+}
+
+DEFINE_MEMBER(void, set_chunk_communicator)()
+{
+  for (int i = 0; i < numchunk; i++) {
+    for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
+      for (int iz = 0; iz < 3; iz++) {
+        for (int iy = 0; iy < 3; iy++) {
+          for (int ix = 0; ix < 3; ix++) {
+            chunkvec[i]->set_mpi_communicator(mode, iz, iy, ix, mpicommvec(mode, iz, iy, ix));
+          }
+        }
+      }
+    }
   }
 }
 
 DEFINE_MEMBER(void, setup)()
 {
   // set MPI communicator for each mode
-  for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
-    for (int i = 0; i < numchunk; i++) {
-      chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
-    }
-  }
+  set_chunk_communicator();
 
   // setup for each chunk with boundary condition
   {
@@ -476,12 +490,8 @@ DEFINE_MEMBER(void, setup)()
 DEFINE_MEMBER(bool, rebuild_chunkmap)()
 {
   if (BaseApp::rebuild_chunkmap()) {
-    // set MPI communicator for each mode
-    for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
-      for (int i = 0; i < numchunk; i++) {
-        chunkvec[i]->set_mpi_communicator(mode, mpicommvec[mode]);
-      }
-    }
+    // reset MPI communicator for each mode
+    set_chunk_communicator();
     return true;
   }
 
