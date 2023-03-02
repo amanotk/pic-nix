@@ -17,8 +17,11 @@ public:
     float64 delt;
     float64 delh;
 
+    field_load = config.value("field_load", 1.0);
+
     Ns   = config["Ns"].get<int>();
     cc   = config["cc"].get<float64>();
+    delt = config["delt"].get<float64>();
     delh = config["delh"].get<float64>();
     delx = delh;
     dely = delh;
@@ -63,20 +66,28 @@ public:
     {
       // random number generators
       int                                     random_seed = 0;
-      std::mt19937                            mt(0);
+      std::mt19937                            mtp(0);
+      std::mt19937                            mtv(0);
       std::uniform_real_distribution<float64> uniform(0.0, 1.0);
       std::normal_distribution<float64>       normal(0.0, 1.0);
 
-      // seed
-      if (config["seed_type"].is_null() || config["seed_type"].get<std::string>() == "random") {
-        random_seed = std::random_device()();
-      } else {
-        random_seed = this->myid; // chunk ID
+      // random seed
+      {
+        std::string seed_type = config.value("seed_type", "random"); // random by default
+
+        if (seed_type == "random") {
+          random_seed = std::random_device()();
+        } else if (seed_type == "chunkid") {
+          random_seed = this->myid; // chunk ID
+        } else {
+          tfm::format(std::cerr, "Error: invalid seed_type\n");
+        }
       }
 
       int  npmax    = 0;
       json particle = config["particle"];
 
+      mtv.seed(random_seed);
       up.resize(Ns);
       for (int is = 0; is < Ns; is++) {
         int     nz = dims[0] + 2 * Nb;
@@ -97,17 +108,17 @@ public:
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
 
-        mt.seed(random_seed);
+        mtp.seed(random_seed); // for charge neutrality
         for (int ip = 0; ip < up[is]->Np; ip++) {
           float64* ptcl = &up[is]->xu(ip, 0);
           int64*   id64 = reinterpret_cast<int64*>(ptcl);
 
-          ptcl[0] = uniform(mt) * xlim[2] + xlim[0];
-          ptcl[1] = uniform(mt) * ylim[2] + ylim[0];
-          ptcl[2] = uniform(mt) * zlim[2] + zlim[0];
-          ptcl[3] = normal(mt) * vt;
-          ptcl[4] = normal(mt) * vt;
-          ptcl[5] = normal(mt) * vt;
+          ptcl[0] = uniform(mtp) * xlim[2] + xlim[0];
+          ptcl[1] = uniform(mtp) * ylim[2] + ylim[0];
+          ptcl[2] = uniform(mtp) * zlim[2] + zlim[0];
+          ptcl[3] = normal(mtv) * vt;
+          ptcl[4] = normal(mtv) * vt;
+          ptcl[5] = normal(mtv) * vt;
           id64[6] = id + ip;
         }
       }

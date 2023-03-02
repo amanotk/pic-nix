@@ -74,12 +74,14 @@ public:
 
       // random seed
       {
-        std::string seed_type = config.value("seed_type", "random");
+        std::string seed_type = config.value("seed_type", "random"); // random by default
 
         if (seed_type == "random") {
           random_seed = std::random_device()();
         } else if (seed_type == "chunkid") {
           random_seed = this->myid; // chunk ID
+        } else {
+          tfm::format(std::cerr, "Error: invalid seed_type\n");
         }
       }
 
