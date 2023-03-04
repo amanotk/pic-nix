@@ -23,9 +23,9 @@ public:
     cc   = config["cc"].get<float64>();
     delt = config["delt"].get<float64>();
     delh = config["delh"].get<float64>();
-    delx = delh;
-    dely = delh;
-    delz = delh;
+
+    // set grid size and coordinate
+    set_coordinate(delh, delh, delh);
 
     //
     // initialize field
@@ -108,7 +108,7 @@ public:
         id *= this->myid;
 
         up[is]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
-        up[is]->m  = ro * (delx * dely * delz) / np;
+        up[is]->m  = ro / np;
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
 

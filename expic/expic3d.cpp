@@ -475,16 +475,21 @@ DEFINE_MEMBER(void, setup)()
   set_chunk_communicator();
 
   // setup for each chunk with boundary condition
+#pragma omp parallel
   {
-    std::set<int> bc_queue;
-
+#pragma omp for schedule(dynamic)
     for (int i = 0; i < numchunk; i++) {
+      // setup for physical conditions
       chunkvec[i]->setup(cfg_json["parameter"]);
+
+      // begin boundary exchange for field
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
-      bc_queue.insert(i);
     }
 
-    this->wait_bc_exchange(bc_queue, Chunk::BoundaryEmf);
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
+    }
   }
 }
 DEFINE_MEMBER(bool, rebuild_chunkmap)()

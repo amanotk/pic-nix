@@ -113,7 +113,6 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
 {
-  const float64 rc    = 1 / cc;
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
@@ -129,7 +128,7 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
 
   for (int is = 0; is < Ns; is++) {
     PtrParticle ps = up[is];
-    float64     qs = ps->q / (delx * dely * delz);
+    float64     qs = ps->q;
 
     // loop over particle
     for (int ip = 0; ip < ps->Np; ip++) {
@@ -206,7 +205,7 @@ DEFINE_MEMBER1(void, deposit_moment)()
 
   for (int is = 0; is < Ns; is++) {
     PtrParticle ps = up[is];
-    float64     ms = ps->m / (delx * dely * delz);
+    float64     ms = ps->m;
 
     // loop over particle
     for (int ip = 0; ip < ps->Np; ip++) {
