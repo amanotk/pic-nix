@@ -1,18 +1,15 @@
 # default configuration
 cmake_minimum_required(VERSION 3.10)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../common.cmake OPTIONAL)
+include(${PICNIX_DIR}/common.cmake OPTIONAL)
 
 # project
-project(libexpic CXX)
-
-# include directory
-set(BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
-include_directories(${BASE_DIR})
-include_directories(${BASE_DIR}/nix)
-include_directories(${BASE_DIR}/nix/thirdparty)
+project(expic CXX)
 
 # build static library
 add_library(expic STATIC exchunk3d.cpp expic3d.cpp)
 
-# to be included
-target_include_directories(expic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# include directory
+target_include_directories(expic PRIVATE ${PICNIX_DIR})
+target_include_directories(expic PRIVATE ${PICNIX_DIR}/nix)
+target_include_directories(expic PRIVATE ${PICNIX_DIR}/nix/thirdparty)
+target_include_directories(expic PUBLIC ${PROJECT_SOURCE_DIR})
