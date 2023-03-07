@@ -82,10 +82,13 @@ def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
         return
 
     #
-    # create hdf5
+    # create hdf5 and add attribute
     #
+    if os.path.exists(hdffile):
+        os.remove(hdffile)
     with h5py.File(hdffile, "w", libver="latest") as h5fp:
-        pass
+        for key, item in meta.items():
+            h5fp.attrs.create(key, item)
 
     # create dataset
     group = ""
