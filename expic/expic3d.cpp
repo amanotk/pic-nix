@@ -300,15 +300,19 @@ DEFINE_MEMBER(void, calculate_moment)()
   if (curstep == momstep)
     return;
 
-  std::set<int> queue;
+#pragma parallel
+  {
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->deposit_moment();
+      chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
+    }
 
-  for (int i = 0; i < numchunk; i++) {
-    chunkvec[i]->deposit_moment();
-    chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
-    queue.insert(i);
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < numchunk; i++) {
+      chunkvec[i]->set_boundary_end(Chunk::BoundaryMom);
+    }
   }
-
-  this->wait_bc_exchange(queue, Chunk::BoundaryMom);
 
   // cache
   momstep = curstep;
