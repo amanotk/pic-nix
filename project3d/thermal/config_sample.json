@@ -1,11 +1,17 @@
 {
 	"application": {
-		"debug": false,
+		"log": {
+			"path": ".",
+			"prefix": "log",
+			"interval": 10.0,
+			"level": 0,
+			"options": null
+		},
 		"rebuild": {
-			"interval" : 20,
-			"loglevel" : 1,
-			"prefix" : "rebuild",
-			"path" : ".",
+			"interval": 20,
+			"loglevel": 1,
+			"prefix": "rebuild",
+			"path": ".",
 			"options": null
 		}
 	},
@@ -70,6 +76,7 @@
 				"vt": 3.1622776601e-1
 			}
 		],
-		"seed_type": "random"
+		"seed_type": "random",
+		"field_load": 1.0
 	}
 }

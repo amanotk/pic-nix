@@ -1,6 +1,5 @@
 {
 	"application": {
-		"debug": false,
 		"log": {
 			"path": ".",
 			"prefix": "log",
@@ -10,6 +9,9 @@
 		},
 		"rebuild": {
 			"interval": 20,
+			"loglevel": 1,
+			"prefix": "rebuild",
+			"path": ".",
 			"options": null
 		}
 	},

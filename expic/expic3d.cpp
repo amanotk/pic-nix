@@ -21,10 +21,6 @@ DEFINE_MEMBER(void, parse_cfg)()
   // application
   {
     json application = cfg_json["application"];
-
-    if (application["debug"].get<bool>() == true) {
-      this->cleanup = 1;
-    }
   }
 
   // parameters
@@ -51,10 +47,9 @@ DEFINE_MEMBER(void, parse_cfg)()
 
     // check dimensions
     if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
-      ERRORPRINT("Number of grid must be divisible by number of chunk\n"
-                 "Nx, Ny, Nz = [%4d, %4d, %4d]\n"
-                 "Cx, Cy, Cz = [%4d, %4d, %4d]\n",
-                 nx, ny, nz, cx, cy, cz);
+      ERROR << tfm::format("Number of grid must be divisible by number of chunk");
+      ERROR << tfm::format("Nx, Ny, Nz = [%4d, %4d, %4d]", nx, ny, nz);
+      ERROR << tfm::format("Cx, Cy, Cz = [%4d, %4d, %4d]", cx, cy, cz);
       this->finalize(-1);
       exit(-1);
     }
@@ -85,7 +80,7 @@ DEFINE_MEMBER(void, parse_cfg)()
 
   // check diagnostic
   if (cfg_json["diagnostic"].is_array() == false) {
-    ERRORPRINT("Invalid diagnostic\n");
+    ERROR << tfm::format("Invalid diagnostic");
   }
 }
 
@@ -102,7 +97,7 @@ DEFINE_MEMBER(void, diagnostic_field)(std::ostream& out, json& obj)
   std::string path   = obj.value("path", ".") + "/";
 
   // filename
-  std::string fn_prefix = tfm::format("%s_%06d", prefix, curstep);
+  std::string fn_prefix = tfm::format("%s_%s", prefix, nix::format_step(curstep));
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
@@ -240,7 +235,7 @@ DEFINE_MEMBER(void, diagnostic_particle)(std::ostream& out, json& obj)
   std::string path   = obj.value("path", ".") + "/";
 
   // filename
-  std::string fn_prefix = tfm::format("%s_%06d", prefix, curstep);
+  std::string fn_prefix = tfm::format("%s_%s", prefix, nix::format_step(curstep));
   std::string fn_json   = fn_prefix + ".json";
   std::string fn_data   = fn_prefix + ".data";
 
@@ -386,7 +381,7 @@ DEFINE_MEMBER(void, diagnostic_history)(std::ostream& out, json& obj)
       ofs.close();
     }
 
-    msg += tfm::format("  %8d %15.6e", curstep, curtime);
+    msg += tfm::format("  %8s %15.6e", nix::format_step(curstep), curtime);
     msg += tfm::format(" %15.6e", history[0]);
     msg += tfm::format(" %15.6e", history[1]);
     msg += tfm::format(" %15.6e", history[2]);
@@ -420,6 +415,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   curstep = 0;
   curtime = 0.0;
   this->initialize_mpi(&argc, &argv);
+  this->initialize_debugprinting(this->debug);
   this->initialize_chunkmap();
 
   // load balancer
@@ -583,7 +579,7 @@ DEFINE_MEMBER(void, diagnostic)(std::ostream& out)
       interval = obj["interval"].get<int>();
     } catch (json::exception& e) {
       std::string msg = tfm::format("Error in diagnostic (ignored)\n%s\n", e.what());
-      ERRORPRINT(msg.c_str());
+      ERROR << tfm::format(msg.c_str());
       continue;
     }
 

@@ -1,13 +1,17 @@
 // -*- C++ -*-
+#include "exchunk3d.hpp"
+
+// implementation independent of order
+#include "exchunk3d.cpp"
 
 //
 // implementation specific to 1st-order shape function
 //
-#define DEFINE_MEMBER1(type, name)                                                                 \
+#define DEFINE_MEMBER(type, name)                                                                  \
   template <>                                                                                      \
   type ExChunk3D<1>::name
 
-DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
+DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
   const float64 rc    = 1 / cc;
   const float64 rdx   = 1 / delx;
@@ -83,7 +87,7 @@ DEFINE_MEMBER1(void, push_velocity)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER1(void, push_position)(const float64 delt)
+DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
   const float64 rc = 1 / cc;
 
@@ -111,7 +115,7 @@ DEFINE_MEMBER1(void, push_position)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
+DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
@@ -186,7 +190,7 @@ DEFINE_MEMBER1(void, deposit_current)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER1(void, deposit_moment)()
+DEFINE_MEMBER(void, deposit_moment)()
 {
   //
   // This computes moment quantities for each grid points. Computed moments are
@@ -277,3 +281,12 @@ DEFINE_MEMBER1(void, deposit_moment)()
     }
   }
 }
+
+template class ExChunk3D<1>;
+
+#undef DEFINE_MEMBER
+
+// Local Variables:
+// c-file-style   : "gnu"
+// c-file-offsets : ((innamespace . 0) (inline-open . 0))
+// End:

@@ -263,7 +263,7 @@ DEFINE_MEMBER(void, set_boundary_begin)(int mode)
     break;
   }
   default:
-    ERRORPRINT("No such boundary mode exists!\n");
+    ERROR << tfm::format("No such boundary mode exists!");
     break;
   }
 }
@@ -292,15 +292,13 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
     break;
   }
   default:
-    ERRORPRINT("No such boundary mode exists!\n");
+    ERROR << tfm::format("No such boundary mode exists!");
     break;
   }
 }
 
-// implementation for specific shape functions
-#include "exchunk3d_1st.cpp"
+#undef DEFINE_MEMBER
 
-template class ExChunk3D<1>;
 // Local Variables:
 // c-file-style   : "gnu"
 // c-file-offsets : ((innamespace . 0) (inline-open . 0))
