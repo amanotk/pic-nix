@@ -419,16 +419,12 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   curstep = 0;
   curtime = 0.0;
   this->initialize_mpi(&argc, &argv);
+  this->initialize_logger();
   this->initialize_debugprinting(this->debug);
   this->initialize_chunkmap();
 
   // load balancer
   balancer = this->create_balancer();
-
-  // buffer allocation
-  int bufsize = 1024 * 16;
-  sendbuf.resize(bufsize);
-  recvbuf.resize(bufsize);
 
   // set auxiliary information for chunk
   for (int i = 0; i < numchunk; i++) {
@@ -509,6 +505,7 @@ DEFINE_MEMBER(void, push)()
 
   wclock1 = nix::wall_clock();
 
+  DEBUG2 << "push() is called";
 #pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
@@ -561,10 +558,10 @@ DEFINE_MEMBER(void, push)()
   wclock2 = nix::wall_clock();
 
   // log
+  DEBUG2 << "log in push";
   {
-    json push     = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
-    json log_step = {{"push", push}};
-    this->append_log_step(log_step);
+    json push = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+    this->logger->append(curstep, "push", push);
   }
 }
 

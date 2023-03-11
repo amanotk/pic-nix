@@ -3,8 +3,7 @@
 		"log": {
 			"path": ".",
 			"prefix": "log",
-			"interval": 10.0,
-			"level": 0,
+			"interval": 10,
 			"options": null
 		},
 		"rebuild": {

@@ -36,7 +36,6 @@ protected:
   using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
   using BaseApp::cfg_file;
   using BaseApp::cfg_json;
-  using BaseApp::log_json;
   using BaseApp::balancer;
   using BaseApp::numchunk;
   using BaseApp::chunkvec;
@@ -57,8 +56,6 @@ protected:
   using BaseApp::periodic;
   using BaseApp::nprocess;
   using BaseApp::thisrank;
-  using BaseApp::sendbuf;
-  using BaseApp::recvbuf;
 
   int        Ns;         ///< number of species
   int        momstep;    ///< step at which moment quantities are cached
