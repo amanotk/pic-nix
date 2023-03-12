@@ -1,11 +1,13 @@
 // -*- C++ -*-
 
 #include "expic3d.hpp"
+#include "diagnoser.hpp"
 
 constexpr int order = 1;
 
 class MainChunk;
 class MainApplication;
+using MainDiagnoser = Diagnoser;
 
 class MainChunk : public ExChunk3D<order>
 {
@@ -137,10 +139,10 @@ public:
   }
 };
 
-class MainApplication : public ExPIC3D<order>
+class MainApplication : public ExPIC3D<order, MainDiagnoser>
 {
 public:
-  using ExPIC3D<order>::ExPIC3D; // inherit constructors
+  using ExPIC3D<order, MainDiagnoser>::ExPIC3D; // inherit constructors
 
   std::unique_ptr<ExChunk3D<order>> create_chunk(const int dims[], int id) override
   {

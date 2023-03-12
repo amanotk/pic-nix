@@ -242,22 +242,22 @@ DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
     this->inject_particle(up);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
@@ -272,22 +272,22 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }

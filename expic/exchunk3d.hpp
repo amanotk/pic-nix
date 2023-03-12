@@ -49,7 +49,7 @@ template <int Order>
 class ExChunk3D : public BaseChunk3D<Order>::ChunkType
 {
 public:
-  using this_type    = ExChunk3D<Order>;
+  using ThisType     = ExChunk3D<Order>;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
@@ -112,6 +112,26 @@ protected:
   xt::xtensor<float64, 4> uf; ///< electromagnetic field
   xt::xtensor<float64, 4> uj; ///< current density
   xt::xtensor<float64, 5> um; ///< particle moment
+
+  ///
+  /// @brief internal data struct
+  ///
+  struct InternalData {
+    int&                     Ns;
+    float64&                 cc;
+    ParticleVec&             up;
+    xt::xtensor<float64, 4>& uf;
+    xt::xtensor<float64, 4>& uj;
+    xt::xtensor<float64, 5>& um;
+  };
+
+  ///
+  /// @brief return internal data struct
+  ///
+  InternalData get_internal_data()
+  {
+    return {Ns, cc, up, uf, uj, um};
+  }
 
 public:
   ExChunk3D(const int dims[3], int id = 0);

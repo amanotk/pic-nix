@@ -27,13 +27,17 @@ using nix::PtrParticle;
 /// chunk instance. In addition, custom diagnostics routines may also be implemented through the
 /// virtual method diagnostic().
 ///
-template <int Order>
+template <int Order, typename Diagnoser>
 class ExPIC3D : public nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>
 {
+public:
+  using ThisType = ExPIC3D<Order, Diagnoser>;
+  using BaseApp  = nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>;
+  using Chunk        = ExChunk3D<Order>;
+  using PtrDiagnoser = std::unique_ptr<Diagnoser>;
+  using MpiCommVec   = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
+
 protected:
-  using BaseApp    = nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>;
-  using Chunk      = ExChunk3D<Order>;
-  using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
   using BaseApp::cfg_file;
   using BaseApp::cfg_json;
   using BaseApp::balancer;
@@ -57,19 +61,12 @@ protected:
   using BaseApp::nprocess;
   using BaseApp::thisrank;
 
-  int        Ns;         ///< number of species
-  int        momstep;    ///< step at which moment quantities are cached
-  MpiCommVec mpicommvec; ///< MPI Communicators
+  int          Ns;         ///< number of species
+  int          momstep;    ///< step at which moment quantities are cached
+  MpiCommVec   mpicommvec; ///< MPI Communicators
+  PtrDiagnoser diagnoser;  ///< diagnostic handler
 
   virtual void parse_cfg() override;
-
-  virtual void diagnostic_field(std::ostream& out, json& obj);
-
-  virtual void diagnostic_particle(std::ostream& out, json& obj);
-
-  virtual void diagnostic_history(std::ostream& out, json& obj);
-
-  virtual void calculate_moment();
 
   virtual void initialize(int argc, char** argv) override;
 
@@ -86,8 +83,17 @@ public:
 
   virtual void push() override;
 
+  virtual void calculate_moment();
+
   virtual void diagnostic(std::ostream& out) override;
+
+  int get_Ns()
+  {
+    return Ns;
+  }
 };
+
+#include "expic3d.cpp"
 
 // Local Variables:
 // c-file-style   : "gnu"
