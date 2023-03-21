@@ -5,6 +5,9 @@
 """
 
 import os
+import concurrent
+import concurrent.futures
+import tqdm
 import numpy as np
 import json
 import h5py
@@ -13,29 +16,23 @@ _DEBUG = True
 FMT_CHUNKID = "%.8d"
 
 
-def doit_parallel(files, datadir, verbose):
+def doit_parallel(files, verbose):
     "Parallel execution of json2hdf5 for given list of files"
-    try:
-        import tqdm
-    except:
-        tqdm = None
-
-    from concurrent import futures
-
     # IMPORTANT: use process pool rather than thread pool for performance
-    with futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor() as executor:
         future_list = []
         for f in files:
             if os.path.exists(f) and os.path.splitext(f)[1] == ".json":
-                future = executor.submit(json2hdf5, f, datadir=datadir, verbose=verbose)
+                future = executor.submit(json2hdf5, f, verbose=verbose)
                 future_list.append(future)
-        if tqdm is not None:  # show progress bar if tqdm is available
-            progress_bar = tqdm.tqdm(total=len(future_list), desc="Generating HDF5")
-            for future in futures.as_completed(future_list):
-                progress_bar.update(1)
+        # show progress bar
+        progress_bar = tqdm.tqdm(total=len(future_list), desc="Generating HDF5")
+        progress_bar.update(0)
+        for f in concurrent.futures.as_completed(future_list):
+            progress_bar.update(1)
 
 
-def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
+def json2hdf5(jsonfile, hdffile=None, verbose=True):
     "Generate HDF5 file from given JSON file"
     jsondir = os.path.dirname(jsonfile)
     if jsondir == "":
@@ -43,9 +40,6 @@ def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
 
     if hdffile is None:
         hdffile = os.path.splitext(jsonfile)[0] + ".h5"
-
-    if datadir is None:
-        datadir = jsondir
 
     if verbose:
         print("Processing {} to produce {}".format(jsonfile, hdffile))
@@ -92,7 +86,7 @@ def json2hdf5(jsonfile, datadir=None, hdffile=None, verbose=True):
 
     # create dataset
     group = ""
-    extpath = "/".join([datadir, rawfile])
+    extpath = rawfile
     add_dataset(obj, hdffile, datafile, extpath, byteorder, order, group, verbose)
 
     # create virtual dataset for chunked dataset
@@ -130,7 +124,9 @@ def add_dataset(obj, hdffile, datafile, extpath, byteorder, order, group="", ver
                 shape = shape[::-1]
             ext = ((extpath, offset, dsize),)
             name = "/".join([group, ds_name])
-            h5fp.create_dataset(name, shape=shape, dtype=dtype, external=ext)
+            h5fp.create_dataset(
+                name, shape=shape, dtype=dtype, external=ext, efile_prefix="${ORIGIN}"
+            )
             if verbose:
                 print(
                     '  - dataset "{}" has been created '
@@ -307,23 +303,17 @@ def report_error(msg):
 
 
 if __name__ == "__main__":
-    import optparse
+    import argparse
 
-    parser = optparse.OptionParser()
-    parser.add_option(
-        "-d",
-        "--datadir",
-        dest="datadir",
-        default=None,
-        help="relative path to data directory embedded in HDF5 files",
-    )
-    parser.add_option(
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
         "-v",
         "--verbose",
         dest="verbose",
         action="store_true",
         default=False,
-        help="print verbose messages",
+        help="Print verbose messages",
     )
-    options, args = parser.parse_args()
-    doit_parallel(args, options.datadir, options.verbose)
+    parser.add_argument("jsonfiles", nargs="*", help="Input json format files")
+    args = parser.parse_args()
+    doit_parallel(args.jsonfiles, args.verbose)
