@@ -10,20 +10,23 @@ import concurrent.futures
 import tqdm
 import numpy as np
 import json
+import msgpack
 import h5py
 
 _DEBUG = True
 FMT_CHUNKID = "%.8d"
+GROUP_CHUNKMAP = "chunkmap"
+GROUP_CHUNKED = "chunked"
 
 
-def doit_parallel(files, verbose):
+def doit_parallel(files, profile, verbose):
     "Parallel execution of json2hdf5 for given list of files"
     # IMPORTANT: use process pool rather than thread pool for performance
     with concurrent.futures.ProcessPoolExecutor() as executor:
         future_list = []
         for f in files:
             if os.path.exists(f) and os.path.splitext(f)[1] == ".json":
-                future = executor.submit(json2hdf5, f, verbose=verbose)
+                future = executor.submit(json2hdf5, f, profile, verbose=verbose)
                 future_list.append(future)
         # show progress bar
         progress_bar = tqdm.tqdm(total=len(future_list), desc="Generating HDF5")
@@ -32,7 +35,7 @@ def doit_parallel(files, verbose):
             progress_bar.update(1)
 
 
-def json2hdf5(jsonfile, hdffile=None, verbose=True):
+def json2hdf5(jsonfile, profile, hdffile=None, verbose=True):
     "Generate HDF5 file from given JSON file"
     jsondir = os.path.dirname(jsonfile)
     if jsondir == "":
@@ -90,12 +93,14 @@ def json2hdf5(jsonfile, hdffile=None, verbose=True):
     add_dataset(obj, hdffile, datafile, extpath, byteorder, order, group, verbose)
 
     # create virtual dataset for chunked dataset
-    chunkmap = "chunkmap"
-    chunked = "chunked"
-    chunk = add_chunkmap(obj, hdffile, chunkmap, verbose)
+    with open(profile, "rb") as f:
+        data = msgpack.unpack(f)
+        chunkmap = data.get("chunkmap", None)
+    chunk = add_chunkmap(chunkmap, hdffile, GROUP_CHUNKMAP, verbose)
+
     if chunk:
-        dataset = create_chunked_dataset(hdffile, chunkmap, chunked, verbose)
-        create_vds(hdffile, chunkmap, chunked, dataset, verbose)
+        dataset = create_chunked_dataset(hdffile, GROUP_CHUNKMAP, GROUP_CHUNKMAP, verbose)
+        create_vds(hdffile, GROUP_CHUNKMAP, GROUP_CHUNKED, dataset, verbose)
 
     if verbose:
         print("done !")
@@ -134,14 +139,13 @@ def add_dataset(obj, hdffile, datafile, extpath, byteorder, order, group="", ver
                 )
 
 
-def add_chunkmap(obj, hdffile, group="", verbose=True):
+def add_chunkmap(chunkmap, hdffile, group="", verbose=True):
     "Add chunkmap to HDF5 file"
-    chunkmap = obj.get("chunkmap", None)
     if chunkmap is None:
         return False
 
     with h5py.File(hdffile, "r+", libver="latest") as h5fp:
-        for ds_name in ("rank", "coord", "chunkid"):
+        for ds_name in ("coord", "chunkid"):
             if not ds_name in chunkmap:
                 continue
             data = np.array(chunkmap.get(ds_name))
@@ -307,6 +311,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "-p",
+        "--profile",
+        dest="profile",
+        type=str,
+        required=True,
+        help="Filename for profile in msgpack format containing chunkmap information",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         dest="verbose",
@@ -314,6 +326,6 @@ if __name__ == "__main__":
         default=False,
         help="Print verbose messages",
     )
-    parser.add_argument("jsonfiles", nargs="*", help="Input json format files")
+    parser.add_argument("jsonfile", nargs="*", help="Input json format files")
     args = parser.parse_args()
-    doit_parallel(args.jsonfiles, args.verbose)
+    doit_parallel(args.jsonfile, args.profile, args.verbose)

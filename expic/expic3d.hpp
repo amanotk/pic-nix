@@ -10,6 +10,7 @@
 using namespace nix::typedefs;
 using nix::json;
 using nix::Balancer;
+using nix::Logger;
 using nix::Particle;
 using nix::ParticleVec;
 using nix::PtrParticle;
@@ -41,6 +42,7 @@ protected:
   using BaseApp::cfg_file;
   using BaseApp::cfg_json;
   using BaseApp::balancer;
+  using BaseApp::logger;
   using BaseApp::numchunk;
   using BaseApp::chunkvec;
   using BaseApp::chunkmap;
@@ -196,15 +198,17 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   curstep = 0;
   curtime = 0.0;
   this->initialize_mpi(&argc, &argv);
-  this->initialize_logger();
   this->initialize_debugprinting(this->debug);
   this->initialize_chunkmap();
 
-  // diagnoser
-  diagnoser = std::make_unique<Diagnoser>();
-
   // load balancer
   balancer = this->create_balancer();
+
+  // logger
+  logger = std::make_unique<Logger>(cfg_json["application"]["log"]);
+
+  // diagnoser
+  diagnoser = std::make_unique<Diagnoser>();
 
   // set auxiliary information for chunk
   for (int i = 0; i < numchunk; i++) {
@@ -341,7 +345,7 @@ DEFINE_MEMBER(void, push)()
   DEBUG2 << "log in push";
   {
     json push = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
-    this->logger->append(curstep, "push", push);
+    logger->append(curstep, "push", push);
   }
 }
 

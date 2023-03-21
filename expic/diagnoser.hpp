@@ -252,10 +252,6 @@ public:
     //
     {
       json root;
-      json cmap;
-
-      // convert chunkmap into json
-      data.chunkmap->save_json(cmap);
 
       // meta data
       root["meta"] = {{"endian", nix::get_endian_flag()},
@@ -263,8 +259,6 @@ public:
                       {"order", 1},
                       {"time", data.curtime},
                       {"step", data.curstep}};
-      // chunkmap
-      root["chunkmap"] = cmap;
       // dataset
       root["dataset"] = dataset;
 
