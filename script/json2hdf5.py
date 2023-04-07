@@ -99,7 +99,7 @@ def json2hdf5(jsonfile, profile, hdffile=None, verbose=True):
     chunk = add_chunkmap(chunkmap, hdffile, GROUP_CHUNKMAP, verbose)
 
     if chunk:
-        dataset = create_chunked_dataset(hdffile, GROUP_CHUNKMAP, GROUP_CHUNKMAP, verbose)
+        dataset = create_chunked_dataset(hdffile, GROUP_CHUNKMAP, GROUP_CHUNKED, verbose)
         create_vds(hdffile, GROUP_CHUNKMAP, GROUP_CHUNKED, dataset, verbose)
 
     if verbose:
