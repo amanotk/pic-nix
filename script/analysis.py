@@ -1,97 +1,235 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
+import pathlib
 import numpy as np
 import h5py
 import json
+import msgpack
 import glob
 
 
-class Run(object):
-    def __init__(self, cfgfile):
-        self.dirname = os.path.dirname(cfgfile)
-        self.read_config(cfgfile)
-        self.read_coord(self.file_field)
+def get_json_meta(obj):
+    meta = obj.get("meta")
 
-    def read_config(self, cfgfile):
-        cfg = json.loads(open(cfgfile, "r").read())
-        self.cfg = cfg
-        self.Ns = cfg["parameter"]["Ns"]
-        self.Nx = cfg["parameter"]["Nx"]
-        self.Ny = cfg["parameter"]["Ny"]
-        self.Nz = cfg["parameter"]["Nz"]
-        self.Cx = cfg["parameter"]["Cx"]
-        self.Cy = cfg["parameter"]["Cy"]
-        self.Cz = cfg["parameter"]["Cz"]
-        self.delt = cfg["parameter"]["delt"]
-        self.delh = cfg["parameter"]["delh"]
-        for diagnostic in cfg["diagnostic"]:
-            prefix = diagnostic["prefix"]
-            path = os.sep.join([self.dirname, diagnostic["path"]])
+    # endian
+    endian = meta.get("endian")
+    if endian == 1:  # little endian
+        byteorder = "<"
+    elif endian == 16777216:  # big endian
+        byteorder = ">"
+    else:
+        print("unrecognized endian flag: {}".format(endian))
+
+    # check raw data file
+    datafile = meta.get("rawfile")
+
+    # check array order
+    order = meta.get("order", 0)
+
+    return byteorder, datafile, order
+
+
+def get_dataset_info(obj, byteorder):
+    offset = obj["offset"]
+    datatype = byteorder + obj["datatype"]
+    shape = obj["shape"]
+    datasize = np.product(shape) * np.dtype(datatype).itemsize
+    return offset, datatype, shape
+
+
+def get_dataset_data(fp, offset, datatype, shape):
+    fp.seek(offset)
+    x = np.fromfile(fp, datatype, np.prod(shape)).reshape(shape)
+    if len(shape) == 1 and shape[0] == 1:
+        x = x[0]
+    return x
+
+
+def convert_array_format(dataset, chunkmap):
+    chunkid = np.array(chunkmap["chunkid"])
+    coord = np.array(chunkmap["coord"])
+    for key in dataset.keys():
+        # determine data shape assuming 3D chunk
+        csh = list(dataset[key].shape[1:])
+        if len(csh) < 3:  # ignore dataset with dimensions < 3
+            continue
+        gsh = csh.copy()
+        gsh[0] = csh[0] * chunkid.shape[0]
+        gsh[1] = csh[1] * chunkid.shape[1]
+        gsh[2] = csh[2] * chunkid.shape[2]
+        csh = tuple(csh)  # shape of each chunk
+        gsh = tuple(gsh)  # shape of global array
+        # assign to new array
+        data = np.zeros(gsh, dataset[key].dtype)
+        for iz in range(chunkid.shape[0]):
+            for iy in range(chunkid.shape[1]):
+                for ix in range(chunkid.shape[2]):
+                    ii = chunkid[iz, iy, ix]
+                    cx = coord[ii, 0]
+                    cy = coord[ii, 1]
+                    cz = coord[ii, 2]
+                    xslice = slice(cx * csh[2], (cx + 1) * csh[2])
+                    yslice = slice(cy * csh[1], (cy + 1) * csh[1])
+                    zslice = slice(cz * csh[0], (cz + 1) * csh[0])
+                    data[zslice, yslice, xslice, ...] = dataset[key][ii]
+        dataset[key] = data
+    return dataset
+
+
+class Run(object):
+    def __init__(self, profile, use_hdf5=False):
+        self.use_hdf5 = use_hdf5
+        self.read_profile(profile)
+        self.set_coordinate()
+
+    def read_profile(self, profile):
+        # read profile
+        with open(profile, "rb") as fp:
+            obj = msgpack.load(fp)
+            self.timestamp = obj["timestamp"]
+            self.chunkmap = obj["chunkmap"]
+            self.config = obj["configuration"]
+
+        # store some parameters
+        parameter = self.config["parameter"]
+        self.Ns = parameter["Ns"]
+        self.Nx = parameter["Nx"]
+        self.Ny = parameter["Ny"]
+        self.Nz = parameter["Nz"]
+        self.Cx = parameter["Cx"]
+        self.Cy = parameter["Cy"]
+        self.Cz = parameter["Cz"]
+        self.delt = parameter["delt"]
+        self.delh = parameter["delh"]
+
+        # find data files
+        if self.use_hdf5:
+            ext = "h5"
+        else:
+            ext = "json"
+        basedir = pathlib.Path(profile).parent
+        for diagnostic in self.config["diagnostic"]:
             interval = diagnostic["interval"]
-            file = sorted(glob.glob(os.sep.join([path, prefix]) + "*.h5"))
+            path = basedir / diagnostic["path"]
             # field
             if diagnostic["name"] == "field":
-                self.file_field = file
+                data = "{}_*.{}".format(diagnostic["prefix"], ext)
+                file = sorted(glob.glob(str(path / data)))
+                self.step_field = np.arange(len(file)) * interval
                 self.time_field = np.arange(len(file)) * self.delt * interval
+                self.file_field = file
             # particle
             if diagnostic["name"] == "particle":
-                self.file_particle = file
+                data = "{}_*.{}".format(diagnostic["prefix"], ext)
+                file = sorted(glob.glob(str(path / data)))
+                self.step_particle = np.arange(len(file)) * interval
                 self.time_particle = np.arange(len(file)) * self.delt * interval
+                self.file_particle = file
 
-    def read_coord(self, files):
-        with h5py.File(files[0], "r") as h5fp:
-            self.xc = np.unique(h5fp.get("xc")[()])
-            self.yc = np.unique(h5fp.get("yc")[()])
-            self.zc = np.unique(h5fp.get("zc")[()])
+    def set_coordinate(self):
+        self.xc = self.delh * np.arange(self.Nx)
+        self.yc = self.delh * np.arange(self.Ny)
+        self.zc = self.delh * np.arange(self.Nz)
 
-    def read_field_all(self):
-        Nt = len(self.file_field)
-        Ns = self.Ns
-        Nz = self.Nz
-        Ny = self.Ny
-        Nx = self.Nx
-        uf = np.zeros((Nt, Nz, Ny, Nx, 6), dtype=np.float64)
-        uj = np.zeros((Nt, Nz, Ny, Nx, 4), dtype=np.float64)
-        um = np.zeros((Nt, Nz, Ny, Nx, Ns, 11), dtype=np.float64)
-        for i in range(Nt):
-            with h5py.File(self.file_field[i], "r") as h5fp:
-                uf[i, ...] = h5fp.get("/vds/uf")[()]
-                uj[i, ...] = h5fp.get("/vds/uj")[()]
-                um[i, ...] = h5fp.get("/vds/um")[()]
-        self.uf = uf
-        self.uj = uj
-        self.um = um
+    def find_step_index_field(self, step):
+        return np.searchsorted(self.step_field, step)
+
+    def find_step_index_particle(self, step):
+        return np.searchsorted(self.step_particle, step)
+
+    def get_field_time_at(self, step):
+        index = self.find_step_index_field(step)
+        return self.time_field[index]
+
+    def get_particle_time_at(self, step):
+        index = self.find_step_index_particle(step)
+        return self.time_particle[index]
 
     def read_field_at(self, step):
-        Ns = self.Ns
-        Nz = self.Nz
-        Ny = self.Ny
-        Nx = self.Nx
-        with h5py.File(self.file_field[step], "r") as h5fp:
+        if self.use_hdf5:
+            return self.read_field_at_hdf5(step)
+        else:
+            return self.read_field_at_json(step)
+
+    def read_particle_at(self, step):
+        if self.use_hdf5:
+            return self.read_particle_at_hdf5(step)
+        else:
+            return self.read_particle_at_json(step)
+
+    def read_field_at_json(self, step):
+        index = self.find_step_index_field(step)
+
+        # read json
+        jsonfile = self.file_field[index]
+        with open(jsonfile, "r") as fp:
+            obj = json.load(fp)
+            byteorder, datafile, order = get_json_meta(obj)
+            dataset = obj["dataset"]
+
+        # read data
+        datafile = str(pathlib.Path(jsonfile).parent / datafile)
+        with open(datafile, "r") as fp:
+            data = {}
+            for dsname in ("uf", "uj", "um"):
+                ds = dataset.get(dsname)
+                offset, dtype, shape = get_dataset_info(ds, byteorder)
+                if order == 0:
+                    shape == shape[::-1]
+                data[dsname] = get_dataset_data(fp, offset, dtype, shape)
+
+        # convert array format
+        data = convert_array_format(data, self.chunkmap)
+
+        return data
+
+    def read_field_at_hdf5(self, step):
+        index = self.find_step_index_field(step)
+
+        with h5py.File(self.file_field[index], "r") as h5fp:
             uf = h5fp.get("/vds/uf")[()]
             uj = h5fp.get("/vds/uf")[()]
             um = h5fp.get("/vds/um")[()]
-        return uf, uj, um
 
-    def read_particle_at(self, step):
+        return dict(uf=uf, uj=uj, um=um)
+
+    def read_particle_at_json(self, step):
+        index = self.find_step_index_particle(step)
+
+        # read json
+        jsonfile = self.file_particle[index]
+        with open(jsonfile, "r") as fp:
+            obj = json.load(fp)
+            byteorder, datafile, order = get_json_meta(obj)
+            dataset = obj["dataset"]
+
+        # read data
+        datafile = str(pathlib.Path(jsonfile).parent / datafile)
+        with open(datafile, "r") as fp:
+            Ns = self.Ns
+            up = [0] * Ns
+            for i in range(Ns):
+                dsname = "up{:02d}".format(i)
+                ds = dataset.get(dsname)
+                offset, dtype, shape = get_dataset_info(ds, byteorder)
+                if order == 0:
+                    shape == shape[::-1]
+                up[i] = get_dataset_data(fp, offset, dtype, shape)
+
+        return up
+
+    def read_particle_at_hdf5(self, step):
+        index = self.find_step_index_particle(step)
+
         Ns = self.Ns
         up = list()
-        with h5py.File(self.file_particle[step], "r") as h5fp:
+        with h5py.File(self.file_particle[index], "r") as h5fp:
             for i in range(Ns):
                 dsname = "/up{:02d}".format(i)
                 up.append(h5fp.get(dsname)[()])
-        return up
 
-    def read_chunkmap_at(self, step):
-        with h5py.File(self.file_field[step], "r") as h5fp:
-            rank = h5fp.get("/chunkmap/rank")[()]
-            coord = h5fp.get("/chunkmap/coord")[()]
-        cdelx = self.Nx // self.Cx * self.delh
-        cdely = self.Ny // self.Cy * self.delh
-        cdelz = self.Nz // self.Cz * self.delh
-        return rank, coord, cdelx, cdely, cdelz
+        return up
 
 
 class Histogram2D:
@@ -127,7 +265,7 @@ def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
     Nx = np.max(cx) + 1
     yy = np.zeros((Nx,), dtype=np.int32)
     yy[cx] = rank
-    ix = np.argwhere(yy[+1:] - yy[:-1] != 0)[:,0]
+    ix = np.argwhere(yy[+1:] - yy[:-1] != 0)[:, 0]
     for i in ix:
         ax.axvline(delx * i, color=colors, lw=0.5)
 
