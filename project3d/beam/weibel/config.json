@@ -1,0 +1,98 @@
+{
+	"application": {
+		"log": {
+			"path": ".",
+			"prefix": "log",
+			"interval": 5000,
+			"options": null
+		},
+		"rebuild": {
+			"interval": 10,
+			"loglevel": 1,
+			"prefix": "rebuild",
+			"path": ".",
+			"options": null
+		}
+	},
+	"diagnostic": [
+		{
+			"name": "history",
+			"path": ".",
+			"prefix": "history",
+			"interval": 50,
+			"options": null
+		},
+		{
+			"name": "field",
+			"path": ".",
+			"prefix": "field",
+			"interval": 50,
+			"options": null
+		},
+		{
+			"name": "particle",
+			"path": ".",
+			"prefix": "particle",
+			"interval": 50,
+			"options": null
+		}
+	],
+	"parameter": {
+		"Nx": 192,
+		"Ny": 192,
+		"Nz": 2,
+		"Cx": 24,
+		"Cy": 24,
+		"Cz": 1,
+		"delt": 2.0e-2,
+		"delh": 1.0,
+		"cc": 2.0e+1,
+		"Bx": 0.0,
+		"By": 0.0,
+		"Bz": 0.0,
+		"Ex": 0.0,
+		"Ey": 0.0,
+		"Ez": 0.0,
+		"Ns": 4,
+		"particle": [
+			{
+				"np": 16,
+				"ro": 0.5e-0,
+				"qm": -1.0e-0,
+				"vt": 1.0e-0,
+				"vx": 0.0,
+				"vy": 0.0,
+				"vz": 10.0
+			},
+			{
+				"np": 16,
+				"ro": 0.5e-0,
+				"qm": -1.0e-0,
+				"vt": 1.0e-0,
+				"vx": 0.0,
+				"vy": 0.0,
+				"vz": -10.0
+			},
+			{
+				"np": 16,
+				"ro": 0.5e-0,
+				"qm": 1.0e-0,
+				"vt": 1.0e-0,
+				"vx": 0.0,
+				"vy": 0.0,
+				"vz": 10.0
+			},
+			{
+				"np": 16,
+				"ro": 0.5e-0,
+				"qm": 1.0e-0,
+				"vt": 1.0e-0,
+				"vx": 0.0,
+				"vy": 0.0,
+				"vz": -10.0
+			}
+		],
+		"seed_type": "random",
+        "field_load": 1.0
+	}
+}
