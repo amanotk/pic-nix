@@ -77,6 +77,42 @@ def convert_array_format(dataset, chunkmap):
     return dataset
 
 
+def convert_to_mp4(prefix, fps, cleanup):
+    import os
+    import glob
+    import subprocess
+
+    ffmpeg_cmdline_format = (
+        "ffmpeg -r {fps:d} -i {src:s} -vcodec libx264 -pix_fmt yuv420p -r 60 {dst:s}"
+    )
+
+    src = prefix + "-%*.png"
+    dst = prefix + ".mp4"
+    cmd = ffmpeg_cmdline_format.format(src=src, dst=dst, fps=fps)
+
+    # run
+    status = True
+    try:
+        if os.path.exists(dst):
+            os.remove(dst)
+        subprocess.run(cmd.split(), capture_output=True, check=True)
+    except subprocess.CalledProcessError as e:
+        status = False
+        print(e.cmd)
+        print(e.returncode)
+        print(e.output)
+        print(e.stdout)
+        print(e.stderr)
+
+    # cleanup if succeeded
+    if status and cleanup:
+        # remove files
+        files = list()
+        files.extend(glob.glob("{:s}-*.png".format(prefix)))
+        for f in files:
+            os.remove(f)
+
+
 class Run(object):
     def __init__(self, profile, use_hdf5=False):
         self.use_hdf5 = use_hdf5
