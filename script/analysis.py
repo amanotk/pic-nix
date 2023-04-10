@@ -113,9 +113,106 @@ def convert_to_mp4(prefix, fps, cleanup):
             os.remove(f)
 
 
+def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
+    import matplotlib as mpl
+
+    cx = coord[:, 0]
+    Nx = np.max(cx) + 1
+    yy = np.zeros((Nx,), dtype=np.int32)
+    yy[cx] = rank
+    ix = np.argwhere(yy[+1:] - yy[:-1] != 0)[:, 0]
+    for i in ix:
+        ax.axvline(delx * i, color=colors, lw=0.5)
+
+
+def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
+    import matplotlib as mpl
+
+    cx = coord[:, 0]
+    cy = coord[:, 1]
+    Nx = np.max(cx) + 1
+    Ny = np.max(cy) + 1
+    ix = np.arange(Nx)
+    iy = np.arange(Ny)
+    zz = np.zeros((Ny, Nx), dtype=np.int32)
+    zz[cy, cx] = rank
+    Ix, Iy = np.broadcast_arrays(ix[None, :], iy[:, None])
+    diffx = np.where(zz[:, +1:] - zz[:, :-1] == 0, 0, 1)
+    diffy = np.where(zz[+1:, :] - zz[:-1, :] == 0, 0, 1)
+    # vertical
+    xsegments = np.zeros((Ny, Nx - 1, 2, 2), dtype=np.float64)
+    xsegments[:, :, 0, 0] = delx * Ix[:, +1:]
+    xsegments[:, :, 0, 1] = dely * Iy[:, +1:]
+    xsegments[:, :, 1, 0] = delx * Ix[:, +1:]
+    xsegments[:, :, 1, 1] = dely * (Iy[:, +1:] + 1)
+    # horizontal
+    ysegments = np.zeros((Ny - 1, Nx, 2, 2), dtype=np.float64)
+    ysegments[:, :, 0, 0] = delx * Ix[+1:, :]
+    ysegments[:, :, 0, 1] = dely * Iy[+1:, :]
+    ysegments[:, :, 1, 0] = delx * (Ix[+1:, :] + 1)
+    ysegments[:, :, 1, 1] = dely * Iy[+1:, :]
+    # line segments
+    segments = xsegments.reshape(Ny * (Nx - 1), 2, 2)
+    xlines = mpl.collections.LineCollection(segments, linewidths=diffx.flat, colors=colors)
+    ax.add_collection(xlines)
+    segments = ysegments.reshape((Ny - 1) * Nx, 2, 2)
+    ylines = mpl.collections.LineCollection(segments, linewidths=diffy.flat, colors=colors)
+    ax.add_collection(ylines)
+
+
+def get_wk_spectrum(f, delt=1.0, delh=1.0):
+    if f.ndim != 2:
+        raise ValueError("Input must be a 2D array")
+    if f.dtype == np.float32 or f.dtype == np.float64:
+        # real
+        Nt = f.shape[0]
+        Nx = f.shape[1]
+        P = np.abs(np.fft.fftshift(np.fft.rfft2(f, norm="ortho"), axes=(0,))) ** 2
+        w = 2 * np.pi * np.fft.fftshift(np.fft.fftfreq(Nt, delt))
+        k = 2 * np.pi * np.fft.rfftfreq(Nx, delh)
+        W, K = np.broadcast_arrays(w[:, None], k[None, :])
+        return P, W, K
+    else:
+        # complex
+        Nt = f.shape[0]
+        Nx = f.shape[1]
+        P = np.abs(np.fft.fftshift(np.fft.fft2(f, norm="ortho"), axes=(0, 1))) ** 2
+        w = 2 * np.pi * np.fft.fftshift(np.fft.fftfreq(Nt, delt))
+        k = 2 * np.pi * np.fft.fftshift(np.fft.fftfreq(Nx, delh))
+        W, K = np.broadcast_arrays(w[:, None], k[None, :])
+        return P, W, K
+
+
+def plot_wk_spectrum(P, W, K, filename, title, **kwargs):
+    import matplotlib
+    from matplotlib import pyplot as plt
+
+    figure = plt.figure()
+    im = plt.pcolormesh(K, W, np.log10(P), shading="nearest")
+    cl = plt.colorbar(im)
+    # xlim
+    kmax = kwargs.get("kmax", 0.25 * K.max())
+    kmin = kwargs.get("kmin", 0.25 * K.min())
+    plt.xlim(kmin, kmax)
+    plt.xlabel(r"$k$")
+    # ylim
+    wmax = kwargs.get("wmax", W.max())
+    wmin = kwargs.get("wmin", W.min())
+    plt.ylim(wmin, wmax)
+    plt.ylabel(r"$\omega$")
+    # clim
+    cmax = kwargs.get("cmin", np.log10(P.max()))
+    cmin = kwargs.get("cmin", cmax - 4)
+    plt.clim(cmin, cmax)
+    # save
+    plt.title(title)
+    plt.savefig(filename)
+
+
 class Run(object):
     def __init__(self, profile, use_hdf5=False):
         self.use_hdf5 = use_hdf5
+        self.profile = profile
         self.read_profile(profile)
         self.set_coordinate()
 
@@ -167,6 +264,34 @@ class Run(object):
         self.xc = self.delh * np.arange(self.Nx)
         self.yc = self.delh * np.arange(self.Ny)
         self.zc = self.delh * np.arange(self.Nz)
+
+    def get_chunk_rank(self, step):
+        rebuild = self.find_rebuild_log_at(step)
+        boundary = np.array(rebuild["boundary"])
+        rank = np.zeros((boundary[-1],), dtype=np.int32)
+        for r in range(boundary.size - 1):
+            rank[boundary[r] : boundary[r + 1]] = r
+        return rank
+
+    def find_rebuild_log_at(self, step):
+        log_config = self.config["application"]["log"]
+
+        # read log file
+        basedir = pathlib.Path(self.profile).parent
+        path = basedir / log_config["path"]
+        prefix = log_config["prefix"]
+        interval = log_config["interval"]
+        filename = str(path / "{:s}_{:08d}.msgpack".format(prefix, (step // interval) * interval))
+        with open(filename, "rb") as fp:
+            obj = msgpack.load(fp)
+
+        # find rebuild log record
+        rebuild = np.array([x.get("rebuild", None) for x in obj])
+        rebuild = np.compress(rebuild != None, rebuild)
+        for record in rebuild:
+            if record.get("step", -1) == step:
+                return record
+        return None
 
     def find_step_index_field(self, step):
         return np.searchsorted(self.step_field, step)
@@ -292,102 +417,6 @@ class Histogram2D:
         y = 0.5 * (self.yedges[+1:] + self.yedges[:-1])
         X, Y = np.broadcast_arrays(x[:, None], y[None, :])
         return X, Y, self.density
-
-
-def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
-    import matplotlib as mpl
-
-    cx = coord[:, 0]
-    Nx = np.max(cx) + 1
-    yy = np.zeros((Nx,), dtype=np.int32)
-    yy[cx] = rank
-    ix = np.argwhere(yy[+1:] - yy[:-1] != 0)[:, 0]
-    for i in ix:
-        ax.axvline(delx * i, color=colors, lw=0.5)
-
-
-def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
-    import matplotlib as mpl
-
-    cx = coord[:, 0]
-    cy = coord[:, 1]
-    Nx = np.max(cx) + 1
-    Ny = np.max(cy) + 1
-    ix = np.arange(Nx)
-    iy = np.arange(Ny)
-    zz = np.zeros((Ny, Nx), dtype=np.int32)
-    zz[cy, cx] = rank
-    Ix, Iy = np.broadcast_arrays(ix[None, :], iy[:, None])
-    diffx = np.where(zz[:, +1:] - zz[:, :-1] == 0, 0, 1)
-    diffy = np.where(zz[+1:, :] - zz[:-1, :] == 0, 0, 1)
-    # vertical
-    xsegments = np.zeros((Ny, Nx - 1, 2, 2), dtype=np.float64)
-    xsegments[:, :, 0, 0] = delx * Ix[:, +1:]
-    xsegments[:, :, 0, 1] = dely * Iy[:, +1:]
-    xsegments[:, :, 1, 0] = delx * Ix[:, +1:]
-    xsegments[:, :, 1, 1] = dely * (Iy[:, +1:] + 1)
-    # horizontal
-    ysegments = np.zeros((Ny - 1, Nx, 2, 2), dtype=np.float64)
-    ysegments[:, :, 0, 0] = delx * Ix[+1:, :]
-    ysegments[:, :, 0, 1] = dely * Iy[+1:, :]
-    ysegments[:, :, 1, 0] = delx * (Ix[+1:, :] + 1)
-    ysegments[:, :, 1, 1] = dely * Iy[+1:, :]
-    # line segments
-    segments = xsegments.reshape(Ny * (Nx - 1), 2, 2)
-    xlines = mpl.collections.LineCollection(segments, linewidths=diffx.flat, colors=colors)
-    ax.add_collection(xlines)
-    segments = ysegments.reshape((Ny - 1) * Nx, 2, 2)
-    ylines = mpl.collections.LineCollection(segments, linewidths=diffy.flat, colors=colors)
-    ax.add_collection(ylines)
-
-
-def get_wk_spectrum(f, delt=1.0, delh=1.0):
-    if f.ndim != 2:
-        raise ValueError("Input must be a 2D array")
-    if f.dtype == np.float32 or f.dtype == np.float64:
-        # real
-        Nt = f.shape[0]
-        Nx = f.shape[1]
-        P = np.abs(np.fft.fftshift(np.fft.rfft2(f, norm="ortho"), axes=(0,))) ** 2
-        w = 2 * np.pi * np.fft.fftshift(np.fft.fftfreq(Nt, delt))
-        k = 2 * np.pi * np.fft.rfftfreq(Nx, delh)
-        W, K = np.broadcast_arrays(w[:, None], k[None, :])
-        return P, W, K
-    else:
-        # complex
-        Nt = f.shape[0]
-        Nx = f.shape[1]
-        P = np.abs(np.fft.fftshift(np.fft.fft2(f, norm="ortho"), axes=(0, 1))) ** 2
-        w = 2 * np.pi * np.fft.fftshift(np.fft.fftfreq(Nt, delt))
-        k = 2 * np.pi * np.fft.fftshift(np.fft.fftfreq(Nx, delh))
-        W, K = np.broadcast_arrays(w[:, None], k[None, :])
-        return P, W, K
-
-
-def plot_wk_spectrum(P, W, K, filename, title, **kwargs):
-    import matplotlib
-    from matplotlib import pyplot as plt
-
-    figure = plt.figure()
-    im = plt.pcolormesh(K, W, np.log10(P), shading="nearest")
-    cl = plt.colorbar(im)
-    # xlim
-    kmax = kwargs.get("kmax", 0.25 * K.max())
-    kmin = kwargs.get("kmin", 0.25 * K.min())
-    plt.xlim(kmin, kmax)
-    plt.xlabel(r"$k$")
-    # ylim
-    wmax = kwargs.get("wmax", W.max())
-    wmin = kwargs.get("wmin", W.min())
-    plt.ylim(wmin, wmax)
-    plt.ylabel(r"$\omega$")
-    # clim
-    cmax = kwargs.get("cmin", np.log10(P.max()))
-    cmin = kwargs.get("cmin", cmax - 4)
-    plt.clim(cmin, cmax)
-    # save
-    plt.title(title)
-    plt.savefig(filename)
 
 
 if __name__ == "__main__":

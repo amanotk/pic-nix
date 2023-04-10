@@ -20,8 +20,9 @@ import analysis
 
 
 class Run(analysis.Run):
-    def __init__(self, profile):
+    def __init__(self, profile, boundary=True):
         super().__init__(profile)
+        self.plot_chunk_boundary = boundary
 
     def summary(self, step):
         data = self.read_field_at(step)
@@ -94,13 +95,21 @@ class Run(analysis.Run):
             cx_pos = cxs[i].get_position()
             cxs[i].set_position([ax_pos.x0, cx_pos.y0, ax_pos.width, cx_pos.height])
 
+        if self.plot_chunk_boundary:
+            coord = np.array(self.chunkmap["coord"])
+            rank = self.get_chunk_rank(step)
+            cdelx = self.delh * self.Nx // self.Cx
+            cdely = self.delh * self.Ny // self.Cy
+            for i in range(3):
+                analysis.plot_chunk_dist2d(axs[i], coord, rank, cdelx, cdely, colors="white")
+
         fig.suptitle(r"$\omega_{{pe}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
 
         return fig
 
 
-def doit_job(profile, prefix, fps, cleanup):
-    run = Run(profile)
+def doit_job(profile, prefix, fps, boundary, cleanup):
+    run = Run(profile, boundary)
 
     # for all snapshots
     for step in run.step_field:
@@ -131,6 +140,13 @@ if __name__ == "__main__":
         help="Frame/sec used for encoding movie file",
     )
     parser.add_argument(
+        "-b",
+        "--boundary",
+        action="store_true",
+        default=True,
+        help="Show chunk boundary",
+    )
+    parser.add_argument(
         "-c",
         "--cleanup",
         action="store_true",
@@ -141,4 +157,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     profile = args.profile[0]
-    doit_job(profile, args.prefix, args.fps, args.cleanup)
+    doit_job(profile, args.prefix, args.fps, args.boundary, args.cleanup)
