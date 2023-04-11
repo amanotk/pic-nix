@@ -85,17 +85,9 @@ public:
 
   virtual void push() override;
 
+  virtual void diagnostic() override;
+
   virtual void calculate_moment();
-
-  virtual void diagnostic(std::ostream& out) override
-  {
-    json config = cfg_json["diagnostic"];
-    auto data   = this->get_internal_data();
-
-    for (json::iterator it = config.begin(); it != config.end(); ++it) {
-      diagnoser->doit(*it, *this, data);
-    }
-  }
 
   int get_Ns()
   {
@@ -285,11 +277,9 @@ DEFINE_MEMBER(bool, rebuild_chunkmap)()
 
 DEFINE_MEMBER(void, push)()
 {
-  float64 wclock1, wclock2;
+  DEBUG2 << "push() start";
+  float64 wclock1 = nix::wall_clock();
 
-  wclock1 = nix::wall_clock();
-
-  DEBUG2 << "push() is called";
 #pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
@@ -339,14 +329,32 @@ DEFINE_MEMBER(void, push)()
     }
   }
 
-  wclock2 = nix::wall_clock();
+  DEBUG2 << "push() end";
+  float64 wclock2 = nix::wall_clock();
 
-  // log
-  DEBUG2 << "log in push";
+  json log = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+  logger->append(curstep, "push", log);
+}
+
+DEFINE_MEMBER(void, diagnostic)()
+{
+  DEBUG2 << "diagnostic() start";
+  float64 wclock1 = nix::wall_clock();
+
   {
-    json push = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
-    logger->append(curstep, "push", push);
+    json config = cfg_json["diagnostic"];
+    auto data   = this->get_internal_data();
+
+    for (json::iterator it = config.begin(); it != config.end(); ++it) {
+      diagnoser->doit(*it, *this, data);
+    }
   }
+
+  DEBUG2 << "diagnostic() end";
+  float64 wclock2 = nix::wall_clock();
+
+  json log = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+  logger->append(curstep, "diagnostic", log);
 }
 
 DEFINE_MEMBER(void, calculate_moment)()
