@@ -3,23 +3,24 @@ A Particle-In-Cell (PIC) simulation code for collisionless space plasmas.
 
 # Compiling and Executing the Code
 
-## Clone
-Clone the repository to local working directory via:
-```
-$ git clone git@github.com:amanotk/pic-nix.git
-```
-
 ## Set Environment Variable
 ```
 $ export PICNIX_DIR=${PWD}/pic-nix
 ```
 Setting the environment variable `PICNIX_DIR` is optional but it will be useful for running diagnostic python scripts.
 
+## Clone
+Clone the repository to local working directory via:
+```
+$ git clone git@github.com:amanotk/pic-nix.git
+$ cd pic-nix
+$ git submodule update --init
+```
+
 ## Compile
 The code can be compiled with `cmake`, to which a proper C++ compiler and its compiler flags should be specified.  
 The following example assumes `mpicxx` as a compiler with OpenMP enabled.
 ```
-$ cd pic-nix
 $ mkdir build
 $ cd build
 $ cmake .. \
