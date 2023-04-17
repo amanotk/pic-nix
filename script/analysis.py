@@ -266,14 +266,14 @@ class Run(object):
         self.zc = self.delh * np.arange(self.Nz)
 
     def get_chunk_rank(self, step):
-        rebuild = self.find_rebuild_log_at(step)
-        boundary = np.array(rebuild["boundary"])
+        rebalance = self.find_rebalance_log_at(step)
+        boundary = np.array(rebalance["boundary"])
         rank = np.zeros((boundary[-1],), dtype=np.int32)
         for r in range(boundary.size - 1):
             rank[boundary[r] : boundary[r + 1]] = r
         return rank
 
-    def find_rebuild_log_at(self, step):
+    def find_rebalance_log_at(self, step):
         log_config = self.config["application"]["log"]
 
         # read log file
@@ -285,10 +285,10 @@ class Run(object):
         with open(filename, "rb") as fp:
             obj = msgpack.load(fp)
 
-        # find rebuild log record
-        rebuild = np.array([x.get("rebuild", None) for x in obj])
-        rebuild = np.compress(rebuild != None, rebuild)
-        for record in rebuild:
+        # find rebalance log record
+        rebalance = np.array([x.get("rebalance", None) for x in obj])
+        rebalance = np.compress(rebalance != None, rebalance)
+        for record in rebalance:
             if record.get("step", -1) == step:
                 return record
         return None

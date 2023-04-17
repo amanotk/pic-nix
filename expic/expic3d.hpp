@@ -76,7 +76,7 @@ protected:
 
   virtual void setup() override;
 
-  virtual bool rebuild_chunkmap() override;
+  virtual bool rebalance() override;
 
   virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], int id) override = 0;
 
@@ -264,9 +264,9 @@ DEFINE_MEMBER(void, setup)()
     }
   }
 }
-DEFINE_MEMBER(bool, rebuild_chunkmap)()
+DEFINE_MEMBER(bool, rebalance)()
 {
-  if (BaseApp::rebuild_chunkmap()) {
+  if (BaseApp::rebalance()) {
     // reset MPI communicator for each mode
     set_chunk_communicator();
     return true;

@@ -6,11 +6,9 @@
 			"interval": 10,
 			"options": null
 		},
-		"rebuild": {
-			"interval": 20,
+		"rebalance": {
+			"interval": 10,
 			"loglevel": 1,
-			"prefix": "rebuild",
-			"path": ".",
 			"options": null
 		}
 	},
