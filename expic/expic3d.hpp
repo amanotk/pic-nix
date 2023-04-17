@@ -180,6 +180,8 @@ DEFINE_MEMBER(void, parse_cfg)()
 
 DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 {
+  this->initialize_mpi(&argc, &argv);
+
   // parse command line arguments
   this->parse_cmd(argc, argv);
 
@@ -187,20 +189,14 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   this->parse_cfg();
 
   // some initial setup
-  curstep = 0;
-  curtime = 0.0;
-  this->initialize_mpi(&argc, &argv);
+  curstep   = 0;
+  curtime   = 0.0;
+  balancer  = std::make_unique<Balancer>();
+  logger    = std::make_unique<Logger>(cfg_json["application"]["log"]);
+  diagnoser = std::make_unique<Diagnoser>();
+
   this->initialize_debugprinting(this->debug);
   this->initialize_chunkmap();
-
-  // load balancer
-  balancer = this->create_balancer();
-
-  // logger
-  logger = std::make_unique<Logger>(cfg_json["application"]["log"]);
-
-  // diagnoser
-  diagnoser = std::make_unique<Diagnoser>();
 
   // set auxiliary information for chunk
   for (int i = 0; i < numchunk; i++) {

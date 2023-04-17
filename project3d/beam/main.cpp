@@ -1,7 +1,7 @@
 // -*- C++ -*-
 
-#include "expic3d.hpp"
 #include "diagnoser.hpp"
+#include "expic3d.hpp"
 
 constexpr int order = 1;
 
