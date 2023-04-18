@@ -1,0 +1,62 @@
+{
+	"application": {
+		"log": {
+			"path": ".",
+			"prefix": "log",
+			"interval": 5000,
+			"options": null
+		},
+		"rebalance": {
+			"interval": 10,
+			"loglevel": 1,
+			"options": null
+		}
+	},
+	"diagnostic": [
+		{
+			"name": "history",
+			"path": ".",
+			"prefix": "history",
+			"interval": 100,
+			"options": null
+		},
+		{
+			"name": "field",
+			"path": ".",
+			"prefix": "field",
+			"interval": 100,
+			"options": null
+		},
+		{
+			"name": "particle",
+			"path": ".",
+			"prefix": "particle",
+			"interval": 5000,
+			"options": null
+		}
+	],
+	"parameter": {
+		"Nx": 256,
+		"Ny": 256,
+		"Nz": 2,
+		"Cx": 32,
+		"Cy": 32,
+		"Cz": 1,
+		"Ns": 2,
+		"cc": 1.0e+0,
+		"wp": 1.0e+0,
+		"delt": 5.0e-2,
+		"delh": 1.0e-1,
+		"mime": 1.0e+0,
+		"theta": 0.0,
+		"phi": 0.0,
+		"sigma": 1.0e+0,
+		"radius": 5.0e-0,
+		"nbg": 10,
+		"nfb": 100,
+		"Tbg": 1.0e-1,
+		"Tfb": 1.0e-0,
+		"seed_type": "random",
+		"field_load": 1.0
+	}
+}

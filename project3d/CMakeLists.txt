@@ -12,3 +12,4 @@ add_subdirectory(${PICNIX_DIR}/expic ${CMAKE_BINARY_DIR}/expic)
 # all the projects
 add_subdirectory(thermal)
 add_subdirectory(beam)
+add_subdirectory(fireball)
