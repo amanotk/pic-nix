@@ -33,7 +33,7 @@ class Run(analysis.Run):
         uj = data["uj"]
         tt = self.get_field_time_at(step)
         xlim = (0, self.Nx * self.delh)
-        ylim = (0, self.Ny + self.delh)
+        ylim = (0, self.Ny * self.delh)
 
         ## figure and axes
         fig = plt.figure(1, figsize=(9.6, 3.6), dpi=120)
