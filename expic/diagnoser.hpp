@@ -37,19 +37,6 @@ void write_chunk_all(DataPacker packer, Data& data, MPI_File& fh, size_t& disp)
   jsonio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1);
 }
 
-template <typename BasePacker>
-class LoadPacker : public BasePacker
-{
-public:
-  using BasePacker::pack_load;
-
-  template <typename Data>
-  int operator()(Data data, uint8_t* buffer, int address)
-  {
-    return pack_load(data.load, buffer, address);
-  }
-};
-
 class HistoryDiagnoser
 {
 public:
@@ -148,43 +135,91 @@ public:
   }
 };
 
-class FieldDiagnoser
+class LoadDiagnoser
 {
 protected:
   template <typename BasePacker>
-  class CoordinatePacker : public BasePacker
+  class LoadPacker : public BasePacker
   {
-  private:
-    int direction;
-
   public:
-    using BasePacker::pack_coordinate;
-
-    CoordinatePacker(const int dir) : direction(dir)
-    {
-      assert(dir == 0 || dir == 1 || dir == 2);
-    }
+    using BasePacker::pack_load;
 
     template <typename Data>
     int operator()(Data data, uint8_t* buffer, int address)
     {
-      switch (direction) {
-      case 0: {
-        return pack_coordinate(data.Lbz, data.Ubz, data.zc, buffer, address);
-      } break;
-      case 1: {
-        return pack_coordinate(data.Lby, data.Uby, data.yc, buffer, address);
-      } break;
-      case 2: {
-        return pack_coordinate(data.Lbx, data.Ubx, data.xc, buffer, address);
-      } break;
-      default: {
-        return -1;
-      } break;
-      }
+      return pack_load(data.load, buffer, address);
     }
   };
 
+public:
+  template <typename App, typename Data>
+  void operator()(json& config, App& app, Data& data)
+  {
+    if (data.curstep % config.value("interval", 1) != 0)
+      return;
+
+    const int nc = data.cdims[3];
+
+    // get parameters from json
+    std::string prefix = config.value("prefix", "load");
+    std::string path   = config.value("path", ".") + "/";
+
+    // filename
+    std::string fn_prefix = tfm::format("%s_%s", prefix, nix::format_step(data.curstep));
+    std::string fn_json   = fn_prefix + ".json";
+    std::string fn_data   = fn_prefix + ".data";
+
+    MPI_File fh;
+    size_t   disp;
+    json     dataset;
+
+    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+
+    //
+    // load
+    //
+    {
+      const char name[]  = "load";
+      const char desc[]  = "computational work load";
+      const int  ndim    = 2;
+      const int  dims[2] = {nc, App::Chunk::NumLoadMode};
+      const int  size    = nc * App::Chunk::NumLoadMode * sizeof(float64);
+
+      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+      write_chunk_all(LoadPacker<XtensorPacker3D>(), data, fh, disp);
+    }
+
+    jsonio::close_file(&fh);
+
+    //
+    // output json file
+    //
+    {
+      json root;
+
+      // meta data
+      root["meta"] = {{"endian", nix::get_endian_flag()},
+                      {"rawfile", fn_data},
+                      {"order", 1},
+                      {"time", data.curtime},
+                      {"step", data.curstep}};
+      // dataset
+      root["dataset"] = dataset;
+
+      if (data.thisrank == 0) {
+        std::ofstream ofs(path + fn_json);
+        ofs << std::setw(2) << root;
+        ofs.close();
+      }
+
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+  }
+};
+
+class FieldDiagnoser
+{
+protected:
   template <typename BasePacker>
   class FieldPacker : public BasePacker
   {
@@ -251,42 +286,6 @@ public:
     json     dataset;
 
     jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
-
-    //
-    // coordinate
-    //
-    {
-      const char name[]  = "xc";
-      const char desc[]  = "x coordinate";
-      const int  ndim    = 2;
-      const int  dims[2] = {nc, nx};
-      const int  size    = nc * nx * sizeof(float64);
-
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(CoordinatePacker<XtensorPacker3D>(2), data, fh, disp);
-    }
-
-    {
-      const char name[]  = "yc";
-      const char desc[]  = "y coordinate";
-      const int  ndim    = 2;
-      const int  dims[2] = {nc, ny};
-      const int  size    = nc * ny * sizeof(float64);
-
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(CoordinatePacker<XtensorPacker3D>(1), data, fh, disp);
-    }
-
-    {
-      const char name[]  = "zc";
-      const char desc[]  = "z coordinate";
-      const int  ndim    = 2;
-      const int  dims[2] = {nc, nz};
-      const int  size    = nc * nz * sizeof(float64);
-
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(CoordinatePacker<XtensorPacker3D>(0), data, fh, disp);
-    }
 
     //
     // electromagnetic field
@@ -467,6 +466,7 @@ class Diagnoser
 {
 protected:
   HistoryDiagnoser  history;
+  LoadDiagnoser     load;
   FieldDiagnoser    field;
   ParticleDiagnoser particle;
 
@@ -479,6 +479,11 @@ public:
 
     if (config["name"] == "history") {
       history(config, app, data);
+      return;
+    }
+
+    if (config["name"] == "load") {
+      load(config, app, data);
       return;
     }
 

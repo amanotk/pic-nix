@@ -183,9 +183,9 @@ public:
               float64 vte;
               float64 vti;
 
-              float64 zz = zc(iz) - z0;
-              float64 yy = yc(iy) - y0;
-              float64 xx = xc(ix) - x0;
+              float64 zz = (iz - Lbz + 0.5) * delz + zlim[0] - z0;
+              float64 yy = (iy - Lby + 0.5) * dely + ylim[0] - y0;
+              float64 xx = (ix - Lbx + 0.5) * delx + xlim[0] - x0;
 
               if (is_inside_fireball(zz, yy, xx, radius)) {
                 // fireball
@@ -200,9 +200,9 @@ public:
               }
 
               for (int jp = 0; jp < nppc; jp++) {
-                float64 z = (uniform(mtp) - 0.5) * delz + zc(iz);
-                float64 y = (uniform(mtp) - 0.5) * dely + yc(iy);
-                float64 x = (uniform(mtp) - 0.5) * delx + xc(ix);
+                float64 z = (uniform(mtp) + iz - Lbz) * delz + zlim[0];
+                float64 y = (uniform(mtp) + iy - Lby) * dely + ylim[0];
+                float64 x = (uniform(mtp) + ix - Lbx) * delx + xlim[0];
 
                 // electrons
                 up[0]->xu(ip, 0) = x;
@@ -249,14 +249,13 @@ class MainApplication : public ExPIC3D<order, MainDiagnoser>
 {
 public:
   using ExPIC3D<order, MainDiagnoser>::ExPIC3D; // inherit constructors
-  using ExPIC3D::FloatVec;
 
   std::unique_ptr<ExChunk3D<order>> create_chunk(const int dims[], int id) override
   {
     return std::make_unique<MainChunk>(dims, id);
   }
 
-  void initialize_workload(FloatVec& workload) override
+  void initialize_workload() override
   {
     json    parameter  = cfg_json["parameter"];
     int     nbg        = parameter["nbg"].get<float64>();
@@ -278,8 +277,10 @@ public:
       std::array<int, 2> yr = {cy * dims[1], (cy + 1) * dims[1]};
       std::array<int, 2> xr = {cx * dims[2], (cx + 1) * dims[2]};
 
-      int count   = count_cell_within_fireball(zr, yr, xr, delz, dely, delx, z0, y0, x0, radius);
-      workload[i] = 2 * (count * nfb + (ncell_chunk - count) * nbg) + field_load;
+      int     count = count_cell_within_fireball(zr, yr, xr, delz, dely, delx, z0, y0, x0, radius);
+      float64 a     = 2.0 * count / ncell_chunk;
+      float64 b     = 2.0 * (ncell_chunk - count) / ncell_chunk;
+      workload[i]   = a * nfb + b * nbg + field_load;
     }
   }
 };

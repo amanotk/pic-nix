@@ -82,10 +82,10 @@ DEFINE_MEMBER(void, reset_load)()
 {
   const int Ng = dims[0] * dims[1] * dims[2];
 
-  this->load[LoadField]    = field_load;
-  this->load[LoadParticle] = 0;
+  load[LoadField]    = field_load;
+  load[LoadParticle] = 0;
   for (int is = 0; is < up.size(); is++) {
-    this->load[LoadParticle] += up[is]->Np / Ng;
+    load[LoadParticle] += up[is]->Np / Ng;
   }
 }
 
@@ -200,8 +200,8 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
 
 DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
-  // physical boundary
-  this->set_boundary_physical(mode);
+  // physical boundary for field
+  this->set_boundary_field(mode);
 
   switch (mode) {
   case BoundaryEmf: {

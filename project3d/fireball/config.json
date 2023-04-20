@@ -21,6 +21,13 @@
 			"options": null
 		},
 		{
+			"name": "load",
+			"path": ".",
+			"prefix": "load",
+			"interval": 10,
+			"options": null
+		},
+		{
 			"name": "field",
 			"path": ".",
 			"prefix": "field",

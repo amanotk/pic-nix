@@ -35,7 +35,7 @@ struct BaseChunk3D;
 ///
 /// - setup()
 ///   physics-wise initial condition (both for particles and fields)
-/// - set_boundary_physical()
+/// - set_boundary_field()
 ///   non-periodic boundary condition for fields
 /// - set_boundary_particle()
 ///   non-periodic boundary condition for particles
@@ -60,9 +60,6 @@ public:
   using Chunk::Ubx;
   using Chunk::Uby;
   using Chunk::Ubz;
-  using Chunk::xc;
-  using Chunk::yc;
-  using Chunk::zc;
   using Chunk::delx;
   using Chunk::dely;
   using Chunk::delz;
@@ -74,19 +71,6 @@ public:
 
   // boundary margin
   static constexpr int Nb = Chunk::boundary_margin;
-
-  // mode for diagnostic
-  enum DiagnosticMode {
-    DiagnosticLoad     = 0,
-    DiagnosticX        = 1,
-    DiagnosticY        = 2,
-    DiagnosticZ        = 3,
-    DiagnosticEmf      = 4,
-    DiagnosticCur      = 5,
-    DiagnosticMom      = 6,
-    DiagnosticParticle = 10,
-    DiagnosticCustom   = 20,
-  };
 
   // mode for load
   enum LoadMode {
@@ -109,10 +93,10 @@ protected:
 
   int                     Ns; ///< number of particle species
   float64                 cc; ///< speed of light
-  ParticleVec             up; ///< list of particles
   xt::xtensor<float64, 4> uf; ///< electromagnetic field
   xt::xtensor<float64, 4> uj; ///< current density
   xt::xtensor<float64, 5> um; ///< particle moment
+  ParticleVec             up; ///< list of particles
 
   ///
   /// @brief internal data struct
@@ -127,9 +111,6 @@ protected:
     int&                     Ns;
     float64&                 cc;
     std::vector<float64>&    load;
-    xt::xtensor<float64, 1>& xc;
-    xt::xtensor<float64, 1>& yc;
-    xt::xtensor<float64, 1>& zc;
     xt::xtensor<float64, 4>& uf;
     xt::xtensor<float64, 4>& uj;
     xt::xtensor<float64, 5>& um;
@@ -141,7 +122,7 @@ protected:
   ///
   InternalData get_internal_data()
   {
-    return {Lbx, Ubx, Lby, Uby, Lbz, Ubz, Ns, cc, load, xc, yc, zc, uf, uj, um, up};
+    return {Lbx, Ubx, Lby, Uby, Lbz, Ubz, Ns, cc, load, uf, uj, um, up};
   }
 
 public:
