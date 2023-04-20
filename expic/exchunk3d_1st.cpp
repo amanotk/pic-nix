@@ -1,9 +1,6 @@
 // -*- C++ -*-
 #include "exchunk3d.hpp"
 
-// implementation independent of order
-#include "exchunk3d.cpp"
-
 //
 // implementation specific to 1st-order shape function
 //

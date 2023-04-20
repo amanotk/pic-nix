@@ -6,7 +6,7 @@ include(${PICNIX_DIR}/common.cmake OPTIONAL)
 project(expic CXX)
 
 # build static library
-add_library(expic STATIC exchunk3d_1st.cpp)
+add_library(expic STATIC exchunk3d.cpp exchunk3d_1st.cpp)
 
 # include directory
 target_include_directories(expic PRIVATE ${PICNIX_DIR})

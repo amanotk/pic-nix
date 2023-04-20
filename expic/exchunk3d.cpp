@@ -260,6 +260,8 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
   }
 }
 
+template class ExChunk3D<1>;
+
 #undef DEFINE_MEMBER
 
 // Local Variables:
