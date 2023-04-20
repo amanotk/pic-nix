@@ -7,19 +7,21 @@
 #include "nix/debug.hpp"
 #include "nix/nix.hpp"
 #include "nix/particle.hpp"
+#include "nix/xtensor_packer3d.hpp"
 
 using namespace nix::typedefs;
 using nix::json;
 using nix::Buffer;
 using nix::Particle;
+using nix::XtensorPacker3D;
 
-template <typename Data>
-void write_chunk_all(Data& data, MPI_File& fh, size_t& disp, int mode)
+template <typename DataPacker, typename Data>
+void write_chunk_all(DataPacker packer, Data& data, MPI_File& fh, size_t& disp)
 {
   int bufsize = 0;
 
   for (int i = 0; i < data.numchunk; i++) {
-    bufsize += data.chunkvec[i]->pack_diagnostic(mode, nullptr, 0);
+    bufsize += data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
   }
 
   // write to disk
@@ -28,12 +30,25 @@ void write_chunk_all(Data& data, MPI_File& fh, size_t& disp, int mode)
 
   // pack
   for (int i = 0, address = 0; i < data.numchunk; i++) {
-    address = data.chunkvec[i]->pack_diagnostic(mode, bufptr, address);
+    address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
   }
 
   // collective write
   jsonio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1);
 }
+
+template <typename BasePacker>
+class LoadPacker : public BasePacker
+{
+public:
+  using BasePacker::pack_load;
+
+  template <typename Data>
+  int operator()(Data data, uint8_t* buffer, int address)
+  {
+    return pack_load(data.load, buffer, address);
+  }
+};
 
 class HistoryDiagnoser
 {
@@ -135,6 +150,80 @@ public:
 
 class FieldDiagnoser
 {
+protected:
+  template <typename BasePacker>
+  class CoordinatePacker : public BasePacker
+  {
+  private:
+    int direction;
+
+  public:
+    using BasePacker::pack_coordinate;
+
+    CoordinatePacker(const int dir) : direction(dir)
+    {
+      assert(dir == 0 || dir == 1 || dir == 2);
+    }
+
+    template <typename Data>
+    int operator()(Data data, uint8_t* buffer, int address)
+    {
+      switch (direction) {
+      case 0: {
+        return pack_coordinate(data.Lbz, data.Ubz, data.zc, buffer, address);
+      } break;
+      case 1: {
+        return pack_coordinate(data.Lby, data.Uby, data.yc, buffer, address);
+      } break;
+      case 2: {
+        return pack_coordinate(data.Lbx, data.Ubx, data.xc, buffer, address);
+      } break;
+      default: {
+        return -1;
+      } break;
+      }
+    }
+  };
+
+  template <typename BasePacker>
+  class FieldPacker : public BasePacker
+  {
+  public:
+    using BasePacker::pack_field;
+
+    template <typename Data>
+    int operator()(Data data, uint8_t* buffer, int address)
+    {
+      return pack_field(data.uf, data, buffer, address);
+    }
+  };
+
+  template <typename BasePacker>
+  class CurrentPacker : public BasePacker
+  {
+  public:
+    using BasePacker::pack_field;
+
+    template <typename Data>
+    int operator()(Data data, uint8_t* buffer, int address)
+    {
+      return pack_field(data.uj, data, buffer, address);
+    }
+  };
+
+  template <typename BasePacker>
+  class MomentPacker : public BasePacker
+  {
+  public:
+    using BasePacker::pack_field;
+
+    template <typename Data>
+    int operator()(Data data, uint8_t* buffer, int address)
+    {
+      return pack_field(data.um, data, buffer, address);
+    }
+  };
+
 public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
@@ -174,7 +263,7 @@ public:
       const int  size    = nc * nx * sizeof(float64);
 
       jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(data, fh, disp, App::Chunk::DiagnosticX);
+      write_chunk_all(CoordinatePacker<XtensorPacker3D>(2), data, fh, disp);
     }
 
     {
@@ -185,7 +274,7 @@ public:
       const int  size    = nc * ny * sizeof(float64);
 
       jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(data, fh, disp, App::Chunk::DiagnosticY);
+      write_chunk_all(CoordinatePacker<XtensorPacker3D>(1), data, fh, disp);
     }
 
     {
@@ -196,7 +285,7 @@ public:
       const int  size    = nc * nz * sizeof(float64);
 
       jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(data, fh, disp, App::Chunk::DiagnosticZ);
+      write_chunk_all(CoordinatePacker<XtensorPacker3D>(0), data, fh, disp);
     }
 
     //
@@ -210,7 +299,7 @@ public:
       const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
       jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(data, fh, disp, App::Chunk::DiagnosticEmf);
+      write_chunk_all(FieldPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
     //
@@ -224,7 +313,7 @@ public:
       const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
       jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(data, fh, disp, App::Chunk::DiagnosticCur);
+      write_chunk_all(CurrentPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
     //
@@ -242,7 +331,7 @@ public:
 
       // write
       jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(data, fh, disp, App::Chunk::DiagnosticMom);
+      write_chunk_all(MomentPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
     jsonio::close_file(&fh);
@@ -275,6 +364,27 @@ public:
 
 class ParticleDiagnoser
 {
+protected:
+  template <typename BasePacker>
+  class ParticlePacker : public BasePacker
+  {
+  private:
+    int index;
+
+  public:
+    using BasePacker::pack_particle;
+
+    ParticlePacker(const int is) : index(is)
+    {
+    }
+
+    template <typename Data>
+    int operator()(Data data, uint8_t* buffer, int address)
+    {
+      return pack_particle(data.up[index], data, buffer, address);
+    }
+  };
+
 public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
@@ -309,8 +419,7 @@ public:
     for (int is = 0; is < Ns; is++) {
       // write particles
       size_t disp0 = disp;
-      int    mode  = App::Chunk::DiagnosticParticle + is;
-      write_chunk_all(data, fh, disp, mode);
+      write_chunk_all(ParticlePacker<XtensorPacker3D>(is), data, fh, disp);
 
       // meta data
       {

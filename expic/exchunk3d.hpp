@@ -70,6 +70,7 @@ public:
   using Chunk::ylim;
   using Chunk::zlim;
   using Chunk::mpibufvec;
+  using Chunk::load;
 
   // boundary margin
   static constexpr int Nb = Chunk::boundary_margin;
@@ -117,12 +118,22 @@ protected:
   /// @brief internal data struct
   ///
   struct InternalData {
+    int&                     Lbx;
+    int&                     Ubx;
+    int&                     Lby;
+    int&                     Uby;
+    int&                     Lbz;
+    int&                     Ubz;
     int&                     Ns;
     float64&                 cc;
-    ParticleVec&             up;
+    std::vector<float64>&    load;
+    xt::xtensor<float64, 1>& xc;
+    xt::xtensor<float64, 1>& yc;
+    xt::xtensor<float64, 1>& zc;
     xt::xtensor<float64, 4>& uf;
     xt::xtensor<float64, 4>& uj;
     xt::xtensor<float64, 5>& um;
+    ParticleVec&             up;
   };
 
   ///
@@ -130,7 +141,7 @@ protected:
   ///
   InternalData get_internal_data()
   {
-    return {Ns, cc, up, uf, uj, um};
+    return {Lbx, Ubx, Lby, Uby, Lbz, Ubz, Ns, cc, load, xc, yc, zc, uf, uj, um, up};
   }
 
 public:
@@ -143,8 +154,6 @@ public:
   virtual void allocate();
 
   virtual void reset_load() override;
-
-  virtual int pack_diagnostic(int mode, void* buffer, int address) override;
 
   virtual void setup(json& config) override;
 
@@ -167,6 +176,12 @@ public:
   virtual void set_boundary_begin(int mode = 0) override;
 
   virtual void set_boundary_end(int mode = 0) override;
+
+  template <typename DataPacker>
+  int pack_diagnostic(DataPacker packer, uint8_t* buffer, int address)
+  {
+    return packer(get_internal_data(), buffer, address);
+  }
 };
 
 // first-order shape function requires 2 boundary margins

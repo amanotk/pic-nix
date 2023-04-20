@@ -89,43 +89,6 @@ DEFINE_MEMBER(void, reset_load)()
   }
 }
 
-DEFINE_MEMBER(int, pack_diagnostic)(int mode, void* buffer, int address)
-{
-  switch (mode) {
-  case DiagnosticLoad:
-    return this->pack_diagnostic_load(buffer, address);
-    break;
-  case DiagnosticX:
-    return this->pack_diagnostic_coord(buffer, address, 2);
-    break;
-  case DiagnosticY:
-    return this->pack_diagnostic_coord(buffer, address, 1);
-    break;
-  case DiagnosticZ:
-    return this->pack_diagnostic_coord(buffer, address, 0);
-    break;
-  case DiagnosticEmf:
-    return this->pack_diagnostic_field(buffer, address, uf);
-    break;
-  case DiagnosticCur:
-    return this->pack_diagnostic_field(buffer, address, uj);
-    break;
-  case DiagnosticMom: {
-    return this->pack_diagnostic_field(buffer, address, um);
-  } break;
-  default:
-    break;
-  }
-
-  // pack a specific particle species
-  if (mode >= DiagnosticParticle && mode < DiagnosticCustom) {
-    int is = mode - DiagnosticParticle;
-    return this->pack_diagnostic_particle(buffer, address, up[is]);
-  }
-
-  return 0;
-}
-
 DEFINE_MEMBER(void, setup)(json& config)
 {
   // a derived class should implement it
