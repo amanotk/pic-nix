@@ -5,7 +5,6 @@
 #include "nix/buffer.hpp"
 #include "nix/chunk3d.hpp"
 #include "nix/debug.hpp"
-#include "nix/jsonio.hpp"
 #include "nix/nix.hpp"
 #include "nix/particle.hpp"
 #include "nix/xtensorall.hpp"

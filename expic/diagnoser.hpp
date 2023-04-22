@@ -6,6 +6,7 @@
 #include "nix/buffer.hpp"
 #include "nix/debug.hpp"
 #include "nix/nix.hpp"
+#include "nix/nixio.hpp"
 #include "nix/particle.hpp"
 #include "nix/xtensor_packer3d.hpp"
 
@@ -36,7 +37,7 @@ void write_chunk_all(DataPacker packer, Data& data, MPI_File& fh, size_t& disp)
   // write to the disk
   {
     MPI_Request req;
-    jsonio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1, &req);
+    nixio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1, &req);
     MPI_Wait(&req, MPI_STATUS_IGNORE);
   }
 }
@@ -177,7 +178,7 @@ public:
     size_t   disp;
     json     dataset;
 
-    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    nixio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
 
     //
     // load
@@ -189,11 +190,11 @@ public:
       const int  dims[2] = {nc, App::Chunk::NumLoadMode};
       const int  size    = nc * App::Chunk::NumLoadMode * sizeof(float64);
 
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
       write_chunk_all(LoadPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
-    jsonio::close_file(&fh);
+    nixio::close_file(&fh);
 
     //
     // output json file
@@ -289,7 +290,7 @@ public:
     size_t   disp;
     json     dataset;
 
-    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    nixio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
 
     //
     // electromagnetic field
@@ -301,7 +302,7 @@ public:
       const int  dims[5] = {nc, nz, ny, nx, 6};
       const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
       write_chunk_all(FieldPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
@@ -315,7 +316,7 @@ public:
       const int  dims[5] = {nc, nz, ny, nx, 4};
       const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
       write_chunk_all(CurrentPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
@@ -333,11 +334,11 @@ public:
       app.calculate_moment();
 
       // write
-      jsonio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
+      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
       write_chunk_all(MomentPacker<XtensorPacker3D>(), data, fh, disp);
     }
 
-    jsonio::close_file(&fh);
+    nixio::close_file(&fh);
 
     //
     // output json file
@@ -414,7 +415,7 @@ public:
     size_t   disp;
     json     dataset;
 
-    jsonio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    nixio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
 
     //
     // for each particle
@@ -434,11 +435,11 @@ public:
         const int dims[2] = {Np, Particle::Nc};
         const int size    = Np * Particle::Nc * sizeof(float64);
 
-        jsonio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, size, ndim, dims);
+        nixio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, size, ndim, dims);
       }
     }
 
-    jsonio::close_file(&fh);
+    nixio::close_file(&fh);
 
     //
     // output json file

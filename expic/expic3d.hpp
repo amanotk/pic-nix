@@ -5,7 +5,6 @@
 #include "exchunk3d.hpp"
 #include "nix/application.hpp"
 #include "nix/chunkmap.hpp"
-#include "nix/jsonio.hpp"
 
 using namespace nix::typedefs;
 using nix::json;
