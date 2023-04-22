@@ -20,21 +20,25 @@ void write_chunk_all(DataPacker packer, Data& data, MPI_File& fh, size_t& disp)
 {
   int bufsize = 0;
 
+  // calculate buffer size
   for (int i = 0; i < data.numchunk; i++) {
     bufsize += data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
   }
 
-  // write to disk
+  // pack data
   Buffer   buffer(bufsize);
   uint8_t* bufptr = buffer.get();
 
-  // pack
   for (int i = 0, address = 0; i < data.numchunk; i++) {
     address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
   }
 
-  // collective write
-  jsonio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1);
+  // write to the disk
+  {
+    MPI_Request req;
+    jsonio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1, &req);
+    MPI_Wait(&req, MPI_STATUS_IGNORE);
+  }
 }
 
 class HistoryDiagnoser
