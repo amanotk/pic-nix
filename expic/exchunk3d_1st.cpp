@@ -33,6 +33,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     float64     dt1 = 0.5 * ps->q / ps->m * delt;
 
     // loop over particle
+    auto& xu = ps->xu;
     for (int ip = 0; ip < ps->Np; ip++) {
       float64 wix[2] = {0};
       float64 whx[2] = {0};
@@ -42,25 +43,24 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       float64 whz[2] = {0};
       float64 emf[6] = {0};
 
-      float64* xu  = &ps->xu(ip, 0);
-      float64  gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
-      float64  dt2 = dt1 * rc / gam;
+      float64 gam = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
+      float64 dt2 = dt1 * rc / gam;
 
       // grid indices
-      int ix = digitize(xu[0], ximin, rdx);
-      int hx = digitize(xu[0], xhmin, rdx);
-      int iy = digitize(xu[1], yimin, rdy);
-      int hy = digitize(xu[1], yhmin, rdy);
-      int iz = digitize(xu[2], zimin, rdz);
-      int hz = digitize(xu[2], zhmin, rdz);
+      int ix = digitize(xu(ip, 0), ximin, rdx);
+      int hx = digitize(xu(ip, 0), xhmin, rdx);
+      int iy = digitize(xu(ip, 1), yimin, rdy);
+      int hy = digitize(xu(ip, 1), yhmin, rdy);
+      int iz = digitize(xu(ip, 2), zimin, rdz);
+      int hz = digitize(xu(ip, 2), zhmin, rdz);
 
       // weights
-      shape1(xu[0], ximin + ix * delx, rdx, wix);
-      shape1(xu[0], xhmin + hx * delx, rdx, whx);
-      shape1(xu[1], yimin + iy * dely, rdy, wiy);
-      shape1(xu[1], yhmin + hy * dely, rdy, why);
-      shape1(xu[2], zimin + iz * delz, rdz, wiz);
-      shape1(xu[2], zhmin + hz * delz, rdz, whz);
+      shape1(xu(ip, 0), ximin + ix * delx, rdx, wix);
+      shape1(xu(ip, 0), xhmin + hx * delx, rdx, whx);
+      shape1(xu(ip, 1), yimin + iy * dely, rdy, wiy);
+      shape1(xu(ip, 1), yhmin + hy * dely, rdy, why);
+      shape1(xu(ip, 2), zimin + iz * delz, rdz, wiz);
+      shape1(xu(ip, 2), zhmin + hz * delz, rdz, whz);
 
       //
       // calculate electromagnetic field at particle position
@@ -86,7 +86,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       emf[5] = interp3d1(uf, iz, hy, hx, 5, wiz, why, whx, dt2);
 
       // push particle velocity
-      push_buneman_boris(&xu[3], emf);
+      push_buneman_boris(&xu(ip, 3), emf);
     }
   }
 }
@@ -99,19 +99,19 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
     ParticlePtr ps = up[is];
 
     // loop over particle
+    auto& xu = ps->xu;
+    auto& xv = ps->xv;
     for (int ip = 0; ip < ps->Np; ip++) {
-      float64* xu  = &ps->xu(ip, 0);
-      float64* xv  = &ps->xv(ip, 0);
-      float64  gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
-      float64  dt  = delt / gam;
+      float64 gam = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
+      float64 dt  = delt / gam;
 
       // substitute to temporary
-      std::memcpy(xv, xu, sizeof(float64) * Particle::Nc);
+      std::memcpy(&xv(ip, 0), &xu(ip, 0), ParticlePtr::element_type::get_particle_size());
 
       // update position
-      xu[0] += xu[3] * dt;
-      xu[1] += xu[4] * dt;
-      xu[2] += xu[5] * dt;
+      xu(ip, 0) += xu(ip, 3) * dt;
+      xu(ip, 1) += xu(ip, 4) * dt;
+      xu(ip, 2) += xu(ip, 5) * dt;
     }
 
     // count
@@ -139,38 +139,37 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
     float64     qs = ps->q;
 
     // loop over particle
+    auto& xu = ps->xu;
+    auto& xv = ps->xv;
     for (int ip = 0; ip < ps->Np; ip++) {
       float64 ss[2][3][4]     = {0};
       float64 cur[4][4][4][4] = {0};
-
-      float64* xv = &ps->xv(ip, 0);
-      float64* xu = &ps->xu(ip, 0);
 
       //
       // -*- weights before move -*-
       //
       // grid indices
-      int ix0 = digitize(xv[0], ximin, rdx);
-      int iy0 = digitize(xv[1], yimin, rdy);
-      int iz0 = digitize(xv[2], zimin, rdz);
+      int ix0 = digitize(xv(ip, 0), ximin, rdx);
+      int iy0 = digitize(xv(ip, 1), yimin, rdy);
+      int iz0 = digitize(xv(ip, 2), zimin, rdz);
 
       // weights
-      shape1(xv[0], ximin + ix0 * delx, rdx, &ss[0][0][1]);
-      shape1(xv[1], yimin + iy0 * dely, rdy, &ss[0][1][1]);
-      shape1(xv[2], zimin + iz0 * delz, rdz, &ss[0][2][1]);
+      shape1(xv(ip, 0), ximin + ix0 * delx, rdx, &ss[0][0][1]);
+      shape1(xv(ip, 1), yimin + iy0 * dely, rdy, &ss[0][1][1]);
+      shape1(xv(ip, 2), zimin + iz0 * delz, rdz, &ss[0][2][1]);
 
       //
       // -*- weights after move -*-
       //
       // grid indices
-      int ix1 = digitize(xu[0], ximin, rdx);
-      int iy1 = digitize(xu[1], yimin, rdy);
-      int iz1 = digitize(xu[2], zimin, rdz);
+      int ix1 = digitize(xu(ip, 0), ximin, rdx);
+      int iy1 = digitize(xu(ip, 1), yimin, rdy);
+      int iz1 = digitize(xu(ip, 2), zimin, rdz);
 
       // weights
-      shape1(xu[0], ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
-      shape1(xu[1], yimin + iy1 * dely, rdy, &ss[1][1][1 + iy1 - iy0]);
-      shape1(xu[2], zimin + iz1 * delz, rdz, &ss[1][2][1 + iz1 - iz0]);
+      shape1(xu(ip, 0), ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
+      shape1(xu(ip, 1), yimin + iy1 * dely, rdy, &ss[1][1][1 + iy1 - iy0]);
+      shape1(xu(ip, 2), zimin + iz1 * delz, rdz, &ss[1][2][1 + iz1 - iz0]);
 
       //
       // -*- accumulate current via density decomposition -*-
@@ -216,30 +215,29 @@ DEFINE_MEMBER(void, deposit_moment)()
     float64     ms = ps->m;
 
     // loop over particle
+    auto& xu = ps->xu;
     for (int ip = 0; ip < ps->Np; ip++) {
       float64 wx[2]            = {0};
       float64 wy[2]            = {0};
       float64 wz[2]            = {0};
       float64 mom[2][2][2][11] = {0};
 
-      float64* xu = &ps->xu(ip, 0);
-
       // grid indices
-      int ix = digitize(xu[0], ximin, rdx);
-      int iy = digitize(xu[1], yimin, rdy);
-      int iz = digitize(xu[2], zimin, rdz);
+      int ix = digitize(xu(ip, 0), ximin, rdx);
+      int iy = digitize(xu(ip, 1), yimin, rdy);
+      int iz = digitize(xu(ip, 2), zimin, rdz);
 
       // weights
-      shape1(xu[0], ximin + ix * delx, rdx, wx);
-      shape1(xu[1], yimin + iy * dely, rdy, wy);
-      shape1(xu[2], zimin + iz * delz, rdz, wz);
+      shape1(xu(ip, 0), ximin + ix * delx, rdx, wx);
+      shape1(xu(ip, 1), yimin + iy * dely, rdy, wy);
+      shape1(xu(ip, 2), zimin + iz * delz, rdz, wz);
 
       // deposit to local array (this step is not necessary for scalar version)
       for (int jz = 0; jz < 2; jz++) {
         for (int jy = 0; jy < 2; jy++) {
           for (int jx = 0; jx < 2; jx++) {
             float64 ww = ms * wz[jz] * wy[jy] * wx[jx];
-            float64 gm = lorentz_factor(xu[3], xu[4], xu[5], rc);
+            float64 gm = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
 
             //
             //  0: mass density
@@ -255,16 +253,16 @@ DEFINE_MEMBER(void, deposit_moment)()
             // 10: yz-component T^{2,3}
             //
             mom[jz][jy][jx][0]  = ww;
-            mom[jz][jy][jx][1]  = ww * xu[3];
-            mom[jz][jy][jx][2]  = ww * xu[4];
-            mom[jz][jy][jx][3]  = ww * xu[5];
+            mom[jz][jy][jx][1]  = ww * xu(ip, 3);
+            mom[jz][jy][jx][2]  = ww * xu(ip, 4);
+            mom[jz][jy][jx][3]  = ww * xu(ip, 5);
             mom[jz][jy][jx][4]  = ww * gm * cc;
-            mom[jz][jy][jx][5]  = ww * xu[3] * xu[3] / gm;
-            mom[jz][jy][jx][6]  = ww * xu[4] * xu[4] / gm;
-            mom[jz][jy][jx][7]  = ww * xu[5] * xu[5] / gm;
-            mom[jz][jy][jx][8]  = ww * xu[3] * xu[4] / gm;
-            mom[jz][jy][jx][9]  = ww * xu[3] * xu[5] / gm;
-            mom[jz][jy][jx][10] = ww * xu[4] * xu[5] / gm;
+            mom[jz][jy][jx][5]  = ww * xu(ip, 3) * xu(ip, 3) / gm;
+            mom[jz][jy][jx][6]  = ww * xu(ip, 4) * xu(ip, 4) / gm;
+            mom[jz][jy][jx][7]  = ww * xu(ip, 5) * xu(ip, 5) / gm;
+            mom[jz][jy][jx][8]  = ww * xu(ip, 3) * xu(ip, 4) / gm;
+            mom[jz][jy][jx][9]  = ww * xu(ip, 3) * xu(ip, 5) / gm;
+            mom[jz][jy][jx][10] = ww * xu(ip, 4) * xu(ip, 5) / gm;
           }
         }
       }
