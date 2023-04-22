@@ -133,8 +133,8 @@ public:
       this->sort_particle(up);
 
       // allocate MPI buffer for particle
-      this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(int) * Ns,
-                           Ns * npmax * sizeof(float64) * Particle::Nc);
+      int size = ParticlePtr::element_type::get_particle_size();
+      this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(int) * Ns, Ns * npmax * size);
     }
   }
 };

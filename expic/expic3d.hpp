@@ -10,9 +10,6 @@ using namespace nix::typedefs;
 using nix::json;
 using nix::Balancer;
 using nix::Logger;
-using nix::Particle;
-using nix::ParticleVec;
-using nix::PtrParticle;
 
 ///
 /// @brief Application for 3D Explicit PIC Simulations

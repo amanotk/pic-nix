@@ -7,14 +7,16 @@
 #include "nix/debug.hpp"
 #include "nix/nix.hpp"
 #include "nix/nixio.hpp"
-#include "nix/particle.hpp"
+
+#include "nix/xtensor_particle.hpp"
 #include "nix/xtensor_packer3d.hpp"
 
 using namespace nix::typedefs;
 using nix::json;
 using nix::Buffer;
-using nix::Particle;
 using nix::XtensorPacker3D;
+using nix::ParticlePtr;
+using nix::ParticleVec;
 
 template <typename DataPacker, typename Data>
 void write_chunk_all(DataPacker packer, Data& data, MPI_File& fh, size_t& disp)
@@ -430,12 +432,13 @@ public:
         std::string name = tfm::format("up%02d", is);
         std::string desc = tfm::format("particle species %02d", is);
 
-        const int Np      = (disp - disp0) / (Particle::Nc * sizeof(float64));
+        const int size    = ParticlePtr::element_type::get_particle_size();
+        const int Np      = (disp - disp0) / size;
         const int ndim    = 2;
-        const int dims[2] = {Np, Particle::Nc};
-        const int size    = Np * Particle::Nc * sizeof(float64);
+        const int dims[2] = {Np, ParticlePtr::element_type::Nc};
 
-        nixio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, size, ndim, dims);
+        nixio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, Np * size, ndim,
+                            dims);
       }
     }
 
