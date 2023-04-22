@@ -51,7 +51,7 @@ public:
   using ThisType     = ExChunk3D<Order>;
   using Chunk        = typename BaseChunk3D<Order>::ChunkType;
   using MpiBuffer    = typename Chunk::MpiBuffer;
-  using PtrMpiBuffer = typename Chunk::PtrMpiBuffer;
+  using MpiBufferPtr = typename Chunk::MpiBufferPtr;
   using Chunk::dims;
   using Chunk::Lbx;
   using Chunk::Lby;
