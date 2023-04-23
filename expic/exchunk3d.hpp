@@ -167,19 +167,19 @@ public:
 // first-order shape function requires 2 boundary margins
 template <>
 struct BaseChunk3D<1> {
-  using ChunkType = nix::Chunk3D<2, ParticlePtr>;
+  using ChunkType = nix::Chunk3D<2, Particle>;
 };
 
 // second-order shape function requires 2 boundary margins
 template <>
 struct BaseChunk3D<2> {
-  using ChunkType = nix::Chunk3D<2, ParticlePtr>;
+  using ChunkType = nix::Chunk3D<2, Particle>;
 };
 
 // third-order shape function requires 3 boundary margins
 template <>
 struct BaseChunk3D<3> {
-  using ChunkType = nix::Chunk3D<3, ParticlePtr>;
+  using ChunkType = nix::Chunk3D<3, Particle>;
 };
 
 // Local Variables:

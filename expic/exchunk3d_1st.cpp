@@ -106,7 +106,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
       float64 dt  = delt / gam;
 
       // substitute to temporary
-      std::memcpy(&xv(ip, 0), &xu(ip, 0), ParticlePtr::element_type::get_particle_size());
+      std::memcpy(&xv(ip, 0), &xu(ip, 0), Particle::get_particle_size());
 
       // update position
       xu(ip, 0) += xu(ip, 3) * dt;
