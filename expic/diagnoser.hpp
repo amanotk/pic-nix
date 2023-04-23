@@ -8,8 +8,8 @@
 #include "nix/nix.hpp"
 #include "nix/nixio.hpp"
 
-#include "nix/xtensor_particle.hpp"
 #include "nix/xtensor_packer3d.hpp"
+#include "nix/xtensor_particle.hpp"
 
 using namespace nix::typedefs;
 using nix::json;
@@ -19,32 +19,105 @@ using nix::Particle;
 using nix::ParticlePtr;
 using nix::ParticleVec;
 
-template <typename DataPacker, typename Data>
-void write_chunk_all(DataPacker packer, Data& data, MPI_File& fh, size_t& disp)
+class AsynchronousDiagnoser
 {
-  int bufsize = 0;
+protected:
+  MPI_File                 filehandle;
+  std::vector<Buffer>      buffer;
+  std::vector<MPI_Request> request;
 
-  // calculate buffer size
-  for (int i = 0; i < data.numchunk; i++) {
-    bufsize += data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
-  }
-
-  // pack data
-  Buffer   buffer(bufsize);
-  uint8_t* bufptr = buffer.get();
-
-  for (int i = 0, address = 0; i < data.numchunk; i++) {
-    address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
-  }
-
-  // write to the disk
+  // check if the output is required
+  bool require_output(int curstep, json& config)
   {
-    MPI_Request req;
-    nixio::write_contiguous(&fh, &disp, bufptr, bufsize, 1, 1, &req);
-    MPI_Wait(&req, MPI_STATUS_IGNORE);
-  }
-}
+    bool status    = curstep % config.value("interval", 1) == 0;
+    bool completed = is_completed();
 
+    if (status == true) {
+      // make sure all the requests are completed
+      wait_all();
+    }
+
+    if (status == false && completed == false) {
+      // check if all the request are completed
+      int flag = 0;
+      MPI_Testall(request.size(), request.data(), &flag, MPI_STATUSES_IGNORE);
+    }
+
+    return status;
+  }
+
+public:
+  // constructor
+  AsynchronousDiagnoser(int size)
+  {
+    buffer.resize(size);
+    request.resize(size);
+
+    std::fill(request.begin(), request.end(), MPI_REQUEST_NULL);
+  }
+
+  // open file if all the requests are completed
+  void open_file(const char* filename, size_t* disp, const char* mode)
+  {
+    nixio::open_file(filename, &filehandle, disp, mode);
+  }
+
+  // close file if all the requests are completed
+  void close_file()
+  {
+    assert(is_completed() == true);
+    nixio::close_file(&filehandle);
+  }
+
+  // check if all the requests are completed
+  bool is_completed()
+  {
+    bool status = std::all_of(request.begin(), request.end(),
+                              [](auto& req) { return req == MPI_REQUEST_NULL; });
+    return status;
+  }
+
+  // wait for the completion of the job
+  void wait(int jobid)
+  {
+    MPI_Wait(&request[jobid], MPI_STATUS_IGNORE);
+  }
+
+  // wait for the completion of all the jobs and close the file
+  void wait_all()
+  {
+    MPI_Waitall(request.size(), request.data(), MPI_STATUSES_IGNORE);
+    std::fill(request.begin(), request.end(), MPI_REQUEST_NULL);
+    close_file();
+  }
+
+  // launch asynchronous write
+  template <typename DataPacker, typename Data>
+  void launch(int jobid, DataPacker packer, Data& data, size_t& disp)
+  {
+    int bufsize = 0;
+
+    // calculate buffer size
+    for (int i = 0; i < data.numchunk; i++) {
+      bufsize += data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
+    }
+
+    // pack data
+    buffer[jobid].resize(bufsize);
+    uint8_t* bufptr = buffer[jobid].get();
+
+    for (int i = 0, address = 0; i < data.numchunk; i++) {
+      address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
+    }
+
+    // write to the disk
+    nixio::write_contiguous(&filehandle, &disp, bufptr, bufsize, 1, 1, &request[jobid]);
+  }
+};
+
+///
+/// @brief Diagnoser for time history
+///
 class HistoryDiagnoser
 {
 public:
@@ -143,9 +216,13 @@ public:
   }
 };
 
-class LoadDiagnoser
+///
+/// @brief Diagnoser for computational work load
+///
+class LoadDiagnoser : public AsynchronousDiagnoser
 {
 protected:
+  // data packer for load
   template <typename BasePacker>
   class LoadPacker : public BasePacker
   {
@@ -160,10 +237,16 @@ protected:
   };
 
 public:
+  /// constructor
+  LoadDiagnoser() : AsynchronousDiagnoser(1)
+  {
+  }
+
+  // data packing functor
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    if (data.curstep % config.value("interval", 1) != 0)
+    if (require_output(data.curstep, config) == false)
       return;
 
     const int nc = data.cdims[3];
@@ -177,11 +260,10 @@ public:
     std::string fn_json   = fn_prefix + ".json";
     std::string fn_data   = fn_prefix + ".data";
 
-    MPI_File fh;
-    size_t   disp;
-    json     dataset;
+    size_t disp;
+    json   dataset;
 
-    nixio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    open_file((path + fn_data).c_str(), &disp, "w");
 
     //
     // load
@@ -194,10 +276,12 @@ public:
       const int  size    = nc * App::Chunk::NumLoadMode * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(LoadPacker<XtensorPacker3D>(), data, fh, disp);
+      launch(0, LoadPacker<XtensorPacker3D>(), data, disp);
     }
 
-    nixio::close_file(&fh);
+    if (is_completed() == true) {
+      close_file();
+    }
 
     //
     // output json file
@@ -225,9 +309,13 @@ public:
   }
 };
 
-class FieldDiagnoser
+///
+/// @brief Diagnoser for field
+///
+class FieldDiagnoser : public AsynchronousDiagnoser
 {
 protected:
+  // data packer for electromagnetic field
   template <typename BasePacker>
   class FieldPacker : public BasePacker
   {
@@ -241,6 +329,7 @@ protected:
     }
   };
 
+  // data packer for current
   template <typename BasePacker>
   class CurrentPacker : public BasePacker
   {
@@ -254,6 +343,7 @@ protected:
     }
   };
 
+  // data packer for moment
   template <typename BasePacker>
   class MomentPacker : public BasePacker
   {
@@ -268,10 +358,16 @@ protected:
   };
 
 public:
+  // constructor
+  FieldDiagnoser() : AsynchronousDiagnoser(3)
+  {
+  }
+
+  // data packing functor
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    if (data.curstep % config.value("interval", 1) != 0)
+    if (require_output(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
@@ -289,11 +385,10 @@ public:
     std::string fn_json   = fn_prefix + ".json";
     std::string fn_data   = fn_prefix + ".data";
 
-    MPI_File fh;
-    size_t   disp;
-    json     dataset;
+    size_t disp;
+    json   dataset;
 
-    nixio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    open_file((path + fn_data).c_str(), &disp, "w");
 
     //
     // electromagnetic field
@@ -306,7 +401,7 @@ public:
       const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(FieldPacker<XtensorPacker3D>(), data, fh, disp);
+      launch(0, FieldPacker<XtensorPacker3D>(), data, disp);
     }
 
     //
@@ -320,7 +415,7 @@ public:
       const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(CurrentPacker<XtensorPacker3D>(), data, fh, disp);
+      launch(1, CurrentPacker<XtensorPacker3D>(), data, disp);
     }
 
     //
@@ -338,10 +433,12 @@ public:
 
       // write
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      write_chunk_all(MomentPacker<XtensorPacker3D>(), data, fh, disp);
+      launch(2, MomentPacker<XtensorPacker3D>(), data, disp);
     }
 
-    nixio::close_file(&fh);
+    if (is_completed() == true) {
+      close_file();
+    }
 
     //
     // output json file
@@ -369,9 +466,15 @@ public:
   }
 };
 
-class ParticleDiagnoser
+///
+/// @brief Diagnoser for particle
+///
+class ParticleDiagnoser : public AsynchronousDiagnoser
 {
 protected:
+  constexpr static int max_species = 10;
+
+  // data packer for particle
   template <typename BasePacker>
   class ParticlePacker : public BasePacker
   {
@@ -393,10 +496,16 @@ protected:
   };
 
 public:
+  // constructor
+  ParticleDiagnoser() : AsynchronousDiagnoser(max_species)
+  {
+  }
+
+  // data packing functor
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    if (data.curstep % config.value("interval", 1) != 0)
+    if (require_output(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
@@ -404,6 +513,8 @@ public:
     const int nx = data.ndims[2] / data.cdims[2];
     const int nc = data.cdims[3];
     const int Ns = app.get_Ns();
+
+    assert(Ns <= max_species);
 
     // get parameters from json
     std::string prefix = config.value("prefix", "particle");
@@ -414,11 +525,10 @@ public:
     std::string fn_json   = fn_prefix + ".json";
     std::string fn_data   = fn_prefix + ".data";
 
-    MPI_File fh;
-    size_t   disp;
-    json     dataset;
+    size_t disp;
+    json   dataset;
 
-    nixio::open_file((path + fn_data).c_str(), &fh, &disp, "w");
+    open_file((path + fn_data).c_str(), &disp, "w");
 
     //
     // for each particle
@@ -426,7 +536,7 @@ public:
     for (int is = 0; is < Ns; is++) {
       // write particles
       size_t disp0 = disp;
-      write_chunk_all(ParticlePacker<XtensorPacker3D>(is), data, fh, disp);
+      launch(is, ParticlePacker<XtensorPacker3D>(is), data, disp);
 
       // meta data
       {
@@ -443,7 +553,10 @@ public:
       }
     }
 
-    nixio::close_file(&fh);
+    // wait_all();
+    if (is_completed() == true) {
+      close_file();
+    }
 
     //
     // output json file
@@ -471,6 +584,9 @@ public:
   }
 };
 
+///
+/// @brief Diagnoser
+///
 class Diagnoser
 {
 protected:
