@@ -553,7 +553,6 @@ public:
       }
     }
 
-    // wait_all();
     if (is_completed() == true) {
       close_file();
     }
