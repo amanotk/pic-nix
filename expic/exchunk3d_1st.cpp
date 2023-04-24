@@ -284,7 +284,10 @@ DEFINE_MEMBER(void, deposit_moment)()
   }
 }
 
-template class ExChunk3D<1>;
+template void ExChunk3D<1>::push_velocity(const float64 delt);
+template void ExChunk3D<1>::push_position(const float64 delt);
+template void ExChunk3D<1>::deposit_current(const float64 delt);
+template void ExChunk3D<1>::deposit_moment();
 
 #undef DEFINE_MEMBER
 

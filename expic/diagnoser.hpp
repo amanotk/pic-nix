@@ -56,13 +56,13 @@ public:
     std::fill(request.begin(), request.end(), MPI_REQUEST_NULL);
   }
 
-  // open file if all the requests are completed
+  // open file
   void open_file(const char* filename, size_t* disp, const char* mode)
   {
     nixio::open_file(filename, &filehandle, disp, mode);
   }
 
-  // close file if all the requests are completed
+  // close file
   void close_file()
   {
     assert(is_completed() == true);
