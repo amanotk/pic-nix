@@ -23,6 +23,7 @@ class AsynchronousDiagnoser
 {
 protected:
   MPI_File                 filehandle;
+  bool                     is_opened;
   std::vector<Buffer>      buffer;
   std::vector<MPI_Request> request;
 
@@ -48,7 +49,7 @@ protected:
 
 public:
   // constructor
-  AsynchronousDiagnoser(int size)
+  AsynchronousDiagnoser(int size) : is_opened(false)
   {
     buffer.resize(size);
     request.resize(size);
@@ -59,14 +60,21 @@ public:
   // open file
   void open_file(const char* filename, size_t* disp, const char* mode)
   {
-    nixio::open_file(filename, &filehandle, disp, mode);
+    if (is_opened == false) {
+      nixio::open_file(filename, &filehandle, disp, mode);
+      is_opened = true;
+    }
   }
 
   // close file
   void close_file()
   {
     assert(is_completed() == true);
-    nixio::close_file(&filehandle);
+
+    if (is_opened == true) {
+      nixio::close_file(&filehandle);
+      is_opened = false;
+    }
   }
 
   // check if all the requests are completed
