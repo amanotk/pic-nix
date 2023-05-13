@@ -46,6 +46,23 @@ def get_dataset_data(fp, offset, datatype, shape):
     return x
 
 
+def find_record_from_msgpack(filename, name, step=None):
+    with open(filename, "rb") as fp:
+        obj = msgpack.load(fp)
+
+    # find data
+    data = np.array([x.get(name, None) for x in obj])
+    data = np.compress(data != None, data)
+
+    # choose step
+    if step is not None:
+        for x in data:
+            if x.get("step", -1) == step:
+                return x
+
+    return data
+
+
 def convert_array_format(dataset, chunkmap):
     chunkid = np.array(chunkmap["chunkid"])
     coord = np.array(chunkmap["coord"])
@@ -160,6 +177,86 @@ def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
     ax.add_collection(ylines)
 
 
+def plot_loadbalance(run, nrank, axs):
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    # check load data
+    status = False
+    for diagnostic in run.config["diagnostic"]:
+        if diagnostic["name"] == "load":
+            status = True
+            break
+    if status == False:
+        return False
+
+    Nt = run.step_load.size
+    Nc = run.Cx * run.Cy * run.Cz
+    Nr = nrank
+    stepload = np.zeros((Nt,))
+    chunkload = np.zeros((Nt, Nc))
+    rankload = np.zeros((Nt, Nr))
+
+    ## read time stamp
+    pattern = run.format_filename(**run.config["application"]["log"])
+    file = glob.glob(pattern)
+    time = [0] * len(file)
+    step = [0] * len(file)
+    for i, filename in enumerate(file):
+        push = find_record_from_msgpack(filename, "push")
+        time[i] = np.array([p["start"] for p in push])
+        step[i] = np.array([p["step"] for p in push])
+    time = np.concatenate(time)
+    step = np.concatenate(step)
+
+    ## read load data
+    for i, s in enumerate(run.step_load):
+        stepload[i] = s
+        # load by chunk
+        chunkload[i, :] = run.read_load_at(s).sum(axis=-1)
+        # load by rank
+        rebalance = run.find_rebalance_log_at(s)
+        boundary = np.array(rebalance["boundary"])
+        assert boundary.size == Nr + 1  # check consistency
+        hist, _ = np.histogram(np.arange(Nc), weights=chunkload[i, :], bins=boundary)
+        rankload[i, :] = hist
+
+    chunkmean = chunkload.mean(axis=1)
+    chunkdelta = (chunkload.max(axis=1) - chunkload.min(axis=1)) / chunkmean * 100
+    chunksigma = chunkload.std(axis=1) / chunkmean * 100
+    rankmean = rankload.mean(axis=1)
+    rankdelta = (rankload.max(axis=1) - rankload.min(axis=1)) / rankmean * 100
+    ranksigma = rankload.std(axis=1) / rankmean * 100
+
+    ## plot results
+    plt.sca(axs[0])
+    plt.plot(step[1:], time[+1:] - time[:-1], "-")
+    plt.ylabel("Elapsed time / step [s]")
+    plt.grid()
+
+    plt.sca(axs[1])
+    plt.plot(stepload[1:], rankdelta[1:], label="max - min")
+    plt.plot(stepload[1:], ranksigma[1:], label="sigma")
+    plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    plt.ylabel("Rank load imbalance [%]")
+    plt.grid()
+
+    plt.sca(axs[2])
+    plt.plot(stepload[1:], chunkdelta[1:], label="max - min")
+    plt.plot(stepload[1:], chunksigma[1:], label="sigma")
+    plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    plt.ylabel("Chunk load imbalacne [%]")
+    plt.grid()
+
+    plt.xlabel("Time step")
+    plt.xlim(0, stepload[-1])
+    plt.suptitle(
+        "# Rank = {:d}, # Chunk = {:d}, Average Imbalance = {:6.2}%".format(Nr, Nc, Nr / Nc * 100)
+    )
+
+    return True
+
+
 def get_wk_spectrum(f, delt=1.0, delh=1.0):
     if f.ndim != 2:
         raise ValueError("Input must be a 2D array")
@@ -216,6 +313,17 @@ class Run(object):
         self.read_profile(profile)
         self.set_coordinate()
 
+    def format_filename(self, step=None, **kwargs):
+        basedir = pathlib.Path(self.profile).parent
+        path = kwargs.get("path", ".")
+        prefix = kwargs.get("prefix", "")
+        interval = kwargs.get("interval", 1)
+        if step is not None:
+            filename = "{:s}_{:08d}.msgpack".format(prefix, (step // interval) * interval)
+        else:
+            filename = "{:s}_*.msgpack".format(prefix)
+        return str(basedir / path / filename)
+
     def read_profile(self, profile):
         # read profile
         with open(profile, "rb") as fp:
@@ -245,6 +353,13 @@ class Run(object):
         for diagnostic in self.config["diagnostic"]:
             interval = diagnostic["interval"]
             path = basedir / diagnostic["path"]
+            # load
+            if diagnostic["name"] == "load":
+                data = "{}_*.{}".format(diagnostic["prefix"], ext)
+                file = sorted(glob.glob(str(path / data)))
+                self.step_load = np.arange(len(file)) * interval
+                self.time_load = np.arange(len(file)) * self.delt * interval
+                self.file_load = file
             # field
             if diagnostic["name"] == "field":
                 data = "{}_*.{}".format(diagnostic["prefix"], ext)
@@ -274,30 +389,21 @@ class Run(object):
         return rank
 
     def find_rebalance_log_at(self, step):
-        log_config = self.config["application"]["log"]
+        filename = self.format_filename(step, **self.config["application"]["log"])
+        return find_record_from_msgpack(filename, "rebalance", step)
 
-        # read log file
-        basedir = pathlib.Path(self.profile).parent
-        path = basedir / log_config["path"]
-        prefix = log_config["prefix"]
-        interval = log_config["interval"]
-        filename = str(path / "{:s}_{:08d}.msgpack".format(prefix, (step // interval) * interval))
-        with open(filename, "rb") as fp:
-            obj = msgpack.load(fp)
-
-        # find rebalance log record
-        rebalance = np.array([x.get("rebalance", None) for x in obj])
-        rebalance = np.compress(rebalance != None, rebalance)
-        for record in rebalance:
-            if record.get("step", -1) == step:
-                return record
-        return None
+    def find_step_index_load(self, step):
+        return np.searchsorted(self.step_load, step)
 
     def find_step_index_field(self, step):
         return np.searchsorted(self.step_field, step)
 
     def find_step_index_particle(self, step):
         return np.searchsorted(self.step_particle, step)
+
+    def get_load_time_at(self, step):
+        index = self.find_step_index_load(step)
+        return self.time_load[index]
 
     def get_field_time_at(self, step):
         index = self.find_step_index_field(step)
@@ -306,6 +412,9 @@ class Run(object):
     def get_particle_time_at(self, step):
         index = self.find_step_index_particle(step)
         return self.time_particle[index]
+
+    def read_load_at(self, step):
+        return self.read_load_at_json(step)
 
     def read_field_at(self, step):
         if self.use_hdf5:
@@ -318,6 +427,26 @@ class Run(object):
             return self.read_particle_at_hdf5(step)
         else:
             return self.read_particle_at_json(step)
+
+    def read_load_at_json(self, step):
+        index = self.find_step_index_load(step)
+
+        # read json
+        jsonfile = self.file_load[index]
+        with open(jsonfile, "r") as fp:
+            obj = json.load(fp)
+            byteorder, datafile, order = get_json_meta(obj)
+            dataset = obj["dataset"]
+
+        # read data
+        datafile = str(pathlib.Path(jsonfile).parent / datafile)
+        with open(datafile, "r") as fp:
+            offset, dtype, shape = get_dataset_info(dataset.get("load"), byteorder)
+            if order == 0:
+                shape == shape[::-1]
+            data = get_dataset_data(fp, offset, dtype, shape)
+
+        return data
 
     def read_field_at_json(self, step):
         index = self.find_step_index_field(step)
