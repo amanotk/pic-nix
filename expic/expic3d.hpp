@@ -324,7 +324,7 @@ DEFINE_MEMBER(void, push)()
   DEBUG2 << "push() end";
   float64 wclock2 = nix::wall_clock();
 
-  json log = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+  json log = {{"elapsed", wclock2 - wclock1}};
   logger->append(curstep, "push", log);
 }
 
@@ -345,7 +345,7 @@ DEFINE_MEMBER(void, diagnostic)()
   DEBUG2 << "diagnostic() end";
   float64 wclock2 = nix::wall_clock();
 
-  json log = {{"start", wclock1}, {"end", wclock2}, {"elapsed", wclock2 - wclock1}};
+  json log = {{"elapsed", wclock2 - wclock1}};
   logger->append(curstep, "diagnostic", log);
 }
 

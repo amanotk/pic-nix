@@ -46,19 +46,20 @@ def get_dataset_data(fp, offset, datatype, shape):
     return x
 
 
-def find_record_from_msgpack(filename, name, step=None):
+def find_record_from_msgpack(filename, rank=None, step=None, name=None):
+    data = []
     with open(filename, "rb") as fp:
-        obj = msgpack.load(fp)
-
-    # find data
-    data = np.array([x.get(name, None) for x in obj])
-    data = np.compress(data != None, data)
-
-    # choose step
-    if step is not None:
-        for x in data:
-            if x.get("step", -1) == step:
-                return x
+        stream = fp.read()
+        unpacker = msgpack.Unpacker(None, max_buffer_size=len(stream))
+        unpacker.feed(stream)
+        for record in unpacker:
+            flag = True
+            flag = flag & (rank is None or rank == record.get("rank", -1))
+            flag = flag & (step is None or step == record.get("step", -1))
+            if name is None and flag:
+                data.append(record)
+            elif flag:
+                data.append(record.get(name, None))
 
     return data
 
@@ -177,7 +178,7 @@ def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
     ax.add_collection(ylines)
 
 
-def plot_loadbalance(run, nrank, axs):
+def plot_loadbalance(run, axs):
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 
@@ -192,33 +193,30 @@ def plot_loadbalance(run, nrank, axs):
 
     Nt = run.step_load.size
     Nc = run.Cx * run.Cy * run.Cz
-    Nr = nrank
+    Nr = run.nprocess
     stepload = np.zeros((Nt,))
     chunkload = np.zeros((Nt, Nc))
     rankload = np.zeros((Nt, Nr))
 
     ## read time stamp
-    pattern = run.format_filename(**run.config["application"]["log"])
-    file = glob.glob(pattern)
-    time = [0] * len(file)
-    step = [0] * len(file)
-    for i, filename in enumerate(file):
-        push = find_record_from_msgpack(filename, "push")
-        time[i] = np.array([p["start"] for p in push])
-        step[i] = np.array([p["step"] for p in push])
-    time = np.concatenate(time)
-    step = np.concatenate(step)
+    log = run.config["application"]["log"]
+    dirname = pathlib.Path(run.profile).parent / log.get("path", ".")
+    filename = log.get("prefix", "") + ".msgpack"
+    data = find_record_from_msgpack(str(dirname / filename), rank=0)
+    time = np.array([x["timestamp"]["unixtime"] for x in data])
+    step = np.array([x["step"] for x in data])
 
     ## read load data
     for i, s in enumerate(run.step_load):
         stepload[i] = s
+        data = run.read_load_at(s)
+        load = data["load"].sum(axis=-1)
+        rank = data["rank"]
         # load by chunk
-        chunkload[i, :] = run.read_load_at(s).sum(axis=-1)
+        chunkload[i, :] = load
         # load by rank
-        rebalance = run.find_rebalance_log_at(s)
-        boundary = np.array(rebalance["boundary"])
-        assert boundary.size == Nr + 1  # check consistency
-        hist, _ = np.histogram(np.arange(Nc), weights=chunkload[i, :], bins=boundary)
+        bins = np.arange(Nr + 1)
+        hist, _ = np.histogram(rank, weights=load, bins=bins)
         rankload[i, :] = hist
 
     chunkmean = chunkload.mean(axis=1)
@@ -324,11 +322,19 @@ class Run(object):
             filename = "{:s}_*.msgpack".format(prefix)
         return str(basedir / path / filename)
 
+    def format_log_filename(self):
+        basedir = pathlib.Path(self.profile).parent
+        path = self.config["application"]["log"].get("path", ".")
+        prefix = self.config["application"]["log"].get("prefix", "")
+        filename = "{:s}.msgpack".format(prefix)
+        return str(basedir / path / filename)
+
     def read_profile(self, profile):
         # read profile
         with open(profile, "rb") as fp:
             obj = msgpack.load(fp)
             self.timestamp = obj["timestamp"]
+            self.nprocess = obj["nprocess"]
             self.chunkmap = obj["chunkmap"]
             self.config = obj["configuration"]
 
@@ -389,8 +395,9 @@ class Run(object):
         return rank
 
     def find_rebalance_log_at(self, step):
-        filename = self.format_filename(step, **self.config["application"]["log"])
-        return find_record_from_msgpack(filename, "rebalance", step)
+        filename = self.format_log_filename()
+        data = find_record_from_msgpack(filename, rank=0, step=step, name="rebalance")[0]
+        return data
 
     def find_step_index_load(self, step):
         return np.searchsorted(self.step_load, step)
@@ -441,10 +448,13 @@ class Run(object):
         # read data
         datafile = str(pathlib.Path(jsonfile).parent / datafile)
         with open(datafile, "r") as fp:
-            offset, dtype, shape = get_dataset_info(dataset.get("load"), byteorder)
-            if order == 0:
-                shape == shape[::-1]
-            data = get_dataset_data(fp, offset, dtype, shape)
+            data = {}
+            for dsname in ("load", "rank"):
+                ds = dataset.get(dsname)
+                offset, dtype, shape = get_dataset_info(ds, byteorder)
+                if order == 0:
+                    shape == shape[::-1]
+                data[dsname] = get_dataset_data(fp, offset, dtype, shape)
 
         return data
 

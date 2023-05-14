@@ -2,8 +2,10 @@ compiler.mk
 *.o
 *.d
 *.a
+*.msgpack
 *.out
 *.data
+*.png
 *.mp4
 *.stdout
 *.stderr

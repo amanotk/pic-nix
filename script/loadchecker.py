@@ -17,7 +17,7 @@ plt.rcParams.update({"font.size": 12})
 import analysis
 
 
-def doit_job(profile, prefix, nrank):
+def doit_job(profile, prefix):
     run = analysis.Run(profile)
 
     fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
@@ -29,7 +29,7 @@ def doit_job(profile, prefix, nrank):
         hspace=0.10,
         wspace=0.10,
     )
-    status = analysis.plot_loadbalance(run, nrank, axs)
+    status = analysis.plot_loadbalance(run, axs)
 
     if status == True:
         fig.savefig(prefix + ".png", dpi=120)
@@ -48,16 +48,8 @@ if __name__ == "__main__":
         default="loadbalance",
         help="Prefix used for output image file",
     )
-    parser.add_argument(
-        "-n",
-        "--nrank",
-        type=int,
-        required=True,
-        default=1,
-        help="Number of MPI ranks",
-    )
     parser.add_argument("profile", nargs=1, help="run profile")
 
     args = parser.parse_args()
     profile = args.profile[0]
-    doit_job(profile, args.prefix, args.nrank)
+    doit_job(profile, args.prefix)

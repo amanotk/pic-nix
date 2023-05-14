@@ -231,22 +231,59 @@ class LoadDiagnoser : public AsynchronousDiagnoser
 {
 protected:
   // data packer for load
-  template <typename BasePacker>
-  class LoadPacker : public BasePacker
+  class LoadPacker
   {
   public:
-    using BasePacker::pack_load;
+    template <typename Data>
+    int operator()(Data data, uint8_t* buffer, int address)
+    {
+      auto& load = data.load;
+
+      int count = sizeof(float64) * load.size() + address;
+
+      if (buffer == nullptr) {
+        return count;
+      }
+
+      // packing
+      float64* ptr = reinterpret_cast<float64*>(buffer + address);
+      std::copy(load.begin(), load.end(), ptr);
+
+      return count;
+    }
+  };
+
+  // data packer for rank
+  class RankPacker
+  {
+  private:
+    int thisrank;
+
+  public:
+    RankPacker(int rank) : thisrank(rank)
+    {
+    }
 
     template <typename Data>
     int operator()(Data data, uint8_t* buffer, int address)
     {
-      return pack_load(data.load, buffer, address);
+      int count = sizeof(int) + address;
+
+      if (buffer == nullptr) {
+        return count;
+      }
+
+      // packing
+      int* ptr = reinterpret_cast<int*>(buffer + address);
+      *ptr     = thisrank;
+
+      return count;
     }
   };
 
 public:
   /// constructor
-  LoadDiagnoser() : AsynchronousDiagnoser(1)
+  LoadDiagnoser() : AsynchronousDiagnoser(2)
   {
   }
 
@@ -284,7 +321,21 @@ public:
       const int  size    = nc * App::Chunk::NumLoadMode * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      launch(0, LoadPacker<XtensorPacker3D>(), data, disp);
+      launch(0, LoadPacker(), data, disp);
+    }
+
+    //
+    // rank
+    //
+    {
+      const char name[]  = "rank";
+      const char desc[]  = "MPI rank";
+      const int  ndim    = 1;
+      const int  dims[1] = {nc};
+      const int  size    = nc * sizeof(int);
+
+      nixio::put_metadata(dataset, name, "i4", desc, disp, size, ndim, dims);
+      launch(1, RankPacker(data.thisrank), data, disp);
     }
 
     if (is_completed() == true) {
