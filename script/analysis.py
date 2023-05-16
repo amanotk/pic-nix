@@ -53,6 +53,8 @@ def find_record_from_msgpack(filename, rank=None, step=None, name=None):
         unpacker = msgpack.Unpacker(None, max_buffer_size=len(stream))
         unpacker.feed(stream)
         for record in unpacker:
+            if record is None:
+                continue
             flag = True
             flag = flag & (rank is None or rank == record.get("rank", -1))
             flag = flag & (step is None or step == record.get("step", -1))
@@ -228,7 +230,7 @@ def plot_loadbalance(run, axs):
 
     ## plot results
     plt.sca(axs[0])
-    plt.plot(step[1:], time[+1:] - time[:-1], "-")
+    plt.plot(step[1:], time[+1:] - time[:-1], ".", ms=1)
     plt.ylabel("Elapsed time / step [s]")
     plt.grid()
 
