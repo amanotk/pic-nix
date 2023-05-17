@@ -238,6 +238,9 @@ DEFINE_MEMBER(void, setup)()
   // set MPI communicator for each mode
   set_chunk_communicator();
 
+  // for debugging output of chunk size in MB
+  std::vector<float64> chunksize(numchunk);
+
   // setup for each chunk with boundary condition
 #pragma omp parallel
   {
@@ -245,6 +248,12 @@ DEFINE_MEMBER(void, setup)()
     for (int i = 0; i < numchunk; i++) {
       // setup for physical conditions
       chunkvec[i]->setup(cfg_json["parameter"]);
+      chunksize[i] = chunkvec[i]->get_size_byte() / (1024.0 * 1024.0);
+
+#pragma omp critical
+      {
+        DEBUG1 << tfm::format("Chunk[%8d] : %8.2f [MB]", chunkvec[i]->get_id(), chunksize[i]);
+      }
 
       // begin boundary exchange for field
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
@@ -255,7 +264,11 @@ DEFINE_MEMBER(void, setup)()
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
     }
   }
+
+  DEBUG1 << tfm::format("Total     : %8.2f [MB]",
+                        std::accumulate(chunksize.begin(), chunksize.end(), 0.0));
 }
+
 DEFINE_MEMBER(bool, rebalance)()
 {
   if (BaseApp::rebalance()) {

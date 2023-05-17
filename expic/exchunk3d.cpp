@@ -19,6 +19,23 @@ DEFINE_MEMBER(, ExChunk3D)
   this->reset_load();
 }
 
+DEFINE_MEMBER(int64_t, get_size_byte)()
+{
+  int64_t size = 0;
+  size += uf.size() * sizeof(float64);
+  size += uj.size() * sizeof(float64);
+  size += um.size() * sizeof(float64);
+  // particle
+  for (int is = 0; is < Ns; is++) {
+    size += up[is]->get_size_byte();
+  }
+  // MPI Buffer
+  for (int i = 0; i < NumBoundaryMode; i++) {
+    size += mpibufvec[i]->get_size_byte();
+  }
+  return size;
+}
+
 DEFINE_MEMBER(int, pack)(void* buffer, int address)
 {
   using nix::memcpy_count;

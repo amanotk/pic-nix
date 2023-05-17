@@ -127,6 +127,8 @@ protected:
 public:
   ExChunk3D(const int dims[3], int id = 0);
 
+  virtual int64_t get_size_byte() override;
+
   virtual int pack(void* buffer, int address) override;
 
   virtual int unpack(void* buffer, int address) override;

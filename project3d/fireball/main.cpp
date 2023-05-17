@@ -234,7 +234,8 @@ public:
             }
           }
         }
-        npmax = ip / (dims[0]*dims[1]*dims[2]);
+        assert(ip == mp);
+        npmax = ip / (dims[0] * dims[1] * dims[2]);
       }
 
       // initial sort
