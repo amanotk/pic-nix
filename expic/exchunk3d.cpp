@@ -36,6 +36,32 @@ DEFINE_MEMBER(int64_t, get_size_byte)()
   return size;
 }
 
+DEFINE_MEMBER(void, setup_particle_mpi_buffer)(float64 cfl)
+{
+  int sizebyte[3][3][3];
+  int zlen[3] = {1, dims[0], 1};
+  int ylen[3] = {1, dims[1], 1};
+  int xlen[3] = {1, dims[2], 1};
+
+  int nppc = 0;
+  for (int is = 0; is < Ns; is++) {
+    nppc += up[is]->get_Np_active() / (dims[0] * dims[1] * dims[2]);
+  }
+
+  int byte_per_cell = static_cast<int>(nppc * cfl) * Particle::get_particle_size();
+
+  for (int iz = 0; iz < 3; iz++) {
+    for (int iy = 0; iy < 3; iy++) {
+      for (int ix = 0; ix < 3; ix++) {
+        sizebyte[iz][iy][ix] = zlen[iz] * ylen[iy] * xlen[ix] * byte_per_cell;
+      }
+    }
+  }
+  sizebyte[1][1][1] = 0;
+
+  this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(int) * Ns, sizebyte);
+}
+
 DEFINE_MEMBER(int, pack)(void* buffer, int address)
 {
   using nix::memcpy_count;

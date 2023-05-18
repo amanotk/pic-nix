@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import json
 import msgpack
 
 
 def doit(filename):
+    if os.path.exists(filename) is False:
+        print("File not found: {}".format(filename))
+        return
     with open(filename, "rb") as fp:
         stream = fp.read()
         unpacker = msgpack.Unpacker(None, max_buffer_size=len(stream))

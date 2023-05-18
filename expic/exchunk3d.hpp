@@ -8,8 +8,8 @@
 #include "nix/nix.hpp"
 #include "nix/xtensorall.hpp"
 
-#include "nix/xtensor_particle.hpp"
 #include "nix/xtensor_halo3d.hpp"
+#include "nix/xtensor_particle.hpp"
 
 using namespace nix::typedefs;
 using nix::json;
@@ -128,6 +128,8 @@ public:
   ExChunk3D(const int dims[3], int id = 0);
 
   virtual int64_t get_size_byte() override;
+
+  virtual void setup_particle_mpi_buffer(float64 cfl);
 
   virtual int pack(void* buffer, int address) override;
 

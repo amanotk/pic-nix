@@ -84,8 +84,6 @@ public:
     float64 qion   = -qele;
     float64 b0     = cc * sqrt(sigma) / std::abs(qele / mele);
 
-    int npmax = 0;
-
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
 
@@ -235,16 +233,13 @@ public:
           }
         }
         assert(ip == mp);
-        npmax = ip / (dims[0] * dims[1] * dims[2]);
       }
 
       // initial sort
       this->sort_particle(up);
 
-      // allocate MPI buffer for particle
-      npmax = static_cast<int>(npmax * cc * delt / delh);
-      this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(int) * Ns,
-                           Ns * npmax * Particle::get_particle_size());
+      // use default MPI buffer allocator for particle
+      setup_particle_mpi_buffer(cc * delt / delh);
     }
   }
 };
