@@ -74,6 +74,8 @@ protected:
 
   virtual bool rebalance() override;
 
+  virtual void finalize(int cleanup = 0) override;
+
   virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], int id) override = 0;
 
 public:
@@ -278,6 +280,23 @@ DEFINE_MEMBER(bool, rebalance)()
   }
 
   return false;
+}
+
+DEFINE_MEMBER(void, finalize)(int cleanup)
+{
+  // free MPI communicator
+  for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
+    for (int iz = 0; iz < 3; iz++) {
+      for (int iy = 0; iy < 3; iy++) {
+        for (int ix = 0; ix < 3; ix++) {
+          MPI_Comm_free(&mpicommvec(mode, iz, iy, ix));
+        }
+      }
+    }
+  }
+
+  // finalize
+  BaseApp::finalize(cleanup);
 }
 
 DEFINE_MEMBER(void, push)()

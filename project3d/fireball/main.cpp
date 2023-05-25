@@ -239,7 +239,8 @@ public:
       this->sort_particle(up);
 
       // use default MPI buffer allocator for particle
-      setup_particle_mpi_buffer(cc * delt / delh);
+      float64 fraction = config.value("mpi_buffer_fraction", cc * delt / delh);
+      setup_particle_mpi_buffer(fraction);
     }
   }
 };
