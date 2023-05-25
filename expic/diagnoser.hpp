@@ -120,6 +120,7 @@ public:
 
     // write to the disk
     nixio::write_contiguous(&filehandle, &disp, bufptr, bufsize, 1, 1, &request[jobid]);
+    wait(jobid);
   }
 };
 
