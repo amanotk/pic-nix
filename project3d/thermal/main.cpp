@@ -86,7 +86,6 @@ public:
         }
       }
 
-      int  npmax    = 0;
       json particle = config["particle"];
 
       mtv.seed(random_seed);
@@ -102,7 +101,6 @@ public:
         float64 qm = particle[is]["qm"].get<float64>();
         float64 vt = particle[is]["vt"].get<float64>();
 
-        npmax = std::max(npmax, static_cast<int>(np * cc * delt / delh));
         id *= this->myid;
 
         up[is]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
@@ -128,9 +126,9 @@ public:
       // initial sort
       this->sort_particle(up);
 
-      // allocate MPI buffer for particle
-      this->set_mpi_buffer(mpibufvec[BoundaryParticle], 0, sizeof(int) * Ns,
-                           Ns * npmax * sizeof(float64) * Particle::Nc);
+      // use default MPI buffer allocator for particle
+      float64 fraction = config.value("mpi_buffer_fraction", cc * delt / delh);
+      setup_particle_mpi_buffer(fraction);
     }
   }
 };

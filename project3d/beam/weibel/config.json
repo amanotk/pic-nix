@@ -91,6 +91,7 @@
 			}
 		],
 		"seed_type": "random",
-        "field_load": 1.0
+		"field_load": 1.0,
+		"mpi_buffer_fraction": 2.0
 	}
 }

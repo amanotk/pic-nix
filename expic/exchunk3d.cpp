@@ -36,7 +36,7 @@ DEFINE_MEMBER(int64_t, get_size_byte)()
   return size;
 }
 
-DEFINE_MEMBER(void, setup_particle_mpi_buffer)(float64 cfl)
+DEFINE_MEMBER(void, setup_particle_mpi_buffer)(float64 fraction)
 {
   int sizebyte[3][3][3];
   int zlen[3] = {1, dims[0], 1};
@@ -45,10 +45,11 @@ DEFINE_MEMBER(void, setup_particle_mpi_buffer)(float64 cfl)
 
   int nppc = 0;
   for (int is = 0; is < Ns; is++) {
-    nppc += up[is]->get_Np_active() / (dims[0] * dims[1] * dims[2]);
+    nppc += up[is]->get_Np_active();
   }
+  nppc /= (dims[0] * dims[1] * dims[2]);
 
-  int byte_per_cell = static_cast<int>(nppc * cfl) * Particle::get_particle_size();
+  int byte_per_cell = static_cast<int>(nppc * fraction) * Particle::get_particle_size();
 
   for (int iz = 0; iz < 3; iz++) {
     for (int iy = 0; iy < 3; iy++) {

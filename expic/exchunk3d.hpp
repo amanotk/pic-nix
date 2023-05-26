@@ -129,7 +129,7 @@ public:
 
   virtual int64_t get_size_byte() override;
 
-  virtual void setup_particle_mpi_buffer(float64 cfl);
+  virtual void setup_particle_mpi_buffer(float64 fraction);
 
   virtual int pack(void* buffer, int address) override;
 
