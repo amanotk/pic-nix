@@ -35,18 +35,16 @@ public:
   using MpiCommVec   = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
 
 protected:
-  using BaseApp::cfg_file;
-  using BaseApp::cfg_json;
+  using BaseApp::cfgparser;
+  using BaseApp::argparser;
   using BaseApp::balancer;
   using BaseApp::logger;
-  using BaseApp::numchunk;
   using BaseApp::chunkvec;
   using BaseApp::chunkmap;
   using BaseApp::ndims;
   using BaseApp::cdims;
   using BaseApp::curstep;
   using BaseApp::curtime;
-  using BaseApp::tmax;
   using BaseApp::delt;
   using BaseApp::delx;
   using BaseApp::dely;
@@ -55,7 +53,6 @@ protected:
   using BaseApp::xlim;
   using BaseApp::ylim;
   using BaseApp::zlim;
-  using BaseApp::periodic;
   using BaseApp::nprocess;
   using BaseApp::thisrank;
 
@@ -63,8 +60,6 @@ protected:
   int          momstep;    ///< step at which moment quantities are cached
   MpiCommVec   mpicommvec; ///< MPI Communicators
   PtrDiagnoser diagnoser;  ///< diagnostic handler
-
-  virtual void parse_cfg() override;
 
   virtual void initialize(int argc, char** argv) override;
 
@@ -102,102 +97,22 @@ DEFINE_MEMBER(, ExPIC3D)
 {
 }
 
-DEFINE_MEMBER(void, parse_cfg)()
-{
-  // read configuration file
-  {
-    std::ifstream f(cfg_file.c_str());
-    cfg_json = json::parse(f, nullptr, true, true);
-  }
-
-  // application
-  {
-    json application = cfg_json["application"];
-  }
-
-  // parameters
-  {
-    json parameter = cfg_json["parameter"];
-
-    // number of grids and chunks
-    int nx = parameter["Nx"].get<int>();
-    int ny = parameter["Ny"].get<int>();
-    int nz = parameter["Nz"].get<int>();
-    int cx = parameter["Cx"].get<int>();
-    int cy = parameter["Cy"].get<int>();
-    int cz = parameter["Cz"].get<int>();
-
-    // other parameters
-    float64 delh = parameter["delh"].get<float64>();
-
-    Ns   = parameter["Ns"].get<int>();
-    cc   = parameter["cc"].get<float64>();
-    delt = parameter["delt"].get<float64>();
-    delx = delh;
-    dely = delh;
-    delz = delh;
-
-    // check dimensions
-    if (!(nz % cz == 0 && ny % cy == 0 && nx % cx == 0)) {
-      ERROR << tfm::format("Number of grid must be divisible by number of chunk");
-      ERROR << tfm::format("Nx, Ny, Nz = [%4d, %4d, %4d]", nx, ny, nz);
-      ERROR << tfm::format("Cx, Cy, Cz = [%4d, %4d, %4d]", cx, cy, cz);
-      this->finalize(-1);
-      exit(-1);
-    }
-
-    // global number of grid
-    ndims[0] = nz;
-    ndims[1] = ny;
-    ndims[2] = nx;
-    ndims[3] = ndims[0] * ndims[1] * ndims[2];
-
-    // global number of chunk
-    cdims[0] = cz;
-    cdims[1] = cy;
-    cdims[2] = cx;
-    cdims[3] = cdims[0] * cdims[1] * cdims[2];
-
-    // global domain size
-    xlim[0] = 0;
-    xlim[1] = delx * ndims[2];
-    xlim[2] = xlim[1] - xlim[0];
-    ylim[0] = 0;
-    ylim[1] = dely * ndims[1];
-    ylim[2] = ylim[1] - ylim[0];
-    zlim[0] = 0;
-    zlim[1] = delz * ndims[0];
-    zlim[2] = zlim[1] - zlim[0];
-  }
-
-  // check diagnostic
-  if (cfg_json["diagnostic"].is_array() == false) {
-    ERROR << tfm::format("Invalid diagnostic");
-  }
-}
-
 DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 {
-  this->initialize_mpi(&argc, &argv);
+  BaseApp::initialize(argc, argv);
 
-  // parse command line arguments
-  this->parse_cmd(argc, argv);
+  // get number of species
+  Ns = cfgparser->get_parameter()["Ns"];
 
-  // parse configuration file
-  this->parse_cfg();
-
-  // some initial setup
-  curstep   = 0;
-  curtime   = 0.0;
-  balancer  = std::make_unique<Balancer>();
-  logger    = std::make_unique<Logger>(cfg_json["application"]["log"]);
+  // diagnostics
   diagnoser = std::make_unique<Diagnoser>();
 
-  this->initialize_debugprinting(this->debug);
-  this->initialize_chunkmap();
+  if (cfgparser->get_diagnostic().is_array() == false) {
+    ERROR << tfm::format("Invalid diagnostic");
+  }
 
   // set auxiliary information for chunk
-  for (int i = 0; i < numchunk; i++) {
+  for (int i = 0; i < chunkvec.size(); i++) {
     int ix, iy, iz;
     int offset[3];
 
@@ -222,7 +137,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 
 DEFINE_MEMBER(void, set_chunk_communicator)()
 {
-  for (int i = 0; i < numchunk; i++) {
+  for (int i = 0; i < chunkvec.size(); i++) {
     for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
       for (int iz = 0; iz < 3; iz++) {
         for (int iy = 0; iy < 3; iy++) {
@@ -241,15 +156,16 @@ DEFINE_MEMBER(void, setup)()
   set_chunk_communicator();
 
   // for debugging output of chunk size in MB
-  std::vector<float64> chunksize(numchunk);
+  std::vector<float64> chunksize(chunkvec.size());
 
   // setup for each chunk with boundary condition
 #pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       // setup for physical conditions
-      chunkvec[i]->setup(cfg_json["parameter"]);
+      auto config = cfgparser->get_parameter();
+      chunkvec[i]->setup(config);
       chunksize[i] = chunkvec[i]->get_size_byte() / (1024.0 * 1024.0);
 
 #pragma omp critical
@@ -262,7 +178,7 @@ DEFINE_MEMBER(void, setup)()
     }
 
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
     }
   }
@@ -307,7 +223,7 @@ DEFINE_MEMBER(void, push)()
 #pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       // reset load
       chunkvec[i]->reset_load();
 
@@ -332,7 +248,7 @@ DEFINE_MEMBER(void, push)()
     }
 
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryCur);
 
       // push E
@@ -343,12 +259,12 @@ DEFINE_MEMBER(void, push)()
     }
 
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryParticle);
     }
 
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
     }
   }
@@ -366,7 +282,7 @@ DEFINE_MEMBER(void, diagnostic)()
   float64 wclock1 = nix::wall_clock();
 
   {
-    json config = cfg_json["diagnostic"];
+    json config = cfgparser->get_diagnostic();
     auto data   = this->get_internal_data();
 
     for (json::iterator it = config.begin(); it != config.end(); ++it) {
@@ -389,13 +305,13 @@ DEFINE_MEMBER(void, calculate_moment)()
 #pragma parallel
   {
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->deposit_moment();
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
     }
 
 #pragma omp for schedule(dynamic)
-    for (int i = 0; i < numchunk; i++) {
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryMom);
     }
   }

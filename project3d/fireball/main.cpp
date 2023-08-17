@@ -257,7 +257,9 @@ public:
 
   void initialize_workload() override
   {
-    json    parameter  = cfg_json["parameter"];
+    const int nchunk_global = cdims[3];
+
+    json    parameter  = cfgparser->get_parameter();
     int     nbg        = parameter["nbg"].get<float64>();
     int     nfb        = parameter["nfb"].get<float64>();
     float64 radius     = parameter["radius"].get<float64>();
@@ -269,7 +271,7 @@ public:
     float64 y0          = 0.5 * (ylim[0] + ylim[1]);
     float64 x0          = 0.5 * (xlim[0] + xlim[1]);
 
-    for (int i = 0; i < workload.size(); i++) {
+    for (int i = 0; i < nchunk_global; i++) {
       int cx, cy, cz;
       chunkmap->get_coordinate(i, cz, cy, cx);
 
@@ -280,7 +282,8 @@ public:
       int     count = count_cell_within_fireball(zr, yr, xr, delz, dely, delx, z0, y0, x0, radius);
       float64 a     = 2.0 * count / ncell_chunk;
       float64 b     = 2.0 * (ncell_chunk - count) / ncell_chunk;
-      workload[i]   = a * nfb + b * nbg + field_load;
+
+      balancer->load(i) = a * nfb + b * nbg + field_load;
     }
   }
 };

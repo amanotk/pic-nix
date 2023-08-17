@@ -106,7 +106,7 @@ public:
     int bufsize = 0;
 
     // calculate buffer size
-    for (int i = 0; i < data.numchunk; i++) {
+    for (int i = 0; i < data.chunkvec.size(); i++) {
       bufsize += data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
     }
 
@@ -114,7 +114,7 @@ public:
     buffer[jobid].resize(bufsize);
     uint8_t* bufptr = buffer[jobid].get();
 
-    for (int i = 0, address = 0; i < data.numchunk; i++) {
+    for (int i = 0, address = 0; i < data.chunkvec.size(); i++) {
       address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
     }
 
@@ -146,7 +146,7 @@ public:
     app.calculate_moment();
 
     // calculate divergence error and energy
-    for (int i = 0; i < data.numchunk; i++) {
+    for (int i = 0; i < data.chunkvec.size(); i++) {
       float64 div_e = 0;
       float64 div_b = 0;
       float64 ene_e = 0;
