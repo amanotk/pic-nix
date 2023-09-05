@@ -49,7 +49,7 @@ DEFINE_MEMBER(void, setup_particle_mpi_buffer)(float64 fraction)
   }
   nppc /= (dims[0] * dims[1] * dims[2]);
 
-  int byte_per_cell = static_cast<int>(nppc * fraction) * Particle::get_particle_size();
+  int byte_per_cell = static_cast<int>(nppc * fraction) * ParticleType::get_particle_size();
 
   for (int iz = 0; iz < 3; iz++) {
     for (int iy = 0; iy < 3; iy++) {
@@ -99,7 +99,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
   // particle (automatically allocate memory)
   up.resize(Ns);
   for (int is = 0; is < Ns; is++) {
-    up[is] = std::make_shared<Particle>();
+    up[is] = std::make_shared<ParticleType>();
     count += up[is]->unpack(buffer, count);
   }
 

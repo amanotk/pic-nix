@@ -8,12 +8,7 @@
   template <>                                                                                      \
   type ExChunk3D<1>::name
 
-using nix::digitize;
-using nix::lorentz_factor;
-using nix::push_buneman_boris;
-using nix::shape1;
-using nix::interp3d1;
-using nix::esirkepov3d1;
+using namespace nix::primitives;
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
@@ -106,7 +101,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
       float64 dt  = delt / gam;
 
       // substitute to temporary
-      std::memcpy(&xv(ip, 0), &xu(ip, 0), Particle::get_particle_size());
+      std::memcpy(&xv(ip, 0), &xu(ip, 0), ParticleType::get_particle_size());
 
       // update position
       xu(ip, 0) += xu(ip, 3) * dt;

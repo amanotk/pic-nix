@@ -163,13 +163,13 @@ public:
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
         up[0]->m  = mele;
         up[0]->q  = qele;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
         up[1]->m  = mion;
         up[1]->q  = qion;
         up[1]->Np = mp;
@@ -294,7 +294,7 @@ public:
 int main(int argc, char** argv)
 {
   MainApplication app(argc, argv);
-  return app.main(std::cout);
+  return app.main();
 }
 
 // Local Variables:

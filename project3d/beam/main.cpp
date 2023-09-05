@@ -107,7 +107,7 @@ public:
 
         id *= this->myid;
 
-        up[is]     = std::make_shared<Particle>(2 * mp, nz * ny * nx);
+        up[is]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
         up[is]->m  = ro / np;
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
@@ -154,7 +154,7 @@ public:
 int main(int argc, char** argv)
 {
   MainApplication app(argc, argv);
-  return app.main(std::cout);
+  return app.main();
 }
 
 // Local Variables:

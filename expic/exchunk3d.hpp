@@ -12,10 +12,11 @@
 #include "nix/xtensor_particle.hpp"
 
 using namespace nix::typedefs;
+using namespace nix::primitives;
 using nix::json;
-using nix::Particle;
 using nix::ParticlePtr;
 using nix::ParticleVec;
+using ParticleType = nix::ParticlePtr::element_type;
 
 // trick to map from order of shape function to number of boundary margins
 template <int Order>
@@ -171,19 +172,19 @@ public:
 // first-order shape function requires 2 boundary margins
 template <>
 struct BaseChunk3D<1> {
-  using ChunkType = nix::Chunk3D<2, Particle>;
+  using ChunkType = nix::Chunk3D<2, ParticleType>;
 };
 
 // second-order shape function requires 2 boundary margins
 template <>
 struct BaseChunk3D<2> {
-  using ChunkType = nix::Chunk3D<2, Particle>;
+  using ChunkType = nix::Chunk3D<2, ParticleType>;
 };
 
 // third-order shape function requires 3 boundary margins
 template <>
 struct BaseChunk3D<3> {
-  using ChunkType = nix::Chunk3D<3, Particle>;
+  using ChunkType = nix::Chunk3D<3, ParticleType>;
 };
 
 // Local Variables:

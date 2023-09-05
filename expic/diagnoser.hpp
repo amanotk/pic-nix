@@ -15,9 +15,9 @@ using namespace nix::typedefs;
 using nix::json;
 using nix::Buffer;
 using nix::XtensorPacker3D;
-using nix::Particle;
 using nix::ParticlePtr;
 using nix::ParticleVec;
+using ParticleType = nix::ParticlePtr::element_type;
 
 class AsynchronousDiagnoser
 {
@@ -603,10 +603,10 @@ public:
         std::string name = tfm::format("up%02d", is);
         std::string desc = tfm::format("particle species %02d", is);
 
-        const int size    = Particle::get_particle_size();
+        const int size    = ParticleType::get_particle_size();
         const int Np      = (disp - disp0) / size;
         const int ndim    = 2;
-        const int dims[2] = {Np, Particle::Nc};
+        const int dims[2] = {Np, ParticleType::Nc};
 
         nixio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, Np * size, ndim,
                             dims);

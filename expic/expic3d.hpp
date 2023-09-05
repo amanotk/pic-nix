@@ -69,7 +69,7 @@ protected:
 
   virtual bool rebalance() override;
 
-  virtual void finalize(int cleanup = 0) override;
+  virtual void finalize() override;
 
   virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], int id) override = 0;
 
@@ -198,7 +198,7 @@ DEFINE_MEMBER(bool, rebalance)()
   return false;
 }
 
-DEFINE_MEMBER(void, finalize)(int cleanup)
+DEFINE_MEMBER(void, finalize)()
 {
   // free MPI communicator
   for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
@@ -212,7 +212,7 @@ DEFINE_MEMBER(void, finalize)(int cleanup)
   }
 
   // finalize
-  BaseApp::finalize(cleanup);
+  BaseApp::finalize();
 }
 
 DEFINE_MEMBER(void, push)()
