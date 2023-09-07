@@ -65,7 +65,7 @@ protected:
 
   virtual void set_chunk_communicator();
 
-  virtual void setup() override;
+  virtual void setup_chunks() override;
 
   virtual bool rebalance() override;
 
@@ -75,6 +75,10 @@ protected:
 
 public:
   ExPIC3D(int argc, char** argv);
+
+  virtual json to_json() override;
+
+  virtual bool from_json(json& state) override;
 
   virtual void push() override;
 
@@ -111,18 +115,6 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
     ERROR << tfm::format("Invalid diagnostic");
   }
 
-  // set auxiliary information for chunk
-  for (int i = 0; i < chunkvec.size(); i++) {
-    int ix, iy, iz;
-    int offset[3];
-
-    chunkmap->get_coordinate(chunkvec[i]->get_id(), iz, iy, ix);
-    offset[0] = iz * ndims[0] / cdims[0];
-    offset[1] = iy * ndims[1] / cdims[1];
-    offset[2] = ix * ndims[2] / cdims[2];
-    chunkvec[i]->set_global_context(offset, ndims);
-  }
-
   // initialize communicators
   for (int mode = 0; mode < Chunk::NumBoundaryMode; mode++) {
     for (int iz = 0; iz < 3; iz++) {
@@ -150,30 +142,16 @@ DEFINE_MEMBER(void, set_chunk_communicator)()
   }
 }
 
-DEFINE_MEMBER(void, setup)()
+DEFINE_MEMBER(void, setup_chunks)()
 {
-  // set MPI communicator for each mode
+  BaseApp::setup_chunks();
   set_chunk_communicator();
 
-  // for debugging output of chunk size in MB
-  std::vector<float64> chunksize(chunkvec.size());
-
-  // setup for each chunk with boundary condition
+  // apply boundary condition just in case
 #pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      // setup for physical conditions
-      auto config = cfgparser->get_parameter();
-      chunkvec[i]->setup(config);
-      chunksize[i] = chunkvec[i]->get_size_byte() / (1024.0 * 1024.0);
-
-#pragma omp critical
-      {
-        DEBUG1 << tfm::format("Chunk[%8d] : %8.2f [MB]", chunkvec[i]->get_id(), chunksize[i]);
-      }
-
-      // begin boundary exchange for field
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
     }
 
@@ -182,15 +160,33 @@ DEFINE_MEMBER(void, setup)()
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
     }
   }
+}
 
-  DEBUG1 << tfm::format("Total     : %8.2f [MB]",
-                        std::accumulate(chunksize.begin(), chunksize.end(), 0.0));
+DEFINE_MEMBER(json, to_json)()
+{
+  json state = BaseApp::to_json();
+
+  state["Ns"]      = Ns;
+  state["momstep"] = momstep;
+
+  return state;
+}
+
+DEFINE_MEMBER(bool, from_json)(json& state)
+{
+  if (BaseApp::from_json(state) == false) {
+    return false;
+  }
+
+  Ns      = state["Ns"];
+  momstep = state["momstep"];
+
+  return true;
 }
 
 DEFINE_MEMBER(bool, rebalance)()
 {
   if (BaseApp::rebalance()) {
-    // reset MPI communicator for each mode
     set_chunk_communicator();
     return true;
   }
