@@ -109,7 +109,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   Ns = cfgparser->get_parameter()["Ns"];
 
   // diagnostics
-  diagnoser = std::make_unique<Diagnoser>();
+  diagnoser = std::make_unique<Diagnoser>(this->get_basedir());
 
   if (cfgparser->get_diagnostic().is_array() == false) {
     ERROR << tfm::format("Invalid diagnostic");

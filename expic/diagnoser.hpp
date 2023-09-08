@@ -24,6 +24,7 @@ class AsynchronousDiagnoser
 protected:
   MPI_File                 filehandle;
   bool                     is_opened;
+  std::string              basedir;
   std::vector<Buffer>      buffer;
   std::vector<MPI_Request> request;
 
@@ -49,7 +50,7 @@ protected:
 
 public:
   // constructor
-  AsynchronousDiagnoser(int size) : is_opened(false)
+  AsynchronousDiagnoser(std::string basedir, int size) : basedir(basedir), is_opened(false)
   {
     buffer.resize(size);
     request.resize(size);
@@ -58,10 +59,10 @@ public:
   }
 
   // open file
-  void open_file(const char* filename, size_t* disp, const char* mode)
+  void open_file(std::string filename, size_t* disp, const char* mode)
   {
     if (is_opened == false) {
-      nixio::open_file(filename, &filehandle, disp, mode);
+      nixio::open_file(filename.c_str(), &filehandle, disp, mode);
       is_opened = true;
     }
   }
@@ -129,10 +130,20 @@ public:
 ///
 class HistoryDiagnoser
 {
+protected:
+  std::string basedir;
+
 public:
+  // constructor
+  HistoryDiagnoser(std::string basedir) : basedir(basedir)
+  {
+  }
+
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
+    namespace fs = std::filesystem;
+
     if (data.curstep % config.value("interval", 1) != 0)
       return;
 
@@ -180,9 +191,10 @@ public:
     // output from root
     if (data.thisrank == 0) {
       // get parameters from json
-      std::string prefix = config.value("prefix", "history");
-      std::string path   = config.value("path", ".") + "/";
-      std::string msg    = "";
+      fs::path    prefix   = config.value("prefix", "history");
+      fs::path    path     = config.value("path", ".");
+      std::string filename = (basedir / path / prefix).string() + ".txt";
+      std::string msg      = "";
 
       // initial call
       if (data.curstep == 0) {
@@ -198,7 +210,7 @@ public:
         msg += "\n";
 
         // clear file
-        std::ofstream ofs(path + prefix + ".txt", nix::text_write);
+        std::ofstream ofs(filename, nix::text_write);
         ofs.close();
       }
 
@@ -217,7 +229,7 @@ public:
 
       // append to file
       {
-        std::ofstream ofs(path + prefix + ".txt", nix::text_append);
+        std::ofstream ofs(filename, nix::text_append);
         ofs << msg << std::flush;
         ofs.close();
       }
@@ -284,7 +296,7 @@ protected:
 
 public:
   /// constructor
-  LoadDiagnoser() : AsynchronousDiagnoser(2)
+  LoadDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, 2)
   {
   }
 
@@ -292,24 +304,26 @@ public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
+    namespace fs = std::filesystem;
+
     if (require_output(data.curstep, config) == false)
       return;
 
     const int nc = data.cdims[3];
 
-    // get parameters from json
-    std::string prefix = config.value("prefix", "load");
-    std::string path   = config.value("path", ".") + "/";
-
     // filename
-    std::string fn_prefix = tfm::format("%s_%s", prefix, nix::format_step(data.curstep));
-    std::string fn_json   = fn_prefix + ".json";
-    std::string fn_data   = fn_prefix + ".data";
+    fs::path    path              = fs::path(basedir) / config.value("path", ".");
+    std::string fn_prefix         = config.value("prefix", "load");
+    std::string fn_step           = nix::format_step(data.curstep);
+    std::string fn_json           = tfm::format("%s_%s.json", fn_prefix, fn_step);
+    std::string fn_data           = tfm::format("%s_%s.data", fn_prefix, fn_step);
+    std::string fn_json_with_path = (path / fn_json).string();
+    std::string fn_data_with_path = (path / fn_data).string();
 
     size_t disp;
     json   dataset;
 
-    open_file((path + fn_data).c_str(), &disp, "w");
+    open_file(fn_data_with_path, &disp, "w");
 
     //
     // load
@@ -359,7 +373,7 @@ public:
       root["dataset"] = dataset;
 
       if (data.thisrank == 0) {
-        std::ofstream ofs(path + fn_json);
+        std::ofstream ofs(fn_json_with_path);
         ofs << std::setw(2) << root;
         ofs.close();
       }
@@ -419,7 +433,7 @@ protected:
 
 public:
   // constructor
-  FieldDiagnoser() : AsynchronousDiagnoser(3)
+  FieldDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, 3)
   {
   }
 
@@ -427,6 +441,8 @@ public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
+    namespace fs = std::filesystem;
+
     if (require_output(data.curstep, config) == false)
       return;
 
@@ -436,19 +452,19 @@ public:
     const int nc = data.cdims[3];
     const int Ns = app.get_Ns();
 
-    // get parameters from json
-    std::string prefix = config.value("prefix", "field");
-    std::string path   = config.value("path", ".") + "/";
-
     // filename
-    std::string fn_prefix = tfm::format("%s_%s", prefix, nix::format_step(data.curstep));
-    std::string fn_json   = fn_prefix + ".json";
-    std::string fn_data   = fn_prefix + ".data";
+    fs::path    path              = fs::path(basedir) / config.value("path", ".");
+    std::string fn_prefix         = config.value("prefix", "load");
+    std::string fn_step           = nix::format_step(data.curstep);
+    std::string fn_json           = tfm::format("%s_%s.json", fn_prefix, fn_step);
+    std::string fn_data           = tfm::format("%s_%s.data", fn_prefix, fn_step);
+    std::string fn_json_with_path = (path / fn_json).string();
+    std::string fn_data_with_path = (path / fn_data).string();
 
     size_t disp;
     json   dataset;
 
-    open_file((path + fn_data).c_str(), &disp, "w");
+    open_file(fn_data_with_path, &disp, "w");
 
     //
     // electromagnetic field
@@ -516,7 +532,7 @@ public:
       root["dataset"] = dataset;
 
       if (data.thisrank == 0) {
-        std::ofstream ofs(path + fn_json);
+        std::ofstream ofs(fn_json_with_path);
         ofs << std::setw(2) << root;
         ofs.close();
       }
@@ -557,7 +573,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiagnoser() : AsynchronousDiagnoser(max_species)
+  ParticleDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, max_species)
   {
   }
 
@@ -565,6 +581,8 @@ public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
+    namespace fs = std::filesystem;
+
     if (require_output(data.curstep, config) == false)
       return;
 
@@ -576,19 +594,19 @@ public:
 
     assert(Ns <= max_species);
 
-    // get parameters from json
-    std::string prefix = config.value("prefix", "particle");
-    std::string path   = config.value("path", ".") + "/";
-
     // filename
-    std::string fn_prefix = tfm::format("%s_%s", prefix, nix::format_step(data.curstep));
-    std::string fn_json   = fn_prefix + ".json";
-    std::string fn_data   = fn_prefix + ".data";
+    fs::path    path              = fs::path(basedir) / config.value("path", ".");
+    std::string fn_prefix         = config.value("prefix", "load");
+    std::string fn_step           = nix::format_step(data.curstep);
+    std::string fn_json           = tfm::format("%s_%s.json", fn_prefix, fn_step);
+    std::string fn_data           = tfm::format("%s_%s.data", fn_prefix, fn_step);
+    std::string fn_json_with_path = (path / fn_json).string();
+    std::string fn_data_with_path = (path / fn_data).string();
 
     size_t disp;
     json   dataset;
 
-    open_file((path + fn_data).c_str(), &disp, "w");
+    open_file(fn_data_with_path, &disp, "w");
 
     //
     // for each particle
@@ -608,8 +626,7 @@ public:
         const int ndim    = 2;
         const int dims[2] = {Np, ParticleType::Nc};
 
-        nixio::put_metadata(dataset, name.c_str(), "f8", desc.c_str(), disp0, Np * size, ndim,
-                            dims);
+        nixio::put_metadata(dataset, name, "f8", desc, disp0, Np * size, ndim, dims);
       }
     }
 
@@ -633,7 +650,7 @@ public:
       root["dataset"] = dataset;
 
       if (data.thisrank == 0) {
-        std::ofstream ofs(path + fn_json);
+        std::ofstream ofs(fn_json_with_path);
         ofs << std::setw(2) << root;
         ofs.close();
       }
@@ -655,6 +672,11 @@ protected:
   ParticleDiagnoser particle;
 
 public:
+  Diagnoser(std::string basedir)
+      : history(basedir), load(basedir), field(basedir), particle(basedir)
+  {
+  }
+
   template <typename App, typename Data>
   void doit(json& config, App& app, Data& data)
   {
