@@ -242,6 +242,34 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
   }
 }
 
+DEFINE_MEMBER(void, push_position)(const float64 delt)
+{
+  const float64 rc = 1 / cc;
+
+  for (int is = 0; is < Ns; is++) {
+    ParticlePtr ps = up[is];
+
+    // loop over particle
+    auto& xu = ps->xu;
+    auto& xv = ps->xv;
+    for (int ip = 0; ip < ps->Np; ip++) {
+      float64 gam = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
+      float64 dt  = delt / gam;
+
+      // substitute to temporary
+      std::memcpy(&xv(ip, 0), &xu(ip, 0), ParticleType::get_particle_size());
+
+      // update position
+      xu(ip, 0) += xu(ip, 3) * dt;
+      xu(ip, 1) += xu(ip, 4) * dt;
+      xu(ip, 2) += xu(ip, 5) * dt;
+    }
+
+    // count
+    this->count_particle(ps, 0, ps->Np - 1, true);
+  }
+}
+
 DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
   // physical boundary for field
@@ -305,6 +333,7 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 }
 
 template class ExChunk3D<1>;
+template class ExChunk3D<2>;
 
 #undef DEFINE_MEMBER
 

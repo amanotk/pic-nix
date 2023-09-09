@@ -150,9 +150,9 @@ public:
 
   virtual void push_bfd(float64 delt);
 
-  virtual void push_velocity(float64 delt);
-
   virtual void push_position(float64 delt);
+
+  virtual void push_velocity(float64 delt);
 
   virtual void deposit_current(float64 delt);
 

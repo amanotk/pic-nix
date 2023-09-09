@@ -3,7 +3,11 @@
 #include "diagnoser.hpp"
 #include "expic3d.hpp"
 
-constexpr int order = 1;
+#if defined(SHAPE_ORDER) && SHAPE_ORDER >= 1 && SHAPE_ORDER <= 2
+constexpr int order = SHAPE_ORDER;
+#else
+#error "Condition 1 <= SHAPE_ORDER <= 2 must be satisfied"
+#endif
 
 class MainChunk;
 class MainApplication;

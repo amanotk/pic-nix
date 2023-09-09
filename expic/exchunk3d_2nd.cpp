@@ -6,7 +6,7 @@
 //
 #define DEFINE_MEMBER(type, name)                                                                  \
   template <>                                                                                      \
-  type ExChunk3D<1>::name
+  type ExChunk3D<2>::name
 
 using namespace nix::primitives;
 
@@ -16,12 +16,12 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
-  const float64 ximin = xlim[0] + 0.5 * delx;
-  const float64 xhmin = xlim[0];
-  const float64 yimin = ylim[0] + 0.5 * dely;
-  const float64 yhmin = ylim[0];
-  const float64 zimin = zlim[0] + 0.5 * delz;
-  const float64 zhmin = zlim[0];
+  const float64 ximin = xlim[0];
+  const float64 xhmin = xlim[0] + 0.5 * delx;
+  const float64 yimin = ylim[0];
+  const float64 yhmin = ylim[0] + 0.5 * dely;
+  const float64 zimin = zlim[0];
+  const float64 zhmin = zlim[0] + 0.5 * delz;
 
   for (int is = 0; is < Ns; is++) {
     ParticlePtr ps  = up[is];
@@ -30,12 +30,12 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     // loop over particle
     auto& xu = ps->xu;
     for (int ip = 0; ip < ps->Np; ip++) {
-      float64 wix[2] = {0};
-      float64 whx[2] = {0};
-      float64 wiy[2] = {0};
-      float64 why[2] = {0};
-      float64 wiz[2] = {0};
-      float64 whz[2] = {0};
+      float64 wix[3] = {0};
+      float64 whx[3] = {0};
+      float64 wiy[3] = {0};
+      float64 why[3] = {0};
+      float64 wiz[3] = {0};
+      float64 whz[3] = {0};
       float64 emf[6] = {0};
 
       float64 gam = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
@@ -50,12 +50,12 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       int hz = digitize(xu(ip, 2), zhmin, rdz);
 
       // weights
-      shape1(xu(ip, 0), ximin + ix * delx, rdx, wix);
-      shape1(xu(ip, 0), xhmin + hx * delx, rdx, whx);
-      shape1(xu(ip, 1), yimin + iy * dely, rdy, wiy);
-      shape1(xu(ip, 1), yhmin + hy * dely, rdy, why);
-      shape1(xu(ip, 2), zimin + iz * delz, rdz, wiz);
-      shape1(xu(ip, 2), zhmin + hz * delz, rdz, whz);
+      shape2(xu(ip, 0), ximin + ix * delx, rdx, wix);
+      shape2(xu(ip, 0), xhmin + hx * delx, rdx, whx);
+      shape2(xu(ip, 1), yimin + iy * dely, rdy, wiy);
+      shape2(xu(ip, 1), yhmin + hy * dely, rdy, why);
+      shape2(xu(ip, 2), zimin + iz * delz, rdz, wiz);
+      shape2(xu(ip, 2), zhmin + hz * delz, rdz, whz);
 
       //
       // calculate electromagnetic field at particle position
@@ -73,12 +73,12 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       hx += Lbx;
       hy += Lby;
       hz += Lbz;
-      emf[0] = interp3d1(uf, iz, iy, hx, 0, wiz, wiy, whx, dt1);
-      emf[1] = interp3d1(uf, iz, hy, ix, 1, wiz, why, wix, dt1);
-      emf[2] = interp3d1(uf, hz, iy, ix, 2, whz, wiy, wix, dt1);
-      emf[3] = interp3d1(uf, hz, hy, ix, 3, whz, why, wix, dt2);
-      emf[4] = interp3d1(uf, hz, iy, hx, 4, whz, wiy, whx, dt2);
-      emf[5] = interp3d1(uf, iz, hy, hx, 5, wiz, why, whx, dt2);
+      emf[0] = interp3d2(uf, iz, iy, hx, 0, wiz, wiy, whx, dt1);
+      emf[1] = interp3d2(uf, iz, hy, ix, 1, wiz, why, wix, dt1);
+      emf[2] = interp3d2(uf, hz, iy, ix, 2, whz, wiy, wix, dt1);
+      emf[3] = interp3d2(uf, hz, hy, ix, 3, whz, why, wix, dt2);
+      emf[4] = interp3d2(uf, hz, iy, hx, 4, whz, wiy, whx, dt2);
+      emf[5] = interp3d2(uf, iz, hy, hx, 5, wiz, why, whx, dt2);
 
       // push particle velocity
       push_buneman_boris(&xu(ip, 3), emf);
@@ -94,9 +94,9 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   const float64 dxdt  = delx / delt;
   const float64 dydt  = dely / delt;
   const float64 dzdt  = delz / delt;
-  const float64 ximin = xlim[0] + 0.5 * delx;
-  const float64 yimin = ylim[0] + 0.5 * dely;
-  const float64 zimin = zlim[0] + 0.5 * delz;
+  const float64 ximin = xlim[0];
+  const float64 yimin = ylim[0];
+  const float64 zimin = zlim[0];
 
   // clear charge/current density
   uj.fill(0);
@@ -109,8 +109,8 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
     auto& xu = ps->xu;
     auto& xv = ps->xv;
     for (int ip = 0; ip < ps->Np; ip++) {
-      float64 ss[2][3][4]     = {0};
-      float64 cur[4][4][4][4] = {0};
+      float64 ss[2][3][5]     = {0};
+      float64 cur[5][5][5][4] = {0};
 
       //
       // -*- weights before move -*-
@@ -121,9 +121,9 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       int iz0 = digitize(xv(ip, 2), zimin, rdz);
 
       // weights
-      shape1(xv(ip, 0), ximin + ix0 * delx, rdx, &ss[0][0][1]);
-      shape1(xv(ip, 1), yimin + iy0 * dely, rdy, &ss[0][1][1]);
-      shape1(xv(ip, 2), zimin + iz0 * delz, rdz, &ss[0][2][1]);
+      shape2(xv(ip, 0), ximin + ix0 * delx, rdx, &ss[0][0][1]);
+      shape2(xv(ip, 1), yimin + iy0 * dely, rdy, &ss[0][1][1]);
+      shape2(xv(ip, 2), zimin + iz0 * delz, rdz, &ss[0][2][1]);
 
       //
       // -*- weights after move -*-
@@ -134,25 +134,25 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       int iz1 = digitize(xu(ip, 2), zimin, rdz);
 
       // weights
-      shape1(xu(ip, 0), ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
-      shape1(xu(ip, 1), yimin + iy1 * dely, rdy, &ss[1][1][1 + iy1 - iy0]);
-      shape1(xu(ip, 2), zimin + iz1 * delz, rdz, &ss[1][2][1 + iz1 - iz0]);
+      shape2(xu(ip, 0), ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
+      shape2(xu(ip, 1), yimin + iy1 * dely, rdy, &ss[1][1][1 + iy1 - iy0]);
+      shape2(xu(ip, 2), zimin + iz1 * delz, rdz, &ss[1][2][1 + iz1 - iz0]);
 
       //
       // -*- accumulate current via density decomposition -*-
       //
-      esirkepov3d1(dxdt, dydt, dzdt, ss, cur);
+      esirkepov3d2(dxdt, dydt, dzdt, ss, cur);
 
       ix0 += Lbx;
       iy0 += Lby;
       iz0 += Lbz;
-      for (int jz = 0; jz < 4; jz++) {
-        for (int jy = 0; jy < 4; jy++) {
-          for (int jx = 0; jx < 4; jx++) {
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 0) += qs * cur[jz][jy][jx][0];
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 1) += qs * cur[jz][jy][jx][1];
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 2) += qs * cur[jz][jy][jx][2];
-            uj(iz0 + jz - 1, iy0 + jy - 1, ix0 + jx - 1, 3) += qs * cur[jz][jy][jx][3];
+      for (int jz = 0; jz < 5; jz++) {
+        for (int jy = 0; jy < 5; jy++) {
+          for (int jx = 0; jx < 5; jx++) {
+            uj(iz0 + jz - 2, iy0 + jy - 2, ix0 + jx - 2, 0) += qs * cur[jz][jy][jx][0];
+            uj(iz0 + jz - 2, iy0 + jy - 2, ix0 + jx - 2, 1) += qs * cur[jz][jy][jx][1];
+            uj(iz0 + jz - 2, iy0 + jy - 2, ix0 + jx - 2, 2) += qs * cur[jz][jy][jx][2];
+            uj(iz0 + jz - 2, iy0 + jy - 2, ix0 + jx - 2, 3) += qs * cur[jz][jy][jx][3];
           }
         }
       }
@@ -170,9 +170,9 @@ DEFINE_MEMBER(void, deposit_moment)()
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
-  const float64 ximin = xlim[0] + 0.5 * delx;
-  const float64 yimin = ylim[0] + 0.5 * dely;
-  const float64 zimin = zlim[0] + 0.5 * delz;
+  const float64 ximin = xlim[0];
+  const float64 yimin = ylim[0];
+  const float64 zimin = zlim[0];
 
   // clear moment
   um.fill(0);
@@ -184,10 +184,10 @@ DEFINE_MEMBER(void, deposit_moment)()
     // loop over particle
     auto& xu = ps->xu;
     for (int ip = 0; ip < ps->Np; ip++) {
-      float64 wx[2]            = {0};
-      float64 wy[2]            = {0};
-      float64 wz[2]            = {0};
-      float64 mom[2][2][2][11] = {0};
+      float64 wx[3]            = {0};
+      float64 wy[3]            = {0};
+      float64 wz[3]            = {0};
+      float64 mom[3][3][3][11] = {0};
 
       // grid indices
       int ix = digitize(xu(ip, 0), ximin, rdx);
@@ -195,14 +195,14 @@ DEFINE_MEMBER(void, deposit_moment)()
       int iz = digitize(xu(ip, 2), zimin, rdz);
 
       // weights
-      shape1(xu(ip, 0), ximin + ix * delx, rdx, wx);
-      shape1(xu(ip, 1), yimin + iy * dely, rdy, wy);
-      shape1(xu(ip, 2), zimin + iz * delz, rdz, wz);
+      shape2(xu(ip, 0), ximin + ix * delx, rdx, wx);
+      shape2(xu(ip, 1), yimin + iy * dely, rdy, wy);
+      shape2(xu(ip, 2), zimin + iz * delz, rdz, wz);
 
       // deposit to local array (this step is not necessary for scalar version)
-      for (int jz = 0; jz < 2; jz++) {
-        for (int jy = 0; jy < 2; jy++) {
-          for (int jx = 0; jx < 2; jx++) {
+      for (int jz = 0; jz < 3; jz++) {
+        for (int jy = 0; jy < 3; jy++) {
+          for (int jx = 0; jx < 3; jx++) {
             float64 ww = ms * wz[jz] * wy[jy] * wx[jx];
             float64 gm = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
 
@@ -238,11 +238,11 @@ DEFINE_MEMBER(void, deposit_moment)()
       ix += Lbx;
       iy += Lby;
       iz += Lbz;
-      for (int jz = 0; jz < 2; jz++) {
-        for (int jy = 0; jy < 2; jy++) {
-          for (int jx = 0; jx < 2; jx++) {
+      for (int jz = 0; jz < 3; jz++) {
+        for (int jy = 0; jy < 3; jy++) {
+          for (int jx = 0; jx < 3; jx++) {
             for (int k = 0; k < 11; k++) {
-              um(iz + jz, iy + jy, ix + jx, is, k) += mom[jz][jy][jx][k];
+              um(iz + jz - 1, iy + jy - 1, ix + jx - 1, is, k) += mom[jz][jy][jx][k];
             }
           }
         }
