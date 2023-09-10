@@ -332,8 +332,8 @@ public:
       const char name[]  = "load";
       const char desc[]  = "computational work load";
       const int  ndim    = 2;
-      const int  dims[2] = {nc, App::Chunk::NumLoadMode};
-      const int  size    = nc * App::Chunk::NumLoadMode * sizeof(float64);
+      const int  dims[2] = {nc, App::ChunkType::NumLoadMode};
+      const int  size    = nc * App::ChunkType::NumLoadMode * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
       launch(0, LoadPacker(), data, disp);

@@ -3,7 +3,7 @@
 #include "diagnoser.hpp"
 #include "expic3d.hpp"
 
-#if defined(SHAPE_ORDER) && SHAPE_ORDER >= 1 && SHAPE_ORDER <= 2
+#if defined(SHAPE_ORDER) && 1 <= SHAPE_ORDER && SHAPE_ORDER <= 2
 constexpr int order = SHAPE_ORDER;
 #else
 #error "Condition 1 <= SHAPE_ORDER <= 2 must be satisfied"
@@ -249,12 +249,12 @@ public:
   }
 };
 
-class MainApplication : public ExPIC3D<order, MainDiagnoser>
+class MainApplication : public ExPIC3D<MainChunk, MainDiagnoser>
 {
 public:
-  using ExPIC3D<order, MainDiagnoser>::ExPIC3D; // inherit constructors
+  using ExPIC3D<MainChunk, MainDiagnoser>::ExPIC3D; // inherit constructors
 
-  std::unique_ptr<ExChunk3D<order>> create_chunk(const int dims[], int id) override
+  std::unique_ptr<MainChunk> create_chunk(const int dims[], int id) override
   {
     return std::make_unique<MainChunk>(dims, id);
   }

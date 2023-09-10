@@ -13,7 +13,6 @@ using nix::Logger;
 
 ///
 /// @brief Application for 3D Explicit PIC Simulations
-/// @tparam Order order of shape function
 ///
 /// This class takes care of initialization of various objects (ChunkMap, Balancer, etc.) and a main
 /// loop for explicit PIC simulations. Core numerical solvers are implemented in a chunk class, and
@@ -24,13 +23,13 @@ using nix::Logger;
 /// chunk instance. In addition, custom diagnostics routines may also be implemented through the
 /// virtual method diagnostic().
 ///
-template <int Order, typename Diagnoser>
-class ExPIC3D : public nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>
+template <typename Chunk, typename Diagnoser>
+class ExPIC3D : public nix::Application<Chunk, nix::ChunkMap<3>>
 {
 public:
-  using ThisType     = ExPIC3D<Order, Diagnoser>;
-  using BaseApp      = nix::Application<ExChunk3D<Order>, nix::ChunkMap<3>>;
-  using Chunk        = ExChunk3D<Order>;
+  using ThisType     = ExPIC3D<Chunk, Diagnoser>;
+  using BaseApp      = nix::Application<Chunk, nix::ChunkMap<3>>;
+  using ChunkType    = Chunk;
   using PtrDiagnoser = std::unique_ptr<Diagnoser>;
   using MpiCommVec   = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
 
@@ -71,7 +70,7 @@ protected:
 
   virtual void finalize() override;
 
-  virtual std::unique_ptr<ExChunk3D<Order>> create_chunk(const int dims[], int id) override = 0;
+  virtual std::unique_ptr<Chunk> create_chunk(const int dims[], int id) override = 0;
 
 public:
   ExPIC3D(int argc, char** argv);
@@ -93,8 +92,8 @@ public:
 };
 
 #define DEFINE_MEMBER(type, name)                                                                  \
-  template <int Order, typename Diagnoser>                                                         \
-  type ExPIC3D<Order, Diagnoser>::name
+  template <typename Chunk, typename Diagnoser>                                                    \
+  type ExPIC3D<Chunk, Diagnoser>::name
 
 DEFINE_MEMBER(, ExPIC3D)
 (int argc, char** argv) : BaseApp(argc, argv), Ns(1), momstep(-1)
