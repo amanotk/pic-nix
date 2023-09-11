@@ -27,8 +27,8 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const float64 zhmin = zlim[0];
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps  = up[is];
-    float64     dt1 = 0.5 * ps->q / ps->m * delt;
+    auto    ps  = up[is];
+    float64 dt1 = 0.5 * ps->q / ps->m * delt;
 
     // loop over particle
     auto& xu = ps->xu;
@@ -108,8 +108,8 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   uj.fill(0);
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps = up[is];
-    float64     qs = ps->q;
+    auto    ps = up[is];
+    float64 qs = ps->q;
 
     // loop over particle
     auto& xu = ps->xu;
@@ -187,8 +187,8 @@ DEFINE_MEMBER(void, deposit_moment)()
   um.fill(0);
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps = up[is];
-    float64     ms = ps->m;
+    auto    ps = up[is];
+    float64 ms = ps->m;
 
     // loop over particle
     auto& xu = ps->xu;

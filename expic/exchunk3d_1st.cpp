@@ -16,16 +16,19 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
-  const float64 ximin = xlim[0] + 0.5 * delx;
+  const float64 dx2   = 0.5 * delx;
+  const float64 dy2   = 0.5 * dely;
+  const float64 dz2   = 0.5 * delz;
+  const float64 ximin = xlim[0] + dx2;
   const float64 xhmin = xlim[0];
-  const float64 yimin = ylim[0] + 0.5 * dely;
+  const float64 yimin = ylim[0] + dy2;
   const float64 yhmin = ylim[0];
-  const float64 zimin = zlim[0] + 0.5 * delz;
+  const float64 zimin = zlim[0] + dz2;
   const float64 zhmin = zlim[0];
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps  = up[is];
-    float64     dt1 = 0.5 * ps->q / ps->m * delt;
+    auto    ps  = up[is];
+    float64 dt1 = 0.5 * ps->q / ps->m * delt;
 
     // loop over particle
     auto& xu = ps->xu;
@@ -94,16 +97,19 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   const float64 dxdt  = delx / delt;
   const float64 dydt  = dely / delt;
   const float64 dzdt  = delz / delt;
-  const float64 ximin = xlim[0] + 0.5 * delx;
-  const float64 yimin = ylim[0] + 0.5 * dely;
-  const float64 zimin = zlim[0] + 0.5 * delz;
+  const float64 dx2   = 0.5 * delx;
+  const float64 dy2   = 0.5 * dely;
+  const float64 dz2   = 0.5 * delz;
+  const float64 ximin = xlim[0] + dx2;
+  const float64 yimin = ylim[0] + dy2;
+  const float64 zimin = zlim[0] + dz2;
 
   // clear charge/current density
   uj.fill(0);
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps = up[is];
-    float64     qs = ps->q;
+    auto    ps = up[is];
+    float64 qs = ps->q;
 
     // loop over particle
     auto& xu = ps->xu;
@@ -170,16 +176,19 @@ DEFINE_MEMBER(void, deposit_moment)()
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
-  const float64 ximin = xlim[0] + 0.5 * delx;
-  const float64 yimin = ylim[0] + 0.5 * dely;
-  const float64 zimin = zlim[0] + 0.5 * delz;
+  const float64 dx2   = 0.5 * delx;
+  const float64 dy2   = 0.5 * dely;
+  const float64 dz2   = 0.5 * delz;
+  const float64 ximin = xlim[0] + dx2;
+  const float64 yimin = ylim[0] + dy2;
+  const float64 zimin = zlim[0] + dz2;
 
   // clear moment
   um.fill(0);
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps = up[is];
-    float64     ms = ps->m;
+    auto    ps = up[is];
+    float64 ms = ps->m;
 
     // loop over particle
     auto& xu = ps->xu;

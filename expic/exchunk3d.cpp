@@ -247,7 +247,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   const float64 rc = 1 / cc;
 
   for (int is = 0; is < Ns; is++) {
-    ParticlePtr ps = up[is];
+    auto ps = up[is];
 
     // loop over particle
     auto& xu = ps->xu;
