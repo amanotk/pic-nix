@@ -16,12 +16,15 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
-  const float64 ximin = xlim[0];
-  const float64 xhmin = xlim[0] + 0.5 * delx;
-  const float64 yimin = ylim[0];
-  const float64 yhmin = ylim[0] + 0.5 * dely;
-  const float64 zimin = zlim[0];
-  const float64 zhmin = zlim[0] + 0.5 * delz;
+  const float64 dx2   = 0.5 * delx;
+  const float64 dy2   = 0.5 * dely;
+  const float64 dz2   = 0.5 * delz;
+  const float64 ximin = xlim[0] + dx2;
+  const float64 xhmin = xlim[0];
+  const float64 yimin = ylim[0] + dy2;
+  const float64 yhmin = ylim[0];
+  const float64 zimin = zlim[0] + dz2;
+  const float64 zhmin = zlim[0];
 
   for (int is = 0; is < Ns; is++) {
     ParticlePtr ps  = up[is];
@@ -42,12 +45,12 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       float64 dt2 = dt1 * rc / gam;
 
       // grid indices
-      int ix = digitize(xu(ip, 0), ximin, rdx);
-      int hx = digitize(xu(ip, 0), xhmin, rdx);
-      int iy = digitize(xu(ip, 1), yimin, rdy);
-      int hy = digitize(xu(ip, 1), yhmin, rdy);
-      int iz = digitize(xu(ip, 2), zimin, rdz);
-      int hz = digitize(xu(ip, 2), zhmin, rdz);
+      int ix = digitize(xu(ip, 0), ximin - dx2, rdx);
+      int hx = digitize(xu(ip, 0), xhmin - dx2, rdx);
+      int iy = digitize(xu(ip, 1), yimin - dy2, rdy);
+      int hy = digitize(xu(ip, 1), yhmin - dy2, rdy);
+      int iz = digitize(xu(ip, 2), zimin - dz2, rdz);
+      int hz = digitize(xu(ip, 2), zhmin - dz2, rdz);
 
       // weights
       shape2(xu(ip, 0), ximin + ix * delx, rdx, wix);
@@ -94,9 +97,12 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   const float64 dxdt  = delx / delt;
   const float64 dydt  = dely / delt;
   const float64 dzdt  = delz / delt;
-  const float64 ximin = xlim[0];
-  const float64 yimin = ylim[0];
-  const float64 zimin = zlim[0];
+  const float64 dx2   = 0.5 * delx;
+  const float64 dy2   = 0.5 * dely;
+  const float64 dz2   = 0.5 * delz;
+  const float64 ximin = xlim[0] + dx2;
+  const float64 yimin = ylim[0] + dy2;
+  const float64 zimin = zlim[0] + dz2;
 
   // clear charge/current density
   uj.fill(0);
@@ -116,9 +122,9 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       // -*- weights before move -*-
       //
       // grid indices
-      int ix0 = digitize(xv(ip, 0), ximin, rdx);
-      int iy0 = digitize(xv(ip, 1), yimin, rdy);
-      int iz0 = digitize(xv(ip, 2), zimin, rdz);
+      int ix0 = digitize(xv(ip, 0), ximin - dx2, rdx);
+      int iy0 = digitize(xv(ip, 1), yimin - dy2, rdy);
+      int iz0 = digitize(xv(ip, 2), zimin - dz2, rdz);
 
       // weights
       shape2(xv(ip, 0), ximin + ix0 * delx, rdx, &ss[0][0][1]);
@@ -129,9 +135,9 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       // -*- weights after move -*-
       //
       // grid indices
-      int ix1 = digitize(xu(ip, 0), ximin, rdx);
-      int iy1 = digitize(xu(ip, 1), yimin, rdy);
-      int iz1 = digitize(xu(ip, 2), zimin, rdz);
+      int ix1 = digitize(xu(ip, 0), ximin - dx2, rdx);
+      int iy1 = digitize(xu(ip, 1), yimin - dy2, rdy);
+      int iz1 = digitize(xu(ip, 2), zimin - dz2, rdz);
 
       // weights
       shape2(xu(ip, 0), ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
@@ -170,9 +176,12 @@ DEFINE_MEMBER(void, deposit_moment)()
   const float64 rdx   = 1 / delx;
   const float64 rdy   = 1 / dely;
   const float64 rdz   = 1 / delz;
-  const float64 ximin = xlim[0];
-  const float64 yimin = ylim[0];
-  const float64 zimin = zlim[0];
+  const float64 dx2   = 0.5 * delx;
+  const float64 dy2   = 0.5 * dely;
+  const float64 dz2   = 0.5 * delz;
+  const float64 ximin = xlim[0] + dx2;
+  const float64 yimin = ylim[0] + dy2;
+  const float64 zimin = zlim[0] + dz2;
 
   // clear moment
   um.fill(0);
@@ -190,9 +199,9 @@ DEFINE_MEMBER(void, deposit_moment)()
       float64 mom[3][3][3][11] = {0};
 
       // grid indices
-      int ix = digitize(xu(ip, 0), ximin, rdx);
-      int iy = digitize(xu(ip, 1), yimin, rdy);
-      int iz = digitize(xu(ip, 2), zimin, rdz);
+      int ix = digitize(xu(ip, 0), ximin - dx2, rdx);
+      int iy = digitize(xu(ip, 1), yimin - dy2, rdy);
+      int iz = digitize(xu(ip, 2), zimin - dz2, rdz);
 
       // weights
       shape2(xu(ip, 0), ximin + ix * delx, rdx, wx);
