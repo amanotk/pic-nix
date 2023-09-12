@@ -1,0 +1,63 @@
+{
+	"application": {
+		"basedir": "run1",
+		"log": {
+			"path": ".",
+			"prefix": "log",
+			"interval": 5000,
+			"options": null
+		},
+		"rebalance": {
+			"interval": 10,
+			"loglevel": 1,
+			"options": null
+		},
+		"mpistream": {
+			"path": "debug"
+		}
+	},
+	"diagnostic": [
+		{
+			"name": "history",
+			"path": ".",
+			"prefix": "history",
+			"interval": 20,
+			"options": null
+		},
+		{
+			"name": "field",
+			"path": ".",
+			"prefix": "field",
+			"interval": 20,
+			"options": null
+		},
+		{
+			"name": "particle",
+			"path": ".",
+			"prefix": "particle",
+			"interval": 200,
+			"options": null
+		}
+	],
+	"parameter": {
+		"Nx": 128,
+		"Ny": 128,
+		"Nz": 2,
+		"Cx": 16,
+		"Cy": 16,
+		"Cz": 1,
+		"Ns": 2,
+		"delt": 5.0e-2,
+		"delh": 1.0e-1,
+		"lcs": 2.5,
+		"ncs": 50,
+		"nbg": 5,
+		"mime": 25,
+		"tite": 5.0,
+		"bz": 0.0,
+		"db": 0.0,
+		"seed_type": "random",
+		"field_load": 1.0,
+		"mpi_buffer_fraction": 2.0
+	}
+}

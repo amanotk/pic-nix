@@ -48,7 +48,6 @@ protected:
   using BaseApp::delx;
   using BaseApp::dely;
   using BaseApp::delz;
-  using BaseApp::cc;
   using BaseApp::xlim;
   using BaseApp::ylim;
   using BaseApp::zlim;
