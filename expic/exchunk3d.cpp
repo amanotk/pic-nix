@@ -205,15 +205,32 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
   const float64 cfly = cc * delt / dely;
   const float64 cflz = cc * delt / delz;
 
-  for (int iz = Lbz - 1; iz <= Ubz; iz++) {
-    for (int iy = Lby - 1; iy <= Uby; iy++) {
-      for (int ix = Lbx - 1; ix <= Ubx; ix++) {
+  // Ex
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb - 1; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
         uf(iz, iy, ix, 0) += (+cfly) * (uf(iz, iy + 1, ix, 5) - uf(iz, iy, ix, 5)) +
                              (-cflz) * (uf(iz + 1, iy, ix, 4) - uf(iz, iy, ix, 4)) -
                              delt * uj(iz, iy, ix, 1);
+      }
+    }
+  }
+
+  // Ey
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb - 1; ix++) {
         uf(iz, iy, ix, 1) += (+cflz) * (uf(iz + 1, iy, ix, 3) - uf(iz, iy, ix, 3)) +
                              (-cflx) * (uf(iz, iy, ix + 1, 5) - uf(iz, iy, ix, 5)) -
                              delt * uj(iz, iy, ix, 2);
+      }
+    }
+  }
+
+  // Ez
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb - 1; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb - 1; ix++) {
         uf(iz, iy, ix, 2) += (+cflx) * (uf(iz, iy, ix + 1, 4) - uf(iz, iy, ix, 4)) +
                              (-cfly) * (uf(iz, iy + 1, ix, 3) - uf(iz, iy, ix, 3)) -
                              delt * uj(iz, iy, ix, 3);
@@ -228,13 +245,30 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
   const float64 cfly = cc * delt / dely;
   const float64 cflz = cc * delt / delz;
 
-  for (int iz = Lbz; iz <= Ubz + 1; iz++) {
-    for (int iy = Lby; iy <= Uby + 1; iy++) {
-      for (int ix = Lbx; ix <= Ubx + 1; ix++) {
+  // Bx
+  for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb + 1; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
         uf(iz, iy, ix, 3) += (-cfly) * (uf(iz, iy, ix, 2) - uf(iz, iy - 1, ix, 2)) +
                              (+cflz) * (uf(iz, iy, ix, 1) - uf(iz - 1, iy, ix, 1));
+      }
+    }
+  }
+
+  // By
+  for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb + 1; ix <= Ubx + Nb; ix++) {
         uf(iz, iy, ix, 4) += (-cflz) * (uf(iz, iy, ix, 0) - uf(iz - 1, iy, ix, 0)) +
                              (+cflx) * (uf(iz, iy, ix, 2) - uf(iz, iy, ix - 1, 2));
+      }
+    }
+  }
+
+  // Bz
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb + 1; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb + 1; ix <= Ubx + Nb; ix++) {
         uf(iz, iy, ix, 5) += (-cflx) * (uf(iz, iy, ix, 1) - uf(iz, iy, ix - 1, 1)) +
                              (+cfly) * (uf(iz, iy, ix, 0) - uf(iz, iy - 1, ix, 0));
       }
@@ -272,9 +306,6 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
-  // physical boundary for field
-  this->set_boundary_field(mode);
-
   switch (mode) {
   case BoundaryEmf: {
     auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
@@ -330,6 +361,9 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
     ERROR << tfm::format("No such boundary mode exists!");
     break;
   }
+
+  // physical boundary for field
+  this->set_boundary_field(mode);
 }
 
 template class ExChunk3D<1>;

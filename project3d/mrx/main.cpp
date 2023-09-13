@@ -58,9 +58,9 @@ public:
       // memory allocation
       allocate();
 
-      for (int iz = Lbz; iz <= Ubz; iz++) {
-        for (int iy = Lby; iy <= Uby; iy++) {
-          for (int ix = Lbx; ix <= Ubx; ix++) {
+      for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
+        for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
+          for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
             float64 y         = ylim[0] + (iy - Lby + 0.5) * dely;
             float64 f         = tanh((y - ycs) / lcs);
             uf(iz, iy, ix, 0) = 0;
@@ -187,51 +187,98 @@ public:
     }
   }
 
+  void get_diverror(float64& efd, float64& bfd) override
+  {
+    const float64 rdx = 1 / delx;
+    const float64 rdy = 1 / dely;
+    const float64 rdz = 1 / delz;
+
+    int lbz = Lbz;
+    int ubz = Ubz;
+    int lby = Lby;
+    int uby = Uby;
+    int lbx = Lbx;
+    int ubx = Ubx;
+
+    efd = 0;
+    bfd = 0;
+
+    if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
+      lby += Nb;
+    }
+
+    if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
+      uby -= Nb;
+    }
+
+    for (int iz = lbz; iz <= ubz; iz++) {
+      for (int iy = lby; iy <= uby; iy++) {
+        for (int ix = lbx; ix <= ubx; ix++) {
+          // div(E) - rho
+          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
+                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          // div(B)
+          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
+                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+        }
+      }
+    }
+  }
+
   void set_boundary_emf()
   {
     const float64 delyx = dely / delx;
     const float64 delyz = dely / delz;
 
-    return;
     //
     // lower boundary in y
     //
     if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
       // transverse E: Ex, Ez
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Lby - iy + Nb - 1;
+        int iy2 = Lby + iy + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uf(iz, Lby - 1 - iy, ix, 0) = -uf(iz, Lby + iy, ix, 0);
-            uf(iz, Lby - 1 - iy, ix, 2) = -uf(iz, Lby + iy, ix, 2);
+            uf(iz, iy1, ix, 0) = uf(iz, iy2, ix, 0);
+            uf(iz, iy1, ix, 2) = uf(iz, iy2, ix, 2);
           }
         }
       }
       // normal E: Ey
-      for (int iy = Lby - 1; iy >= Lby - Nb; iy--) {
-        for (int iz = Lbz - 1; iz <= Ubz + 1; iz++) {
-          for (int ix = Lbx - 1; ix <= Ubx + 1; ix++) {
-            uf(iz, iy, ix, 1) = uf(iz, iy + 1, ix, 1) +
-                                delyx * (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) +
-                                delyz * (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2));
+      for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Lby - iy + Nb - 1;
+        int iy2 = iy1 + 1;
+        for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
+          for (int ix = Lbx - Nb; ix <= Ubx + Nb - 1; ix++) {
+            uf(iz, iy1, ix, 1) = -dely * uj(iz, iy1, ix, 0) + uf(iz, iy2, ix, 1) +
+                                 delyx * (uf(iz, iy1, ix + 1, 0) - uf(iz, iy1, ix, 0)) +
+                                 delyz * (uf(iz + 1, iy1, ix, 2) - uf(iz, iy1, ix, 2));
           }
         }
       }
       // transverse B: Bx, Bz
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Lby - iy + Nb - 1;
+        int iy2 = Lby + iy + Nb + 1;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uf(iz, Lby - 1 - iy, ix, 3) = +uf(iz, Lby + 1 + iy, ix, 3);
-            uf(iz, Lby - 1 - iy, ix, 5) = +uf(iz, Lby + 1 + iy, ix, 5);
+            uf(iz, iy1, ix, 3) = uf(iz, iy2, ix, 3);
+            uf(iz, iy1, ix, 5) = uf(iz, iy2, ix, 5);
           }
         }
       }
       // normal B: By
-      for (int iy = Lby; iy >= Lby - Nb + 1; iy--) {
-        for (int iz = Lbz - 1; iz <= Ubz + 1; iz++) {
-          for (int ix = Lbx - 1; ix <= Ubx + 1; ix++) {
-            uf(iz, iy - 1, ix, 4) = +uf(iz, iy, ix, 4) +
-                                    delyx * (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) +
-                                    delyz * (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5));
+      for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Lby - iy + Nb - 1;
+        int iy2 = iy1 + 1;
+        for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
+          for (int ix = Lbx - Nb + 1; ix <= Ubx + Nb; ix++) {
+            uf(iz, iy1, ix, 4) = uf(iz, iy2, ix, 4) +
+                                 delyx * (uf(iz, iy2, ix, 3) - uf(iz, iy2, ix - 1, 3)) +
+                                 delyz * (uf(iz, iy2, ix, 5) - uf(iz - 1, iy2, ix, 5));
           }
         }
       }
@@ -243,39 +290,48 @@ public:
     if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
       // transverse E: Ex, Ez
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Uby + iy - Nb + 1;
+        int iy2 = Uby - iy - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uf(iz, Uby + 1 + iy, ix, 0) = -uf(iz, Uby - iy, ix, 0);
-            uf(iz, Uby + 1 + iy, ix, 2) = -uf(iz, Uby - iy, ix, 2);
+            uf(iz, iy1, ix, 0) = uf(iz, iy2, ix, 0);
+            uf(iz, iy1, ix, 2) = uf(iz, iy2, ix, 2);
           }
         }
       }
       // normal E: Ey
-      for (int iy = Uby; iy <= Uby + Nb - 1; iy++) {
-        for (int iz = Lbz - 1; iz <= Ubz + 1; iz++) {
-          for (int ix = Lbx - 1; ix <= Ubx + 1; ix++) {
-            uf(iz, iy + 1, ix, 1) = uf(iz, iy, ix, 1) -
-                                    delyx * (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) -
-                                    delyz * (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2));
+      for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Uby + iy - Nb + 2;
+        int iy2 = iy1 - 1;
+        for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
+          for (int ix = Lbx - Nb; ix <= Ubx + Nb - 1; ix++) {
+            uf(iz, iy1, ix, 1) = +dely * uj(iz, iy1, ix, 0) + uf(iz, iy2, ix, 1) -
+                                 delyx * (uf(iz, iy2, ix + 1, 0) - uf(iz, iy2, ix, 0)) -
+                                 delyz * (uf(iz + 1, iy2, ix, 2) - uf(iz, iy2, ix, 2));
+            ;
           }
         }
       }
       // transverse B: Bx, Bz
-      for (int iy = 1; iy < Nb; iy++) {
+      for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Uby + iy - Nb + 2;
+        int iy2 = Uby - iy - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uf(iz, Uby + 1 + iy, ix, 3) = +uf(iz, Uby + 1 - iy, ix, 3);
-            uf(iz, Uby + 1 + iy, ix, 5) = +uf(iz, Uby + 1 - iy, ix, 5);
+            uf(iz, iy1, ix, 3) = uf(iz, iy2, ix, 3);
+            uf(iz, iy1, ix, 5) = uf(iz, iy2, ix, 5);
           }
         }
       }
       // normal B: By
-      for (int iy = Uby + 1; iy <= Uby + Nb; iy++) {
-        for (int iz = Lbz - 1; iz <= Ubz + 1; iz++) {
-          for (int ix = Lbx - 1; ix <= Ubx + 1; ix++) {
-            uf(iz, iy, ix, 4) = +uf(iz, iy - 1, ix, 4) -
-                                delyx * (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) -
-                                delyz * (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5));
+      for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Uby + iy - Nb + 1;
+        int iy2 = iy1 - 1;
+        for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
+          for (int ix = Lbx - Nb + 1; ix <= Ubx + Nb; ix++) {
+            uf(iz, iy1, ix, 4) = uf(iz, iy2, ix, 4) -
+                                 delyx * (uf(iz, iy1, ix, 3) - uf(iz, iy1, ix - 1, 3)) -
+                                 delyz * (uf(iz, iy1, ix, 5) - uf(iz - 1, iy1, ix, 5));
           }
         }
       }
@@ -284,30 +340,19 @@ public:
 
   void set_boundary_cur()
   {
-    return;
     //
     // lower boundary in y
     //
     if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
-      // add boundary contribution
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Lby - iy + Nb - 1;
+        int iy2 = iy1;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uj(iz, Lby + iy, ix, 0) += uj(iz, Lby - 1 - iy, ix, 0);
-            uj(iz, Lby + iy, ix, 1) -= uj(iz, Lby - 1 - iy, ix, 1);
-            uj(iz, Lby + iy, ix, 2) -= uj(iz, Lby - 1 - iy, ix, 2);
-            uj(iz, Lby + iy, ix, 3) -= uj(iz, Lby - 1 - iy, ix, 3);
-          }
-        }
-      }
-      // set boundary condition
-      for (int iy = 0; iy < Nb; iy++) {
-        for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
-          for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uj(iz, Lby - 1 - iy, ix, 0) = 0;
-            uj(iz, Lby - 1 - iy, ix, 1) = 0;
-            uj(iz, Lby - 1 - iy, ix, 2) = 0;
-            uj(iz, Lby - 1 - iy, ix, 3) = 0;
+            uj(iz, iy1, ix, 0) = 0;
+            uj(iz, iy1, ix, 1) = 0;
+            uj(iz, iy2, ix, 2) = 0;
+            uj(iz, iy1, ix, 3) = 0;
           }
         }
       }
@@ -317,25 +362,16 @@ public:
     // upper boundary in y
     //
     if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
-      // add boundary contribution
-      for (int iy = 0; iy < Nb; iy++) {
-        for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
-          for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uj(iz, Uby - iy, ix, 0) += uj(iz, Uby + 1 + iy, ix, 0);
-            uj(iz, Uby - iy, ix, 1) -= uj(iz, Uby + 1 + iy, ix, 1);
-            uj(iz, Uby - iy, ix, 2) -= uj(iz, Uby + 1 + iy, ix, 2);
-            uj(iz, Uby - iy, ix, 3) -= uj(iz, Uby + 1 + iy, ix, 3);
-          }
-        }
-      }
       // set boundary condition
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Uby + iy - Nb + 1;
+        int iy2 = iy1 + 1;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uj(iz, Uby + 1 + iy, ix, 0) = 0;
-            uj(iz, Uby + 1 + iy, ix, 1) = 0;
-            uj(iz, Uby + 1 + iy, ix, 2) = 0;
-            uj(iz, Uby + 1 + iy, ix, 3) = 0;
+            uj(iz, iy1, ix, 0) = 0;
+            uj(iz, iy1, ix, 1) = 0;
+            uj(iz, iy2, ix, 2) = 0;
+            uj(iz, iy1, ix, 3) = 0;
           }
         }
       }
@@ -344,17 +380,17 @@ public:
 
   void set_boundary_mom()
   {
-    return;
     //
     // lower boundary in y
     //
     if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
-      // add boundary contribution
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Lby - iy + Nb - 1;
+        int iy2 = Lby + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
             for (int ik = 0; ik < 11; ik++) {
-              um(iz, Lby + iy, ix, ik) += um(iz, Lby - 1 - iy, ix, ik);
+              um(iz, iy1, ix, ik) = um(iz, iy2, ix, ik);
             }
           }
         }
@@ -365,12 +401,13 @@ public:
     // upper boundary in y
     //
     if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
-      // add boundary contribution
       for (int iy = 0; iy < Nb; iy++) {
+        int iy1 = Uby + iy - Nb + 1;
+        int iy2 = Uby - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
             for (int ik = 0; ik < 11; ik++) {
-              um(iz, Uby - iy, ix, ik) += um(iz, Uby + 1 + iy, ix, ik);
+              um(iz, iy1, ix, ik) = um(iz, iy2, ix, ik);
             }
           }
         }
@@ -403,8 +440,10 @@ public:
   {
     // NOTE: trick to take care of round-off error
     float64 xlength = gxlim[2] - std::numeric_limits<float64>::epsilon();
-    float64 ylength = gylim[2] - std::numeric_limits<float64>::epsilon();
     float64 zlength = gzlim[2] - std::numeric_limits<float64>::epsilon();
+
+    float64 ymin = gylim[0];
+    float64 ymax = gylim[1];
 
     // apply boundary condition
     auto& xu = particle->xu;
@@ -415,21 +454,17 @@ public:
       //
       // lower boundary in y
       //
-      if (xu(ip, 1) < gylim[0]) {
-        xu(ip, 1) = 2 * gylim[0] - xu(ip, 1);
-        xu(ip, 3) = -xu(ip, 3);
+      if (xu(ip, 1) < ymin) {
+        xu(ip, 1) = -xu(ip, 1) + 2 * ymin;
         xu(ip, 4) = -xu(ip, 4);
-        xu(ip, 5) = -xu(ip, 5);
       }
 
       //
       // upper boundary in y
       //
-      if (xu(ip, 1) > gylim[1]) {
-        xu(ip, 1) = 2 * gylim[1] - xu(ip, 1);
-        xu(ip, 3) = -xu(ip, 3);
+      if (xu(ip, 1) >= ymax) {
+        xu(ip, 1) = -xu(ip, 1) + 2 * ymax;
         xu(ip, 4) = -xu(ip, 4);
-        xu(ip, 5) = -xu(ip, 5);
       }
     }
   }
