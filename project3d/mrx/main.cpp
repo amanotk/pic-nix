@@ -47,7 +47,8 @@ public:
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
 
-    // current sheet location
+    // center of current sheet
+    float64 xcs = 0.5 * (gxlim[0] + gxlim[1]);
     float64 ycs = 0.5 * (gylim[0] + gylim[1]);
 
     //
@@ -61,14 +62,21 @@ public:
       for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
         for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            float64 y         = ylim[0] + (iy - Lby + 0.5) * dely;
-            float64 f         = tanh((y - ycs) / lcs);
+            float64 xi    = xlim[0] + (ix - Lbx + 0.5) * delx - xcs;
+            float64 yi    = ylim[0] + (iy - Lby + 0.5) * dely - ycs;
+            float64 xm    = xi - delx;
+            float64 ym    = yi - dely;
+            float64 bx    = tanh(yi / lcs);
+            float64 az_00 = 2 * db * lcs * exp(-(xi * xi + yi * yi) / (4 * lcs * lcs));
+            float64 az_01 = 2 * db * lcs * exp(-(xi * xi + ym * ym) / (4 * lcs * lcs));
+            float64 az_10 = 2 * db * lcs * exp(-(xm * xm + yi * yi) / (4 * lcs * lcs));
+
             uf(iz, iy, ix, 0) = 0;
             uf(iz, iy, ix, 1) = 0;
             uf(iz, iy, ix, 2) = 0;
-            uf(iz, iy, ix, 3) = b0 * f;
-            uf(iz, iy, ix, 4) = 0;
-            uf(iz, iy, ix, 5) = 0;
+            uf(iz, iy, ix, 3) = b0 * (+(az_00 - az_01) / dely + bx);
+            uf(iz, iy, ix, 4) = b0 * (-(az_00 - az_10) / delx);
+            uf(iz, iy, ix, 5) = b0 * bz;
           }
         }
       }
@@ -242,8 +250,8 @@ public:
         int iy2 = Lby + iy + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uf(iz, iy1, ix, 0) = uf(iz, iy2, ix, 0);
-            uf(iz, iy1, ix, 2) = uf(iz, iy2, ix, 2);
+            uf(iz, iy1, ix, 0) = -uf(iz, iy2, ix, 0);
+            uf(iz, iy1, ix, 2) = -uf(iz, iy2, ix, 2);
           }
         }
       }
@@ -294,8 +302,8 @@ public:
         int iy2 = Uby - iy - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            uf(iz, iy1, ix, 0) = uf(iz, iy2, ix, 0);
-            uf(iz, iy1, ix, 2) = uf(iz, iy2, ix, 2);
+            uf(iz, iy1, ix, 0) = -uf(iz, iy2, ix, 0);
+            uf(iz, iy1, ix, 2) = -uf(iz, iy2, ix, 2);
           }
         }
       }
