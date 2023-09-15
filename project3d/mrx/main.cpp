@@ -24,25 +24,25 @@ public:
     cc = 1.0;
     Ns = 2;
 
-    float64 delt = config["delt"].get<float64>();
-    float64 delh = config["delh"].get<float64>();
-
-    float64 b0   = 1.0;
-    float64 lcs  = config["lcs"].get<float64>();
-    int     ncs  = config["ncs"].get<float64>();
-    int     nbg  = config["nbg"].get<float64>();
-    float64 mime = config["mime"].get<float64>();
-    float64 tite = config["tite"].get<float64>();
-    float64 bz   = config["bz"].get<float64>();
-    float64 db   = config["db"].get<float64>();
-    float64 qe   = -1.0 / ncs;
-    float64 qi   = +1.0 / ncs;
-    float64 me   = std::abs(qe);
-    float64 mi   = me * mime;
-    float64 vdi  = -cc * b0 / (qi * ncs * lcs) / (1 + tite) * tite;
-    float64 vde  = +cc * b0 / (qi * ncs * lcs) / (1 + tite) * 1.0;
-    float64 vti  = sqrt(0.5 * b0 * b0 / (ncs * mi) / (1 + tite) * tite);
-    float64 vte  = sqrt(0.5 * b0 * b0 / (ncs * me) / (1 + tite) * 1.0);
+    float64 delt  = config["delt"].get<float64>();
+    float64 delh  = config["delh"].get<float64>();
+    float64 lcs   = config["lcs"].get<float64>();
+    int     ncs   = config["ncs"].get<float64>();
+    int     nbg   = config["nbg"].get<float64>();
+    float64 sigma = config["sigma"].get<float64>();
+    float64 mime  = config["mime"].get<float64>();
+    float64 tite  = config["tite"].get<float64>();
+    float64 bz    = config["bz"].get<float64>();
+    float64 db    = config["db"].get<float64>();
+    float64 b0    = sqrt(sigma);
+    float64 qe    = -1.0 / ncs;
+    float64 qi    = +1.0 / ncs;
+    float64 me    = std::abs(qe);
+    float64 mi    = me * mime;
+    float64 vdi   = -cc * b0 / (qi * ncs * lcs) / (1 + tite) * tite;
+    float64 vde   = +cc * b0 / (qi * ncs * lcs) / (1 + tite) * 1.0;
+    float64 vti   = sqrt(0.5 * b0 * b0 / (ncs * mi) / (1 + tite) * tite);
+    float64 vte   = sqrt(0.5 * b0 * b0 / (ncs * me) / (1 + tite) * 1.0);
 
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
