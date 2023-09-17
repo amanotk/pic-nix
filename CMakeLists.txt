@@ -11,5 +11,9 @@ include(${PICNIX_DIR}/common.cmake OPTIONAL)
 # project
 project(pic-nix CXX)
 
+# package
+set(CMAKE_MODULE_PATH "${PICNIX_DIR}/nix")
+find_package(Filesystem REQUIRED)
+
 # build all executables in project3d
 add_subdirectory(project3d)

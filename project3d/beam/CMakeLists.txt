@@ -19,6 +19,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME main.out)
 target_include_directories(${PROJECT_NAME} PRIVATE ${PICNIX_DIR})
 
 # link library
+target_link_libraries(${PROJECT_NAME} std::filesystem)
 target_link_libraries(${PROJECT_NAME} nix expic)
 
 # copy
