@@ -145,7 +145,7 @@ def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
         ax.axvline(delx * i, color=colors, lw=0.5)
 
 
-def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
+def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w", width=1):
     import matplotlib as mpl
 
     cx = coord[:, 0]
@@ -157,8 +157,8 @@ def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w"):
     zz = np.zeros((Ny, Nx), dtype=np.int32)
     zz[cy, cx] = rank
     Ix, Iy = np.broadcast_arrays(ix[None, :], iy[:, None])
-    diffx = np.where(zz[:, +1:] - zz[:, :-1] == 0, 0, 1)
-    diffy = np.where(zz[+1:, :] - zz[:-1, :] == 0, 0, 1)
+    diffx = np.where(zz[:, +1:] - zz[:, :-1] == 0, 0, 1) * width
+    diffy = np.where(zz[+1:, :] - zz[:-1, :] == 0, 0, 1) * width
     # vertical
     xsegments = np.zeros((Ny, Nx - 1, 2, 2), dtype=np.float64)
     xsegments[:, :, 0, 0] = delx * Ix[:, +1:]

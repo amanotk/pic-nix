@@ -8,7 +8,7 @@ set(PROJECT_NAME "fireball")
 project(${PROJECT_NAME} CXX)
 
 # order of shape function
-option(SHAPE_ORDER "Set SHAPE_ORDER to specify order of shape function" 1)
+set(SHAPE_ORDER 2 CACHE STRING "Order of shape function")
 add_compile_definitions(SHAPE_ORDER=${SHAPE_ORDER})
 
 # executable
