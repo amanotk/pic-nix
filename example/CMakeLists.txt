@@ -3,9 +3,6 @@ include(${PICNIX_DIR}/common.cmake OPTIONAL)
 # project
 project(example CXX)
 
-# source directory
-add_subdirectory(${PICNIX_DIR}/expic ${CMAKE_BINARY_DIR}/expic)
-
 # all the projects
 add_subdirectory(thermal)
 add_subdirectory(beam)
