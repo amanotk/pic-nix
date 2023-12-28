@@ -1,3 +1,0 @@
-[submodule "nix"]
-	path = nix
-	url = git@github.com:amanotk/nix.git
