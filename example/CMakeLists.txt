@@ -1,7 +1,7 @@
 include(${PICNIX_DIR}/common.cmake OPTIONAL)
 
 # project
-project(project3d CXX)
+project(example CXX)
 
 # source directory
 add_subdirectory(${PICNIX_DIR}/expic ${CMAKE_BINARY_DIR}/expic)

@@ -27,15 +27,15 @@ $ cmake -S . -B build \
 $ cmake --build build
 ```
 This is the so-called out-of-source build, which produces compiled binary in the `build` directory (in this particular case).
-Therefore, you will find executable files `main.out` in, e.g., `build/project3d/beam`.
+Therefore, you will find executable files `main.out` in, e.g., `build/example/beam`.
 
 For details, please refer to [CMake Reference Documentation](https://cmake.org/cmake/help/latest/).
 
 ## Run
 You can now execute `main.out` using `mpiexec` (or `mpirun`).  
-For example, you can run a simulation with default setup in `project3d/beam/twostream`.
+For example, you can run a simulation with default setup in `example/beam/twostream`.
 ```
-$ cd build/project3d/beam/twostream
+$ cd build/example/beam/twostream
 $ export OMP_NUM_THREADS=2
 $ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.json
 ```

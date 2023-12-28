@@ -24,5 +24,8 @@ FetchContent_MakeAvailable(nix)
 set(CMAKE_MODULE_PATH ${nix_SOURCE_DIR})
 find_package(Filesystem REQUIRED)
 
-### build all executables in project3d
-add_subdirectory(project3d)
+### build all executables in example directory
+option(BUILD_EXAMPLE "Build example" ON)
+if(BUILD_EXAMPLE)
+    add_subdirectory(example)
+endif()
