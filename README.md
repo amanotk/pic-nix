@@ -1,53 +1,64 @@
 # PIC-NIX
-A Particle-In-Cell (PIC) simulation code for collisionless space plasmas.
+A Particle-In-Cell (PIC) simulation code for collisionless space plasmas.  
+This is based on the kinetic plasma simulation framework `nix`, which can be found [here](https://github.com/amanotk/nix).
 
 # Compiling and Executing the Code
 
-## Set Environment Variable
+## Environment Variable
 ```
-$ export PICNIX_DIR=${PWD}/pic-nix
+$ export PICNIX_DIR=/some/where/pic-nix
 ```
-Setting the environment variable `PICNIX_DIR` is optional but it will be useful for running diagnostic python scripts.
+Setting the environment variable `PICNIX_DIR` is optional, but it will be useful for running diagnostic python scripts.
 
 ## Clone
-Clone the repository to local working directory via:
+Clone the repository to a local working directory via:
 ```
 $ git clone git@github.com:amanotk/pic-nix.git
-$ cd pic-nix
-$ git submodule update --init
 ```
 
 ## Compile
 The code can be compiled with `cmake`, to which a proper C++ compiler and its compiler flags should be specified.  
-The following example assumes `mpicxx` as a compiler with OpenMP enabled.
+The following example assumes `mpicxx` as a compiler with a `g++` backend and enables OpenMP.
 ```
-$ mkdir build
-$ cd build
-$ cmake .. \
+$ cd pic-nix
+$ cmake -S . -B build \
 	-DCMAKE_CXX_COMPILER=mpicxx \
 	-DCMAKE_CXX_FLAGS="-O3 -fopenmp"
-$ make
+$ cmake --build build
 ```
-You will now find executable files `main.out` in `project3d/thermal` and `project3d/beam` directories.
+This is the so-called out-of-source build, which produces compiled binary in the `build` directory (in this particular case).
+Therefore, you will find executable files `main.out` in, e.g., `build/project3d/beam`.
+
+For details, please refer to [CMake Reference Documentation](https://cmake.org/cmake/help/latest/).
 
 ## Run
 You can now execute `main.out` using `mpiexec` (or `mpirun`).  
 For example, you can run a simulation with default setup in `project3d/beam/twostream`.
 ```
-$ cd project3d/beam/twostream
+$ cd build/project3d/beam/twostream
 $ export OMP_NUM_THREADS=2
 $ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.json
 ```
-In this example, you use 8 MPI processes each launch 2 threads.
+In this example, you use 8 MPI processes, each launching 2 threads.
+The simulation parameters will be read from the configuration file `config.json`.
 
-Some command-line options are:
-- `-c` or `--config` : configuration file
-- `-t` or `--tmax`   : maximum physical time in simulation unit (default 1.79769e+308)
-- `-e` or `--emax`   : maximum elapsed time in sec (default 3600)
-
+Available command-line options will be shown with the `--help` option:
+```
+$ ./main.out --help
+usage: ./main.out --config=string [options] ...
+options:
+  -c, --config     configuration file (string)
+  -l, --load       prefix of snapshot to load (string [=])
+  -s, --save       prefix of snapshot to save (string [=])
+  -t, --tmax       maximum physical time (double [=1.79769e+308])
+  -e, --emax       maximum elapsed time [sec] (double [=3600])
+  -v, --verbose    verbosity level (int [=0])
+  -?, --help       print this message
+```
+  
 ## Plot
 After finishing the simulation, you can run the following command in the same directory:
 ```
-$ python batch.py profile.msgpack
+$ python batch.py data/profile.msgpack
 ```
 You will now see image files `twosteam-XXXXXXXX.png` for each snapshot and `twostream.mp4`, which is a movie file encoded by using `ffmpeg`.
