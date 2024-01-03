@@ -53,12 +53,12 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       int hz = digitize(xu(ip, 2), zhmin - dz2, rdz);
 
       // weights
-      shape2(xu(ip, 0), ximin + ix * delx, rdx, wix);
-      shape2(xu(ip, 0), xhmin + hx * delx, rdx, whx);
-      shape2(xu(ip, 1), yimin + iy * dely, rdy, wiy);
-      shape2(xu(ip, 1), yhmin + hy * dely, rdy, why);
-      shape2(xu(ip, 2), zimin + iz * delz, rdz, wiz);
-      shape2(xu(ip, 2), zhmin + hz * delz, rdz, whz);
+      shape<2>(xu(ip, 0), ximin + ix * delx, rdx, wix);
+      shape<2>(xu(ip, 0), xhmin + hx * delx, rdx, whx);
+      shape<2>(xu(ip, 1), yimin + iy * dely, rdy, wiy);
+      shape<2>(xu(ip, 1), yhmin + hy * dely, rdy, why);
+      shape<2>(xu(ip, 2), zimin + iz * delz, rdz, wiz);
+      shape<2>(xu(ip, 2), zhmin + hz * delz, rdz, whz);
 
       //
       // calculate electromagnetic field at particle position
@@ -127,9 +127,9 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       int iz0 = digitize(xv(ip, 2), zimin - dz2, rdz);
 
       // weights
-      shape2(xv(ip, 0), ximin + ix0 * delx, rdx, &ss[0][0][1]);
-      shape2(xv(ip, 1), yimin + iy0 * dely, rdy, &ss[0][1][1]);
-      shape2(xv(ip, 2), zimin + iz0 * delz, rdz, &ss[0][2][1]);
+      shape<2>(xv(ip, 0), ximin + ix0 * delx, rdx, &ss[0][0][1]);
+      shape<2>(xv(ip, 1), yimin + iy0 * dely, rdy, &ss[0][1][1]);
+      shape<2>(xv(ip, 2), zimin + iz0 * delz, rdz, &ss[0][2][1]);
 
       //
       // -*- weights after move -*-
@@ -140,14 +140,14 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       int iz1 = digitize(xu(ip, 2), zimin - dz2, rdz);
 
       // weights
-      shape2(xu(ip, 0), ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
-      shape2(xu(ip, 1), yimin + iy1 * dely, rdy, &ss[1][1][1 + iy1 - iy0]);
-      shape2(xu(ip, 2), zimin + iz1 * delz, rdz, &ss[1][2][1 + iz1 - iz0]);
+      shape<2>(xu(ip, 0), ximin + ix1 * delx, rdx, &ss[1][0][1 + ix1 - ix0]);
+      shape<2>(xu(ip, 1), yimin + iy1 * dely, rdy, &ss[1][1][1 + iy1 - iy0]);
+      shape<2>(xu(ip, 2), zimin + iz1 * delz, rdz, &ss[1][2][1 + iz1 - iz0]);
 
       //
       // -*- accumulate current via density decomposition -*-
       //
-      esirkepov3d2(dxdt, dydt, dzdt, ss, cur);
+      esirkepov3d<2>(dxdt, dydt, dzdt, ss, cur);
 
       ix0 += Lbx;
       iy0 += Lby;
@@ -204,9 +204,9 @@ DEFINE_MEMBER(void, deposit_moment)()
       int iz = digitize(xu(ip, 2), zimin - dz2, rdz);
 
       // weights
-      shape2(xu(ip, 0), ximin + ix * delx, rdx, wx);
-      shape2(xu(ip, 1), yimin + iy * dely, rdy, wy);
-      shape2(xu(ip, 2), zimin + iz * delz, rdz, wz);
+      shape<2>(xu(ip, 0), ximin + ix * delx, rdx, wx);
+      shape<2>(xu(ip, 1), yimin + iy * dely, rdy, wy);
+      shape<2>(xu(ip, 2), zimin + iz * delz, rdz, wz);
 
       // deposit to local array (this step is not necessary for scalar version)
       for (int jz = 0; jz < 3; jz++) {
