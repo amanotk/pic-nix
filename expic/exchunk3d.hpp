@@ -187,6 +187,12 @@ struct BaseChunk3D<3> {
   using ChunkType = nix::Chunk3D<3, ParticleType>;
 };
 
+// fourth-order shape function requires 3 boundary margins
+template <>
+struct BaseChunk3D<4> {
+  using ChunkType = nix::Chunk3D<3, ParticleType>;
+};
+
 // Local Variables:
 // c-file-style   : "gnu"
 // c-file-offsets : ((innamespace . 0) (inline-open . 0))
