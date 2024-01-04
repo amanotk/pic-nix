@@ -379,18 +379,13 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       hx0 += Lbx - (Order / 2);
       hy0 += Lby - (Order / 2);
       hz0 += Lbz - (Order / 2);
-      for (int jz = 0, iz = iz0, hz = hz0; jz < size; jz++, iz++, hz++) {
-        for (int jy = 0, iy = iy0, hy = hy0; jy < size; jy++, iy++, hy++) {
-          for (int jx = 0, ix = ix0, hx = hx0; jx < size; jx++, ix++, hx++) {
-            emf[0] += uf(iz, iy, hx, 0) * wiz[jz] * wiy[jy] * whx[jx] * dt1;
-            emf[1] += uf(iz, hy, ix, 1) * wiz[jz] * why[jy] * wix[jx] * dt1;
-            emf[2] += uf(hz, iy, ix, 2) * whz[jz] * wiy[jy] * wix[jx] * dt1;
-            emf[3] += uf(hz, hy, ix, 3) * whz[jz] * why[jy] * wix[jx] * dt2;
-            emf[4] += uf(hz, iy, hx, 4) * whz[jz] * wiy[jy] * whx[jx] * dt2;
-            emf[5] += uf(iz, hy, hx, 5) * wiz[jz] * why[jy] * whx[jx] * dt2;
-          }
-        }
-      }
+
+      emf[0] = interpolate3d<Order>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
+      emf[1] = interpolate3d<Order>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
+      emf[2] = interpolate3d<Order>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
+      emf[3] = interpolate3d<Order>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
+      emf[4] = interpolate3d<Order>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
+      emf[5] = interpolate3d<Order>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
 
       // push particle velocity
       push_buneman_boris(&xu(ip, 3), emf);
