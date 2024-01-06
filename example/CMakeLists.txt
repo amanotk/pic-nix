@@ -1,4 +1,4 @@
-include(${PICNIX_DIR}/common.cmake OPTIONAL)
+include(${CMAKE_SOURCE_DIR}/common.cmake OPTIONAL)
 
 # project
 project(example CXX)

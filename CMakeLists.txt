@@ -39,11 +39,11 @@ if(NOT (PICNIX_SHAPE_ORDER GREATER_EQUAL 1 AND PICNIX_SHAPE_ORDER LESS_EQUAL 4))
 endif()
 
 # explicit PIC library
-add_subdirectory(${PICNIX_DIR}/expic ${CMAKE_BINARY_DIR}/expic)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/expic ${CMAKE_CURRENT_BINARY_DIR}/expic)
 
 # build all executables in example directory
-option(BUILD_EXAMPLE "Build example" ON)
+option(PICNIX_BUILD_EXAMPLE "Build example" ON)
 
-if(BUILD_EXAMPLE)
+if(PICNIX_BUILD_EXAMPLE)
   add_subdirectory(example)
 endif()
