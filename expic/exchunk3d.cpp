@@ -8,6 +8,24 @@
 DEFINE_MEMBER(, ExChunk3D)
 (const int dims[3], int id) : Chunk(dims, id), Ns(1), field_load(1.0)
 {
+  // check the minimum number of grids
+  {
+    bool is_valid = true;
+
+    for (int dir = 0; dir < 3; dir++) {
+      is_valid &= (dims[dir] >= Nb);
+    }
+
+    if (is_valid == false) {
+      ERROR << tfm::format("Specified chunk dimensions are invalid.");
+      ERROR << tfm::format("* Number of grid in x direction : %4d", dims[2]);
+      ERROR << tfm::format("* Number of grid in y direction : %4d", dims[1]);
+      ERROR << tfm::format("* Number of grid in z direction : %4d", dims[0]);
+      ERROR << tfm::format("* Minimum number of grids       : %4d", Nb);
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+  }
+
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
   for (int i = 0; i < NumBoundaryMode; i++) {
@@ -636,6 +654,8 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 
 template class ExChunk3D<1>;
 template class ExChunk3D<2>;
+template class ExChunk3D<3>;
+template class ExChunk3D<4>;
 
 #undef DEFINE_MEMBER
 

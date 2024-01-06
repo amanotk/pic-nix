@@ -2,6 +2,11 @@
 #ifndef _EXCHUNK3D_HPP_
 #define _EXCHUNK3D_HPP_
 
+#ifndef PICNIX_SHAPE_ORDER
+#define PICNIX_SHAPE_ORDER:STRING=3
+#define PICNIX_SHAPE_ORDER 2
+#endif
+
 #include "nix/buffer.hpp"
 #include "nix/chunk3d.hpp"
 #include "nix/debug.hpp"
@@ -17,10 +22,6 @@ using nix::json;
 using nix::ParticlePtr;
 using nix::ParticleVec;
 using ParticleType = nix::ParticlePtr::element_type;
-
-// trick to map from order of shape function to number of boundary margins
-template <int Order>
-struct BaseChunk3D;
 
 ///
 /// @brief Chunk for 3D Explicit PIC Simulations
@@ -46,11 +47,11 @@ struct BaseChunk3D;
 /// applications.
 ///
 template <int Order>
-class ExChunk3D : public BaseChunk3D<Order>::ChunkType
+class ExChunk3D : public nix::Chunk3D<(Order + 3) / 2, ParticleType>
 {
 public:
   using ThisType     = ExChunk3D<Order>;
-  using Chunk        = typename BaseChunk3D<Order>::ChunkType;
+  using Chunk        = typename nix::Chunk3D<(Order + 3) / 2, ParticleType>;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using MpiBufferPtr = typename Chunk::MpiBufferPtr;
   using Chunk::dims;
@@ -167,30 +168,6 @@ public:
   {
     return packer(get_internal_data(), buffer, address);
   }
-};
-
-// first-order shape function requires 2 boundary margins
-template <>
-struct BaseChunk3D<1> {
-  using ChunkType = nix::Chunk3D<2, ParticleType>;
-};
-
-// second-order shape function requires 2 boundary margins
-template <>
-struct BaseChunk3D<2> {
-  using ChunkType = nix::Chunk3D<2, ParticleType>;
-};
-
-// third-order shape function requires 3 boundary margins
-template <>
-struct BaseChunk3D<3> {
-  using ChunkType = nix::Chunk3D<3, ParticleType>;
-};
-
-// fourth-order shape function requires 3 boundary margins
-template <>
-struct BaseChunk3D<4> {
-  using ChunkType = nix::Chunk3D<3, ParticleType>;
 };
 
 // Local Variables:
