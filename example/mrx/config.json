@@ -16,19 +16,19 @@
 			"name": "history",
 			"path": ".",
 			"prefix": "history",
-			"interval": 20
+			"interval": 100
 		},
 		{
 			"name": "field",
 			"path": ".",
 			"prefix": "field",
-			"interval": 20
+			"interval": 100
 		},
 		{
 			"name": "particle",
 			"path": ".",
 			"prefix": "particle",
-			"interval": 200
+			"interval": 1000
 		}
 	],
 	"parameter": {
