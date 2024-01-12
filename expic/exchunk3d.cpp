@@ -360,7 +360,6 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       float64 why[size] = {0};
       float64 wiz[size] = {0};
       float64 whz[size] = {0};
-      float64 emf[6]    = {0};
 
       float64 gam = lorentz_factor(xu(ip, 3), xu(ip, 4), xu(ip, 5), rc);
       float64 dt2 = dt1 * rc / gam;
@@ -398,15 +397,15 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       hy0 += Lby - (Order / 2);
       hz0 += Lbz - (Order / 2);
 
-      emf[0] = interpolate3d<Order>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
-      emf[1] = interpolate3d<Order>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
-      emf[2] = interpolate3d<Order>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
-      emf[3] = interpolate3d<Order>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
-      emf[4] = interpolate3d<Order>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
-      emf[5] = interpolate3d<Order>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
+      float64 ex = interpolate3d<Order>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
+      float64 ey = interpolate3d<Order>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
+      float64 ez = interpolate3d<Order>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
+      float64 bx = interpolate3d<Order>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
+      float64 by = interpolate3d<Order>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
+      float64 bz = interpolate3d<Order>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
 
       // push particle velocity
-      push_buneman_boris(&xu(ip, 3), emf);
+      push_boris(xu(ip, 3), xu(ip, 4), xu(ip, 5), ex, ey, ez, bx, by, bz);
     }
   }
 }
