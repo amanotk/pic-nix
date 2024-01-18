@@ -125,6 +125,14 @@ protected:
     return {Lbx, Ubx, Lby, Uby, Lbz, Ubz, Ns, cc, load, uf, uj, um, up};
   }
 
+  virtual void push_position_impl_scalar(float64 delt);
+
+  virtual void push_velocity_impl_scalar(float64 delt);
+
+  virtual void deposit_current_impl_scalar(float64 delt);
+
+  virtual void deposit_moment_impl_scalar();
+
 public:
   ExChunk3D(const int dims[3], int id = 0);
 
@@ -150,6 +158,10 @@ public:
 
   virtual void push_bfd(float64 delt);
 
+  virtual void set_boundary_begin(int mode = 0) override;
+
+  virtual void set_boundary_end(int mode = 0) override;
+
   virtual void push_position(float64 delt);
 
   virtual void push_velocity(float64 delt);
@@ -157,10 +169,6 @@ public:
   virtual void deposit_current(float64 delt);
 
   virtual void deposit_moment();
-
-  virtual void set_boundary_begin(int mode = 0) override;
-
-  virtual void set_boundary_end(int mode = 0) override;
 
   template <typename DataPacker>
   int pack_diagnostic(DataPacker packer, uint8_t* buffer, int address)
