@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-include(common.cmake)
+set(CMAKE_CXX_STANDARD 17)
 
 # project
 project(pic-nix CXX)
@@ -19,7 +19,7 @@ else()
   FetchContent_Declare(
     nix
     GIT_REPOSITORY https://github.com/amanotk/nix.git
-    GIT_TAG 6c4917b4183b736567639df30a11042750a01911
+    GIT_TAG 3875bf5b85bdb23b95f587f48792fefbf2d478a1
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/nix
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/nix
   )
@@ -29,6 +29,9 @@ endif()
 # Filesystem package
 set(CMAKE_MODULE_PATH ${nix_SOURCE_DIR})
 find_package(Filesystem REQUIRED)
+
+# xsimd for xtensor
+add_compile_definitions(XTENSOR_USE_XSIMD)
 
 # order of particle shape function
 set(PICNIX_SHAPE_ORDER 2 CACHE STRING "Order of particle shape function")

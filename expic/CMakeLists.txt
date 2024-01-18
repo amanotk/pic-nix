@@ -1,5 +1,3 @@
-include(${CMAKE_SOURCE_DIR}/common.cmake OPTIONAL)
-
 # project
 project(expic CXX)
 

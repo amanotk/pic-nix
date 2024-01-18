@@ -1,5 +1,3 @@
-include(${CMAKE_SOURCE_DIR}/common.cmake OPTIONAL)
-
 set(PROJECT_NAME "thermal")
 
 # project
