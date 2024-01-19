@@ -363,12 +363,14 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  push_velocity_impl_scalar(delt);
+  //push_velocity_impl_scalar(delt);
+  push_velocity_impl_xsimd(delt);
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
-  deposit_current_impl_scalar(delt);
+  //deposit_current_impl_scalar(delt);
+  deposit_current_impl_xsimd(delt);
 }
 
 DEFINE_MEMBER(void, deposit_moment)()
@@ -378,8 +380,8 @@ DEFINE_MEMBER(void, deposit_moment)()
 
 #undef DEFINE_MEMBER
 
-// scalar version
-#include "exchunk3d_impl_scalar.cpp"
+#include "exchunk3d_impl_scalar.cpp" // scalar version
+#include "exchunk3d_impl_xsimd.cpp"  // vector version with xsimd
 
 template class ExChunk3D<1>;
 template class ExChunk3D<2>;

@@ -192,19 +192,11 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       //
       esirkepov3d<Order>(dxdt, dydt, dzdt, ss, cur);
 
+      // deposit to global array
       ix0 += Lbx - (Order / 2) - 1;
       iy0 += Lby - (Order / 2) - 1;
       iz0 += Lbz - (Order / 2) - 1;
-      for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
-        for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
-          for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
-            uj(iz, iy, ix, 0) += qs * cur[jz][jy][jx][0];
-            uj(iz, iy, ix, 1) += qs * cur[jz][jy][jx][1];
-            uj(iz, iy, ix, 2) += qs * cur[jz][jy][jx][2];
-            uj(iz, iy, ix, 3) += qs * cur[jz][jy][jx][3];
-          }
-        }
-      }
+      append_current3d<Order>(uj, iz0, iy0, ix0, cur, qs);
     }
   }
 }

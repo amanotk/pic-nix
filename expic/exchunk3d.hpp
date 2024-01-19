@@ -133,6 +133,14 @@ protected:
 
   virtual void deposit_moment_impl_scalar();
 
+  virtual void push_position_impl_xsimd(float64 delt);
+
+  virtual void push_velocity_impl_xsimd(float64 delt);
+
+  virtual void deposit_current_impl_xsimd(float64 delt);
+
+  virtual void deposit_moment_impl_xsimd();
+
 public:
   ExChunk3D(const int dims[3], int id = 0);
 
