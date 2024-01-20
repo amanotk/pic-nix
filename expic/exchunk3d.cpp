@@ -422,7 +422,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  auto mode = config["vectorization"]["velocity"].get<std::string>();
+  auto mode = config["vectorization"].value("velocity", "scalar");
 
   if (mode == "scalar") {
     push_velocity_impl_scalar(delt);
@@ -435,7 +435,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
-  auto mode = config["vectorization"]["current"].get<std::string>();
+  auto mode = config["vectorization"].value("current", "scalar");
 
   if (mode == "scalar") {
     deposit_current_impl_scalar(delt);
