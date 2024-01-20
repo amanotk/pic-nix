@@ -91,12 +91,13 @@ public:
 protected:
   float64 field_load; ///< field load per grid point (normalized to particle load)
 
-  int                     Ns; ///< number of particle species
-  float64                 cc; ///< speed of light
-  xt::xtensor<float64, 4> uf; ///< electromagnetic field
-  xt::xtensor<float64, 4> uj; ///< current density
-  xt::xtensor<float64, 5> um; ///< particle moment
-  ParticleVec             up; ///< list of particles
+  json                    config; ///< configuration
+  int                     Ns;     ///< number of particle species
+  float64                 cc;     ///< speed of light
+  xt::xtensor<float64, 4> uf;     ///< electromagnetic field
+  xt::xtensor<float64, 4> uj;     ///< current density
+  xt::xtensor<float64, 5> um;     ///< particle moment
+  ParticleVec             up;     ///< list of particles
 
   ///
   /// @brief internal data struct

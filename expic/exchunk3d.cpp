@@ -153,7 +153,66 @@ DEFINE_MEMBER(void, reset_load)()
 
 DEFINE_MEMBER(void, setup)(json& config)
 {
-  // a derived class should implement it
+  this->config = config;
+
+  // vectorization mode
+  {
+    std::vector<std::string> valid_mode = {"scalar", "xsimd-sorted", "xsimd-unsorted"};
+
+    if (this->config["vectorization"].is_null()) {
+      //
+      // scalar by default
+      //
+      this->config["vectorization"] = {
+          {"position", "scalar"}, {"velocity", "scalar"}, {"current", "scalar"}};
+    } else if (this->config["vectorization"].is_string()) {
+      //
+      // same vectorization mode for position, velocity, and current
+      //
+      std::string mode = this->config["vectorization"];
+
+      bool is_valid_mode =
+          std::find(valid_mode.begin(), valid_mode.end(), mode) != valid_mode.end();
+      if (is_valid_mode == true) {
+        this->config["vectorization"] = {{"position", mode}, {"velocity", mode}, {"current", mode}};
+      } else {
+        ERROR << tfm::format("Invalid vectorization mode: %s", mode);
+        MPI_Abort(MPI_COMM_WORLD, -1);
+      }
+    } else if (this->config["vectorization"].is_object()) {
+      //
+      // different vectorization modes for position, velocity, and current
+      //
+      for (auto& key : {"position", "velocity", "current"}) {
+        auto mode = this->config["vectorization"][key];
+
+        bool is_valid_mode =
+            mode.is_string() == true &&
+            std::find(valid_mode.begin(), valid_mode.end(), mode) != valid_mode.end();
+        if (is_valid_mode == true) {
+          this->config["vectorization"][key] = mode;
+        } else {
+          ERROR << tfm::format("Invalid vectorization mode for %s: %s", key, mode);
+          MPI_Abort(MPI_COMM_WORLD, -1);
+        }
+      }
+    } else {
+      ERROR << "Invalid format for vectorization mode";
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    for (auto& key : {"position", "velocity", "current"}) {
+      std::string mode = this->config["vectorization"][key];
+      DEBUG1 << tfm::format("Vectorization mode for %s: %s", key, mode);
+    }
+  }
+
+  // seed for random number generator
+  {
+    if (this->config["seed"].is_null() == true) {
+      this->config["seed"] = "random";
+    }
+  }
 }
 
 DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
@@ -363,14 +422,28 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  //push_velocity_impl_scalar(delt);
-  push_velocity_impl_xsimd(delt);
+  auto mode = config["vectorization"]["velocity"].get<std::string>();
+
+  if (mode == "scalar") {
+    push_velocity_impl_scalar(delt);
+  } else if (mode == "xsimd-unsorted") {
+    push_velocity_impl_xsimd(delt);
+  } else if (mode == "xsimd-sorted") {
+    push_velocity_impl_xsimd(delt);
+  }
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
-  //deposit_current_impl_scalar(delt);
-  deposit_current_impl_xsimd(delt);
+  auto mode = config["vectorization"]["current"].get<std::string>();
+
+  if (mode == "scalar") {
+    deposit_current_impl_scalar(delt);
+  } else if (mode == "xsimd-unsorted") {
+    deposit_current_impl_xsimd(delt);
+  } else if (mode == "xsimd-sorted") {
+    deposit_current_impl_xsimd(delt);
+  }
 }
 
 DEFINE_MEMBER(void, deposit_moment)()

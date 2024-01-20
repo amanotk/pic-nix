@@ -46,6 +46,8 @@ public:
 
   virtual void setup(json& config) override
   {
+    ExChunk3D<order>::setup(config);
+
     // parameter for load balancing
     field_load = config.value("field_load", 1.0);
 

@@ -16,6 +16,8 @@ public:
 
   virtual void setup(json& config) override
   {
+    ExChunk3D<order>::setup(config);
+
     float64 delt;
     float64 delh;
 

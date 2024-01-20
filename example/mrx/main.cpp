@@ -15,6 +15,8 @@ public:
 
   virtual void setup(json& config) override
   {
+    ExChunk3D<order>::setup(config);
+
     field_load = config.value("field_load", 1.0);
 
     cc = 1.0;
