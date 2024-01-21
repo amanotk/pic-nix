@@ -97,6 +97,13 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
   for (int is = 0; is < Ns; is++) {
     count += up[is]->pack(buffer, count);
   }
+  // config
+  {
+    std::vector<uint8_t> msgpack = json::to_msgpack(config);
+    int                  size    = msgpack.size();
+    count += memcpy_count(buffer, &size, sizeof(int), count, 0);
+    count += memcpy_count(buffer, msgpack.data(), size, count, 0);
+  }
 
   return count;
 }
@@ -119,6 +126,16 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
   for (int is = 0; is < Ns; is++) {
     up[is] = std::make_shared<ParticleType>();
     count += up[is]->unpack(buffer, count);
+  }
+  // config
+  {
+    int size = 0;
+    count += memcpy_count(&size, buffer, sizeof(int), 0, count);
+
+    std::vector<uint8_t> msgpack(size);
+    count += memcpy_count(msgpack.data(), buffer, size, 0, count);
+
+    config = json::from_msgpack(msgpack);
   }
 
   return count;
