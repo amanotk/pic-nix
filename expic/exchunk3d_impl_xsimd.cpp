@@ -10,6 +10,236 @@
   template <int Order>                                                                             \
   type ExChunk3D<Order>::name##_impl_xsimd
 
+namespace
+{
+//
+// Loop body for push_velocity
+//
+template <int Order, typename T_float>
+struct PushVelocityXsimd {
+  static constexpr int size   = Order + 2;
+  static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
+  using simd_f64              = simd::simd_f64;
+  using simd_i64              = simd::simd_i64;
+
+  int     lbx;
+  int     lby;
+  int     lbz;
+  float64 dx;
+  float64 dy;
+  float64 dz;
+  float64 xigrid;
+  float64 xhgrid;
+  float64 yigrid;
+  float64 yhgrid;
+  float64 zigrid;
+  float64 zhgrid;
+
+  T_float  rc;
+  T_float  rdx;
+  T_float  rdy;
+  T_float  rdz;
+  T_float  ximin;
+  T_float  xhmin;
+  T_float  yimin;
+  T_float  yhmin;
+  T_float  zimin;
+  T_float  zhmin;
+  simd_i64 index;
+
+  PushVelocityXsimd(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3],
+                    float64 ylim[3], float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
+      : dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz)
+  {
+    rc     = 1 / cc;
+    rdx    = 1 / dx;
+    rdy    = 1 / dy;
+    rdz    = 1 / dz;
+    ximin  = xlim[0] + 0.5 * delx * is_odd;
+    xhmin  = xlim[0] + 0.5 * delx * is_odd - 0.5 * delx;
+    yimin  = ylim[0] + 0.5 * dely * is_odd;
+    yhmin  = ylim[0] + 0.5 * dely * is_odd - 0.5 * dely;
+    zimin  = zlim[0] + 0.5 * delz * is_odd;
+    zhmin  = zlim[0] + 0.5 * delz * is_odd - 0.5 * delz;
+    xigrid = xlim[0] + 0.5 * delx;
+    xhgrid = xlim[0];
+    yigrid = ylim[0] + 0.5 * dely;
+    yhgrid = ylim[0];
+    zigrid = zlim[0] + 0.5 * delz;
+    zhgrid = zlim[0];
+    index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+  }
+
+  template <typename T_array>
+  void operator()(T_array& uf, T_float xu[], T_float dt1)
+  {
+    using T_int = xsimd::as_integer_t<T_float>;
+
+    T_float wix[size] = {0};
+    T_float whx[size] = {0};
+    T_float wiy[size] = {0};
+    T_float why[size] = {0};
+    T_float wiz[size] = {0};
+    T_float whz[size] = {0};
+
+    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
+    auto dt2 = dt1 * rc / gam;
+
+    // grid indices and positions
+    auto ix0 = digitize(xu[0], ximin, rdx);
+    auto hx0 = digitize(xu[0], xhmin, rdx);
+    auto iy0 = digitize(xu[1], yimin, rdy);
+    auto hy0 = digitize(xu[1], yhmin, rdy);
+    auto iz0 = digitize(xu[2], zimin, rdz);
+    auto hz0 = digitize(xu[2], zhmin, rdz);
+    auto xig = xigrid + to_float(ix0) * dx;
+    auto xhg = xhgrid + to_float(hx0) * dx;
+    auto yig = yigrid + to_float(iy0) * dy;
+    auto yhg = yhgrid + to_float(hy0) * dy;
+    auto zig = zigrid + to_float(iz0) * dz;
+    auto zhg = zhgrid + to_float(hz0) * dz;
+
+    // weights
+    shape<Order>(xu[0], xig, rdx, wix);
+    shape<Order>(xu[0], xhg, rdx, whx);
+    shape<Order>(xu[1], yig, rdy, wiy);
+    shape<Order>(xu[1], yhg, rdy, why);
+    shape<Order>(xu[2], zig, rdz, wiz);
+    shape<Order>(xu[2], zhg, rdz, whz);
+
+    //
+    // calculate electromagnetic field at particle position
+    //
+    // * Ex => half-integer for x, full-integer for y, z
+    // * Ey => half-integer for y, full-integer for z, x
+    // * Ez => half-integer for z, full-integer for x, y
+    // * Bx => half-integer for y, z, full-integer for x
+    // * By => half-integer for z, x, full-integer for y
+    // * Bz => half-integer for x, y, full-integer for z
+    //
+    ix0 += lbx - (Order / 2);
+    iy0 += lby - (Order / 2);
+    iz0 += lbz - (Order / 2);
+    hx0 += lbx - (Order / 2);
+    hy0 += lby - (Order / 2);
+    hz0 += lbz - (Order / 2);
+
+    auto ex = interpolate3d<Order>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
+    auto ey = interpolate3d<Order>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
+    auto ez = interpolate3d<Order>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
+    auto bx = interpolate3d<Order>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
+    auto by = interpolate3d<Order>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
+    auto bz = interpolate3d<Order>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
+
+    // push particle velocity
+    push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
+  };
+};
+
+//
+// Loop body for deposit_current
+//
+template <int Order, typename T_float>
+struct DepositCurrentXsimd {
+  static constexpr int size   = Order + 3;
+  static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
+  using simd_f64              = simd::simd_f64;
+  using simd_i64              = simd::simd_i64;
+
+  int     lbx;
+  int     lby;
+  int     lbz;
+  float64 dx;
+  float64 dy;
+  float64 dz;
+  float64 dxdt;
+  float64 dydt;
+  float64 dzdt;
+  float64 xgrid;
+  float64 ygrid;
+  float64 zgrid;
+
+  T_float  rdx;
+  T_float  rdy;
+  T_float  rdz;
+  T_float  xmin;
+  T_float  ymin;
+  T_float  zmin;
+  simd_i64 index;
+
+  DepositCurrentXsimd(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3],
+                      float64 ylim[3], float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
+      : dx(delx), dy(dely), dz(delz), dxdt(delx / delt), dydt(dely / delt), dzdt(delz / delt),
+        lbx(Lbx), lby(Lby), lbz(Lbz)
+  {
+    rdx   = 1 / dx;
+    rdy   = 1 / dy;
+    rdz   = 1 / dz;
+    xmin  = xlim[0] + 0.5 * delx * is_odd;
+    ymin  = ylim[0] + 0.5 * dely * is_odd;
+    zmin  = zlim[0] + 0.5 * delz * is_odd;
+    xgrid = xlim[0] + 0.5 * delx;
+    ygrid = ylim[0] + 0.5 * dely;
+    zgrid = zlim[0] + 0.5 * delz;
+    index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+  }
+
+  template <typename T_array>
+  void operator()(T_array& uj, T_float xv[], T_float xu[], T_float (&ss)[2][3][size],
+                  T_float (&cur)[size][size][size][4], float64 qs)
+  {
+    using T_int = xsimd::as_integer_t<T_float>;
+
+    //
+    // -*- weights before move -*-
+    //
+    // grid indices and positions
+    auto ix0 = digitize(xv[0], xmin, rdx);
+    auto iy0 = digitize(xv[1], ymin, rdy);
+    auto iz0 = digitize(xv[2], zmin, rdz);
+    auto xg0 = xgrid + to_float(ix0) * dx;
+    auto yg0 = ygrid + to_float(iy0) * dy;
+    auto zg0 = zgrid + to_float(iz0) * dz;
+
+    // weights
+    shape<Order>(xv[0], xg0, rdx, &ss[0][0][1]);
+    shape<Order>(xv[1], yg0, rdy, &ss[0][1][1]);
+    shape<Order>(xv[2], zg0, rdz, &ss[0][2][1]);
+
+    //
+    // -*- weights after move -*-
+    //
+    // grid indices and positions
+    auto ix1 = digitize(xu[0], xmin, rdx);
+    auto iy1 = digitize(xu[1], ymin, rdy);
+    auto iz1 = digitize(xu[2], zmin, rdz);
+    auto xg1 = xgrid + to_float(ix1) * dx;
+    auto yg1 = ygrid + to_float(iy1) * dy;
+    auto zg1 = zgrid + to_float(iz1) * dz;
+
+    // weights
+    shape<Order>(xu[0], xg1, rdx, &ss[1][0][1]);
+    shape<Order>(xu[1], yg1, rdy, &ss[1][1][1]);
+    shape<Order>(xu[2], zg1, rdz, &ss[1][2][1]);
+
+    // shift weights according to particle movement
+    T_int shift[3] = {ix1 - ix0, iy1 - iy0, iz1 - iz0};
+    esirkepov3d_shift_weights_after_movement<Order>(shift, ss[1]);
+
+    //
+    // -*- accumulate current via density decomposition -*-
+    //
+    esirkepov3d<Order>(dxdt, dydt, dzdt, ss, cur);
+
+    // deposit to global array
+    ix0 += lbx - (Order / 2) - 1;
+    iy0 += lby - (Order / 2) - 1;
+    iz0 += lbz - (Order / 2) - 1;
+    append_current3d<Order>(uj, iz0, iy0, ix0, cur, qs);
+  }
+};
+} // namespace
+
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
   const float64 rc = 1 / cc;
@@ -42,104 +272,14 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
   using simd::simd_f64;
   using simd::simd_i64;
-  constexpr int size   = Order + 2;
-  constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
-
-  const float64  rc     = 1 / cc;
-  const float64  rdx    = 1 / delx;
-  const float64  rdy    = 1 / dely;
-  const float64  rdz    = 1 / delz;
-  const float64  ximin  = xlim[0] + 0.5 * delx * is_odd;
-  const float64  xhmin  = xlim[0] + 0.5 * delx * is_odd - 0.5 * delx;
-  const float64  yimin  = ylim[0] + 0.5 * dely * is_odd;
-  const float64  yhmin  = ylim[0] + 0.5 * dely * is_odd - 0.5 * dely;
-  const float64  zimin  = zlim[0] + 0.5 * delz * is_odd;
-  const float64  zhmin  = zlim[0] + 0.5 * delz * is_odd - 0.5 * delz;
-  const float64  xigrid = ximin - 0.5 * delx * is_odd + 0.5 * delx;
-  const float64  xhgrid = xhmin - 0.5 * delx * is_odd + 0.5 * delx;
-  const float64  yigrid = yimin - 0.5 * dely * is_odd + 0.5 * dely;
-  const float64  yhgrid = yhmin - 0.5 * dely * is_odd + 0.5 * dely;
-  const float64  zigrid = zimin - 0.5 * delz * is_odd + 0.5 * delz;
-  const float64  zhgrid = zhmin - 0.5 * delz * is_odd + 0.5 * delz;
+  constexpr int  size   = Order + 2;
+  constexpr int  is_odd = Order % 2 == 0 ? 0 : 1;
   const simd_i64 index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-  //
-  // loop body for both vectorized and scalar version
-  //
-  auto LoopBody = [=](auto& uf, auto xu[], auto dt1) {
-    using T_float = std::remove_reference_t<decltype(*xu)>;
-    using T_int   = xsimd::as_integer_t<T_float>;
-
-    const T_float rc_simd    = rc;
-    const T_float rdx_simd   = rdx;
-    const T_float rdy_simd   = rdy;
-    const T_float rdz_simd   = rdz;
-    const T_float ximin_simd = ximin;
-    const T_float xhmin_simd = xhmin;
-    const T_float yimin_simd = yimin;
-    const T_float yhmin_simd = yhmin;
-    const T_float zimin_simd = zimin;
-    const T_float zhmin_simd = zhmin;
-
-    T_float wix[size] = {0};
-    T_float whx[size] = {0};
-    T_float wiy[size] = {0};
-    T_float why[size] = {0};
-    T_float wiz[size] = {0};
-    T_float whz[size] = {0};
-
-    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc_simd);
-    auto dt2 = dt1 * rc_simd / gam;
-
-    // grid indices and positions
-    auto ix0 = digitize(xu[0], ximin_simd, rdx_simd);
-    auto hx0 = digitize(xu[0], xhmin_simd, rdx_simd);
-    auto iy0 = digitize(xu[1], yimin_simd, rdy_simd);
-    auto hy0 = digitize(xu[1], yhmin_simd, rdy_simd);
-    auto iz0 = digitize(xu[2], zimin_simd, rdz_simd);
-    auto hz0 = digitize(xu[2], zhmin_simd, rdz_simd);
-    auto xig = xigrid + to_float(ix0) * delx;
-    auto xhg = xhgrid + to_float(hx0) * delx;
-    auto yig = yigrid + to_float(iy0) * dely;
-    auto yhg = yhgrid + to_float(hy0) * dely;
-    auto zig = zigrid + to_float(iz0) * delz;
-    auto zhg = zhgrid + to_float(hz0) * delz;
-
-    // weights
-    shape<Order>(xu[0], xig, rdx_simd, wix);
-    shape<Order>(xu[0], xhg, rdx_simd, whx);
-    shape<Order>(xu[1], yig, rdy_simd, wiy);
-    shape<Order>(xu[1], yhg, rdy_simd, why);
-    shape<Order>(xu[2], zig, rdz_simd, wiz);
-    shape<Order>(xu[2], zhg, rdz_simd, whz);
-
-    //
-    // calculate electromagnetic field at particle position
-    //
-    // * Ex => half-integer for x, full-integer for y, z
-    // * Ey => half-integer for y, full-integer for z, x
-    // * Ez => half-integer for z, full-integer for x, y
-    // * Bx => half-integer for y, z, full-integer for x
-    // * By => half-integer for z, x, full-integer for y
-    // * Bz => half-integer for x, y, full-integer for z
-    //
-    ix0 += Lbx - (Order / 2);
-    iy0 += Lby - (Order / 2);
-    iz0 += Lbz - (Order / 2);
-    hx0 += Lbx - (Order / 2);
-    hy0 += Lby - (Order / 2);
-    hz0 += Lbz - (Order / 2);
-
-    auto ex = interpolate3d<Order>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
-    auto ey = interpolate3d<Order>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
-    auto ez = interpolate3d<Order>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
-    auto bx = interpolate3d<Order>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
-    auto by = interpolate3d<Order>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
-    auto bz = interpolate3d<Order>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
-
-    // push particle velocity
-    push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
-  };
+  PushVelocityXsimd<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
+                                               Lbz, cc);
+  PushVelocityXsimd<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
+                                               Lbz, cc);
 
   //
   // main computation
@@ -164,7 +304,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       xu[4] = simd_f64::gather(&ps->xu(ip, 4), index);
       xu[5] = simd_f64::gather(&ps->xu(ip, 5), index);
 
-      LoopBody(uf, xu, dt1);
+      LoopBodyV(uf, xu, dt1);
 
       // store particles to memory
       xu[3].scatter(&ps->xu(ip, 3), index);
@@ -179,7 +319,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       float64* xu  = &ps->xu(ip, 0);
       float64  dt1 = 0.5 * ps->q / ps->m * delt;
 
-      LoopBody(uf, xu, dt1);
+      LoopBodyS(uf, xu, dt1);
     }
   }
 }
@@ -188,88 +328,17 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
   using simd::simd_f64;
   using simd::simd_i64;
-  constexpr int size   = Order + 3;
-  constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
+  constexpr int  size   = Order + 3;
+  constexpr int  is_odd = Order % 2 == 0 ? 0 : 1;
+  const simd_i64 index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-  const float64  rdx   = 1 / delx;
-  const float64  rdy   = 1 / dely;
-  const float64  rdz   = 1 / delz;
-  const float64  dxdt  = delx / delt;
-  const float64  dydt  = dely / delt;
-  const float64  dzdt  = delz / delt;
-  const float64  xmin  = xlim[0] + 0.5 * delx * is_odd;
-  const float64  ymin  = ylim[0] + 0.5 * dely * is_odd;
-  const float64  zmin  = zlim[0] + 0.5 * delz * is_odd;
-  const float64  xgrid = xlim[0] + 0.5 * delx;
-  const float64  ygrid = ylim[0] + 0.5 * dely;
-  const float64  zgrid = zlim[0] + 0.5 * delz;
-  const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+  DepositCurrentXsimd<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
+                                                 Lbz, cc);
+  DepositCurrentXsimd<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
+                                                 Lbz, cc);
 
   // clear charge/current density
   uj.fill(0);
-
-  //
-  // loop body for both vectorized and scalar version
-  //
-  auto LoopBody = [=](auto& uj, auto xv[], auto xu[], auto ss[2][3][size],
-                      auto cur[size][size][size][4], auto qs) {
-    using T_float = std::remove_reference_t<decltype(*xv)>;
-    using T_int   = xsimd::as_integer_t<T_float>;
-
-    const T_float xmin_simd = xmin;
-    const T_float ymin_simd = ymin;
-    const T_float zmin_simd = zmin;
-    const T_float rdx_simd  = rdx;
-    const T_float rdy_simd  = rdy;
-    const T_float rdz_simd  = rdz;
-
-    //
-    // -*- weights before move -*-
-    //
-    // grid indices and positions
-    auto ix0 = digitize(xv[0], xmin_simd, rdx_simd);
-    auto iy0 = digitize(xv[1], ymin_simd, rdy_simd);
-    auto iz0 = digitize(xv[2], zmin_simd, rdz_simd);
-    auto xg0 = xgrid + to_float(ix0) * delx;
-    auto yg0 = ygrid + to_float(iy0) * dely;
-    auto zg0 = zgrid + to_float(iz0) * delz;
-
-    // weights
-    shape<Order>(xv[0], xg0, rdx_simd, &ss[0][0][1]);
-    shape<Order>(xv[1], yg0, rdy_simd, &ss[0][1][1]);
-    shape<Order>(xv[2], zg0, rdz_simd, &ss[0][2][1]);
-
-    //
-    // -*- weights after move -*-
-    //
-    // grid indices and positions
-    auto ix1 = digitize(xu[0], xmin_simd, rdx_simd);
-    auto iy1 = digitize(xu[1], ymin_simd, rdy_simd);
-    auto iz1 = digitize(xu[2], zmin_simd, rdz_simd);
-    auto xg1 = xgrid + to_float(ix1) * delx;
-    auto yg1 = ygrid + to_float(iy1) * dely;
-    auto zg1 = zgrid + to_float(iz1) * delz;
-
-    // weights
-    shape<Order>(xu[0], xg1, rdx_simd, &ss[1][0][1]);
-    shape<Order>(xu[1], yg1, rdy_simd, &ss[1][1][1]);
-    shape<Order>(xu[2], zg1, rdz_simd, &ss[1][2][1]);
-
-    // shift weights according to particle movement
-    T_int shift[3] = {ix1 - ix0, iy1 - iy0, iz1 - iz0};
-    esirkepov3d_shift_weights_after_movement<Order>(shift, ss[1]);
-
-    //
-    // -*- accumulate current via density decomposition -*-
-    //
-    esirkepov3d<Order>(dxdt, dydt, dzdt, ss, cur);
-
-    // deposit to global array
-    ix0 += Lbx - (Order / 2) - 1;
-    iy0 += Lby - (Order / 2) - 1;
-    iz0 += Lbz - (Order / 2) - 1;
-    append_current3d<Order>(uj, iz0, iy0, ix0, cur, qs);
-  };
 
   //
   // main computation
@@ -296,7 +365,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       xu[1] = simd_f64::gather(&ps->xu(ip, 1), index);
       xu[2] = simd_f64::gather(&ps->xu(ip, 2), index);
 
-      LoopBody(uj, xv, xu, ss, cur, ps->q);
+      LoopBodyV(uj, xv, xu, ss, cur, ps->q);
     }
 
     //
@@ -308,7 +377,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       float64  ss[2][3][size]           = {0};
       float64  cur[size][size][size][4] = {0};
 
-      LoopBody(uj, xv, xu, ss, cur, ps->q);
+      LoopBodyS(uj, xv, xu, ss, cur, ps->q);
     }
   }
 }
