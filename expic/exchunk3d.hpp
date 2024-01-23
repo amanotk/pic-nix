@@ -138,7 +138,11 @@ protected:
 
   virtual void push_velocity_impl_xsimd(float64 delt);
 
+  virtual void push_velocity_unsorted_impl_xsimd(float64 delt);
+
   virtual void deposit_current_impl_xsimd(float64 delt);
+
+  virtual void deposit_current_unsorted_impl_xsimd(float64 delt);
 
   virtual void deposit_moment_impl_xsimd();
 
@@ -170,6 +174,10 @@ public:
   virtual void set_boundary_begin(int mode = 0) override;
 
   virtual void set_boundary_end(int mode = 0) override;
+
+  virtual void count_particle(ParticlePtr particle, int Lbp, int Ubp, bool reset = true) override;
+
+  virtual void sort_particle(ParticleVec& particle) override;
 
   virtual void push_position(float64 delt);
 

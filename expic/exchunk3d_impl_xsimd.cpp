@@ -10,13 +10,13 @@
   template <int Order>                                                                             \
   type ExChunk3D<Order>::name##_impl_xsimd
 
-namespace
+namespace xsimd_core
 {
 //
-// Loop body for push_velocity
+// Implementation of loop body for push_velocity
 //
 template <int Order, typename T_float>
-struct PushVelocityXsimd {
+struct Velocity {
   static constexpr int size   = Order + 2;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
   using simd_f64              = simd::simd_f64;
@@ -47,8 +47,8 @@ struct PushVelocityXsimd {
   T_float  zhmin;
   simd_i64 index;
 
-  PushVelocityXsimd(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3],
-                    float64 ylim[3], float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
+  Velocity(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
+           float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
       : dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz)
   {
     rc     = 1 / cc;
@@ -71,10 +71,8 @@ struct PushVelocityXsimd {
   }
 
   template <typename T_array>
-  void operator()(T_array& uf, T_float xu[], T_float dt1)
+  void unsorted_mc(T_array& uf, T_float xu[], T_float dt1)
   {
-    using T_int = xsimd::as_integer_t<T_float>;
-
     T_float wix[size] = {0};
     T_float whx[size] = {0};
     T_float wiy[size] = {0};
@@ -87,24 +85,24 @@ struct PushVelocityXsimd {
 
     // grid indices and positions
     auto ix0 = digitize(xu[0], ximin, rdx);
-    auto hx0 = digitize(xu[0], xhmin, rdx);
     auto iy0 = digitize(xu[1], yimin, rdy);
-    auto hy0 = digitize(xu[1], yhmin, rdy);
     auto iz0 = digitize(xu[2], zimin, rdz);
+    auto hx0 = digitize(xu[0], xhmin, rdx);
+    auto hy0 = digitize(xu[1], yhmin, rdy);
     auto hz0 = digitize(xu[2], zhmin, rdz);
     auto xig = xigrid + to_float(ix0) * dx;
-    auto xhg = xhgrid + to_float(hx0) * dx;
     auto yig = yigrid + to_float(iy0) * dy;
-    auto yhg = yhgrid + to_float(hy0) * dy;
     auto zig = zigrid + to_float(iz0) * dz;
+    auto xhg = xhgrid + to_float(hx0) * dx;
+    auto yhg = yhgrid + to_float(hy0) * dy;
     auto zhg = zhgrid + to_float(hz0) * dz;
 
     // weights
     shape<Order>(xu[0], xig, rdx, wix);
-    shape<Order>(xu[0], xhg, rdx, whx);
     shape<Order>(xu[1], yig, rdy, wiy);
-    shape<Order>(xu[1], yhg, rdy, why);
     shape<Order>(xu[2], zig, rdz, wiz);
+    shape<Order>(xu[0], xhg, rdx, whx);
+    shape<Order>(xu[1], yhg, rdy, why);
     shape<Order>(xu[2], zhg, rdz, whz);
 
     //
@@ -133,14 +131,79 @@ struct PushVelocityXsimd {
 
     // push particle velocity
     push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
-  };
+  }
+
+  template <typename T_array>
+  void sorted_mc(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
+  {
+    T_float wix[size] = {0};
+    T_float whx[size] = {0};
+    T_float wiy[size] = {0};
+    T_float why[size] = {0};
+    T_float wiz[size] = {0};
+    T_float whz[size] = {0};
+
+    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
+    auto dt2 = dt1 * rc / gam;
+
+    // grid indices and positions
+    auto ix0 = digitize(xu[0], ximin, rdx);
+    auto iy0 = digitize(xu[1], yimin, rdy);
+    auto iz0 = digitize(xu[2], zimin, rdz);
+    auto hx0 = digitize(xu[0], xhmin, rdx);
+    auto hy0 = digitize(xu[1], yhmin, rdy);
+    auto hz0 = digitize(xu[2], zhmin, rdz);
+    auto xig = xigrid + to_float(ix0) * dx;
+    auto yig = yigrid + to_float(iy0) * dy;
+    auto zig = zigrid + to_float(iz0) * dz;
+    auto xhg = xhgrid + to_float(hx0) * dx;
+    auto yhg = yhgrid + to_float(hy0) * dy;
+    auto zhg = zhgrid + to_float(hz0) * dz;
+
+    // weights
+    shape<Order>(xu[0], xig, rdx, wix);
+    shape<Order>(xu[1], yig, rdy, wiy);
+    shape<Order>(xu[2], zig, rdz, wiz);
+    shape<Order>(xu[0], xhg, rdx, whx);
+    shape<Order>(xu[1], yhg, rdy, why);
+    shape<Order>(xu[2], zhg, rdz, whz);
+
+    // shift weights according to particle position
+    interpolate3d_shift_weights<Order>(hx0 - ix0, whx);
+    interpolate3d_shift_weights<Order>(hy0 - iy0, why);
+    interpolate3d_shift_weights<Order>(hz0 - iz0, whz);
+
+    //
+    // calculate electromagnetic field at particle position
+    //
+    // * Ex => half-integer for x, full-integer for y, z
+    // * Ey => half-integer for y, full-integer for z, x
+    // * Ez => half-integer for z, full-integer for x, y
+    // * Bx => half-integer for y, z, full-integer for x
+    // * By => half-integer for z, x, full-integer for y
+    // * Bz => half-integer for x, y, full-integer for z
+    //
+    ix -= (Order / 2);
+    iy -= (Order / 2);
+    iz -= (Order / 2);
+
+    auto ex = interpolate3d<Order>(uf, iz, iy, ix, 0, wiz, wiy, whx, dt1);
+    auto ey = interpolate3d<Order>(uf, iz, iy, ix, 1, wiz, why, wix, dt1);
+    auto ez = interpolate3d<Order>(uf, iz, iy, ix, 2, whz, wiy, wix, dt1);
+    auto bx = interpolate3d<Order>(uf, iz, iy, ix, 3, whz, why, wix, dt2);
+    auto by = interpolate3d<Order>(uf, iz, iy, ix, 4, whz, wiy, whx, dt2);
+    auto bz = interpolate3d<Order>(uf, iz, iy, ix, 5, wiz, why, whx, dt2);
+
+    // push particle velocity
+    push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
+  }
 };
 
 //
-// Loop body for deposit_current
+// Implementation of loop body for deposit_current
 //
 template <int Order, typename T_float>
-struct DepositCurrentXsimd {
+struct Current {
   static constexpr int size   = Order + 3;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
   using simd_f64              = simd::simd_f64;
@@ -167,8 +230,8 @@ struct DepositCurrentXsimd {
   T_float  zmin;
   simd_i64 index;
 
-  DepositCurrentXsimd(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3],
-                      float64 ylim[3], float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
+  Current(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
+          float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
       : dx(delx), dy(dely), dz(delz), dxdt(delx / delt), dydt(dely / delt), dzdt(delz / delt),
         lbx(Lbx), lby(Lby), lbz(Lbz)
   {
@@ -185,8 +248,8 @@ struct DepositCurrentXsimd {
   }
 
   template <typename T_array>
-  void operator()(T_array& uj, T_float xv[], T_float xu[], T_float (&ss)[2][3][size],
-                  T_float (&cur)[size][size][size][4], float64 qs)
+  void unsorted(T_array& uj, T_float xv[], T_float xu[], T_float ss[2][3][size],
+                T_float cur[size][size][size][4], float64 qs)
   {
     using T_int = xsimd::as_integer_t<T_float>;
 
@@ -237,8 +300,62 @@ struct DepositCurrentXsimd {
     iz0 += lbz - (Order / 2) - 1;
     append_current3d<Order>(uj, iz0, iy0, ix0, cur, qs);
   }
+
+  template <typename T_array>
+  void sorted(T_array& uj, int iz, int iy, int ix, T_float xv[], T_float xu[],
+              T_float ss[2][3][size], T_float cur[size][size][size][4], float64 qs)
+  {
+    using T_int = xsimd::as_integer_t<T_float>;
+
+    //
+    // -*- weights before move -*-
+    //
+    // grid indices and positions
+    auto ix0 = digitize(xv[0], xmin, rdx);
+    auto iy0 = digitize(xv[1], ymin, rdy);
+    auto iz0 = digitize(xv[2], zmin, rdz);
+    auto xg0 = xgrid + to_float(ix0) * dx;
+    auto yg0 = ygrid + to_float(iy0) * dy;
+    auto zg0 = zgrid + to_float(iz0) * dz;
+
+    // weights
+    shape<Order>(xv[0], xg0, rdx, &ss[0][0][1]);
+    shape<Order>(xv[1], yg0, rdy, &ss[0][1][1]);
+    shape<Order>(xv[2], zg0, rdz, &ss[0][2][1]);
+
+    //
+    // -*- weights after move -*-
+    //
+    // grid indices and positions
+    auto ix1 = digitize(xu[0], xmin, rdx);
+    auto iy1 = digitize(xu[1], ymin, rdy);
+    auto iz1 = digitize(xu[2], zmin, rdz);
+    auto xg1 = xgrid + to_float(ix1) * dx;
+    auto yg1 = ygrid + to_float(iy1) * dy;
+    auto zg1 = zgrid + to_float(iz1) * dz;
+
+    // weights
+    shape<Order>(xu[0], xg1, rdx, &ss[1][0][1]);
+    shape<Order>(xu[1], yg1, rdy, &ss[1][1][1]);
+    shape<Order>(xu[2], zg1, rdz, &ss[1][2][1]);
+
+    // shift weights according to particle movement
+    T_int shift[3] = {ix1 - ix0, iy1 - iy0, iz1 - iz0};
+    esirkepov3d_shift_weights_after_movement<Order>(shift, ss[1]);
+
+    //
+    // -*- accumulate current via density decomposition -*-
+    //
+    esirkepov3d<Order>(dxdt, dydt, dzdt, ss, cur);
+
+    // deposit to global array
+    ix -= ((Order + 1) / 2) + 1;
+    iy -= ((Order + 1) / 2) + 1;
+    iz -= ((Order + 1) / 2) + 1;
+    append_current3d<Order>(uj, iz, iy, ix, cur, qs);
+  }
 };
-} // namespace
+} // namespace xsimd_core
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
@@ -270,23 +387,93 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
+  using namespace xsimd_core;
+  using simd::simd_f64;
+  using simd::simd_i64;
+  constexpr int  size     = Order + 2;
+  constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
+  const int      stride_x = 1;
+  const int      stride_y = stride_x * (dims[2] + 1);
+  const int      stride_z = stride_y * (dims[1] + 1);
+  const int      lbx      = Lbx;
+  const int      lby      = Lby;
+  const int      lbz      = Lbz;
+  const int      ubx      = Ubx + is_odd;
+  const int      uby      = Uby + is_odd;
+  const int      ubz      = Ubz + is_odd;
+  const simd_i64 index    = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+
+  Velocity<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Velocity<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+
+  //
+  // main computation
+  //
+  for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
+    for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
+      for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
+        int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
+
+        // process particles in the cell
+        for (int is = 0; is < Ns; is++) {
+          int     ip_zero = up[is]->pindex(ii);
+          int     np_cell = up[is]->pindex(ii + 1) - ip_zero;
+          int     np_simd = (np_cell / simd_f64::size) * simd_f64::size;
+          float64 qmdt    = 0.5 * up[is]->q / up[is]->m * delt;
+
+          //
+          // vectorized loop
+          //
+          for (int ip = ip_zero; ip < ip_zero + np_simd; ip += simd_f64::size) {
+            // local SIMD register
+            simd_f64 xu[6];
+
+            // load particles to SIMD register
+            xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
+            xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
+            xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
+            xu[3] = simd_f64::gather(&up[is]->xu(ip, 3), index);
+            xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
+            xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
+
+            LoopBodyV.sorted_mc(uf, iz, iy, ix, xu, simd_f64(qmdt));
+
+            // store particles to memory
+            xu[3].scatter(&up[is]->xu(ip, 3), index);
+            xu[4].scatter(&up[is]->xu(ip, 4), index);
+            xu[5].scatter(&up[is]->xu(ip, 5), index);
+          }
+
+          //
+          // scalar loop for reminder
+          //
+          for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
+            LoopBodyS.sorted_mc(uf, iz, iy, ix, &up[is]->xu(ip, 0), qmdt);
+          }
+        }
+      }
+    }
+  }
+}
+
+DEFINE_MEMBER(void, push_velocity_unsorted)(const float64 delt)
+{
+  using namespace xsimd_core;
   using simd::simd_f64;
   using simd::simd_i64;
   constexpr int  size   = Order + 2;
   constexpr int  is_odd = Order % 2 == 0 ? 0 : 1;
   const simd_i64 index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-  PushVelocityXsimd<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
-                                               Lbz, cc);
-  PushVelocityXsimd<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
-                                               Lbz, cc);
+  Velocity<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Velocity<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
 
   //
   // main computation
   //
   for (int is = 0; is < Ns; is++) {
-    auto ps      = up[is];
-    int  np_simd = (ps->Np / simd_f64::size) * simd_f64::size;
+    int     np_simd = (up[is]->Np / simd_f64::size) * simd_f64::size;
+    float64 qmdt    = 0.5 * up[is]->q / up[is]->m * delt;
 
     //
     // vectorized loop
@@ -294,48 +481,119 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     for (int ip = 0; ip < np_simd; ip += simd_f64::size) {
       // local SIMD register
       simd_f64 xu[6];
-      simd_f64 dt1 = 0.5 * ps->q / ps->m * delt;
 
       // load particles to SIMD register
-      xu[0] = simd_f64::gather(&ps->xu(ip, 0), index);
-      xu[1] = simd_f64::gather(&ps->xu(ip, 1), index);
-      xu[2] = simd_f64::gather(&ps->xu(ip, 2), index);
-      xu[3] = simd_f64::gather(&ps->xu(ip, 3), index);
-      xu[4] = simd_f64::gather(&ps->xu(ip, 4), index);
-      xu[5] = simd_f64::gather(&ps->xu(ip, 5), index);
+      xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
+      xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
+      xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
+      xu[3] = simd_f64::gather(&up[is]->xu(ip, 3), index);
+      xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
+      xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
 
-      LoopBodyV(uf, xu, dt1);
+      LoopBodyV.unsorted_mc(uf, xu, simd_f64(qmdt));
 
       // store particles to memory
-      xu[3].scatter(&ps->xu(ip, 3), index);
-      xu[4].scatter(&ps->xu(ip, 4), index);
-      xu[5].scatter(&ps->xu(ip, 5), index);
+      xu[3].scatter(&up[is]->xu(ip, 3), index);
+      xu[4].scatter(&up[is]->xu(ip, 4), index);
+      xu[5].scatter(&up[is]->xu(ip, 5), index);
     }
 
     //
     // scalar loop for reminder
     //
-    for (int ip = np_simd; ip < ps->Np; ip++) {
-      float64* xu  = &ps->xu(ip, 0);
-      float64  dt1 = 0.5 * ps->q / ps->m * delt;
-
-      LoopBodyS(uf, xu, dt1);
+    for (int ip = np_simd; ip < up[is]->Np; ip++) {
+      LoopBodyS.unsorted_mc(uf, &up[is]->xu(ip, 0), qmdt);
     }
   }
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
+  using namespace xsimd_core;
+  using simd::simd_f64;
+  using simd::simd_i64;
+  constexpr int  size     = Order + 3;
+  constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
+  const int      stride_x = 1;
+  const int      stride_y = stride_x * (dims[2] + 1);
+  const int      stride_z = stride_y * (dims[1] + 1);
+  const int      lbx      = Lbx;
+  const int      lby      = Lby;
+  const int      lbz      = Lbz;
+  const int      ubx      = Ubx + is_odd;
+  const int      uby      = Uby + is_odd;
+  const int      ubz      = Ubz + is_odd;
+  const simd_i64 index    = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+
+  Current<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Current<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+
+  // clear charge/current density
+  uj.fill(0);
+
+  //
+  // main computation
+  //
+  for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
+    for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
+      for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
+        int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
+
+        // process particles in the cell
+        for (int is = 0; is < Ns; is++) {
+          int ip_zero = up[is]->pindex(ii);
+          int np_cell = up[is]->pindex(ii + 1) - ip_zero;
+          int np_simd = (np_cell / simd_f64::size) * simd_f64::size;
+
+          //
+          // vectorized loop
+          //
+          for (int ip = ip_zero; ip < ip_zero + np_simd; ip += simd_f64::size) {
+            // local SIMD register
+            simd_f64 xv[3];
+            simd_f64 xu[3];
+            simd_f64 ss[2][3][size]           = {0};
+            simd_f64 cur[size][size][size][4] = {0};
+
+            // load particles to SIMD register
+            xv[0] = simd_f64::gather(&up[is]->xv(ip, 0), index);
+            xv[1] = simd_f64::gather(&up[is]->xv(ip, 1), index);
+            xv[2] = simd_f64::gather(&up[is]->xv(ip, 2), index);
+            xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
+            xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
+            xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
+
+            LoopBodyV.sorted(uj, iz, iy, ix, xv, xu, ss, cur, up[is]->q);
+          }
+
+          //
+          // scalar loop for reminder
+          //
+          for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
+            float64* xv                       = &up[is]->xv(ip, 0);
+            float64* xu                       = &up[is]->xu(ip, 0);
+            float64  ss[2][3][size]           = {0};
+            float64  cur[size][size][size][4] = {0};
+
+            LoopBodyS.sorted(uj, iz, iy, ix, xv, xu, ss, cur, up[is]->q);
+          }
+        }
+      }
+    }
+  }
+}
+
+DEFINE_MEMBER(void, deposit_current_unsorted)(const float64 delt)
+{
+  using namespace xsimd_core;
   using simd::simd_f64;
   using simd::simd_i64;
   constexpr int  size   = Order + 3;
   constexpr int  is_odd = Order % 2 == 0 ? 0 : 1;
   const simd_i64 index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-  DepositCurrentXsimd<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
-                                                 Lbz, cc);
-  DepositCurrentXsimd<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby,
-                                                 Lbz, cc);
+  Current<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Current<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
 
   // clear charge/current density
   uj.fill(0);
@@ -344,8 +602,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   // main computation
   //
   for (int is = 0; is < Ns; is++) {
-    auto ps      = up[is];
-    int  np_simd = (ps->Np / simd_f64::size) * simd_f64::size;
+    int np_simd = (up[is]->Np / simd_f64::size) * simd_f64::size;
 
     //
     // vectorized loop
@@ -358,26 +615,26 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       simd_f64 cur[size][size][size][4] = {0};
 
       // load particles to SIMD register
-      xv[0] = simd_f64::gather(&ps->xv(ip, 0), index);
-      xv[1] = simd_f64::gather(&ps->xv(ip, 1), index);
-      xv[2] = simd_f64::gather(&ps->xv(ip, 2), index);
-      xu[0] = simd_f64::gather(&ps->xu(ip, 0), index);
-      xu[1] = simd_f64::gather(&ps->xu(ip, 1), index);
-      xu[2] = simd_f64::gather(&ps->xu(ip, 2), index);
+      xv[0] = simd_f64::gather(&up[is]->xv(ip, 0), index);
+      xv[1] = simd_f64::gather(&up[is]->xv(ip, 1), index);
+      xv[2] = simd_f64::gather(&up[is]->xv(ip, 2), index);
+      xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
+      xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
+      xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
 
-      LoopBodyV(uj, xv, xu, ss, cur, ps->q);
+      LoopBodyV.unsorted(uj, xv, xu, ss, cur, up[is]->q);
     }
 
     //
     // scalar loop for reminder
     //
-    for (int ip = np_simd; ip < ps->Np; ip++) {
-      float64* xv                       = &ps->xv(ip, 0);
-      float64* xu                       = &ps->xu(ip, 0);
+    for (int ip = np_simd; ip < up[is]->Np; ip++) {
+      float64* xv                       = &up[is]->xv(ip, 0);
+      float64* xu                       = &up[is]->xu(ip, 0);
       float64  ss[2][3][size]           = {0};
       float64  cur[size][size][size][4] = {0};
 
-      LoopBodyS(uj, xv, xu, ss, cur, ps->q);
+      LoopBodyS.unsorted(uj, xv, xu, ss, cur, up[is]->q);
     }
   }
 }

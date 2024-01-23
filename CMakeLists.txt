@@ -19,7 +19,7 @@ else()
   FetchContent_Declare(
     nix
     GIT_REPOSITORY https://github.com/amanotk/nix.git
-    GIT_TAG 3875bf5b85bdb23b95f587f48792fefbf2d478a1
+    GIT_TAG 681dc1f1396398aa098b15941e12f2939340870d
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/nix
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/nix
   )
@@ -37,7 +37,7 @@ add_compile_definitions(XTENSOR_USE_XSIMD)
 set(PICNIX_SHAPE_ORDER 2 CACHE STRING "Order of particle shape function")
 add_compile_definitions(PICNIX_SHAPE_ORDER=${PICNIX_SHAPE_ORDER})
 
-if(NOT (PICNIX_SHAPE_ORDER GREATER_EQUAL 1 AND PICNIX_SHAPE_ORDER LESS_EQUAL 4))
+if(NOT(PICNIX_SHAPE_ORDER GREATER_EQUAL 1 AND PICNIX_SHAPE_ORDER LESS_EQUAL 4))
   message(FATAL_ERROR "PICNIX_SHAPE_ORDER must be between 1 and 4.")
 endif()
 

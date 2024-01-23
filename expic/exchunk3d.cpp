@@ -174,7 +174,7 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // vectorization mode
   {
-    std::vector<std::string> valid_mode = {"scalar", "xsimd-sorted", "xsimd-unsorted"};
+    std::vector<std::string> valid_mode = {"scalar", "xsimd", "xsimd-unsorted"};
 
     if (this->config["vectorization"].is_null()) {
       //
@@ -432,6 +432,61 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
   this->set_boundary_field(mode);
 }
 
+DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
+{
+  // notice the half-grid offset of cell boundaries for odd-order shape functions
+  constexpr int is_odd        = (Order % 2 == 1) ? 1 : 0;
+  const int     out_of_bounds = particle->Ng;
+  const float64 xmin          = xlim[0] - 0.5 * delx * is_odd;
+  const float64 ymin          = ylim[0] - 0.5 * dely * is_odd;
+  const float64 zmin          = zlim[0] - 0.5 * delz * is_odd;
+
+  // default parameters for unsorted mode
+  int     stride_x = 1;
+  int     stride_y = 1;
+  int     stride_z = 1;
+  float64 rdx      = 1 / xlim[2];
+  float64 rdy      = 1 / ylim[2];
+  float64 rdz      = 1 / zlim[2];
+
+  if (this->require_sort) {
+    stride_x = 1;
+    stride_y = stride_x * (dims[2] + 1);
+    stride_z = stride_y * (dims[1] + 1);
+    rdx      = 1 / delx;
+    rdy      = 1 / dely;
+    rdz      = 1 / delz;
+  }
+
+  // reset count
+  if (reset) {
+    particle->reset_count();
+  }
+
+  auto& xu = particle->xu;
+  for (int ip = Lbp; ip <= Ubp; ip++) {
+    int ix = digitize(xu(ip, 0), xmin, rdx);
+    int iy = digitize(xu(ip, 1), ymin, rdy);
+    int iz = digitize(xu(ip, 2), zmin, rdz);
+    int ii = iz * stride_z + iy * stride_y + ix * stride_x;
+
+    // take care out-of-bounds particles
+    ii = (xu(ip, 0) < xlim[0] || xu(ip, 0) >= xlim[1]) ? out_of_bounds : ii;
+    ii = (xu(ip, 1) < ylim[0] || xu(ip, 1) >= ylim[1]) ? out_of_bounds : ii;
+    ii = (xu(ip, 2) < zlim[0] || xu(ip, 2) >= zlim[1]) ? out_of_bounds : ii;
+
+    particle->increment(ip, ii);
+  }
+}
+
+DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
+{
+  for (int is = 0; is < particle.size(); is++) {
+    count_particle(particle[is], 0, particle[is]->Np - 1, true);
+    particle[is]->sort();
+  }
+}
+
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
   push_position_impl_scalar(delt);
@@ -443,10 +498,10 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 
   if (mode == "scalar") {
     push_velocity_impl_scalar(delt);
+  } else if (mode == "xsimd") {
+    push_velocity_impl_xsimd(delt);
   } else if (mode == "xsimd-unsorted") {
-    push_velocity_impl_xsimd(delt);
-  } else if (mode == "xsimd-sorted") {
-    push_velocity_impl_xsimd(delt);
+    push_velocity_unsorted_impl_xsimd(delt);
   }
 }
 
@@ -456,10 +511,10 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 
   if (mode == "scalar") {
     deposit_current_impl_scalar(delt);
+  } else if (mode == "xsimd") {
+    deposit_current_impl_xsimd(delt);
   } else if (mode == "xsimd-unsorted") {
-    deposit_current_impl_xsimd(delt);
-  } else if (mode == "xsimd-sorted") {
-    deposit_current_impl_xsimd(delt);
+    deposit_current_unsorted_impl_xsimd(delt);
   }
 }
 
