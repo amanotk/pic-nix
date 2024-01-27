@@ -489,7 +489,13 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
-  push_position_impl_scalar(delt);
+  auto mode = config["vectorization"].value("position", "scalar");
+
+  if (mode == "scalar") {
+    push_position_impl_scalar(delt);
+  } else if (mode == "xsimd") {
+    push_position_impl_xsimd(delt);
+  }
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
@@ -525,6 +531,7 @@ DEFINE_MEMBER(void, deposit_moment)()
 
 #undef DEFINE_MEMBER
 
+#include "exchunk3d_impl.hpp"
 #include "exchunk3d_impl_scalar.cpp" // scalar version
 #include "exchunk3d_impl_xsimd.cpp"  // vector version with xsimd
 
