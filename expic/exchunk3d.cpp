@@ -174,37 +174,32 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // vectorization mode
   {
-    std::vector<std::string> valid_mode = {"scalar", "xsimd", "xsimd-unsorted"};
+    std::vector<std::string> valid_mode    = {"scalar", "xsimd", "xsimd-unsorted"};
+    auto                     vectorization = this->config["vectorization"];
 
-    if (this->config["vectorization"].is_null()) {
-      //
-      // scalar by default
-      //
-      this->config["vectorization"] = {
-          {"position", "scalar"}, {"velocity", "scalar"}, {"current", "scalar"}};
-    } else if (this->config["vectorization"].is_string()) {
-      //
-      // same vectorization mode for position, velocity, and current
-      //
-      std::string mode = this->config["vectorization"];
+    bool is_object = vectorization.is_object() == true;
+    bool is_scalar = is_object == false && vectorization == "scalar";
+    bool is_vector = is_object == false && vectorization == "vector";
 
-      bool is_valid_mode =
-          std::find(valid_mode.begin(), valid_mode.end(), mode) != valid_mode.end();
-      if (is_valid_mode == true) {
-        this->config["vectorization"] = {{"position", mode}, {"velocity", mode}, {"current", mode}};
-      } else {
-        ERROR << tfm::format("Invalid vectorization mode: %s", mode);
-        MPI_Abort(MPI_COMM_WORLD, -1);
-      }
-    } else if (this->config["vectorization"].is_object()) {
-      //
-      // different vectorization modes for position, velocity, and current
-      //
-      for (auto& key : {"position", "velocity", "current"}) {
-        auto mode = this->config["vectorization"][key];
+    if (is_scalar == true) {
+      // clang-format off
+      this->config["vectorization"] = {{"position", "scalar"},
+                                       {"velocity", "scalar"},
+                                       {"current", "scalar"},
+                                       {"moment", "scalar"}};
+      // clang-format on
+    } else if (is_vector == true) {
+      // clang-format off
+      this->config["vectorization"] = {{"position", "scalar"},
+                                       {"velocity", "xsimd"},
+                                       {"current", "xsimd"},
+                                       {"moment", "xsimd"}};
+      // clang-format on
+    } else if (is_object == true) {
+      for (auto& key : {"position", "velocity", "current", "moment"}) {
+        std::string mode = vectorization.value(key, "scalar");
 
         bool is_valid_mode =
-            mode.is_string() == true &&
             std::find(valid_mode.begin(), valid_mode.end(), mode) != valid_mode.end();
         if (is_valid_mode == true) {
           this->config["vectorization"][key] = mode;
@@ -213,12 +208,10 @@ DEFINE_MEMBER(void, setup)(json& config)
           MPI_Abort(MPI_COMM_WORLD, -1);
         }
       }
-    } else {
-      ERROR << "Invalid format for vectorization mode";
-      MPI_Abort(MPI_COMM_WORLD, -1);
     }
 
-    for (auto& key : {"position", "velocity", "current"}) {
+    // print vectorization mode
+    for (auto& key : {"position", "velocity", "current", "moment"}) {
       std::string mode = this->config["vectorization"][key];
       DEBUG1 << tfm::format("Vectorization mode for %s: %s", key, mode);
     }
@@ -441,22 +434,13 @@ DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool
   const float64 ymin          = ylim[0] - 0.5 * dely * is_odd;
   const float64 zmin          = zlim[0] - 0.5 * delz * is_odd;
 
-  // default parameters for unsorted mode
+  // parameters for sort by cell
   int     stride_x = 1;
-  int     stride_y = 1;
-  int     stride_z = 1;
-  float64 rdx      = 1 / xlim[2];
-  float64 rdy      = 1 / ylim[2];
-  float64 rdz      = 1 / zlim[2];
-
-  if (this->require_sort) {
-    stride_x = 1;
-    stride_y = stride_x * (dims[2] + 1);
-    stride_z = stride_y * (dims[1] + 1);
-    rdx      = 1 / delx;
-    rdy      = 1 / dely;
-    rdz      = 1 / delz;
-  }
+  int     stride_y = stride_x * (dims[2] + 1);
+  int     stride_z = stride_y * (dims[1] + 1);
+  float64 rdx      = 1 / delx;
+  float64 rdy      = 1 / dely;
+  float64 rdz      = 1 / delz;
 
   // reset count
   if (reset) {

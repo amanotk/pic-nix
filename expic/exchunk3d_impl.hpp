@@ -135,9 +135,9 @@ struct Velocity {
     interpolate3d_shift_weights<Order>(hy0 - iy0, why);
     interpolate3d_shift_weights<Order>(hz0 - iz0, whz);
 
-    ix -= (Order / 2);
-    iy -= (Order / 2);
-    iz -= (Order / 2);
+    ix -= ((Order + 1) / 2);
+    iy -= ((Order + 1) / 2);
+    iz -= ((Order + 1) / 2);
 
     auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
     auto dt2 = dt1 * rc / gam;
