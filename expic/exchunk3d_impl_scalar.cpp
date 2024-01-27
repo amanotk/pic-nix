@@ -29,17 +29,18 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER(void, push_velocity)(const float64 delt)
+DEFINE_MEMBER(template <int Interpolation> void, push_velocity)(const float64 delt)
 {
   using namespace exchunk3d_impl;
 
-  Velocity<Order, float64> LoopBody(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Velocity<Order, float64, Interpolation> LoopBody(delt, delx, dely, delz, xlim, ylim, zlim, Lbx,
+                                                   Lby, Lbz, cc);
 
   for (int is = 0; is < Ns; is++) {
     float64 qmdt = 0.5 * up[is]->q / up[is]->m * delt;
 
     for (int ip = 0; ip < up[is]->Np; ip++) {
-      LoopBody.unsorted_mc(uf, &up[is]->xu(ip, 0), qmdt);
+      LoopBody.unsorted(uf, &up[is]->xu(ip, 0), qmdt);
     }
   }
 }

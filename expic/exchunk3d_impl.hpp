@@ -30,10 +30,21 @@ struct Position {
   }
 };
 
+struct VelocityOption {
+  enum Interp {
+    InterpMC = 0,
+    InterpWT = 1,
+  };
+
+  enum Pusher {
+    PusherBoris = 0,
+  };
+};
+
 //
 // Implementation of loop body for push_velocity
 //
-template <int Order, typename T_float>
+template <int Order, typename T_float, int Interpolation = VelocityOption::InterpMC>
 struct Velocity {
   static constexpr int size   = Order + 2;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
@@ -54,6 +65,8 @@ struct Velocity {
   float64 zhgrid;
 
   T_float  rc;
+  T_float  dt;
+  T_float  rdt;
   T_float  rdx;
   T_float  rdy;
   T_float  rdz;
@@ -67,9 +80,10 @@ struct Velocity {
 
   Velocity(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
            float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
-      : dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz)
+      : dt(cc * delt), dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz)
   {
     rc     = 1 / cc;
+    rdt    = 1 / dt;
     rdx    = 1 / dx;
     rdy    = 1 / dy;
     rdz    = 1 / dz;
@@ -86,6 +100,18 @@ struct Velocity {
     zigrid = zlim[0] + 0.5 * delz;
     zhgrid = zlim[0];
     index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+  }
+
+  auto calc_weights(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
+                    T_float whx[size], T_float why[size], T_float whz[size])
+  {
+    if constexpr (Interpolation == VelocityOption::InterpMC) {
+      return calc_weights_mc(xu, wix, wiy, wiz, whx, why, whz);
+    } else if constexpr (Interpolation == VelocityOption::InterpWT) {
+      return calc_weights_wt(xu, wix, wiy, wiz, whx, why, whz);
+    } else {
+      static_assert([] { return false; }(), "Invalid interpolation type");
+    }
   }
 
   auto calc_weights_mc(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
@@ -116,8 +142,36 @@ struct Velocity {
     return std::make_tuple(ix0, iy0, iz0, hx0, hy0, hz0);
   }
 
+  auto calc_weights_wt(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
+                       T_float whx[size], T_float why[size], T_float whz[size])
+  {
+    // grid indices and positions
+    auto ix0 = digitize(xu[0], ximin, rdx);
+    auto iy0 = digitize(xu[1], yimin, rdy);
+    auto iz0 = digitize(xu[2], zimin, rdz);
+    auto hx0 = digitize(xu[0], xhmin, rdx);
+    auto hy0 = digitize(xu[1], yhmin, rdy);
+    auto hz0 = digitize(xu[2], zhmin, rdz);
+    auto xig = xigrid + to_float(ix0) * dx;
+    auto yig = yigrid + to_float(iy0) * dy;
+    auto zig = zigrid + to_float(iz0) * dz;
+    auto xhg = xhgrid + to_float(hx0) * dx;
+    auto yhg = yhgrid + to_float(hy0) * dy;
+    auto zhg = zhgrid + to_float(hz0) * dz;
+
+    // weights
+    shape_wt<Order>(xu[0], xig, rdx, dt * rdx, rdt * dx, wix);
+    shape_wt<Order>(xu[1], yig, rdy, dt * rdy, rdt * dy, wiy);
+    shape_wt<Order>(xu[2], zig, rdz, dt * rdz, rdt * dz, wiz);
+    shape<Order>(xu[0], xhg, rdx, whx);
+    shape<Order>(xu[1], yhg, rdy, why);
+    shape<Order>(xu[2], zhg, rdz, whz);
+
+    return std::make_tuple(ix0, iy0, iz0, hx0, hy0, hz0);
+  }
+
   template <typename T_array>
-  void sorted_mc(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
+  void sorted(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
   {
     constexpr int stencil = Order;
 
@@ -128,7 +182,7 @@ struct Velocity {
     T_float why[size] = {0};
     T_float whz[size] = {0};
 
-    auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights_mc(xu, wix, wiy, wiz, whx, why, whz);
+    auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights(xu, wix, wiy, wiz, whx, why, whz);
 
     // shift weights according to particle position
     interpolate3d_shift_weights<Order>(hx0 - ix0, whx);
@@ -153,7 +207,7 @@ struct Velocity {
   }
 
   template <typename T_array>
-  void unsorted_mc(T_array& uf, T_float xu[], T_float dt1)
+  void unsorted(T_array& uf, T_float xu[], T_float dt1)
   {
     constexpr int stencil = Order - 1;
 
@@ -164,7 +218,7 @@ struct Velocity {
     T_float why[size] = {0};
     T_float whz[size] = {0};
 
-    auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights_mc(xu, wix, wiy, wiz, whx, why, whz);
+    auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights(xu, wix, wiy, wiz, whx, why, whz);
 
     ix0 += lbx - (Order / 2);
     iy0 += lby - (Order / 2);

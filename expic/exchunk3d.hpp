@@ -126,25 +126,28 @@ protected:
     return {Lbx, Ubx, Lby, Uby, Lbz, Ubz, Ns, cc, load, uf, uj, um, up};
   }
 
-  virtual void push_position_impl_scalar(float64 delt);
+  void push_position_impl_scalar(float64 delt);
 
-  virtual void push_velocity_impl_scalar(float64 delt);
+  void push_position_impl_xsimd(float64 delt);
 
-  virtual void deposit_current_impl_scalar(float64 delt);
+  template <int Interpolation>
+  void push_velocity_impl_scalar(float64 delt);
 
-  virtual void deposit_moment_impl_scalar();
+  template <int Interpolation>
+  void push_velocity_impl_xsimd(float64 delt);
 
-  virtual void push_position_impl_xsimd(float64 delt);
+  template <int Interpolation>
+  void push_velocity_unsorted_impl_xsimd(float64 delt);
 
-  virtual void push_velocity_impl_xsimd(float64 delt);
+  void deposit_current_impl_scalar(float64 delt);
 
-  virtual void push_velocity_unsorted_impl_xsimd(float64 delt);
+  void deposit_current_impl_xsimd(float64 delt);
 
-  virtual void deposit_current_impl_xsimd(float64 delt);
+  void deposit_current_unsorted_impl_xsimd(float64 delt);
 
-  virtual void deposit_current_unsorted_impl_xsimd(float64 delt);
+  void deposit_moment_impl_scalar();
 
-  virtual void deposit_moment_impl_xsimd();
+  void deposit_moment_impl_xsimd();
 
 public:
   ExChunk3D(const int dims[3], int id = 0);

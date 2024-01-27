@@ -1,5 +1,6 @@
 // -*- C++ -*-
 #include "exchunk3d.hpp"
+#include "exchunk3d_impl.hpp"
 
 #define DEFINE_MEMBER(type, name)                                                                  \
   template <int Order>                                                                             \
@@ -484,14 +485,34 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  auto mode = config["vectorization"].value("velocity", "scalar");
+  constexpr int MC = exchunk3d_impl::VelocityOption::InterpMC;
+  constexpr int WT = exchunk3d_impl::VelocityOption::InterpWT;
 
-  if (mode == "scalar") {
-    push_velocity_impl_scalar(delt);
-  } else if (mode == "xsimd") {
-    push_velocity_impl_xsimd(delt);
-  } else if (mode == "xsimd-unsorted") {
-    push_velocity_unsorted_impl_xsimd(delt);
+  auto mode   = config["vectorization"].value("velocity", "scalar");
+  auto interp = config.value("interpolation", "mc");
+
+  if (interp == "mc") {
+    //
+    // MC interpolation
+    //
+    if (mode == "scalar") {
+      push_velocity_impl_scalar<MC>(delt);
+    } else if (mode == "xsimd") {
+      push_velocity_impl_xsimd<MC>(delt);
+    } else if (mode == "xsimd-unsorted") {
+      push_velocity_unsorted_impl_xsimd<MC>(delt);
+    }
+  } else if (interp == "wt") {
+    //
+    // WT interpolation
+    //
+    if (mode == "scalar") {
+      push_velocity_impl_scalar<WT>(delt);
+    } else if (mode == "xsimd") {
+      push_velocity_impl_xsimd<WT>(delt);
+    } else if (mode == "xsimd-unsorted") {
+      push_velocity_unsorted_impl_xsimd<WT>(delt);
+    }
   }
 }
 
@@ -515,7 +536,6 @@ DEFINE_MEMBER(void, deposit_moment)()
 
 #undef DEFINE_MEMBER
 
-#include "exchunk3d_impl.hpp"
 #include "exchunk3d_impl_scalar.cpp" // scalar version
 #include "exchunk3d_impl_xsimd.cpp"  // vector version with xsimd
 

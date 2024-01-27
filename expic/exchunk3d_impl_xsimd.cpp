@@ -63,7 +63,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER(void, push_velocity)(const float64 delt)
+DEFINE_MEMBER(template <int Interpolation> void, push_velocity)(const float64 delt)
 {
   using namespace exchunk3d_impl;
   using simd::simd_f64;
@@ -80,8 +80,10 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const int      ubz      = Ubz + is_odd;
   const simd_i64 index    = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-  Velocity<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
-  Velocity<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Velocity<Order, simd_f64, Interpolation> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx,
+                                                     Lby, Lbz, cc);
+  Velocity<Order, float64, Interpolation>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx,
+                                                     Lby, Lbz, cc);
 
   for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
     for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
@@ -110,7 +112,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
             xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
             xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
 
-            LoopBodyV.sorted_mc(uf, iz, iy, ix, xu, simd_f64(qmdt));
+            LoopBodyV.sorted(uf, iz, iy, ix, xu, simd_f64(qmdt));
 
             // store particles to memory
             xu[3].scatter(&up[is]->xu(ip, 3), index);
@@ -122,7 +124,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
           // scalar loop for reminder
           //
           for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
-            LoopBodyS.sorted_mc(uf, iz, iy, ix, &up[is]->xu(ip, 0), qmdt);
+            LoopBodyS.sorted(uf, iz, iy, ix, &up[is]->xu(ip, 0), qmdt);
           }
         }
       }
@@ -130,15 +132,17 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   }
 }
 
-DEFINE_MEMBER(void, push_velocity_unsorted)(const float64 delt)
+DEFINE_MEMBER(template <int Interpolation> void, push_velocity_unsorted)(const float64 delt)
 {
   using namespace exchunk3d_impl;
   using simd::simd_f64;
   using simd::simd_i64;
   const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-  Velocity<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
-  Velocity<Order, float64>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
+  Velocity<Order, simd_f64, Interpolation> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx,
+                                                     Lby, Lbz, cc);
+  Velocity<Order, float64, Interpolation>  LoopBodyS(delt, delx, dely, delz, xlim, ylim, zlim, Lbx,
+                                                     Lby, Lbz, cc);
 
   for (int is = 0; is < Ns; is++) {
     int     np_simd = (up[is]->Np / simd_f64::size) * simd_f64::size;
@@ -159,7 +163,7 @@ DEFINE_MEMBER(void, push_velocity_unsorted)(const float64 delt)
       xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
       xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
 
-      LoopBodyV.unsorted_mc(uf, xu, simd_f64(qmdt));
+      LoopBodyV.unsorted(uf, xu, simd_f64(qmdt));
 
       // store particles to memory
       xu[3].scatter(&up[is]->xu(ip, 3), index);
@@ -171,7 +175,7 @@ DEFINE_MEMBER(void, push_velocity_unsorted)(const float64 delt)
     // scalar loop for reminder
     //
     for (int ip = np_simd; ip < up[is]->Np; ip++) {
-      LoopBodyS.unsorted_mc(uf, &up[is]->xu(ip, 0), qmdt);
+      LoopBodyS.unsorted(uf, &up[is]->xu(ip, 0), qmdt);
     }
   }
 }
