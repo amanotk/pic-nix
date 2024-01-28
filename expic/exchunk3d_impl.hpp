@@ -54,6 +54,7 @@ struct Velocity {
   int     lbx;
   int     lby;
   int     lbz;
+  float64 dt;
   float64 dx;
   float64 dy;
   float64 dz;
@@ -65,7 +66,12 @@ struct Velocity {
   float64 zhgrid;
 
   T_float  rc;
-  T_float  dt;
+  T_float  dtx;
+  T_float  dty;
+  T_float  dtz;
+  T_float  rdtx;
+  T_float  rdty;
+  T_float  rdtz;
   T_float  rdt;
   T_float  rdx;
   T_float  rdy;
@@ -80,10 +86,15 @@ struct Velocity {
 
   Velocity(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
            float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
-      : dt(cc * delt), dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz)
+      : dt(delt), dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz)
   {
     rc     = 1 / cc;
-    rdt    = 1 / dt;
+    dtx    = cc * dt / dx;
+    dty    = cc * dt / dx;
+    dtz    = cc * dt / dx;
+    rdtx   = 1 / dtx;
+    rdty   = 1 / dty;
+    rdtz   = 1 / dtz;
     rdx    = 1 / dx;
     rdy    = 1 / dy;
     rdz    = 1 / dz;
@@ -105,64 +116,34 @@ struct Velocity {
   auto calc_weights(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
                     T_float whx[size], T_float why[size], T_float whz[size])
   {
+    // grid indices and positions
+    auto ix0 = digitize(xu[0], ximin, rdx);
+    auto iy0 = digitize(xu[1], yimin, rdy);
+    auto iz0 = digitize(xu[2], zimin, rdz);
+    auto hx0 = digitize(xu[0], xhmin, rdx);
+    auto hy0 = digitize(xu[1], yhmin, rdy);
+    auto hz0 = digitize(xu[2], zhmin, rdz);
+    auto xig = xigrid + to_float(ix0) * dx;
+    auto yig = yigrid + to_float(iy0) * dy;
+    auto zig = zigrid + to_float(iz0) * dz;
+    auto xhg = xhgrid + to_float(hx0) * dx;
+    auto yhg = yhgrid + to_float(hy0) * dy;
+    auto zhg = zhgrid + to_float(hz0) * dz;
+
+    // weights
     if constexpr (Interpolation == VelocityOption::InterpMC) {
-      return calc_weights_mc(xu, wix, wiy, wiz, whx, why, whz);
+      // MC weights
+      shape<Order>(xu[0], xig, rdx, wix);
+      shape<Order>(xu[1], yig, rdy, wiy);
+      shape<Order>(xu[2], zig, rdz, wiz);
     } else if constexpr (Interpolation == VelocityOption::InterpWT) {
-      return calc_weights_wt(xu, wix, wiy, wiz, whx, why, whz);
+      // WT weights
+      shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
+      shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
+      shape_wt<Order>(xu[2], zig, rdz, dtz, rdtz, wiz);
     } else {
       static_assert([] { return false; }(), "Invalid interpolation type");
     }
-  }
-
-  auto calc_weights_mc(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
-                       T_float whx[size], T_float why[size], T_float whz[size])
-  {
-    // grid indices and positions
-    auto ix0 = digitize(xu[0], ximin, rdx);
-    auto iy0 = digitize(xu[1], yimin, rdy);
-    auto iz0 = digitize(xu[2], zimin, rdz);
-    auto hx0 = digitize(xu[0], xhmin, rdx);
-    auto hy0 = digitize(xu[1], yhmin, rdy);
-    auto hz0 = digitize(xu[2], zhmin, rdz);
-    auto xig = xigrid + to_float(ix0) * dx;
-    auto yig = yigrid + to_float(iy0) * dy;
-    auto zig = zigrid + to_float(iz0) * dz;
-    auto xhg = xhgrid + to_float(hx0) * dx;
-    auto yhg = yhgrid + to_float(hy0) * dy;
-    auto zhg = zhgrid + to_float(hz0) * dz;
-
-    // weights
-    shape<Order>(xu[0], xig, rdx, wix);
-    shape<Order>(xu[1], yig, rdy, wiy);
-    shape<Order>(xu[2], zig, rdz, wiz);
-    shape<Order>(xu[0], xhg, rdx, whx);
-    shape<Order>(xu[1], yhg, rdy, why);
-    shape<Order>(xu[2], zhg, rdz, whz);
-
-    return std::make_tuple(ix0, iy0, iz0, hx0, hy0, hz0);
-  }
-
-  auto calc_weights_wt(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
-                       T_float whx[size], T_float why[size], T_float whz[size])
-  {
-    // grid indices and positions
-    auto ix0 = digitize(xu[0], ximin, rdx);
-    auto iy0 = digitize(xu[1], yimin, rdy);
-    auto iz0 = digitize(xu[2], zimin, rdz);
-    auto hx0 = digitize(xu[0], xhmin, rdx);
-    auto hy0 = digitize(xu[1], yhmin, rdy);
-    auto hz0 = digitize(xu[2], zhmin, rdz);
-    auto xig = xigrid + to_float(ix0) * dx;
-    auto yig = yigrid + to_float(iy0) * dy;
-    auto zig = zigrid + to_float(iz0) * dz;
-    auto xhg = xhgrid + to_float(hx0) * dx;
-    auto yhg = yhgrid + to_float(hy0) * dy;
-    auto zhg = zhgrid + to_float(hz0) * dz;
-
-    // weights
-    shape_wt<Order>(xu[0], xig, rdx, dt * rdx, rdt * dx, wix);
-    shape_wt<Order>(xu[1], yig, rdy, dt * rdy, rdt * dy, wiy);
-    shape_wt<Order>(xu[2], zig, rdz, dt * rdz, rdt * dz, wiz);
     shape<Order>(xu[0], xhg, rdx, whx);
     shape<Order>(xu[1], yhg, rdy, why);
     shape<Order>(xu[2], zhg, rdz, whz);
