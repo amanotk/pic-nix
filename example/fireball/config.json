@@ -57,9 +57,6 @@
 		"nbg": 10,
 		"nfb": 100,
 		"Tbg": 1.0e-1,
-		"Tfb": 1.0e-0,
-		"seed_type": "random",
-		"field_load": 1.0,
-		"mpi_buffer_fraction": 2.0
+		"Tfb": 1.0e-0
 	}
 }

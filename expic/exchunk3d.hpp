@@ -89,9 +89,7 @@ public:
   };
 
 protected:
-  float64 field_load; ///< field load per grid point (normalized to particle load)
-
-  json                    config; ///< configuration
+  json                    opts;   ///< internal options
   int                     Ns;     ///< number of particle species
   float64                 cc;     ///< speed of light
   xt::xtensor<float64, 4> uf;     ///< electromagnetic field

@@ -76,9 +76,6 @@
 				"vy": 0.0,
 				"vz": 0.0
 			}
-		],
-		"seed_type": "random",
-		"field_load": 1.0,
-		"mpi_buffer_fraction": 2.0
+		]
 	}
 }

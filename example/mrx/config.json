@@ -48,9 +48,6 @@
 		"mime": 25,
 		"tite": 5.0,
 		"bz": 0.0,
-		"db": 0.1,
-		"seed_type": "random",
-		"field_load": 1.0,
-		"mpi_buffer_fraction": 2.0
+		"db": 0.1
 	}
 }

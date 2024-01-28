@@ -2,6 +2,7 @@
 
 #include "diagnoser.hpp"
 #include "expic3d.hpp"
+#include "nix/random.hpp"
 
 constexpr int order = PICNIX_SHAPE_ORDER;
 
@@ -16,8 +17,6 @@ public:
   virtual void setup(json& config) override
   {
     ExChunk3D<order>::setup(config);
-
-    field_load = config.value("field_load", 1.0);
 
     cc = 1.0;
     Ns = 2;
@@ -89,28 +88,11 @@ public:
     // initialize particles
     //
     {
-      // random number generators
-      int                                     random_seed = 0;
-      std::mt19937                            mtp(0);
-      std::mt19937                            mtv(0);
-      std::uniform_real_distribution<float64> uniform(0.0, 1.0);
-      std::normal_distribution<float64>       normal(0.0, 1.0);
-
-      // random seed
-      {
-        std::string seed_type = config.value("seed_type", "random"); // random by default
-
-        if (seed_type == "random") {
-          random_seed = std::random_device()();
-        } else if (seed_type == "chunkid") {
-          random_seed = this->myid; // chunk ID
-        } else {
-          ERROR << tfm::format("Ignoring invalid seed_type: %s", seed_type);
-        }
-
-        mtp.seed(random_seed);
-        mtv.seed(random_seed);
-      }
+      int               random_seed = opts["random_seed"].get<int>();
+      std::mt19937_64   mtp(random_seed);
+      std::mt19937_64   mtv(random_seed);
+      nix::rand_uniform uniform(0.0, 1.0);
+      nix::rand_normal  normal(0.0, 1.0);
 
       {
         int     numcell = dims[0] * dims[1] * dims[2];
@@ -188,7 +170,7 @@ public:
       this->sort_particle(up);
 
       // use default MPI buffer allocator for particle
-      float64 fraction = config.value("mpi_buffer_fraction", cc * delt / delh);
+      float64 fraction = opts.value("mpi_buffer_fraction", cc * delt / delh);
       setup_particle_mpi_buffer(fraction);
     }
   }

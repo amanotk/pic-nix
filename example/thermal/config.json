@@ -67,8 +67,6 @@
 				"qm": 1.0e-1,
 				"vt": 3.1622776601e-1
 			}
-		],
-		"seed_type": "random",
-		"field_load": 1.0
+		]
 	}
 }
