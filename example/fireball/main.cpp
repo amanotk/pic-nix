@@ -221,9 +221,8 @@ public:
       // initial sort
       this->sort_particle(up);
 
-      // use default MPI buffer allocator for particle
-      float64 fraction = opts.value("mpi_buffer_fraction", cc * delt / delh);
-      setup_particle_mpi_buffer(fraction);
+      // allocate MPI buffer for particle
+      setup_particle_mpi_buffer(opts["mpi_buffer_fraction"].get<float64>());
     }
   }
 };
@@ -242,11 +241,11 @@ public:
   {
     const int nchunk_global = cdims[3];
 
-    json    parameter  = cfgparser->get_parameter();
-    int     nbg        = parameter["nbg"].get<float64>();
-    int     nfb        = parameter["nfb"].get<float64>();
-    float64 radius     = parameter["radius"].get<float64>();
-    float64 field_load = parameter["field_load"].get<float64>();
+    json    parameter = cfgparser->get_parameter();
+    int     nbg       = parameter["nbg"].get<float64>();
+    int     nfb       = parameter["nfb"].get<float64>();
+    float64 radius    = parameter["radius"].get<float64>();
+    float64 cell_load = parameter.value("cell_load", 1.0);
 
     int     dims[3]     = {ndims[0] / cdims[0], ndims[1] / cdims[1], ndims[2] / cdims[2]};
     int     ncell_chunk = dims[0] * dims[1] * dims[2];
@@ -266,7 +265,7 @@ public:
       float64 a     = 2.0 * count / ncell_chunk;
       float64 b     = 2.0 * (ncell_chunk - count) / ncell_chunk;
 
-      balancer->load(i) = a * nfb + b * nbg + field_load;
+      balancer->load(i) = a * nfb + b * nbg + cell_load;
     }
   }
 };

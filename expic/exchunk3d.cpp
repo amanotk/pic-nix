@@ -160,7 +160,7 @@ DEFINE_MEMBER(void, reset_load)()
 {
   const int Ng = dims[0] * dims[1] * dims[2];
 
-  load[LoadField]    = opts.value("cell_load", 1);
+  load[LoadField]    = opts.value("cell_load", 1.0);
   load[LoadParticle] = 0;
   for (int is = 0; is < up.size(); is++) {
     load[LoadParticle] += up[is]->Np / Ng;
@@ -174,26 +174,31 @@ DEFINE_MEMBER(void, setup)(json& config)
     std::vector<std::string> valid_mode    = {"scalar", "xsimd", "xsimd-unsorted"};
     auto                     vectorization = config["vectorization"];
 
-    bool is_null   = vectorization.is_null() == true;
-    bool is_object = vectorization.is_object() == true;
-    bool is_scalar = is_object == false && vectorization == "scalar";
-    bool is_vector = is_object == false && vectorization == "vector";
+    bool is_success = true;
 
-    if (is_scalar == true || is_null == true) {
-      // clang-format off
-      opts["vectorization"] = {{"position", "scalar"},
-                               {"velocity", "scalar"},
-                               {"current", "scalar"},
-                               {"moment", "scalar"}};
-      // clang-format on
-    } else if (is_vector == true) {
-      // clang-format off
-      opts["vectorization"] = {{"position", "scalar"},
-                               {"velocity", "xsimd"},
-                               {"current", "xsimd"},
-                               {"moment", "xsimd"}};
-      // clang-format on
-    } else if (is_object == true) {
+    // default
+    if (vectorization.is_null() == true) {
+      vectorization = "scalar";
+    }
+
+    if (vectorization.is_string() == true) {
+      // string type
+      std::string vector_or_scalar = vectorization.get<std::string>();
+      if (vector_or_scalar == "scalar") {
+        opts["vectorization"] = {{"position", "scalar"},
+                                 {"velocity", "scalar"},
+                                 {"current", "scalar"},
+                                 {"moment", "scalar"}};
+      } else if (vector_or_scalar == "vector") {
+        opts["vectorization"] = {{"position", "scalar"},
+                                 {"velocity", "xsimd"},
+                                 {"current", "xsimd"},
+                                 {"moment", "xsimd"}};
+      } else {
+        is_success = false;
+      }
+    } else if (vectorization.is_object() == true) {
+      // assume specific vectorization mode for each variable
       for (auto& key : {"position", "velocity", "current", "moment"}) {
         std::string mode = vectorization.value(key, "scalar");
 
@@ -202,10 +207,17 @@ DEFINE_MEMBER(void, setup)(json& config)
         if (is_valid_mode == true) {
           opts["vectorization"][key] = mode;
         } else {
-          ERROR << tfm::format("Invalid vectorization mode for %s: %s", key, mode);
-          MPI_Abort(MPI_COMM_WORLD, -1);
+          is_success = false;
         }
       }
+    } else {
+      is_success = false;
+    }
+
+    if (is_success == false) {
+      ERROR << tfm::format("Invalid vectorization mode (see below):");
+      std::cerr << std::setw(2) << vectorization << std::endl;
+      MPI_Abort(MPI_COMM_WORLD, -1);
     }
   }
 
@@ -239,7 +251,7 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // misc
   {
-    opts["cell_load"]           = config.value("cell_load", 1);
+    opts["cell_load"]           = config.value("cell_load", 1.0);
     opts["mpi_buffer_fraction"] = config.value("mpi_buffer_fraction", 2.0);
   }
 }

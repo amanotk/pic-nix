@@ -32,6 +32,7 @@
 		}
 	],
 	"parameter": {
+		"vectorization": "vector",
 		"Nx": 512,
 		"Ny": 2,
 		"Nz": 2,

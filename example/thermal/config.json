@@ -38,6 +38,7 @@
 		}
 	],
 	"parameter": {
+		"vectorization": "vector",
 		"Nx": 768,
 		"Ny": 2,
 		"Nz": 2,

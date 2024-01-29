@@ -112,9 +112,8 @@ public:
       // initial sort
       this->sort_particle(up);
 
-      // use default MPI buffer allocator for particle
-      float64 fraction = opts.value("mpi_buffer_fraction", cc * delt / delh);
-      setup_particle_mpi_buffer(fraction);
+      // allocate MPI buffer for particle
+      setup_particle_mpi_buffer(opts["mpi_buffer_fraction"].get<float64>());
     }
   }
 };

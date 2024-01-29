@@ -169,9 +169,8 @@ public:
       // initial sort
       this->sort_particle(up);
 
-      // use default MPI buffer allocator for particle
-      float64 fraction = opts.value("mpi_buffer_fraction", cc * delt / delh);
-      setup_particle_mpi_buffer(fraction);
+      // allocate MPI buffer for particle
+      setup_particle_mpi_buffer(opts["mpi_buffer_fraction"].get<float64>());
     }
   }
 
@@ -491,7 +490,7 @@ public:
     int     nbg        = parameter["nbg"].get<float64>();
     int     ncs        = parameter["ncs"].get<float64>();
     float64 lcs        = parameter["lcs"].get<float64>();
-    float64 field_load = parameter["field_load"].get<float64>();
+    float64 cell_load  = parameter.value("cell_load", 1.0);
     float64 ycs        = 0.5 * (ylim[0] + ylim[1]);
     float64 ylen       = dely * dims[1];
 
@@ -503,7 +502,7 @@ public:
       float64 ymin      = (ylim[0] - ycs + ylen * cy) / lcs;
       float64 rbg       = numcell_chunk * nbg;
       float64 rcs       = numcell_chunk * ncs * (tanh(ymax) - tanh(ymin)) / (ymax - ymin);
-      balancer->load(i) = rbg + rcs + field_load;
+      balancer->load(i) = rbg + rcs + cell_load;
     }
   }
 };
