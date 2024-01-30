@@ -7,7 +7,7 @@
   type ExChunk3D<Order>::name
 
 DEFINE_MEMBER(, ExChunk3D)
-(const int dims[3], int id) : Chunk(dims, id), Ns(1), opts({})
+(const int dims[3], int id) : Chunk(dims, id), Ns(1), option({})
 {
   // check the minimum number of grids
   {
@@ -97,9 +97,9 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
   for (int is = 0; is < Ns; is++) {
     count += up[is]->pack(buffer, count);
   }
-  // opts
+  // option
   {
-    std::vector<uint8_t> msgpack = json::to_msgpack(opts);
+    std::vector<uint8_t> msgpack = json::to_msgpack(option);
     int                  size    = msgpack.size();
     count += memcpy_count(buffer, &size, sizeof(int), count, 0);
     count += memcpy_count(buffer, msgpack.data(), size, count, 0);
@@ -126,7 +126,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
     up[is] = std::make_shared<ParticleType>();
     count += up[is]->unpack(buffer, count);
   }
-  // opts
+  // option
   {
     int size = 0;
     count += memcpy_count(&size, buffer, sizeof(int), 0, count);
@@ -134,7 +134,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
     std::vector<uint8_t> msgpack(size);
     count += memcpy_count(msgpack.data(), buffer, size, 0, count);
 
-    opts = json::from_msgpack(msgpack);
+    option = json::from_msgpack(msgpack);
   }
 
   return count;
@@ -160,7 +160,7 @@ DEFINE_MEMBER(void, reset_load)()
 {
   const int Ng = dims[0] * dims[1] * dims[2];
 
-  load[LoadField]    = opts.value("cell_load", 1.0);
+  load[LoadField]    = option.value("cell_load", 1.0);
   load[LoadParticle] = 0;
   for (int is = 0; is < up.size(); is++) {
     load[LoadParticle] += up[is]->Np / Ng;
@@ -169,10 +169,12 @@ DEFINE_MEMBER(void, reset_load)()
 
 DEFINE_MEMBER(void, setup)(json& config)
 {
+  auto opt = config["option"];
+
   // vectorization mode
   {
     std::vector<std::string> valid_mode    = {"scalar", "xsimd", "xsimd-unsorted"};
-    auto                     vectorization = config["vectorization"];
+    auto                     vectorization = opt["vectorization"];
 
     bool is_success = true;
 
@@ -185,15 +187,15 @@ DEFINE_MEMBER(void, setup)(json& config)
       // string type
       std::string vector_or_scalar = vectorization.get<std::string>();
       if (vector_or_scalar == "scalar") {
-        opts["vectorization"] = {{"position", "scalar"},
-                                 {"velocity", "scalar"},
-                                 {"current", "scalar"},
-                                 {"moment", "scalar"}};
+        option["vectorization"] = {{"position", "scalar"},
+                                   {"velocity", "scalar"},
+                                   {"current", "scalar"},
+                                   {"moment", "scalar"}};
       } else if (vector_or_scalar == "vector") {
-        opts["vectorization"] = {{"position", "scalar"},
-                                 {"velocity", "xsimd"},
-                                 {"current", "xsimd"},
-                                 {"moment", "xsimd"}};
+        option["vectorization"] = {{"position", "scalar"},
+                                   {"velocity", "xsimd"},
+                                   {"current", "xsimd"},
+                                   {"moment", "xsimd"}};
       } else {
         is_success = false;
       }
@@ -205,7 +207,7 @@ DEFINE_MEMBER(void, setup)(json& config)
         bool is_valid_mode =
             std::find(valid_mode.begin(), valid_mode.end(), mode) != valid_mode.end();
         if (is_valid_mode == true) {
-          opts["vectorization"][key] = mode;
+          option["vectorization"][key] = mode;
         } else {
           is_success = false;
         }
@@ -223,12 +225,12 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // seed for random number generator
   {
-    auto seed_type = config["seed_type"];
+    auto seed_type = opt["seed_type"];
 
     if (seed_type.is_string() == false || seed_type == "random") {
-      opts["random_seed"] = std::random_device()();
+      option["random_seed"] = std::random_device()();
     } else if (seed_type == "fixed") {
-      opts["random_seed"] = this->myid; // chunk ID
+      option["random_seed"] = this->myid; // chunk ID
     } else {
       ERROR << tfm::format("Invalid seed type: %s", seed_type);
       MPI_Abort(MPI_COMM_WORLD, -1);
@@ -237,12 +239,12 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // interpolation method
   {
-    auto interp = config["interpolation"];
+    auto interp = opt["interpolation"];
 
     if (interp.is_string() == false || interp == "mc") {
-      opts["interpolation"] = "mc";
+      option["interpolation"] = "mc";
     } else if (interp == "wt") {
-      opts["interpolation"] = "wt";
+      option["interpolation"] = "wt";
     } else {
       ERROR << tfm::format("Invalid interpolation method: %s", interp);
       MPI_Abort(MPI_COMM_WORLD, -1);
@@ -251,8 +253,8 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // misc
   {
-    opts["cell_load"]           = config.value("cell_load", 1.0);
-    opts["mpi_buffer_fraction"] = config.value("mpi_buffer_fraction", 2.0);
+    option["cell_load"]           = opt.value("cell_load", 1.0);
+    option["mpi_buffer_fraction"] = opt.value("mpi_buffer_fraction", 2.0);
   }
 }
 
@@ -504,12 +506,22 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
-  auto mode = opts["vectorization"].value("position", "scalar");
+  std::string mode = option["vectorization"]["position"].get<std::string>();
+
+  bool is_success = true;
 
   if (mode == "scalar") {
     push_position_impl_scalar(delt);
   } else if (mode == "xsimd") {
     push_position_impl_xsimd(delt);
+  } else {
+    is_success = false;
+  }
+
+  if (is_success == false) {
+    ERROR << tfm::format("Error detected in push_position (see below):");
+    std::cerr << std::setw(2) << option << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
   }
 }
 
@@ -518,8 +530,9 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   constexpr int MC = exchunk3d_impl::VelocityOption::InterpMC;
   constexpr int WT = exchunk3d_impl::VelocityOption::InterpWT;
 
-  auto mode   = opts["vectorization"].value("velocity", "scalar");
-  auto interp = opts.value("interpolation", "mc");
+  bool        is_success = true;
+  std::string mode       = option["vectorization"]["velocity"].get<std::string>();
+  std::string interp     = option["interpolation"].get<std::string>();
 
   if (interp == "mc") {
     //
@@ -531,6 +544,8 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       push_velocity_impl_xsimd<MC>(delt);
     } else if (mode == "xsimd-unsorted") {
       push_velocity_unsorted_impl_xsimd<MC>(delt);
+    } else {
+      is_success = false;
     }
   } else if (interp == "wt") {
     //
@@ -542,13 +557,24 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
       push_velocity_impl_xsimd<WT>(delt);
     } else if (mode == "xsimd-unsorted") {
       push_velocity_unsorted_impl_xsimd<WT>(delt);
+    } else {
+      is_success = false;
     }
+  } else {
+    is_success = false;
+  }
+
+  if (is_success == false) {
+    ERROR << tfm::format("Error detected in push_velocity (see below):");
+    std::cerr << std::setw(2) << option << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
   }
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
-  auto mode = opts["vectorization"].value("current", "scalar");
+  bool        is_success = true;
+  std::string mode       = option["vectorization"]["current"].get<std::string>();
 
   if (mode == "scalar") {
     deposit_current_impl_scalar(delt);
@@ -556,6 +582,14 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
     deposit_current_impl_xsimd(delt);
   } else if (mode == "xsimd-unsorted") {
     deposit_current_unsorted_impl_xsimd(delt);
+  } else {
+    is_success = false;
+  }
+
+  if (is_success == false) {
+    ERROR << tfm::format("Error detected in deposit_current (see below):");
+    std::cerr << std::setw(2) << option << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
   }
 }
 

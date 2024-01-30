@@ -88,7 +88,7 @@ public:
     // initialize particles
     //
     {
-      int               random_seed = opts["random_seed"].get<int>();
+      int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
       nix::rand_uniform uniform(0.0, 1.0);
@@ -170,7 +170,7 @@ public:
       this->sort_particle(up);
 
       // allocate MPI buffer for particle
-      setup_particle_mpi_buffer(opts["mpi_buffer_fraction"].get<float64>());
+      setup_particle_mpi_buffer(option["mpi_buffer_fraction"].get<float64>());
     }
   }
 
@@ -487,10 +487,11 @@ public:
     int numcell_chunk = dims[0] * dims[1] * dims[2];
 
     json    parameter  = cfgparser->get_parameter();
+    json    option     = cfgparser->get_application()["option"];
     int     nbg        = parameter["nbg"].get<float64>();
     int     ncs        = parameter["ncs"].get<float64>();
     float64 lcs        = parameter["lcs"].get<float64>();
-    float64 cell_load  = parameter.value("cell_load", 1.0);
+    float64 cell_load  = option.value("cell_load", 1.0);
     float64 ycs        = 0.5 * (ylim[0] + ylim[1]);
     float64 ylen       = dely * dims[1];
 

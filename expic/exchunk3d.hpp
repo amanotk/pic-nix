@@ -89,7 +89,7 @@ public:
   };
 
 protected:
-  json                    opts;   ///< internal options
+  json                    option; ///< internal option
   int                     Ns;     ///< number of particle species
   float64                 cc;     ///< speed of light
   xt::xtensor<float64, 4> uf;     ///< electromagnetic field

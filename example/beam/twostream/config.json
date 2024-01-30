@@ -9,6 +9,9 @@
 		"rebalance": {
 			"interval": 10,
 			"loglevel": 1
+		},
+		"option": {
+			"vectorization": "vector"
 		}
 	},
 	"diagnostic": [

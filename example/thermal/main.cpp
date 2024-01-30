@@ -67,7 +67,7 @@ public:
     // initialize particles
     //
     {
-      int               random_seed = opts["random_seed"].get<int>();
+      int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
       nix::rand_uniform uniform(0.0, 1.0);
@@ -113,7 +113,7 @@ public:
       this->sort_particle(up);
 
       // allocate MPI buffer for particle
-      setup_particle_mpi_buffer(opts["mpi_buffer_fraction"].get<float64>());
+      setup_particle_mpi_buffer(option["mpi_buffer_fraction"].get<float64>());
     }
   }
 };

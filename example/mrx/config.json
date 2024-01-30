@@ -9,6 +9,9 @@
 		"rebalance": {
 			"interval": 10,
 			"loglevel": 1
+		},
+		"option": {
+			"vectorization": "vector"
 		}
 	},
 	"diagnostic": [
@@ -17,6 +20,12 @@
 			"path": ".",
 			"prefix": "history",
 			"interval": 100
+		},
+		{
+			"name": "load",
+			"path": ".",
+			"prefix": "load",
+			"interval": 10
 		},
 		{
 			"name": "field",
@@ -32,7 +41,6 @@
 		}
 	],
 	"parameter": {
-		"vectorization": "vector",
 		"Nx": 256,
 		"Ny": 256,
 		"Nz": 2,
