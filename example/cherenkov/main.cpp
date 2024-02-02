@@ -70,8 +70,8 @@ public:
         for (int iy = Lby; iy <= Uby; iy++) {
           for (int ix = Lbx; ix <= Ubx; ix++) {
             uf(iz, iy, ix, 0) = 0;
-            uf(iz, iy, ix, 1) = 0;
-            uf(iz, iy, ix, 2) = 0;
+            uf(iz, iy, ix, 1) = +Bz * v0 / (gamma * cc);
+            uf(iz, iy, ix, 2) = -By * v0 / (gamma * cc);
             uf(iz, iy, ix, 3) = Bx;
             uf(iz, iy, ix, 4) = By;
             uf(iz, iy, ix, 5) = Bz;
