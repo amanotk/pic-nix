@@ -82,7 +82,6 @@ struct Velocity {
   T_float  yhmin;
   T_float  zimin;
   T_float  zhmin;
-  simd_i64 index;
 
   Velocity(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
            float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
@@ -110,7 +109,6 @@ struct Velocity {
     yhgrid = ylim[0];
     zigrid = zlim[0] + 0.5 * delz;
     zhgrid = zlim[0];
-    index  = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
   }
 
   auto calc_weights(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
@@ -251,7 +249,6 @@ struct Current {
   T_float  xmin;
   T_float  ymin;
   T_float  zmin;
-  simd_i64 index;
 
   Current(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
           float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
@@ -267,10 +264,9 @@ struct Current {
     xgrid = xlim[0] + 0.5 * delx;
     ygrid = ylim[0] + 0.5 * dely;
     zgrid = zlim[0] + 0.5 * delz;
-    index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
   }
 
-  auto calc_local_current(T_float xv[], T_float xu[], T_float ss[2][3][size],
+  auto calc_local_current(T_float xv[], T_float xu[], T_float qs, T_float ss[2][3][size],
                           T_float cur[size][size][size][4])
   {
     using T_int = xsimd::as_integer_t<T_float>;
@@ -314,7 +310,7 @@ struct Current {
     //
     // -*- accumulate current via density decomposition -*-
     //
-    esirkepov3d<Order>(dxdt, dydt, dzdt, ss, cur);
+    esirkepov3d<Order>(dxdt, dydt, dzdt, qs, ss, cur);
 
     return std::make_tuple(ix0, iy0, iz0);
   }
@@ -326,13 +322,13 @@ struct Current {
     T_float cur[size][size][size][4] = {0};
 
     // calculate local current
-    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, ss, cur);
+    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, qs, ss, cur);
 
     // deposit to global array
     ix -= ((Order + 1) / 2) + 1;
     iy -= ((Order + 1) / 2) + 1;
     iz -= ((Order + 1) / 2) + 1;
-    append_current3d<Order>(uj, iz, iy, ix, cur, qs);
+    append_current3d<Order>(uj, iz, iy, ix, cur);
   }
 
   template <typename T_array>
@@ -342,13 +338,13 @@ struct Current {
     T_float cur[size][size][size][4] = {0};
 
     // calculate local current
-    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, ss, cur);
+    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, qs, ss, cur);
 
     // deposit to global array
     ix0 += lbx - (Order / 2) - 1;
     iy0 += lby - (Order / 2) - 1;
     iz0 += lbz - (Order / 2) - 1;
-    append_current3d<Order>(uj, iz0, iy0, ix0, cur, qs);
+    append_current3d<Order>(uj, iz0, iy0, ix0, cur);
   }
 };
 } // namespace exchunk3d_impl
