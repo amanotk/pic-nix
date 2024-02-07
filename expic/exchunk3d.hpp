@@ -69,6 +69,9 @@ public:
   using Chunk::mpibufvec;
   using Chunk::load;
 
+  // order of shape function
+  static constexpr int order = Order;
+
   // boundary margin
   static constexpr int Nb = Chunk::boundary_margin;
 

@@ -486,23 +486,27 @@ public:
     int dims[3]       = {ndims[0] / cdims[0], ndims[1] / cdims[1], ndims[2] / cdims[2]};
     int numcell_chunk = dims[0] * dims[1] * dims[2];
 
-    json    parameter  = cfgparser->get_parameter();
-    json    option     = cfgparser->get_application()["option"];
-    int     nbg        = parameter["nbg"].get<float64>();
-    int     ncs        = parameter["ncs"].get<float64>();
-    float64 lcs        = parameter["lcs"].get<float64>();
-    float64 cell_load  = option.value("cell_load", 1.0);
-    float64 ycs        = 0.5 * (ylim[0] + ylim[1]);
-    float64 ylen       = dely * dims[1];
+    json    parameter = cfgparser->get_parameter();
+    json    option    = cfgparser->get_application()["option"];
+    int     nbg       = parameter["nbg"].get<float64>();
+    int     ncs       = parameter["ncs"].get<float64>();
+    float64 lcs       = parameter["lcs"].get<float64>();
+    float64 cell_load = option.value("cell_load", 1.0);
+    float64 dely      = cfgparser->get_dely();
+    float64 ymin      = 0.0;
+    float64 ymax      = dely * ndims[1];
+    float64 ycs       = 0.5 * (ymin + ymax);
+    float64 ylen      = dely * dims[1];
 
     for (int i = 0; i < numchunk_global; i++) {
       int cx, cy, cz;
       chunkmap->get_coordinate(i, cz, cy, cx);
 
-      float64 ymax      = (ylim[0] - ycs + ylen * (cy + 1)) / lcs;
-      float64 ymin      = (ylim[0] - ycs + ylen * cy) / lcs;
-      float64 rbg       = numcell_chunk * nbg;
-      float64 rcs       = numcell_chunk * ncs * (tanh(ymax) - tanh(ymin)) / (ymax - ymin);
+      float64 ylmax = (ymin - ycs + ylen * (cy + 1)) / lcs;
+      float64 ylmin = (ymin - ycs + ylen * cy) / lcs;
+      float64 rbg   = numcell_chunk * nbg;
+      float64 rcs   = numcell_chunk * ncs * (tanh(ylmax) - tanh(ylmin)) / (ylmax - ylmin);
+
       balancer->load(i) = rbg + rcs + cell_load;
     }
   }

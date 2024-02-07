@@ -278,8 +278,6 @@ DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
       }
     }
   }
-  efd *= delx * dely * delz;
-  bfd *= delx * dely * delz;
 
   // particle energy for each species
   for (int iz = Lbz; iz <= Ubz; iz++) {

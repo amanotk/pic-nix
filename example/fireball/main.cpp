@@ -250,9 +250,12 @@ public:
 
     int     dims[3]     = {ndims[0] / cdims[0], ndims[1] / cdims[1], ndims[2] / cdims[2]};
     int     ncell_chunk = dims[0] * dims[1] * dims[2];
-    float64 z0          = 0.5 * (zlim[0] + zlim[1]);
-    float64 y0          = 0.5 * (ylim[0] + ylim[1]);
-    float64 x0          = 0.5 * (xlim[0] + xlim[1]);
+    float64 dx          = cfgparser->get_delx();
+    float64 dy          = cfgparser->get_dely();
+    float64 dz          = cfgparser->get_delz();
+    float64 x0          = 0.5 * dx * dims[2];
+    float64 y0          = 0.5 * dy * dims[1];
+    float64 z0          = 0.5 * dz * dims[0];
 
     for (int i = 0; i < nchunk_global; i++) {
       int cx, cy, cz;
@@ -262,7 +265,7 @@ public:
       std::array<int, 2> yr = {cy * dims[1], (cy + 1) * dims[1]};
       std::array<int, 2> xr = {cx * dims[2], (cx + 1) * dims[2]};
 
-      int     count = count_cell_within_fireball(zr, yr, xr, delz, dely, delx, z0, y0, x0, radius);
+      int     count = count_cell_within_fireball(zr, yr, xr, dz, dy, dx, z0, y0, x0, radius);
       float64 a     = 2.0 * count / ncell_chunk;
       float64 b     = 2.0 * (ncell_chunk - count) / ncell_chunk;
 

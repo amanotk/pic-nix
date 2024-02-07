@@ -44,13 +44,6 @@ protected:
   using BaseApp::cdims;
   using BaseApp::curstep;
   using BaseApp::curtime;
-  using BaseApp::delt;
-  using BaseApp::delx;
-  using BaseApp::dely;
-  using BaseApp::delz;
-  using BaseApp::xlim;
-  using BaseApp::ylim;
-  using BaseApp::zlim;
   using BaseApp::nprocess;
   using BaseApp::thisrank;
 
@@ -164,6 +157,7 @@ DEFINE_MEMBER(json, to_json)()
 {
   json state = BaseApp::to_json();
 
+  state["order"]   = Chunk::order;
   state["Ns"]      = Ns;
   state["momstep"] = momstep;
 
@@ -173,6 +167,10 @@ DEFINE_MEMBER(json, to_json)()
 DEFINE_MEMBER(bool, from_json)(json& state)
 {
   if (BaseApp::from_json(state) == false) {
+    return false;
+  }
+
+  if (state["order"] != Chunk::order) {
     return false;
   }
 
@@ -216,6 +214,8 @@ DEFINE_MEMBER(void, push)()
 
 #pragma omp parallel
   {
+    const float64 delt = cfgparser->get_delt();
+
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       // reset load
