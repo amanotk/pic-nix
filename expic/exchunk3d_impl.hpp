@@ -65,23 +65,23 @@ struct Velocity {
   float64 zigrid;
   float64 zhgrid;
 
-  T_float  rc;
-  T_float  dtx;
-  T_float  dty;
-  T_float  dtz;
-  T_float  rdtx;
-  T_float  rdty;
-  T_float  rdtz;
-  T_float  rdt;
-  T_float  rdx;
-  T_float  rdy;
-  T_float  rdz;
-  T_float  ximin;
-  T_float  xhmin;
-  T_float  yimin;
-  T_float  yhmin;
-  T_float  zimin;
-  T_float  zhmin;
+  T_float rc;
+  T_float dtx;
+  T_float dty;
+  T_float dtz;
+  T_float rdtx;
+  T_float rdty;
+  T_float rdtz;
+  T_float rdt;
+  T_float rdx;
+  T_float rdy;
+  T_float rdz;
+  T_float ximin;
+  T_float xhmin;
+  T_float yimin;
+  T_float yhmin;
+  T_float zimin;
+  T_float zhmin;
 
   Velocity(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
            float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
@@ -243,12 +243,12 @@ struct Current {
   float64 ygrid;
   float64 zgrid;
 
-  T_float  rdx;
-  T_float  rdy;
-  T_float  rdz;
-  T_float  xmin;
-  T_float  ymin;
-  T_float  zmin;
+  T_float rdx;
+  T_float rdy;
+  T_float rdz;
+  T_float xmin;
+  T_float ymin;
+  T_float zmin;
 
   Current(float64 delt, float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
           float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
@@ -266,10 +266,11 @@ struct Current {
     zgrid = zlim[0] + 0.5 * delz;
   }
 
-  auto calc_local_current(T_float xv[], T_float xu[], T_float qs, T_float ss[2][3][size],
-                          T_float cur[size][size][size][4])
+  auto calc_local_current(T_float xv[], T_float xu[], T_float qs, T_float cur[size][size][size][4])
   {
     using T_int = xsimd::as_integer_t<T_float>;
+
+    T_float ss[2][3][size] = {0};
 
     //
     // -*- weights before move -*-
@@ -315,16 +316,10 @@ struct Current {
     return std::make_tuple(ix0, iy0, iz0);
   }
 
-  template <typename T_array>
-  void sorted(T_array& uj, int iz, int iy, int ix, T_float xv[], T_float xu[], float64 qs)
+  template <typename T_array, typename T_int>
+  void deposit_global_current(T_array& uj, T_int iz, T_int iy, T_int ix,
+                              T_float cur[size][size][size][4])
   {
-    T_float ss[2][3][size]           = {0};
-    T_float cur[size][size][size][4] = {0};
-
-    // calculate local current
-    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, qs, ss, cur);
-
-    // deposit to global array
     ix -= ((Order + 1) / 2) + 1;
     iy -= ((Order + 1) / 2) + 1;
     iz -= ((Order + 1) / 2) + 1;
@@ -334,11 +329,10 @@ struct Current {
   template <typename T_array>
   void unsorted(T_array& uj, T_float xv[], T_float xu[], float64 qs)
   {
-    T_float ss[2][3][size]           = {0};
     T_float cur[size][size][size][4] = {0};
 
     // calculate local current
-    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, qs, ss, cur);
+    auto [ix0, iy0, iz0] = calc_local_current(xv, xu, qs, cur);
 
     // deposit to global array
     ix0 += lbx - (Order / 2) - 1;

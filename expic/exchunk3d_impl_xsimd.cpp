@@ -185,6 +185,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   using namespace exchunk3d_impl;
   using simd::simd_f64;
   using simd::simd_i64;
+  constexpr int  size     = Order + 3;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
   const int      stride_y = stride_x * (dims[2] + 1);
@@ -208,6 +209,10 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
       for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
         int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
 
+        // local current
+        float64  cur[size][size][size][4]      = {0}; // scalar
+        simd_f64 cur_simd[size][size][size][4] = {0}; // SIMD register
+
         // process particles in the cell
         for (int is = 0; is < Ns; is++) {
           int ip_zero = up[is]->pindex(ii);
@@ -221,6 +226,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
             // local SIMD register
             simd_f64 xv[3];
             simd_f64 xu[3];
+            simd_f64 qs = up[is]->q;
 
             // load particles to SIMD register
             xv[0] = simd_f64::gather(&up[is]->xv(ip, 0), index);
@@ -230,7 +236,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
             xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
             xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
 
-            LoopBodyV.sorted(uj, iz, iy, ix, xv, xu, up[is]->q);
+            LoopBodyV.calc_local_current(xv, xu, qs, cur_simd);
           }
 
           //
@@ -239,10 +245,15 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
           for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
             float64* xv = &up[is]->xv(ip, 0);
             float64* xu = &up[is]->xu(ip, 0);
+            float64  qs = up[is]->q;
 
-            LoopBodyS.sorted(uj, iz, iy, ix, xv, xu, up[is]->q);
+            LoopBodyS.calc_local_current(xv, xu, qs, cur);
           }
         }
+
+        // deposit to global array
+        LoopBodyS.deposit_global_current(uj, iz, iy, ix, cur);
+        LoopBodyV.deposit_global_current(uj, iz, iy, ix, cur_simd);
       }
     }
   }
