@@ -37,7 +37,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
         xv[i] = simd_f64::gather(&up[is]->xv(ip, i), index);
       }
 
-      LoopBodyV(xu, xv, delt);
+      LoopBodyV(xv, xu, delt);
 
       // store particles to memory
       xu[0].scatter(&up[is]->xu(ip, 0), index);
@@ -55,7 +55,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
       float64* xu = &up[is]->xu(ip, 0);
       float64* xv = &up[is]->xv(ip, 0);
 
-      LoopBodyS(xu, xv, delt);
+      LoopBodyS(xv, xu, delt);
     }
 
     // count

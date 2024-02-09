@@ -21,7 +21,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
       float64* xu = &up[is]->xu(ip, 0);
       float64* xv = &up[is]->xv(ip, 0);
 
-      LoopBody(xu, xv, delt);
+      LoopBody(xv, xu, delt);
     }
 
     // count

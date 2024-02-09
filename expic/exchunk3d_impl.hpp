@@ -15,7 +15,7 @@ struct Position {
   {
   }
 
-  void operator()(T_float xu[], T_float xv[], float64 delt)
+  void operator()(T_float xv[], T_float xu[], float64 delt)
   {
     // copy to temporary
     for (int i = 0; i < ParticleType::Nc; i++) {
