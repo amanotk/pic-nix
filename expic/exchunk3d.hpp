@@ -98,6 +98,7 @@ protected:
   xt::xtensor<float64, 4> uf;     ///< electromagnetic field
   xt::xtensor<float64, 4> uj;     ///< current density
   xt::xtensor<float64, 5> um;     ///< particle moment
+  xt::xtensor<float64, 5> ff;     ///< electric field for Friedmann filter
   ParticleVec             up;     ///< list of particles
 
   ///
@@ -166,6 +167,8 @@ public:
   virtual void reset_load() override;
 
   virtual void setup(json& config) override;
+
+  virtual void setup_friedman_filter();
 
   virtual void get_energy(float64& efd, float64& bfd, float64 particle[]);
 

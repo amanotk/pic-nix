@@ -88,21 +88,23 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
 
   int count = address;
 
-  count += Chunk::pack(buffer, count);
-  count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
-  count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
-  count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
-  count += memcpy_count(buffer, uj.data(), uj.size() * sizeof(float64), count, 0);
-  // particle
-  for (int is = 0; is < Ns; is++) {
-    count += up[is]->pack(buffer, count);
-  }
   // option
   {
     std::vector<uint8_t> msgpack = json::to_msgpack(option);
     int                  size    = msgpack.size();
     count += memcpy_count(buffer, &size, sizeof(int), count, 0);
     count += memcpy_count(buffer, msgpack.data(), size, count, 0);
+  }
+
+  count += Chunk::pack(buffer, count);
+  count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
+  count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
+  count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
+  count += memcpy_count(buffer, uj.data(), uj.size() * sizeof(float64), count, 0);
+  count += memcpy_count(buffer, ff.data(), ff.size() * sizeof(float64), count, 0);
+  // particle
+  for (int is = 0; is < Ns; is++) {
+    count += up[is]->pack(buffer, count);
   }
 
   return count;
@@ -114,18 +116,6 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
 
   int count = address;
 
-  count += Chunk::unpack(buffer, count);
-  count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
-  count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
-  allocate(); // allocate memory for unpacking
-  count += memcpy_count(uf.data(), buffer, uf.size() * sizeof(float64), 0, count);
-  count += memcpy_count(uj.data(), buffer, uj.size() * sizeof(float64), 0, count);
-  // particle (automatically allocate memory)
-  up.resize(Ns);
-  for (int is = 0; is < Ns; is++) {
-    up[is] = std::make_shared<ParticleType>();
-    count += up[is]->unpack(buffer, count);
-  }
   // option
   {
     int size = 0;
@@ -135,6 +125,20 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
     count += memcpy_count(msgpack.data(), buffer, size, 0, count);
 
     option = json::from_msgpack(msgpack);
+  }
+
+  count += Chunk::unpack(buffer, count);
+  count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
+  count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
+  allocate(); // allocate memory for unpacking
+  count += memcpy_count(uf.data(), buffer, uf.size() * sizeof(float64), 0, count);
+  count += memcpy_count(uj.data(), buffer, uj.size() * sizeof(float64), 0, count);
+  count += memcpy_count(ff.data(), buffer, ff.size() * sizeof(float64), 0, count);
+  // particle (automatically allocate memory)
+  up.resize(Ns);
+  for (int is = 0; is < Ns; is++) {
+    up[is] = std::make_shared<ParticleType>();
+    count += up[is]->unpack(buffer, count);
   }
 
   return count;
@@ -151,9 +155,11 @@ DEFINE_MEMBER(void, allocate)()
   uf.resize({nz, ny, nx, 6});
   uj.resize({nz, ny, nx, 4});
   um.resize({nz, ny, nx, ns, 11});
+  ff.resize({nz, ny, nx, 3, 6});
   uf.fill(0);
   uj.fill(0);
   um.fill(0);
+  ff.fill(0);
 }
 
 DEFINE_MEMBER(void, reset_load)()
@@ -251,10 +257,31 @@ DEFINE_MEMBER(void, setup)(json& config)
     }
   }
 
+  // Friedman filter
+  {
+    option["friedman"] = opt.value("friedman", 0.0);
+  }
+
   // misc
   {
     option["cell_load"]           = opt.value("cell_load", 1.0);
     option["mpi_buffer_fraction"] = opt.value("mpi_buffer_fraction", 2.0);
+  }
+}
+
+DEFINE_MEMBER(void, setup_friedman_filter)()
+{
+  // initialize electric field for Friedman filter
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
+        for (int dir = 0; dir < 3; dir++) {
+          ff(iz, iy, ix, 0, dir) = uf(iz, iy, ix, dir);
+          ff(iz, iy, ix, 1, dir) = uf(iz, iy, ix, dir);
+          ff(iz, iy, ix, 2, dir) = uf(iz, iy, ix, dir);
+        }
+      }
+    }
   }
 }
 
@@ -319,9 +346,27 @@ DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
 
 DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
-  const float64 cflx = cc * delt / delx;
-  const float64 cfly = cc * delt / dely;
-  const float64 cflz = cc * delt / delz;
+  const float64 theta = option["friedman"].get<float64>();
+  const float64 cflx  = cc * delt / delx;
+  const float64 cfly  = cc * delt / dely;
+  const float64 cflz  = cc * delt / delz;
+
+  // update for Friedman filter first (boundary condition has already been set)
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
+        // Ex
+        ff(iz, iy, ix, 2, 0) = ff(iz, iy, ix, 1, 0) + theta * ff(iz, iy, ix, 2, 0);
+        ff(iz, iy, ix, 1, 0) = uf(iz, iy, ix, 0);
+        // Ey
+        ff(iz, iy, ix, 2, 1) = ff(iz, iy, ix, 1, 1) + theta * ff(iz, iy, ix, 2, 1);
+        ff(iz, iy, ix, 1, 1) = uf(iz, iy, ix, 1);
+        // Ez
+        ff(iz, iy, ix, 2, 2) = ff(iz, iy, ix, 1, 2) + theta * ff(iz, iy, ix, 2, 2);
+        ff(iz, iy, ix, 1, 2) = uf(iz, iy, ix, 2);
+      }
+    }
+  }
 
   // Ex
   for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
@@ -359,16 +404,34 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
 
 DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
-  const float64 cflx = cc * delt / delx;
-  const float64 cfly = cc * delt / dely;
-  const float64 cflz = cc * delt / delz;
+  const float64 theta = option["friedman"].get<float64>();
+  const float64 A     = 1 + 0.5 * theta;
+  const float64 B     = theta * (1 - 0.5 * theta);
+  const float64 C     = 0.5 * theta * (1 - theta) * (1 - theta);
+  const float64 cflx  = cc * delt / delx;
+  const float64 cfly  = cc * delt / dely;
+  const float64 cflz  = cc * delt / delz;
+
+  // update for Friedman filter first (boundary condition has already been set)
+  for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
+    for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
+      for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
+        ff(iz, iy, ix, 0, 0) =
+            A * uf(iz, iy, ix, 0) + B * ff(iz, iy, ix, 1, 0) + C * ff(iz, iy, ix, 2, 0);
+        ff(iz, iy, ix, 0, 1) =
+            A * uf(iz, iy, ix, 1) + B * ff(iz, iy, ix, 1, 1) + C * ff(iz, iy, ix, 2, 1);
+        ff(iz, iy, ix, 0, 2) =
+            A * uf(iz, iy, ix, 2) + B * ff(iz, iy, ix, 1, 2) + C * ff(iz, iy, ix, 2, 2);
+      }
+    }
+  }
 
   // Bx
   for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
     for (int iy = Lby - Nb + 1; iy <= Uby + Nb; iy++) {
       for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-        uf(iz, iy, ix, 3) += (-cfly) * (uf(iz, iy, ix, 2) - uf(iz, iy - 1, ix, 2)) +
-                             (+cflz) * (uf(iz, iy, ix, 1) - uf(iz - 1, iy, ix, 1));
+        uf(iz, iy, ix, 3) += (-cfly) * (ff(iz, iy, ix, 0, 2) - ff(iz, iy - 1, ix, 0, 2)) +
+                             (+cflz) * (ff(iz, iy, ix, 0, 1) - ff(iz - 1, iy, ix, 0, 1));
       }
     }
   }
@@ -377,8 +440,8 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
   for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
     for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
       for (int ix = Lbx - Nb + 1; ix <= Ubx + Nb; ix++) {
-        uf(iz, iy, ix, 4) += (-cflz) * (uf(iz, iy, ix, 0) - uf(iz - 1, iy, ix, 0)) +
-                             (+cflx) * (uf(iz, iy, ix, 2) - uf(iz, iy, ix - 1, 2));
+        uf(iz, iy, ix, 4) += (-cflz) * (ff(iz, iy, ix, 0, 0) - ff(iz - 1, iy, ix, 0, 0)) +
+                             (+cflx) * (ff(iz, iy, ix, 0, 2) - ff(iz, iy, ix - 1, 0, 2));
       }
     }
   }
@@ -387,8 +450,8 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
   for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
     for (int iy = Lby - Nb + 1; iy <= Uby + Nb; iy++) {
       for (int ix = Lbx - Nb + 1; ix <= Ubx + Nb; ix++) {
-        uf(iz, iy, ix, 5) += (-cflx) * (uf(iz, iy, ix, 1) - uf(iz, iy, ix - 1, 1)) +
-                             (+cfly) * (uf(iz, iy, ix, 0) - uf(iz, iy - 1, ix, 0));
+        uf(iz, iy, ix, 5) += (-cflx) * (ff(iz, iy, ix, 0, 1) - ff(iz, iy, ix - 1, 0, 1)) +
+                             (+cfly) * (ff(iz, iy, ix, 0, 0) - ff(iz, iy - 1, ix, 0, 0));
       }
     }
   }
