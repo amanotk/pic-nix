@@ -406,7 +406,7 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
   const float64 theta = option["friedman"].get<float64>();
   const float64 A     = 1 + 0.5 * theta;
-  const float64 B     = theta * (1 - 0.5 * theta);
+  const float64 B     = -theta * (1 - 0.5 * theta);
   const float64 C     = 0.5 * theta * (1 - theta) * (1 - theta);
   const float64 cflx  = cc * delt / delx;
   const float64 cfly  = cc * delt / dely;
