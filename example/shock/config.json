@@ -1,0 +1,64 @@
+{
+	"application": {
+		"basedir": "data",
+		"log": {
+			"path": ".",
+			"prefix": "log",
+			"interval": 5000
+		},
+		"rebalance": {
+			"interval": 10,
+			"loglevel": 1
+		},
+		"option": {
+			"vectorization": "vector"
+		}
+	},
+	"diagnostic": [
+		{
+			"name": "history",
+			"path": ".",
+			"prefix": "history",
+			"interval": 100
+		},
+		{
+			"name": "load",
+			"path": ".",
+			"prefix": "load",
+			"interval": 10
+		},
+		{
+			"name": "field",
+			"path": ".",
+			"prefix": "field",
+			"interval": 100
+		},
+		{
+			"name": "particle",
+			"path": ".",
+			"prefix": "particle",
+			"interval": 1000
+		}
+	],
+	"parameter": {
+		"Nx": 1024,
+		"Ny": 2,
+		"Nz": 2,
+		"Cx": 64,
+		"Cy": 1,
+		"Cz": 1,
+		"Ns": 2,
+		"wp": 1.0e+0,
+		"delt": 5.0e-2,
+		"delh": 1.0e-1,
+		"nppc": 32,
+		"mime": 25,
+		"mach": 5.0e+0,
+		"theta": 90.0,
+		"phi": 0.0,
+		"sigma": 2.5e-2,
+		"betae": 0.5,
+		"betai": 0.5,
+		"taper": 1.0e+1
+	}
+}
