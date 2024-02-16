@@ -14,19 +14,9 @@ class MainChunk : public ExChunk3D<order>
 public:
   using ExChunk3D<order>::ExChunk3D; // inherit constructors
 
-  float64 get_wall_xmin() const
-  {
-    return gxlim[0] + Nb * delx;
-  }
-
-  float64 get_wall_xmax() const
-  {
-    return gxlim[1] - Nb * delx;
-  }
-
   float64 initial_flow_profile(const float64 x, const float64 L)
   {
-    float64 xmin = get_wall_xmin();
+    float64 xmin = gxlim[0] + Nb * delx;
     return -(x - xmin < L ? sin(0.5 * nix::math::pi * (x - xmin) / L) : 1.0);
   }
 
@@ -240,7 +230,7 @@ public:
     //
     if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
       // transverse E: Ey, Ez
-      for (int ix = 0; ix < 2 * Nb - 1; ix++) {
+      for (int ix = 0; ix < 2 * Nb; ix++) {
         int ix1 = Lbx - ix + Nb - 1;
         int ix2 = Lbx + ix + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
@@ -469,8 +459,8 @@ public:
       //
       // upper boundary in x
       //
-      if (xu(ip, 0) > xmax) {
-        // do nothing remove from the system
+      if (xu(ip, 0) >= xmax) {
+        // do nothing to remove from the system
       }
     }
   }
@@ -481,16 +471,15 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      float64 rc   = 1.0 / cc;
-      int     step = option["injection"]["step"].get<int>();
-      int     nppc = option["injection"]["nppc"].get<int>();
-      float64 delt = option["injection"]["delt"].get<float64>();
-      float64 vsh  = option["injection"]["vsh"].get<float64>();
-      float64 vte  = option["injection"]["vte"].get<float64>();
-      float64 vti  = option["injection"]["vti"].get<float64>();
-      int     mp   = nppc * dims[0] * dims[1];
-      int     npe  = particle[0]->Np;
-      int     npi  = particle[1]->Np;
+      float64 rc    = 1.0 / cc;
+      int     step  = option["injection"]["step"].get<int>();
+      int     nppc  = option["injection"]["nppc"].get<int>();
+      float64 delt  = option["injection"]["delt"].get<float64>();
+      float64 vsh   = option["injection"]["vsh"].get<float64>();
+      float64 vte   = option["injection"]["vte"].get<float64>();
+      float64 vti   = option["injection"]["vti"].get<float64>();
+      int     mp    = nppc * dims[0] * dims[1];
+      int     Np[2] = {particle[0]->Np, particle[1]->Np};
 
       int                 random_seed = option["random_seed"].get<int>() + step;
       std::mt19937_64     mtp(random_seed);
@@ -499,6 +488,14 @@ public:
       nix::MaxwellJuttner mj_ele(vte * vte, -vsh);
       nix::MaxwellJuttner mj_ion(vti * vti, -vsh);
 
+      // reallocate buffer if necessary
+      for (int is = 0; is < Ns; is++) {
+        if (particle[is]->Np + mp > particle[is]->Np_total) {
+          particle[is]->resize(2 * particle[is]->Np_total);
+        }
+      }
+
+      // injection
       for (int ip = 0; ip < mp; ip++) {
         float64 x = uniform(mtp) * delx + xlim[1];
         float64 y = uniform(mtp) * ylim[2] + ylim[0];
@@ -510,13 +507,13 @@ public:
           auto dx           = ux * delt / lorentz_factor(ux, uy, uz, rc);
 
           if (x + dx < xlim[1]) { // inside the domain
-            up[0]->xu(npe, 0) = x + dx;
-            up[0]->xu(npe, 1) = y;
-            up[0]->xu(npe, 2) = z;
-            up[0]->xu(npe, 3) = ux;
-            up[0]->xu(npe, 4) = uy;
-            up[0]->xu(npe, 5) = uz;
-            npe++;
+            up[0]->xu(Np[0], 0) = x + dx;
+            up[0]->xu(Np[0], 1) = y;
+            up[0]->xu(Np[0], 2) = z;
+            up[0]->xu(Np[0], 3) = ux;
+            up[0]->xu(Np[0], 4) = uy;
+            up[0]->xu(Np[0], 5) = uz;
+            Np[0]++;
           }
         }
 
@@ -526,22 +523,22 @@ public:
           auto dx           = ux * delt / lorentz_factor(ux, uy, uz, rc);
 
           if (x + dx < xlim[1]) { // inside the domain
-            up[1]->xu(npi, 0) = x + dx;
-            up[1]->xu(npi, 1) = y;
-            up[1]->xu(npi, 2) = z;
-            up[1]->xu(npi, 3) = ux;
-            up[1]->xu(npi, 4) = uy;
-            up[1]->xu(npi, 5) = uz;
-            npi++;
+            up[1]->xu(Np[1], 0) = x + dx;
+            up[1]->xu(Np[1], 1) = y;
+            up[1]->xu(Np[1], 2) = z;
+            up[1]->xu(Np[1], 3) = ux;
+            up[1]->xu(Np[1], 4) = uy;
+            up[1]->xu(Np[1], 5) = uz;
+            Np[1]++;
           }
         }
       }
 
       // count injected particles
-      this->count_particle(up[0], up[0]->Np, npe - 1, false);
-      this->count_particle(up[1], up[1]->Np, npi - 1, false);
-      up[0]->Np = npe;
-      up[1]->Np = npi;
+      for (int is = 0; is < Ns; is++) {
+        this->count_particle(up[is], up[is]->Np, Np[is] - 1, false);
+        up[is]->Np = Np[is];
+      }
     }
 
     option["injection"]["step"] = option["injection"]["step"].get<int>() + 1;
