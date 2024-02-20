@@ -426,7 +426,7 @@ public:
     }
   }
 
-  void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp) override
+  void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
   {
     // NOTE: trick to take care of round-off error
     float64 xlength = gxlim[2] - std::numeric_limits<float64>::epsilon();

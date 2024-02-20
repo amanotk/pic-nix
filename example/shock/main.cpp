@@ -11,8 +11,39 @@ using MainDiagnoser = Diagnoser;
 
 class MainChunk : public ExChunk3D<order>
 {
+private:
+  using MJ = nix::MaxwellJuttner;
+
+  nix::rand_uniform uniform;
+  std::mt19937_64   mt;
+  std::vector<MJ>   mj;
+
 public:
   using ExChunk3D<order>::ExChunk3D; // inherit constructors
+
+  template <typename Velocity>
+  auto generate_injection_particle(Velocity& velocity, float64 delt)
+  {
+    const float64 rc = 1.0 / cc;
+
+    float64 xx = 0;
+    float64 dx = 0;
+    float64 ux = 0;
+    float64 uy = 0;
+    float64 uz = 0;
+
+    std::tie(ux, uy, uz) = velocity(mt);
+    xx                   = xlim[1] + cc * delt * uniform(mt);
+    dx                   = ux * delt / lorentz_factor(ux, uy, uz, rc);
+
+    while (xx + dx >= xlim[1]) {
+      std::tie(ux, uy, uz) = velocity(mt);
+      xx                   = xlim[1] + cc * delt * uniform(mt);
+      dx                   = ux * delt / lorentz_factor(ux, uy, uz, rc);
+    }
+
+    return std::make_tuple(xx + dx, ux, uy, uz);
+  }
 
   float64 initial_flow_profile(const float64 x, const float64 L)
   {
@@ -105,12 +136,11 @@ public:
     // initialize particles
     //
     {
-      int                 random_seed = option["random_seed"].get<int>();
-      std::mt19937_64     mtp(random_seed);
-      std::mt19937_64     mtv(random_seed);
-      nix::rand_uniform   uniform(0.0, 1.0);
-      nix::MaxwellJuttner mj_ele(vte * vte, 0.0);
-      nix::MaxwellJuttner mj_ion(vti * vti, 0.0);
+      // setup random number generator
+      int random_seed = option["random_seed"].get<int>();
+      mt.seed(random_seed);
+      mj.push_back(MJ(vte * vte, 0.0));
+      mj.push_back(MJ(vti * vti, 0.0));
 
       {
         int   nz = dims[0] + 2 * Nb;
@@ -133,36 +163,29 @@ public:
         up[1]->q  = qi;
         up[1]->Np = mp;
 
-        for (int ip = 0; ip < mp; ip++) {
-          float64 x = uniform(mtp) * xlim[2] + xlim[0];
-          float64 y = uniform(mtp) * ylim[2] + ylim[0];
-          float64 z = uniform(mtp) * zlim[2] + zlim[0];
-          float64 U = vsh * initial_flow_profile(x, taper);
+        int ip = 0;
+        for (int iz = Lbz; iz <= Ubz; iz++) {
+          for (int iy = Lby; iy <= Uby; iy++) {
+            for (int ix = Lbx; ix <= Ubx; ix++) {
+              for (int jp = 0; jp < nppc; ip++, jp++) {
+                float64 x = xlim[0] + (ix - Lbx + uniform(mt)) * delx;
+                float64 y = ylim[0] + (iy - Lby + uniform(mt)) * dely;
+                float64 z = zlim[0] + (iz - Lbz + uniform(mt)) * delz;
+                float64 U = vsh * initial_flow_profile(x, taper);
 
-          // electrons
-          {
-            auto [ux, uy, uz] = mj_ele(mtv);
-            ux                = mj_ele.lorentz_boost(mtv, U, ux, uy, uz);
+                for (int is = 0; is < Ns; is++) {
+                  mj[is].set_drift(U);
+                  auto [ux, uy, uz] = mj[is](mt);
 
-            up[0]->xu(ip, 0) = x;
-            up[0]->xu(ip, 1) = y;
-            up[0]->xu(ip, 2) = z;
-            up[0]->xu(ip, 3) = ux;
-            up[0]->xu(ip, 4) = uy;
-            up[0]->xu(ip, 5) = uz;
-          }
-
-          // ions
-          {
-            auto [ux, uy, uz] = mj_ion(mtv);
-            ux                = mj_ion.lorentz_boost(mtv, U, ux, uy, uz);
-
-            up[1]->xu(ip, 0) = x;
-            up[1]->xu(ip, 1) = y;
-            up[1]->xu(ip, 2) = z;
-            up[1]->xu(ip, 3) = ux;
-            up[1]->xu(ip, 4) = uy;
-            up[1]->xu(ip, 5) = uz;
+                  up[is]->xu(ip, 0) = x;
+                  up[is]->xu(ip, 1) = y;
+                  up[is]->xu(ip, 2) = z;
+                  up[is]->xu(ip, 3) = ux;
+                  up[is]->xu(ip, 4) = uy;
+                  up[is]->xu(ip, 5) = uz;
+                }
+              }
+            }
           }
         }
 
@@ -174,10 +197,20 @@ public:
       }
     }
 
-    // store option for injection
-    option["injection"] = {{"step", 0},  {"nppc", nppc}, {"delt", delt}, {"vsh", vsh},
-                           {"vte", vte}, {"vti", vti},   {"Ex0", Ex0},   {"Ey0", Ey0},
-                           {"Ez0", Ez0}, {"Bx0", Bx0},   {"By0", By0},   {"Bz0", Bz0}};
+    // store option for boundary
+    option["boundary"] = {{"nppc", nppc},
+                          {"delt", delt},
+                          {"vsh", vsh},
+                          {"vte", vte},
+                          {"vti", vti},
+                          {"Ex0", Ex0},
+                          {"Ey0", Ey0},
+                          {"Ez0", Ez0},
+                          {"Bx0", Bx0},
+                          {"By0", By0},
+                          {"Bz0", Bz0},
+                          {"influx", std::array<int, 2>{0, 0}},
+                          {"efflux", std::array<int, 2>{0, 0}}};
   }
 
   void get_diverror(float64& efd, float64& bfd) override
@@ -281,12 +314,12 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      const float64 Ex0 = option["injection"]["Ex0"].get<float64>();
-      const float64 Ey0 = option["injection"]["Ey0"].get<float64>();
-      const float64 Ez0 = option["injection"]["Ez0"].get<float64>();
-      const float64 Bx0 = option["injection"]["Bx0"].get<float64>();
-      const float64 By0 = option["injection"]["By0"].get<float64>();
-      const float64 Bz0 = option["injection"]["Bz0"].get<float64>();
+      const float64 Ex0 = option["boundary"]["Ex0"].get<float64>();
+      const float64 Ey0 = option["boundary"]["Ey0"].get<float64>();
+      const float64 Ez0 = option["boundary"]["Ez0"].get<float64>();
+      const float64 Bx0 = option["boundary"]["Bx0"].get<float64>();
+      const float64 By0 = option["boundary"]["By0"].get<float64>();
+      const float64 Bz0 = option["boundary"]["Bz0"].get<float64>();
 
       // transverse E: Ey, Ez
       for (int ix = 0; ix < 2 * Nb; ix++) {
@@ -294,8 +327,8 @@ public:
         int ix2 = Ubx - ix - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            uf(iz, iy, ix1, 1) = 1 * Ey0 + 0 * uf(iz, iy, ix2, 1);
-            uf(iz, iy, ix1, 2) = 1 * Ez0 + 0 * uf(iz, iy, ix2, 2);
+            uf(iz, iy, ix1, 1) = Ey0;
+            uf(iz, iy, ix1, 2) = Ez0;
           }
         }
       }
@@ -305,9 +338,7 @@ public:
         int ix2 = ix1 - 1;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb - 1; iy++) {
-            uf(iz, iy, ix1, 0) = +delx * uj(iz, iy, ix2, 0) + uf(iz, iy, ix2, 0) -
-                                 delxy * (uf(iz, iy + 1, ix2, 1) - uf(iz, iy, ix2, 1)) -
-                                 delxz * (uf(iz + 1, iy, ix2, 2) - uf(iz, iy, ix2, 2));
+            uf(iz, iy, ix1, 0) = Ex0;
           }
         }
       }
@@ -317,8 +348,8 @@ public:
         int ix2 = Ubx - ix - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            uf(iz, iy, ix1, 4) = 1 * By0 + 0 * uf(iz, iy, ix2, 4);
-            uf(iz, iy, ix1, 5) = 1 * Bz0 + 0 * uf(iz, iy, ix2, 5);
+            uf(iz, iy, ix1, 4) = By0;
+            uf(iz, iy, ix1, 5) = Bz0;
           }
         }
       }
@@ -328,9 +359,7 @@ public:
         int ix2 = ix1 - 1;
         for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb + 1; iy <= Uby + Nb; iy++) {
-            uf(iz, iy, ix1, 3) = uf(iz, iy, ix2, 3) -
-                                 delxy * (uf(iz, iy, ix1, 4) - uf(iz, iy - 1, ix1, 4)) -
-                                 delxz * (uf(iz, iy, ix1, 5) - uf(iz - 1, iy, ix1, 5));
+            uf(iz, iy, ix1, 3) = Bx0;
           }
         }
       }
@@ -343,35 +372,14 @@ public:
     // lower boundary in x
     //
     if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-      for (int ix = 0; ix < Nb; ix++) {
-        int ix1 = Lbx - ix + Nb - 1;
-        for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
-          for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            uj(iz, iy, ix1, 0) = 0;
-            uj(iz, iy, ix1, 1) = 0;
-            uj(iz, iy, ix1, 2) = 0;
-            uj(iz, iy, ix1, 3) = 0;
-          }
-        }
-      }
+      // not necessary
     }
 
     //
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      for (int ix = 0; ix < Nb; ix++) {
-        int ix1 = Ubx + ix - Nb + 1;
-        int ix2 = ix1 + 1;
-        for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
-          for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            uj(iz, iy, ix1, 0) = 0;
-            uj(iz, iy, ix2, 1) = 0;
-            uj(iz, iy, ix1, 2) = 0;
-            uj(iz, iy, ix1, 3) = 0;
-          }
-        }
-      }
+      // not necessary
     }
   }
 
@@ -433,14 +441,16 @@ public:
     }
   }
 
-  void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp) override
+  void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
   {
     // NOTE: trick to take care of round-off error
-    float64 ylength = gylim[2] - std::numeric_limits<float64>::epsilon();
-    float64 zlength = gzlim[2] - std::numeric_limits<float64>::epsilon();
+    const float64 ylength = gylim[2] - std::numeric_limits<float64>::epsilon();
+    const float64 zlength = gzlim[2] - std::numeric_limits<float64>::epsilon();
+    const float64 xmin    = gxlim[0];
+    const float64 xmax    = gxlim[1];
+    const float64 delt    = option["boundary"]["delt"].get<float64>();
 
-    float64 xmin = gxlim[0];
-    float64 xmax = gxlim[1];
+    int efflux = 0;
 
     // apply boundary condition
     auto& xu = particle->xu;
@@ -454,15 +464,27 @@ public:
       if (xu(ip, 0) < xmin) {
         xu(ip, 0) = -xu(ip, 0) + 2 * xmin;
         xu(ip, 3) = -xu(ip, 3);
+        xu(ip, 4) = -xu(ip, 4);
+        xu(ip, 5) = -xu(ip, 5);
       }
 
       //
       // upper boundary in x
       //
       if (xu(ip, 0) >= xmax) {
-        // do nothing to remove from the system
+        // replaced by a new particle
+        auto [x, ux, uy, uz] = generate_injection_particle(mj[species], delt);
+
+        xu(ip, 0) = x;
+        xu(ip, 3) = ux;
+        xu(ip, 4) = uy;
+        xu(ip, 5) = uz;
+        efflux += 1;
       }
     }
+
+    // store efflux
+    option["boundary"]["efflux"][species] = efflux;
   }
 
   void inject_particle(ParticleVec& particle) override
@@ -471,77 +493,63 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      float64 rc    = 1.0 / cc;
-      int     step  = option["injection"]["step"].get<int>();
-      int     nppc  = option["injection"]["nppc"].get<int>();
-      float64 delt  = option["injection"]["delt"].get<float64>();
-      float64 vsh   = option["injection"]["vsh"].get<float64>();
-      float64 vte   = option["injection"]["vte"].get<float64>();
-      float64 vti   = option["injection"]["vti"].get<float64>();
-      int     mp    = nppc * dims[0] * dims[1];
-      int     Np[2] = {particle[0]->Np, particle[1]->Np};
+      float64 rc   = 1.0 / cc;
+      int     nppc = option["boundary"]["nppc"].get<int>();
+      float64 delt = option["boundary"]["delt"].get<float64>();
+      float64 vsh  = option["boundary"]["vsh"].get<float64>();
+      float64 vte  = option["boundary"]["vte"].get<float64>();
+      float64 vti  = option["boundary"]["vti"].get<float64>();
+      float64 flux = nppc * std::abs(vsh) / sqrt(1 + vsh * vsh * rc * rc) * delt / delx;
 
-      int                 random_seed = option["random_seed"].get<int>() + step;
-      std::mt19937_64     mtp(random_seed);
-      std::mt19937_64     mtv(random_seed);
-      nix::rand_uniform   uniform(0.0, 1.0);
-      nix::MaxwellJuttner mj_ele(vte * vte, -vsh);
-      nix::MaxwellJuttner mj_ion(vti * vti, -vsh);
+      // number of injection particles per cell
+      nix::rand_poisson poisson(flux);
+
+      // set drift velocity for injection
+      for (int is = 0; is < Ns; is++) {
+        mj[is].set_drift(-vsh);
+      }
 
       // reallocate buffer if necessary
       for (int is = 0; is < Ns; is++) {
-        if (particle[is]->Np + mp > particle[is]->Np_total) {
+        if (particle[is]->Np + flux * dims[0] * dims[1] > particle[is]->Np_total) {
           particle[is]->resize(2 * particle[is]->Np_total);
         }
       }
 
       // injection
-      for (int ip = 0; ip < mp; ip++) {
-        float64 x = uniform(mtp) * delx + xlim[1];
-        float64 y = uniform(mtp) * ylim[2] + ylim[0];
-        float64 z = uniform(mtp) * zlim[2] + zlim[0];
+      int influx[Ns] = {0};
 
-        // electrons
-        {
-          auto [ux, uy, uz] = mj_ele(mtv);
-          auto dx           = ux * delt / lorentz_factor(ux, uy, uz, rc);
+      for (int iz = Lbz; iz <= Ubz; iz++) {
+        for (int iy = Lby; iy <= Uby; iy++) {
+          int np_inj = poisson(mt);
+          for (int is = 0; is < Ns; is++) {
+            int np_old = particle[is]->Np;
+            int np_new = particle[is]->Np + np_inj;
+            for (int ip = np_old; ip < np_new; ip++) {
+              auto [x, ux, uy, uz] = generate_injection_particle(mj[is], delt);
+              float64 y            = ylim[0] + (iy - Lby + uniform(mt)) * dely;
+              float64 z            = zlim[0] + (iz - Lbz + uniform(mt)) * delz;
 
-          if (x + dx < xlim[1]) { // inside the domain
-            up[0]->xu(Np[0], 0) = x + dx;
-            up[0]->xu(Np[0], 1) = y;
-            up[0]->xu(Np[0], 2) = z;
-            up[0]->xu(Np[0], 3) = ux;
-            up[0]->xu(Np[0], 4) = uy;
-            up[0]->xu(Np[0], 5) = uz;
-            Np[0]++;
-          }
-        }
+              particle[is]->xu(ip, 0) = x;
+              particle[is]->xu(ip, 1) = y;
+              particle[is]->xu(ip, 2) = z;
+              particle[is]->xu(ip, 3) = ux;
+              particle[is]->xu(ip, 4) = uy;
+              particle[is]->xu(ip, 5) = uz;
+            }
 
-        // ions
-        {
-          auto [ux, uy, uz] = mj_ion(mtv);
-          auto dx           = ux * delt / lorentz_factor(ux, uy, uz, rc);
-
-          if (x + dx < xlim[1]) { // inside the domain
-            up[1]->xu(Np[1], 0) = x + dx;
-            up[1]->xu(Np[1], 1) = y;
-            up[1]->xu(Np[1], 2) = z;
-            up[1]->xu(Np[1], 3) = ux;
-            up[1]->xu(Np[1], 4) = uy;
-            up[1]->xu(Np[1], 5) = uz;
-            Np[1]++;
+            this->count_particle(particle[is], np_old, np_new - 1, false);
+            particle[is]->Np = np_new;
+            influx[is] += np_new - np_old;
           }
         }
       }
 
-      // count injected particles
+      // store influx
       for (int is = 0; is < Ns; is++) {
-        this->count_particle(up[is], up[is]->Np, Np[is] - 1, false);
-        up[is]->Np = Np[is];
+        option["boundary"]["influx"][is] = influx[is];
       }
     }
-
-    option["injection"]["step"] = option["injection"]["step"].get<int>() + 1;
   }
 };
 

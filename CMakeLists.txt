@@ -19,7 +19,7 @@ else()
   FetchContent_Declare(
     nix
     GIT_REPOSITORY https://github.com/amanotk/nix.git
-    GIT_TAG 872cab49f7271bc8f6f0981fb2c0e5a1f6e84e31
+    GIT_TAG d1739f35f62b69456ba7951506c9001fa0d89b72
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/nix
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/nix
   )
