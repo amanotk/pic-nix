@@ -14,9 +14,8 @@ class MainChunk : public ExChunk3D<order>
 private:
   using MJ = nix::MaxwellJuttner;
 
-  nix::rand_uniform uniform;
   std::mt19937_64   mt;
-  std::vector<MJ>   mj;
+  nix::rand_uniform uniform;
 
 public:
   using ExChunk3D<order>::ExChunk3D; // inherit constructors
@@ -137,10 +136,10 @@ public:
     //
     {
       // setup random number generator
-      int random_seed = option["random_seed"].get<int>();
-      mt.seed(random_seed);
-      mj.push_back(MJ(vte * vte, 0.0));
-      mj.push_back(MJ(vti * vti, 0.0));
+      mt.seed(option["random_seed"].get<int>());
+
+      // Maxwell-Juttner distribution
+      std::vector<MJ> mj = {MJ(vte * vte, 0.0), MJ(vti * vti, 0.0)};
 
       {
         int   nz = dims[0] + 2 * Nb;
@@ -446,9 +445,15 @@ public:
     // NOTE: trick to take care of round-off error
     const float64 ylength = gylim[2] - std::numeric_limits<float64>::epsilon();
     const float64 zlength = gzlim[2] - std::numeric_limits<float64>::epsilon();
-    const float64 xmin    = gxlim[0];
-    const float64 xmax    = gxlim[1];
+    int           seed    = option["random_seed"].get<int>() + 1;
     const float64 delt    = option["boundary"]["delt"].get<float64>();
+    const float64 vte     = option["boundary"]["vte"].get<float64>();
+    const float64 vti     = option["boundary"]["vti"].get<float64>();
+    const float64 vsh     = option["boundary"]["vsh"].get<float64>();
+
+    // reset random number generator
+    mt.seed(seed);
+    std::vector<MJ> mj = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
 
     int efflux = 0;
 
@@ -461,17 +466,17 @@ public:
       //
       // lower boundary in x
       //
-      if (xu(ip, 0) < xmin) {
-        xu(ip, 0) = -xu(ip, 0) + 2 * xmin;
+      if (xu(ip, 0) < gxlim[0]) {
+        xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
         xu(ip, 3) = -xu(ip, 3);
-        xu(ip, 4) = -xu(ip, 4);
-        xu(ip, 5) = -xu(ip, 5);
+        xu(ip, 4) = +xu(ip, 4);
+        xu(ip, 5) = +xu(ip, 5);
       }
 
       //
       // upper boundary in x
       //
-      if (xu(ip, 0) >= xmax) {
+      if (xu(ip, 0) >= gxlim[1]) {
         // replaced by a new particle
         auto [x, ux, uy, uz] = generate_injection_particle(mj[species], delt);
 
@@ -483,8 +488,8 @@ public:
       }
     }
 
-    // store efflux
     option["boundary"]["efflux"][species] = efflux;
+    option["random_seed"]                 = seed;
   }
 
   void inject_particle(ParticleVec& particle) override
@@ -494,6 +499,7 @@ public:
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
       float64 rc   = 1.0 / cc;
+      int     seed = option["random_seed"].get<int>() + 1;
       int     nppc = option["boundary"]["nppc"].get<int>();
       float64 delt = option["boundary"]["delt"].get<float64>();
       float64 vsh  = option["boundary"]["vsh"].get<float64>();
@@ -501,13 +507,12 @@ public:
       float64 vti  = option["boundary"]["vti"].get<float64>();
       float64 flux = nppc * std::abs(vsh) / sqrt(1 + vsh * vsh * rc * rc) * delt / delx;
 
+      // reset random number generator
+      mt.seed(seed);
+      std::vector<MJ> mj = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
+
       // number of injection particles per cell
       nix::rand_poisson poisson(flux);
-
-      // set drift velocity for injection
-      for (int is = 0; is < Ns; is++) {
-        mj[is].set_drift(-vsh);
-      }
 
       // reallocate buffer if necessary
       for (int is = 0; is < Ns; is++) {
@@ -545,10 +550,10 @@ public:
         }
       }
 
-      // store influx
       for (int is = 0; is < Ns; is++) {
         option["boundary"]["influx"][is] = influx[is];
       }
+      option["random_seed"] = seed;
     }
   }
 };
