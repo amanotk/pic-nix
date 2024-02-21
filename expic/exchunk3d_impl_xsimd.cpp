@@ -58,6 +58,8 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
       LoopBodyS(xv, xu, delt);
     }
 
+    // boundary condition before counting
+    this->set_boundary_particle(up[is], 0, up[is]->Np - 1, is);
     // count
     this->count_particle(up[is], 0, up[is]->Np - 1, true);
   }

@@ -20,6 +20,13 @@ private:
 public:
   using ExChunk3D<order>::ExChunk3D; // inherit constructors
 
+  void reset_random_number()
+  {
+    option["random_seed"] = option["random_seed"].get<int>() + 1;
+    mt.seed(option["random_seed"].get<int>());
+    uniform.reset();
+  }
+
   template <typename Velocity>
   auto generate_injection_particle(Velocity& velocity, float64 delt)
   {
@@ -365,23 +372,6 @@ public:
     }
   }
 
-  void set_boundary_cur()
-  {
-    //
-    // lower boundary in x
-    //
-    if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-      // not necessary
-    }
-
-    //
-    // upper boundary in x
-    //
-    if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      // not necessary
-    }
-  }
-
   void set_boundary_mom()
   {
     //
@@ -426,10 +416,6 @@ public:
       set_boundary_emf();
       break;
     }
-    case BoundaryCur: {
-      set_boundary_cur();
-      break;
-    }
     case BoundaryMom: {
       set_boundary_mom();
       break;
@@ -442,54 +428,44 @@ public:
 
   void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
   {
-    // NOTE: trick to take care of round-off error
-    const float64 ylength = gylim[2] - std::numeric_limits<float64>::epsilon();
-    const float64 zlength = gzlim[2] - std::numeric_limits<float64>::epsilon();
-    int           seed    = option["random_seed"].get<int>() + 1;
-    const float64 delt    = option["boundary"]["delt"].get<float64>();
-    const float64 vte     = option["boundary"]["vte"].get<float64>();
-    const float64 vti     = option["boundary"]["vti"].get<float64>();
-    const float64 vsh     = option["boundary"]["vsh"].get<float64>();
+    float64 delt = option["boundary"]["delt"].get<float64>();
+    float64 vsh  = option["boundary"]["vsh"].get<float64>();
+    float64 vte  = option["boundary"]["vte"].get<float64>();
+    float64 vti  = option["boundary"]["vti"].get<float64>();
 
     // reset random number generator
-    mt.seed(seed);
-    std::vector<MJ> mj = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
+    reset_random_number();
 
-    int efflux = 0;
+    int             efflux = 0;
+    std::vector<MJ> mj     = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
 
     // apply boundary condition
     auto& xu = particle->xu;
     for (int ip = Lbp; ip <= Ubp; ip++) {
-      xu(ip, 1) += (xu(ip, 1) < gylim[0]) * ylength - (xu(ip, 1) >= gylim[1]) * ylength;
-      xu(ip, 2) += (xu(ip, 2) < gzlim[0]) * zlength - (xu(ip, 2) >= gzlim[1]) * zlength;
-
       //
       // lower boundary in x
       //
       if (xu(ip, 0) < gxlim[0]) {
         xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
         xu(ip, 3) = -xu(ip, 3);
-        xu(ip, 4) = +xu(ip, 4);
-        xu(ip, 5) = +xu(ip, 5);
       }
 
       //
       // upper boundary in x
       //
       if (xu(ip, 0) >= gxlim[1]) {
-        // replaced by a new particle
         auto [x, ux, uy, uz] = generate_injection_particle(mj[species], delt);
 
         xu(ip, 0) = x;
         xu(ip, 3) = ux;
         xu(ip, 4) = uy;
         xu(ip, 5) = uz;
+
         efflux += 1;
       }
     }
 
     option["boundary"]["efflux"][species] = efflux;
-    option["random_seed"]                 = seed;
   }
 
   void inject_particle(ParticleVec& particle) override
@@ -499,7 +475,6 @@ public:
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
       float64 rc   = 1.0 / cc;
-      int     seed = option["random_seed"].get<int>() + 1;
       int     nppc = option["boundary"]["nppc"].get<int>();
       float64 delt = option["boundary"]["delt"].get<float64>();
       float64 vsh  = option["boundary"]["vsh"].get<float64>();
@@ -508,11 +483,10 @@ public:
       float64 flux = nppc * std::abs(vsh) / sqrt(1 + vsh * vsh * rc * rc) * delt / delx;
 
       // reset random number generator
-      mt.seed(seed);
-      std::vector<MJ> mj = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
+      reset_random_number();
 
-      // number of injection particles per cell
       nix::rand_poisson poisson(flux);
+      std::vector<MJ>   mj = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
 
       // reallocate buffer if necessary
       for (int is = 0; is < Ns; is++) {
@@ -521,8 +495,8 @@ public:
         }
       }
 
-      // injection
-      int influx[Ns] = {0};
+      // number of injection particles
+      int influx = 0;
 
       for (int iz = Lbz; iz <= Ubz; iz++) {
         for (int iy = Lby; iy <= Uby; iy++) {
@@ -545,15 +519,14 @@ public:
 
             this->count_particle(particle[is], np_old, np_new - 1, false);
             particle[is]->Np = np_new;
-            influx[is] += np_new - np_old;
           }
+          influx += np_inj;
         }
       }
 
       for (int is = 0; is < Ns; is++) {
-        option["boundary"]["influx"][is] = influx[is];
+        option["boundary"]["influx"][is] = influx;
       }
-      option["random_seed"] = seed;
     }
   }
 };
