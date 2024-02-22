@@ -428,44 +428,51 @@ public:
 
   void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
   {
-    float64 delt = option["boundary"]["delt"].get<float64>();
-    float64 vsh  = option["boundary"]["vsh"].get<float64>();
-    float64 vte  = option["boundary"]["vte"].get<float64>();
-    float64 vti  = option["boundary"]["vti"].get<float64>();
-
-    // reset random number generator
-    reset_random_number();
-
-    int             efflux = 0;
-    std::vector<MJ> mj     = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
-
-    // apply boundary condition
-    auto& xu = particle->xu;
-    for (int ip = Lbp; ip <= Ubp; ip++) {
-      //
-      // lower boundary in x
-      //
-      if (xu(ip, 0) < gxlim[0]) {
-        xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
-        xu(ip, 3) = -xu(ip, 3);
-      }
-
-      //
-      // upper boundary in x
-      //
-      if (xu(ip, 0) >= gxlim[1]) {
-        auto [x, ux, uy, uz] = generate_injection_particle(mj[species], delt);
-
-        xu(ip, 0) = x;
-        xu(ip, 3) = ux;
-        xu(ip, 4) = uy;
-        xu(ip, 5) = uz;
-
-        efflux += 1;
+    //
+    // lower boundary in x
+    //
+    if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
+      auto& xu = particle->xu;
+      for (int ip = Lbp; ip <= Ubp; ip++) {
+        if (xu(ip, 0) < gxlim[0]) {
+          xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
+          xu(ip, 3) = -xu(ip, 3);
+        }
       }
     }
 
-    option["boundary"]["efflux"][species] = efflux;
+    //
+    // upper boundary in x
+    //
+    if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
+      float64 delt = option["boundary"]["delt"].get<float64>();
+      float64 vsh  = option["boundary"]["vsh"].get<float64>();
+      float64 vte  = option["boundary"]["vte"].get<float64>();
+      float64 vti  = option["boundary"]["vti"].get<float64>();
+
+      // reset random number generator
+      reset_random_number();
+
+      int             efflux = 0;
+      std::vector<MJ> mj     = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
+
+      // apply boundary condition
+      auto& xu = particle->xu;
+      for (int ip = Lbp; ip <= Ubp; ip++) {
+        if (xu(ip, 0) >= gxlim[1]) {
+          auto [x, ux, uy, uz] = generate_injection_particle(mj[species], delt);
+
+          xu(ip, 0) = x;
+          xu(ip, 3) = ux;
+          xu(ip, 4) = uy;
+          xu(ip, 5) = uz;
+
+          efflux += 1;
+        }
+      }
+
+      option["boundary"]["efflux"][species] = efflux;
+    }
   }
 
   void inject_particle(ParticleVec& particle) override

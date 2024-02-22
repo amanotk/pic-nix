@@ -384,23 +384,29 @@ public:
 
   void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
   {
-    // apply boundary condition
-    auto& xu = particle->xu;
-    for (int ip = Lbp; ip <= Ubp; ip++) {
-      //
-      // lower boundary in y
-      //
-      if (xu(ip, 1) < gylim[0]) {
-        xu(ip, 1) = -xu(ip, 1) + 2 * gylim[0];
-        xu(ip, 4) = -xu(ip, 4);
+    //
+    // lower boundary in x
+    //
+    if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
+      auto& xu = particle->xu;
+      for (int ip = Lbp; ip <= Ubp; ip++) {
+        if (xu(ip, 1) < gylim[0]) {
+          xu(ip, 1) = -xu(ip, 1) + 2 * gylim[0];
+          xu(ip, 4) = -xu(ip, 4);
+        }
       }
+    }
 
-      //
-      // upper boundary in y
-      //
-      if (xu(ip, 1) >= gylim[1]) {
-        xu(ip, 1) = -xu(ip, 1) + 2 * gylim[1];
-        xu(ip, 4) = -xu(ip, 4);
+    //
+    // upper boundary in x
+    //
+    if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
+      auto& xu = particle->xu;
+      for (int ip = Lbp; ip <= Ubp; ip++) {
+        if (xu(ip, 1) >= gylim[1]) {
+          xu(ip, 1) = -xu(ip, 1) + 2 * gylim[1];
+          xu(ip, 4) = -xu(ip, 4);
+        }
       }
     }
   }
