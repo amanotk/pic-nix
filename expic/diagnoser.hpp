@@ -259,8 +259,8 @@ public:
     if (data.curstep % config.value("interval", 1) != 0)
       return;
 
-    int64_t rank_tot;
-    int64_t send_tot;
+    int64_t rank_tot = 0;
+    int64_t send_tot = 0;
     int64_t send_min[2];
     int64_t send_max[2];
     int64_t recv_min[2];
@@ -272,7 +272,7 @@ public:
       chunk_memory[i] = data.chunkvec[i]->get_size_byte();
     }
 
-    send_tot    = std::accumulate(chunk_memory.begin(), chunk_memory.end(), 0);
+    send_tot    = std::accumulate(chunk_memory.begin(), chunk_memory.end(), send_tot);
     send_min[0] = send_tot;
     send_max[0] = send_tot;
     send_min[1] = *std::min_element(chunk_memory.begin(), chunk_memory.end());
