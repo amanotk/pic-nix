@@ -238,6 +238,102 @@ public:
 };
 
 ///
+/// @brief Diagnoser for memory consumption
+///
+class MemoryDiagnoser
+{
+protected:
+  std::string basedir;
+
+public:
+  // constructor
+  MemoryDiagnoser(std::string basedir) : basedir(basedir)
+  {
+  }
+
+  template <typename App, typename Data>
+  void operator()(json& config, App& app, Data& data)
+  {
+    namespace fs = std::filesystem;
+
+    if (data.curstep % config.value("interval", 1) != 0)
+      return;
+
+    int64_t rank_tot;
+    int64_t send_tot;
+    int64_t send_min[2];
+    int64_t send_max[2];
+    int64_t recv_min[2];
+    int64_t recv_max[2];
+
+    std::vector<int64_t> chunk_memory(data.chunkvec.size());
+
+    for (int i = 0; i < data.chunkvec.size(); i++) {
+      chunk_memory[i] = data.chunkvec[i]->get_size_byte();
+    }
+
+    send_tot    = std::accumulate(chunk_memory.begin(), chunk_memory.end(), 0);
+    send_min[0] = send_tot;
+    send_max[0] = send_tot;
+    send_min[1] = *std::min_element(chunk_memory.begin(), chunk_memory.end());
+    send_max[1] = *std::max_element(chunk_memory.begin(), chunk_memory.end());
+
+    MPI_Reduce(send_min, recv_min, 2, MPI_INT64_T, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(send_max, recv_max, 2, MPI_INT64_T, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&send_tot, &rank_tot, 1, MPI_INT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    int64_t rank_min  = recv_min[0];
+    int64_t rank_max  = recv_max[0];
+    int64_t chunk_min = recv_min[1];
+    int64_t chunk_max = recv_max[1];
+
+    // output from root
+    if (data.thisrank == 0) {
+      // get parameters from json
+      fs::path    prefix   = config.value("prefix", "memory");
+      fs::path    path     = config.value("path", ".");
+      std::string filename = (basedir / path / prefix).string() + ".txt";
+      std::string msg      = "";
+
+      // initial call
+      if (data.curstep == 0) {
+        // header
+        msg += tfm::format("# %8s", "step");
+        msg += tfm::format(" %15s", "time");
+        msg += tfm::format(" %15s", "Total [GB]");
+        msg += tfm::format(" %15s", "Rank Min [GB]");
+        msg += tfm::format(" %15s", "Rank Max [GB]");
+        msg += tfm::format(" %15s", "Chunk Min [MB]");
+        msg += tfm::format(" %15s", "Chunk Max [MB]");
+        msg += "\n";
+
+        // clear file
+        std::ofstream ofs(filename, nix::text_write);
+        ofs.close();
+      }
+
+      const float64 to_mb = 1.0 / (1024 * 1024);
+      const float64 to_gb = 1.0 / (1024 * 1024 * 1024);
+      msg += tfm::format("  %8s", nix::format_step(data.curstep));
+      msg += tfm::format("      %10.3e", data.curtime);
+      msg += tfm::format("      %10.3e", rank_tot * to_gb);
+      msg += tfm::format("      %10.3e", rank_min * to_gb);
+      msg += tfm::format("      %10.3e", rank_max * to_gb);
+      msg += tfm::format("      %10.3e", chunk_min * to_mb);
+      msg += tfm::format("      %10.3e", chunk_max * to_mb);
+      msg += "\n";
+
+      // append to file
+      {
+        std::ofstream ofs(filename, nix::text_append);
+        ofs << msg << std::flush;
+        ofs.close();
+      }
+    }
+  }
+};
+
+///
 /// @brief Diagnoser for computational work load
 ///
 class LoadDiagnoser : public AsynchronousDiagnoser
@@ -667,13 +763,14 @@ class Diagnoser
 {
 protected:
   HistoryDiagnoser  history;
+  MemoryDiagnoser   memory;
   LoadDiagnoser     load;
   FieldDiagnoser    field;
   ParticleDiagnoser particle;
 
 public:
   Diagnoser(std::string basedir)
-      : history(basedir), load(basedir), field(basedir), particle(basedir)
+      : history(basedir), memory(basedir), load(basedir), field(basedir), particle(basedir)
   {
   }
 
@@ -685,6 +782,11 @@ public:
 
     if (config["name"] == "history") {
       history(config, app, data);
+      return;
+    }
+
+    if (config["name"] == "memory") {
+      memory(config, app, data);
       return;
     }
 
