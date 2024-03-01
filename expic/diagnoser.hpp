@@ -104,7 +104,7 @@ public:
   template <typename DataPacker, typename Data>
   void launch(int jobid, DataPacker packer, Data& data, size_t& disp)
   {
-    int bufsize = 0;
+    size_t bufsize = 0;
 
     // calculate buffer size
     for (int i = 0; i < data.chunkvec.size(); i++) {
@@ -344,11 +344,11 @@ protected:
   {
   public:
     template <typename Data>
-    int operator()(Data data, uint8_t* buffer, int address)
+    size_t operator()(Data data, uint8_t* buffer, int address)
     {
       auto& load = data.load;
 
-      int count = sizeof(float64) * load.size() + address;
+      size_t count = sizeof(float64) * load.size() + address;
 
       if (buffer == nullptr) {
         return count;
@@ -374,9 +374,9 @@ protected:
     }
 
     template <typename Data>
-    int operator()(Data data, uint8_t* buffer, int address)
+    size_t operator()(Data data, uint8_t* buffer, int address)
     {
-      int count = sizeof(int) + address;
+      size_t count = sizeof(int) + address;
 
       if (buffer == nullptr) {
         return count;
@@ -493,7 +493,7 @@ protected:
     using BasePacker::pack_field;
 
     template <typename Data>
-    int operator()(Data data, uint8_t* buffer, int address)
+    size_t operator()(Data data, uint8_t* buffer, int address)
     {
       return pack_field(data.uf, data, buffer, address);
     }
@@ -507,7 +507,7 @@ protected:
     using BasePacker::pack_field;
 
     template <typename Data>
-    int operator()(Data data, uint8_t* buffer, int address)
+    size_t operator()(Data data, uint8_t* buffer, int address)
     {
       return pack_field(data.uj, data, buffer, address);
     }
@@ -521,7 +521,7 @@ protected:
     using BasePacker::pack_field;
 
     template <typename Data>
-    int operator()(Data data, uint8_t* buffer, int address)
+    size_t operator()(Data data, uint8_t* buffer, int address)
     {
       return pack_field(data.um, data, buffer, address);
     }
@@ -651,19 +651,42 @@ protected:
   class ParticlePacker : public BasePacker
   {
   private:
-    int index;
+    int     species;
+    int     seed;
+    float64 fraction;
 
   public:
     using BasePacker::pack_particle;
 
-    ParticlePacker(const int is) : index(is)
+    ParticlePacker(int species, int seed = 0, float64 fraction = 1.0)
+        : species(species), seed(seed), fraction(fraction)
     {
     }
 
-    template <typename Data>
-    int operator()(Data data, uint8_t* buffer, int address)
+    std::vector<int64_t> generate_random_index(int N, int M, int random_seed)
     {
-      return pack_particle(data.up[index], data, buffer, address);
+      std::mt19937_64 engine(random_seed);
+
+      std::vector<int64_t> index(N);
+      std::iota(index.begin(), index.end(), 0);
+      std::shuffle(index.begin(), index.end(), engine);
+      index.resize(M);
+      std::sort(index.begin(), index.end());
+
+      return index;
+    }
+
+    template <typename Data>
+    size_t operator()(Data data, uint8_t* buffer, int address)
+    {
+      if (fraction < 1.0) {
+        const int N     = data.up[species]->Np;
+        const int M     = N * fraction;
+        auto      index = generate_random_index(N, M, seed);
+        return pack_particle(data.up[species], index, buffer, address);
+      } else {
+        return pack_particle(data.up[species], buffer, address);
+      }
     }
   };
 
@@ -709,8 +732,10 @@ public:
     //
     for (int is = 0; is < Ns; is++) {
       // write particles
-      size_t disp0 = disp;
-      launch(is, ParticlePacker<XtensorPacker3D>(is), data, disp);
+      size_t  disp0    = disp;
+      int     seed     = data.thisrank;
+      float64 fraction = config.value("fraction", 0.01);
+      launch(is, ParticlePacker<XtensorPacker3D>(is, seed, fraction), data, disp);
 
       // meta data
       {

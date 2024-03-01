@@ -195,7 +195,7 @@ public:
   virtual void deposit_moment();
 
   template <typename DataPacker>
-  int pack_diagnostic(DataPacker packer, uint8_t* buffer, int address)
+  size_t pack_diagnostic(DataPacker packer, uint8_t* buffer, int address)
   {
     return packer(get_internal_data(), buffer, address);
   }
