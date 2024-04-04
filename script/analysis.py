@@ -231,6 +231,7 @@ def plot_loadbalance(run, axs):
     ## plot results
     plt.sca(axs[0])
     plt.plot(step[1:], time[+1:] - time[:-1], ".", ms=1)
+    plt.semilogy()
     plt.ylabel("Elapsed time / step [s]")
     plt.grid()
 
