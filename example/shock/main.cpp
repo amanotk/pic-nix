@@ -437,6 +437,8 @@ public:
         if (xu(ip, 0) < gxlim[0]) {
           xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
           xu(ip, 3) = -xu(ip, 3);
+          xu(ip, 4) = -xu(ip, 4);
+          xu(ip, 5) = -xu(ip, 5);
         }
       }
     }
