@@ -656,7 +656,22 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 
 DEFINE_MEMBER(void, deposit_moment)()
 {
-  deposit_moment_impl_scalar();
+  bool        is_success = true;
+  std::string mode       = option["vectorization"]["moment"].get<std::string>();
+
+  if (mode == "scalar") {
+    deposit_moment_impl_scalar();
+  } else if (mode == "xsimd") {
+    deposit_moment_impl_xsimd();
+  } else {
+    is_success = false;
+  }
+
+  if (is_success == false) {
+    ERROR << tfm::format("Error detected in deposit_moment (see below):");
+    std::cerr << std::setw(2) << option << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
 }
 
 #undef DEFINE_MEMBER

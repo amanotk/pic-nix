@@ -341,6 +341,167 @@ struct Current {
     append_current3d<Order>(uj, iz0, iy0, ix0, cur);
   }
 };
+
+//
+// Implementation of loop body for deposit_moment
+//
+template <int Order, typename T_float>
+struct Moment {
+  static constexpr int index_ro = 0;
+  static constexpr int index_tx = 1;
+  static constexpr int index_ty = 2;
+  static constexpr int index_tz = 3;
+  static constexpr int index_tt = 4;
+  static constexpr int index_xx = 5;
+  static constexpr int index_yy = 6;
+  static constexpr int index_zz = 7;
+  static constexpr int index_xy = 8;
+  static constexpr int index_yz = 9;
+  static constexpr int index_zx = 10;
+  static constexpr int size     = Order + 1;
+  static constexpr int is_odd   = Order % 2 == 0 ? 0 : 1;
+  using simd_f64                = simd::simd_f64;
+  using simd_i64                = simd::simd_i64;
+
+  int     lbx;
+  int     lby;
+  int     lbz;
+  float64 dx;
+  float64 dy;
+  float64 dz;
+  float64 xgrid;
+  float64 ygrid;
+  float64 zgrid;
+
+  T_float cc;
+  T_float rc;
+  T_float rdx;
+  T_float rdy;
+  T_float rdz;
+  T_float xmin;
+  T_float ymin;
+  T_float zmin;
+
+  Moment(float64 delx, float64 dely, float64 delz, float64 xlim[3], float64 ylim[3],
+         float64 zlim[3], int Lbx, int Lby, int Lbz, float64 cc)
+      : dx(delx), dy(dely), dz(delz), lbx(Lbx), lby(Lby), lbz(Lbz), cc(cc)
+  {
+    rc    = 1 / cc;
+    rdx   = 1 / dx;
+    rdy   = 1 / dy;
+    rdz   = 1 / dz;
+    xmin  = xlim[0] + 0.5 * delx * is_odd;
+    ymin  = ylim[0] + 0.5 * dely * is_odd;
+    zmin  = zlim[0] + 0.5 * delz * is_odd;
+    xgrid = xlim[0] + 0.5 * delx;
+    ygrid = ylim[0] + 0.5 * dely;
+    zgrid = zlim[0] + 0.5 * delz;
+  }
+
+  template <typename T_array, typename T_int>
+  static void append_moment3d(T_array& um, T_int iz0, T_int iy0, T_int ix0, int is,
+                              T_float moment[size][size][size][11])
+  {
+    constexpr bool is_scalar = std::is_integral_v<T_int> && std::is_floating_point_v<T_float>;
+    constexpr bool is_vector = std::is_integral_v<T_int> && std::is_same_v<T_float, simd_f64>;
+
+    if constexpr (is_scalar == true) {
+      // naive scalar implementation
+      for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
+        for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
+          for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
+            for (int k = 0; k < 11; k++) {
+              um(iz, iy, ix, is, k) += moment[jz][jy][jx][k];
+            }
+          }
+        }
+      }
+    } else if constexpr (is_vector == true) {
+      // all particle contributions are added to the same grid point
+      for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
+        for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
+          for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
+            for (int k = 0; k < 11; k++) {
+              um(iz, iy, ix, is, k) += xsimd::reduce_add(moment[jz][jy][jx][k]);
+            }
+          }
+        }
+      }
+    } else {
+      static_assert([] { return false; }(), "Invalid combination of types");
+    }
+  }
+
+  auto calc_local_moment(T_float xu[], T_float ms, T_float mom[size][size][size][11])
+  {
+    using T_int = xsimd::as_integer_t<T_float>;
+
+    T_float wx[size] = {0};
+    T_float wy[size] = {0};
+    T_float wz[size] = {0};
+
+    // grid indices and positions
+    auto ix = digitize(xu[0], xmin, rdx);
+    auto iy = digitize(xu[1], ymin, rdy);
+    auto iz = digitize(xu[2], zmin, rdz);
+    auto xg = xgrid + to_float(ix) * dx;
+    auto yg = ygrid + to_float(iy) * dy;
+    auto zg = zgrid + to_float(iz) * dz;
+
+    // weights
+    shape<Order>(xu[0], xg, rdx, wx);
+    shape<Order>(xu[1], yg, rdy, wy);
+    shape<Order>(xu[2], zg, rdz, wz);
+
+    for (int jz = 0; jz < size; jz++) {
+      for (int jy = 0; jy < size; jy++) {
+        for (int jx = 0; jx < size; jx++) {
+          T_float ww = ms * wx[jx] * wy[jy] * wz[jz];
+          T_float gm = lorentz_factor(xu[3], xu[4], xu[5], rc);
+
+          mom[jz][jy][jx][index_ro] += ww;
+          mom[jz][jy][jx][index_tx] += ww * xu[3];
+          mom[jz][jy][jx][index_ty] += ww * xu[4];
+          mom[jz][jy][jx][index_tz] += ww * xu[5];
+          mom[jz][jy][jx][index_tt] += ww * gm * cc;
+          mom[jz][jy][jx][index_xx] += ww * xu[3] * xu[3] / gm;
+          mom[jz][jy][jx][index_yy] += ww * xu[4] * xu[4] / gm;
+          mom[jz][jy][jx][index_zz] += ww * xu[5] * xu[5] / gm;
+          mom[jz][jy][jx][index_xy] += ww * xu[3] * xu[4] / gm;
+          mom[jz][jy][jx][index_yz] += ww * xu[4] * xu[5] / gm;
+          mom[jz][jy][jx][index_zx] += ww * xu[5] * xu[3] / gm;
+        }
+      }
+    }
+
+    return std::make_tuple(ix, iy, iz);
+  }
+
+  template <typename T_array, typename T_int>
+  void deposit_global_moment(T_array& um, T_int iz, T_int iy, T_int ix, int is,
+                             T_float mom[size][size][size][11])
+  {
+    ix -= ((Order + 1) / 2) + 1;
+    iy -= ((Order + 1) / 2) + 1;
+    iz -= ((Order + 1) / 2) + 1;
+    append_moment3d(um, iz, iy, ix, is, mom);
+  }
+
+  template <typename T_array>
+  void unsorted(T_array& um, int is, T_float xu[], float64 ms)
+  {
+    T_float mom[size][size][size][11] = {0};
+
+    // calculate local current
+    auto [ix0, iy0, iz0] = calc_local_moment(xu, ms, mom);
+
+    // deposit to global array
+    ix0 += lbx - (Order / 2) - 1;
+    iy0 += lby - (Order / 2) - 1;
+    iz0 += lbz - (Order / 2) - 1;
+    append_moment3d(um, iz0, iy0, ix0, is, mom);
+  }
+};
 } // namespace exchunk3d_impl
 
 // Local Variables:
