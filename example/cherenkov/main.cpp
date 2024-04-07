@@ -38,19 +38,19 @@ public:
     float64 delt  = config["delt"].get<float64>();
     float64 delh  = config["delh"].get<float64>();
     float64 wp    = config["wp"].get<float64>();
-    float64 v0    = config["v0"].get<float64>();
+    float64 u0    = config["u0"].get<float64>();
     float64 vte   = config["vte"].get<float64>();
     float64 vti   = config["vti"].get<float64>();
     float64 mime  = config["mime"].get<float64>();
     float64 theta = config["theta"].get<float64>();
     float64 phi   = config["phi"].get<float64>();
     float64 sigma = config["sigma"].get<float64>();
-    float64 gamma = sqrt(1.0 + (v0 * v0) / (cc * cc));
-    float64 mele  = 1.0 / nppc;
-    float64 qele  = -wp / nppc * sqrt(gamma);
-    float64 mion  = mele * mime;
-    float64 qion  = -qele;
-    float64 b0    = wp * cc * std::abs((mele / qele) * sigma);
+    float64 gamma = sqrt(1.0 + (u0 * u0) / (cc * cc));
+    float64 me    = 1.0 / nppc;
+    float64 qe    = -wp / nppc * sqrt(gamma);
+    float64 mi    = me * mime;
+    float64 qi    = -qe;
+    float64 b0    = wp * cc * std::abs((me / qe) * sigma);
 
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
@@ -70,8 +70,8 @@ public:
         for (int iy = Lby; iy <= Uby; iy++) {
           for (int ix = Lbx; ix <= Ubx; ix++) {
             uf(iz, iy, ix, 0) = 0;
-            uf(iz, iy, ix, 1) = +Bz * v0 / (gamma * cc);
-            uf(iz, iy, ix, 2) = -By * v0 / (gamma * cc);
+            uf(iz, iy, ix, 1) = +Bz * u0 / (gamma * cc);
+            uf(iz, iy, ix, 2) = -By * u0 / (gamma * cc);
             uf(iz, iy, ix, 3) = Bx;
             uf(iz, iy, ix, 4) = By;
             uf(iz, iy, ix, 5) = Bz;
@@ -96,8 +96,8 @@ public:
       std::mt19937_64     mtp(random_seed);
       std::mt19937_64     mtv(random_seed);
       nix::rand_uniform   uniform(0.0, 1.0);
-      nix::MaxwellJuttner mj_ele(vte * vte, v0);
-      nix::MaxwellJuttner mj_ion(vti * vti, v0);
+      nix::MaxwellJuttner mj_ele(vte * vte, u0);
+      nix::MaxwellJuttner mj_ion(vti * vti, u0);
 
       {
         int   nz = dims[0] + 2 * Nb;
@@ -110,14 +110,14 @@ public:
 
         // electron
         up[0]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
-        up[0]->m  = mele;
-        up[0]->q  = qele;
+        up[0]->m  = me;
+        up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
         up[1]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
-        up[1]->m  = mion;
-        up[1]->q  = qion;
+        up[1]->m  = mi;
+        up[1]->q  = qi;
         up[1]->Np = mp;
 
         // initialize particle distribution

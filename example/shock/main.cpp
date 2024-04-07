@@ -69,15 +69,16 @@ public:
     float64 delh  = config["delh"].get<float64>();
     float64 wp    = config["wp"].get<float64>();
     float64 mime  = config["mime"].get<float64>();
-    float64 mach  = config["mach"].get<float64>();
+    float64 u0    = config["u0"].get<float64>();
     float64 theta = config["theta"].get<float64>();
     float64 phi   = config["phi"].get<float64>();
     float64 sigma = config["sigma"].get<float64>();
     float64 betae = config["betae"].get<float64>();
     float64 betai = config["betai"].get<float64>();
     float64 taper = config["taper"].get<float64>();
-    float64 me    = 1.0 / (sigma * nppc);
-    float64 qe    = -wp * sqrt(sigma) * me;
+    float64 gamma = sqrt(1.0 + (u0 * u0) / (cc * cc));
+    float64 me    = 1.0 / nppc;
+    float64 qe    = -wp / nppc * sqrt(gamma);
     float64 mi    = me * mime;
     float64 qi    = -qe;
     float64 b0    = cc * sqrt(sigma) / std::abs(qe / me);
@@ -85,14 +86,12 @@ public:
     float64 vai   = cc * sqrt(sigma / mime);
     float64 vte   = vae * sqrt(0.5 * betae);
     float64 vti   = vai * sqrt(0.5 * betai);
-    float64 vsh   = vai * mach;
-    float64 gam   = sqrt(1 + vsh * vsh / (cc * cc));
     float64 Bx0   = b0 * cos(theta / 180 * nix::math::pi);
     float64 By0   = b0 * sin(theta / 180 * nix::math::pi) * cos(phi / 180 * nix::math::pi);
     float64 Bz0   = b0 * sin(theta / 180 * nix::math::pi) * sin(phi / 180 * nix::math::pi);
     float64 Ex0   = 0;
-    float64 Ey0   = +(-vsh) * Bz0 / (gam * cc);
-    float64 Ez0   = -(-vsh) * By0 / (gam * cc);
+    float64 Ey0   = +(-u0) * Bz0 / (gamma * cc);
+    float64 Ez0   = -(-u0) * By0 / (gamma * cc);
 
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
@@ -110,7 +109,7 @@ public:
         for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
             float64 xi = (ix + 0.5) * delx + x0;
-            float64 Ux = vsh * initial_flow_profile(xi, taper);
+            float64 Ux = u0 * initial_flow_profile(xi, taper);
             float64 gm = sqrt(1 + Ux * Ux / (cc * cc));
             float64 bx = Bx0;
             float64 by = By0;
@@ -177,7 +176,7 @@ public:
                 float64 x = xlim[0] + (ix - Lbx + uniform(mt)) * delx;
                 float64 y = ylim[0] + (iy - Lby + uniform(mt)) * dely;
                 float64 z = zlim[0] + (iz - Lbz + uniform(mt)) * delz;
-                float64 U = vsh * initial_flow_profile(x, taper);
+                float64 U = u0 * initial_flow_profile(x, taper);
 
                 for (int is = 0; is < Ns; is++) {
                   mj[is].set_drift(U);
@@ -206,7 +205,7 @@ public:
     // store option for boundary
     option["boundary"] = {{"nppc", nppc},
                           {"delt", delt},
-                          {"vsh", vsh},
+                          {"u0", u0},
                           {"vte", vte},
                           {"vti", vti},
                           {"Ex0", Ex0},
@@ -448,7 +447,7 @@ public:
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
       float64 delt = option["boundary"]["delt"].get<float64>();
-      float64 vsh  = option["boundary"]["vsh"].get<float64>();
+      float64 u0   = option["boundary"]["u0"].get<float64>();
       float64 vte  = option["boundary"]["vte"].get<float64>();
       float64 vti  = option["boundary"]["vti"].get<float64>();
 
@@ -456,7 +455,7 @@ public:
       reset_random_number();
 
       int             efflux = 0;
-      std::vector<MJ> mj     = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
+      std::vector<MJ> mj     = {MJ(vte * vte, -u0), MJ(vti * vti, -u0)};
 
       // apply boundary condition
       auto& xu = particle->xu;
@@ -486,16 +485,16 @@ public:
       float64 rc   = 1.0 / cc;
       int     nppc = option["boundary"]["nppc"].get<int>();
       float64 delt = option["boundary"]["delt"].get<float64>();
-      float64 vsh  = option["boundary"]["vsh"].get<float64>();
+      float64 u0   = option["boundary"]["u0"].get<float64>();
       float64 vte  = option["boundary"]["vte"].get<float64>();
       float64 vti  = option["boundary"]["vti"].get<float64>();
-      float64 flux = nppc * std::abs(vsh) / sqrt(1 + vsh * vsh * rc * rc) * delt / delx;
+      float64 flux = nppc * std::abs(u0) / sqrt(1 + u0 * u0 * rc * rc) * delt / delx;
 
       // reset random number generator
       reset_random_number();
 
       nix::rand_poisson poisson(flux);
-      std::vector<MJ>   mj = {MJ(vte * vte, -vsh), MJ(vti * vti, -vsh)};
+      std::vector<MJ>   mj = {MJ(vte * vte, -u0), MJ(vti * vti, -u0)};
 
       // reallocate buffer if necessary
       for (int is = 0; is < Ns; is++) {

@@ -78,11 +78,11 @@ public:
     float64 theta  = config["theta"].get<float64>();
     float64 phi    = config["phi"].get<float64>();
     float64 sigma  = config["sigma"].get<float64>();
-    float64 mele   = 1.0 / (sigma * nfb);
-    float64 qele   = -wp * sqrt(sigma) * mele;
-    float64 mion   = mele * mime;
-    float64 qion   = -qele;
-    float64 b0     = cc * sqrt(sigma) / std::abs(qele / mele);
+    float64 me     = 1.0 / (sigma * nfb);
+    float64 qe     = -wp * sqrt(sigma) * me;
+    float64 mi     = me * mime;
+    float64 qi     = -qe;
+    float64 b0     = cc * sqrt(sigma) / std::abs(qe / me);
 
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
@@ -150,14 +150,14 @@ public:
 
         // electron
         up[0]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
-        up[0]->m  = mele;
-        up[0]->q  = qele;
+        up[0]->m  = me;
+        up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
         up[1]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
-        up[1]->m  = mion;
-        up[1]->q  = qion;
+        up[1]->m  = mi;
+        up[1]->q  = qi;
         up[1]->Np = mp;
 
         // initialize particle distribution
