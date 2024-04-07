@@ -8,6 +8,23 @@ if(NOT DEFINED PICNIX_DIR)
   set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
+# xsimd for xtensor
+add_compile_definitions(XTENSOR_USE_XSIMD)
+
+# MPI_THREAD_MULTIPLE
+option(MPI_THREAD_MULTIPLE "Enable MPI_THREAD_MULTIPLE" ON)
+if(MPI_THREAD_MULTIPLE)
+    add_compile_definitions(HAS_MPI_THREAD_MULTIPLE)
+endif()
+
+# order of particle shape function
+set(PICNIX_SHAPE_ORDER 2 CACHE STRING "Order of particle shape function")
+add_compile_definitions(PICNIX_SHAPE_ORDER=${PICNIX_SHAPE_ORDER})
+
+if(NOT(PICNIX_SHAPE_ORDER GREATER_EQUAL 1 AND PICNIX_SHAPE_ORDER LESS_EQUAL 4))
+  message(FATAL_ERROR "PICNIX_SHAPE_ORDER must be between 1 and 4.")
+endif()
+
 # nix as an external project
 include(FetchContent)
 
@@ -19,7 +36,7 @@ else()
   FetchContent_Declare(
     nix
     GIT_REPOSITORY https://github.com/amanotk/nix.git
-    GIT_TAG v0.1.2
+    GIT_TAG v0.1.3
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/nix
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/nix
   )
@@ -29,17 +46,6 @@ endif()
 # Filesystem package
 set(CMAKE_MODULE_PATH ${nix_SOURCE_DIR})
 find_package(Filesystem REQUIRED)
-
-# xsimd for xtensor
-add_compile_definitions(XTENSOR_USE_XSIMD)
-
-# order of particle shape function
-set(PICNIX_SHAPE_ORDER 2 CACHE STRING "Order of particle shape function")
-add_compile_definitions(PICNIX_SHAPE_ORDER=${PICNIX_SHAPE_ORDER})
-
-if(NOT(PICNIX_SHAPE_ORDER GREATER_EQUAL 1 AND PICNIX_SHAPE_ORDER LESS_EQUAL 4))
-  message(FATAL_ERROR "PICNIX_SHAPE_ORDER must be between 1 and 4.")
-endif()
 
 # explicit PIC library
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/expic ${CMAKE_CURRENT_BINARY_DIR}/expic)
