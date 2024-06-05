@@ -12,4 +12,7 @@ set(CMAKE_SYSTEM_PROCESSOR aarch64)
 set(MPI_THREAD_MULTIPLE OFF CACHE BOOL "MPI thread multiple" FORCE)
 
 set(CMAKE_CXX_COMPILER "mpicxx" CACHE FILEPATH "C++ compiler")
-set(CMAKE_CXX_FLAGS "-mcpu=native -msve-vector-bits=512 -fopenmp -O3" CACHE STRING "C++ compiler flags")
+set(CMAKE_CXX_FLAGS "-Wno-psabi \
+    -mcpu=native -msve-vector-bits=512 \
+    -fopenmp -O3"
+    CACHE STRING "C++ compiler flags")
