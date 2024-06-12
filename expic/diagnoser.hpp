@@ -19,19 +19,119 @@ using nix::ParticlePtr;
 using nix::ParticleVec;
 using ParticleType = nix::ParticlePtr::element_type;
 
-class AsynchronousDiagnoser
+class BaseDiagnoser
+{
+protected:
+  std::string name;
+  std::string basedir;
+
+public:
+  // constructor
+  BaseDiagnoser(std::string basedir, std::string name) : basedir(basedir), name(name)
+  {
+  }
+
+  // check if the given key matches the name
+  bool match(std::string key)
+  {
+    return key == name;
+  }
+
+  // check if the diagnostic is required
+  bool require_diagnostic(int curstep, json& config)
+  {
+    int interval = config.value("interval", 1);
+    int begin    = config.value("begin", 0);
+    int end      = config.value("end", std::numeric_limits<int>::max());
+
+    return (curstep >= begin) && (curstep < end) && ((curstep - begin) % interval == 0);
+  }
+
+  // check if the parent directory of the given path exists
+  bool make_sure_directory_exists(std::string path)
+  {
+    namespace fs = std::filesystem;
+
+    fs::path filepath(path);
+    fs::path dirpath = filepath.parent_path();
+
+    if (fs::exists(dirpath) == true) {
+      return true;
+    }
+
+    if (fs::create_directory(dirpath) == true) {
+      return true;
+    }
+
+    ERROR << tfm::format("Failed to create directory: %s", path);
+
+    return false;
+  }
+
+  // return formatted filename without directory
+  std::string format_filename(json& config, std::string ext, std::string prefix, int step = -1)
+  {
+    namespace fs = std::filesystem;
+
+    prefix = config.value("prefix", prefix);
+
+    if (step >= 0) {
+      prefix = tfm::format("%s_%s", prefix, nix::format_step(step));
+    }
+
+    return prefix + ext;
+  }
+
+  // return formatted filename
+  std::string format_filename(json& config, std::string ext, std::string basedir, std::string path,
+                              std::string prefix, int step = -1)
+  {
+    namespace fs = std::filesystem;
+
+    path   = config.value("path", path);
+    prefix = config.value("prefix", prefix);
+
+    if (step >= 0) {
+      prefix = tfm::format("%s_%s", prefix, nix::format_step(step));
+    }
+
+    return (fs::path(basedir) / path / prefix).string() + ext;
+  }
+
+  // calculate percentile assuming pre-sorted data
+  template <typename T>
+  float64 percentile(T& data, float64 p, bool is_sorted)
+  {
+    int     size  = data.size();
+    int     index = p * (size - 1);
+    float64 frac  = p * (size - 1) - index;
+
+    if (is_sorted == false) {
+      std::sort(data.begin(), data.end());
+    }
+
+    if (index >= 0 && index < size - 1) {
+      // linear interpolation
+      return data[index] * (1 - frac) + data[index + 1] * frac;
+    } else {
+      // error
+      return -1;
+    }
+  }
+};
+
+class AsynchronousDiagnoser : public BaseDiagnoser
 {
 protected:
   MPI_File                 filehandle;
   bool                     is_opened;
-  std::string              basedir;
   std::vector<Buffer>      buffer;
   std::vector<MPI_Request> request;
 
-  // check if the output is required
-  bool require_output(int curstep, json& config)
+  // check if the diagnostic is required
+  bool require_diagnostic(int curstep, json& config)
   {
-    bool status    = curstep % config.value("interval", 1) == 0;
+    bool status    = BaseDiagnoser::require_diagnostic(curstep, config);
     bool completed = is_completed();
 
     if (status == true) {
@@ -50,7 +150,8 @@ protected:
 
 public:
   // constructor
-  AsynchronousDiagnoser(std::string basedir, int size) : basedir(basedir), is_opened(false)
+  AsynchronousDiagnoser(std::string basedir, std::string name, int size)
+      : BaseDiagnoser(basedir, name), is_opened(false)
   {
     buffer.resize(size);
     request.resize(size);
@@ -128,23 +229,18 @@ public:
 ///
 /// @brief Diagnoser for time history
 ///
-class HistoryDiagnoser
+class HistoryDiagnoser : public BaseDiagnoser
 {
-protected:
-  std::string basedir;
-
 public:
   // constructor
-  HistoryDiagnoser(std::string basedir) : basedir(basedir)
+  HistoryDiagnoser(std::string basedir) : BaseDiagnoser(basedir, "history")
   {
   }
 
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    namespace fs = std::filesystem;
-
-    if (data.curstep % config.value("interval", 1) != 0)
+    if (require_diagnostic(data.curstep, config) == false)
       return;
 
     const int            Ns = app.get_Ns();
@@ -190,10 +286,7 @@ public:
 
     // output from root
     if (data.thisrank == 0) {
-      // get parameters from json
-      fs::path    prefix   = config.value("prefix", "history");
-      fs::path    path     = config.value("path", ".");
-      std::string filename = (basedir / path / prefix).string() + ".txt";
+      std::string filename = format_filename(config, ".txt", basedir, ".", "history");
       std::string msg      = "";
 
       // initial call
@@ -210,8 +303,7 @@ public:
         msg += "\n";
 
         // clear file
-        std::ofstream ofs(filename, nix::text_write);
-        ofs.close();
+        std::filesystem::remove(filename);
       }
 
       msg += tfm::format("  %8s %15.6e", nix::format_step(data.curstep), data.curtime);
@@ -228,7 +320,7 @@ public:
       std::cout << msg << std::flush;
 
       // append to file
-      {
+      if (make_sure_directory_exists(filename) == true) {
         std::ofstream ofs(filename, nix::text_append);
         ofs << msg << std::flush;
         ofs.close();
@@ -238,95 +330,232 @@ public:
 };
 
 ///
-/// @brief Diagnoser for memory consumption
+/// @brief Diagnoser for resource usage
 ///
-class MemoryDiagnoser
+class ResourceDiagnoser : public BaseDiagnoser
 {
 protected:
-  std::string basedir;
+  // calculate statistics
+  template <typename T>
+  auto statistics(T& data)
+  {
+    // sort
+    std::sort(data.begin(), data.end());
+
+    json stat      = {};
+    stat["min"]    = data.front();
+    stat["max"]    = data.back();
+    stat["mean"]   = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
+    stat["quant1"] = percentile(data, 0.25, true);
+    stat["quant2"] = percentile(data, 0.50, true);
+    stat["quant3"] = percentile(data, 0.75, true);
+    stat["size"]   = data.size();
+
+    return stat;
+  }
 
 public:
   // constructor
-  MemoryDiagnoser(std::string basedir) : basedir(basedir)
+  ResourceDiagnoser(std::string basedir) : BaseDiagnoser(basedir, "resource")
   {
   }
 
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    namespace fs = std::filesystem;
-
-    if (data.curstep % config.value("interval", 1) != 0)
+    if (require_diagnostic(data.curstep, config) == false)
       return;
 
-    int64_t rank_tot = 0;
-    int64_t send_tot = 0;
-    int64_t send_min[2];
-    int64_t send_max[2];
-    int64_t recv_min[2];
-    int64_t recv_max[2];
+    const float64        to_gb        = 1.0 / (1024 * 1024 * 1024);
+    int                  local_chunk  = 0;
+    float64              local_memory = 0;
+    float64              local_load   = 0;
+    float64              total_load   = 0;
+    std::vector<float64> memoryvec;
+    std::vector<float64> loadvec;
+    std::vector<int>     node_chunk;
+    std::vector<float64> node_memory;
+    std::vector<float64> node_load;
+    std::vector<int>     rank_chunk;
+    std::vector<float64> rank_memory;
+    std::vector<float64> rank_load;
 
-    std::vector<int64_t> chunk_memory(data.chunkvec.size());
-
-    for (int i = 0; i < data.chunkvec.size(); i++) {
-      chunk_memory[i] = data.chunkvec[i]->get_size_byte();
+    //
+    // local resource usage
+    //
+    local_chunk = data.chunkvec.size();
+    memoryvec.resize(local_chunk);
+    loadvec.resize(local_chunk);
+    for (int i = 0; i < local_chunk; i++) {
+      memoryvec[i] = data.chunkvec[i]->get_size_byte() * to_gb;
+      loadvec[i]   = data.chunkvec[i]->get_total_load();
     }
+    local_memory = std::accumulate(memoryvec.begin(), memoryvec.end(), 0.0);
+    local_load   = std::accumulate(loadvec.begin(), loadvec.end(), 0.0);
 
-    send_tot    = std::accumulate(chunk_memory.begin(), chunk_memory.end(), send_tot);
-    send_min[0] = send_tot;
-    send_max[0] = send_tot;
-    send_min[1] = *std::min_element(chunk_memory.begin(), chunk_memory.end());
-    send_max[1] = *std::max_element(chunk_memory.begin(), chunk_memory.end());
+    // total load
+    MPI_Reduce(&local_load, &total_load, 1, MPI_FLOAT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    MPI_Reduce(send_min, recv_min, 2, MPI_INT64_T, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(send_max, recv_max, 2, MPI_INT64_T, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&send_tot, &rank_tot, 1, MPI_INT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
+    //
+    // resource usage
+    //
+    {
+      MPI_Comm node_comm;
+      MPI_Comm internode_comm;
+      int      node_rank;
+      int      node_color;
+      int      internode_size;
+      MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, data.thisrank, MPI_INFO_NULL,
+                          &node_comm);
+      MPI_Comm_rank(node_comm, &node_rank);
 
-    int64_t rank_min  = recv_min[0];
-    int64_t rank_max  = recv_max[0];
-    int64_t chunk_min = recv_min[1];
-    int64_t chunk_max = recv_max[1];
+      node_color = node_rank == 0 ? 0 : 1;
+      MPI_Comm_split(MPI_COMM_WORLD, node_color, data.thisrank, &internode_comm);
+      MPI_Comm_size(internode_comm, &internode_size);
 
-    // output from root
-    if (data.thisrank == 0) {
-      // get parameters from json
-      fs::path    prefix   = config.value("prefix", "memory");
-      fs::path    path     = config.value("path", ".");
-      std::string filename = (basedir / path / prefix).string() + ".txt";
-      std::string msg      = "";
+      // for each node
+      if (config.contains("node") == true) {
+        node_chunk.resize(internode_size, 0);
+        node_memory.resize(internode_size, 0);
+        node_load.resize(internode_size, 0);
 
-      // initial call
-      if (data.curstep == 0) {
-        // header
-        msg += tfm::format("# %8s", "step");
-        msg += tfm::format(" %15s", "time");
-        msg += tfm::format(" %15s", "Total [GB]");
-        msg += tfm::format(" %15s", "Rank Min [GB]");
-        msg += tfm::format(" %15s", "Rank Max [GB]");
-        msg += tfm::format(" %15s", "Chunk Min [MB]");
-        msg += tfm::format(" %15s", "Chunk Max [MB]");
-        msg += "\n";
+        // chunk
+        {
+          int  sum = 0;
+          int* ptr = node_chunk.data();
+          MPI_Reduce(&local_chunk, &sum, 1, MPI_INT, MPI_SUM, 0, node_comm);
+          MPI_Gather(&sum, 1, MPI_INT, ptr, 1, MPI_INT, 0, internode_comm);
+        }
 
-        // clear file
-        std::ofstream ofs(filename, nix::text_write);
-        ofs.close();
+        // memory
+        {
+          float64  sum = 0;
+          float64* ptr = node_memory.data();
+          MPI_Reduce(&local_memory, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, node_comm);
+          MPI_Gather(&sum, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, internode_comm);
+        }
+
+        // load
+        {
+          float64  sum = 0;
+          float64* ptr = node_load.data();
+          MPI_Reduce(&local_load, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, node_comm);
+          MPI_Gather(&sum, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, internode_comm);
+          // normalize
+          std::for_each(node_load.begin(), node_load.end(), [=](auto& x) { x /= total_load; });
+        }
       }
 
-      const float64 to_mb = 1.0 / (1024 * 1024);
-      const float64 to_gb = 1.0 / (1024 * 1024 * 1024);
-      msg += tfm::format("  %8s", nix::format_step(data.curstep));
-      msg += tfm::format("      %10.3e", data.curtime);
-      msg += tfm::format("      %10.3e", rank_tot * to_gb);
-      msg += tfm::format("      %10.3e", rank_min * to_gb);
-      msg += tfm::format("      %10.3e", rank_max * to_gb);
-      msg += tfm::format("      %10.3e", chunk_min * to_mb);
-      msg += tfm::format("      %10.3e", chunk_max * to_mb);
-      msg += "\n";
+      // for each rank
+      if (config.contains("rank") == true) {
+        rank_chunk.resize(data.nprocess, 0);
+        rank_memory.resize(data.nprocess, 0);
+        rank_load.resize(data.nprocess, 0);
+
+        // chunk
+        {
+          int* ptr = rank_chunk.data();
+          MPI_Gather(&local_chunk, 1, MPI_INT, ptr, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        }
+
+        // memory
+        {
+          float64* ptr = rank_memory.data();
+          MPI_Gather(&local_memory, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, MPI_COMM_WORLD);
+        }
+
+        // load
+        {
+          float64* ptr = rank_load.data();
+          MPI_Gather(&local_load, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, MPI_COMM_WORLD);
+          // normalize
+          std::for_each(rank_load.begin(), rank_load.end(), [=](auto& x) { x /= total_load; });
+        }
+      }
+
+      MPI_Comm_free(&internode_comm);
+      MPI_Comm_free(&node_comm);
+    }
+
+    // save to file
+    {
+      json result = {
+          {"step", data.curstep},     {"rank", data.thisrank},      {"time", data.curtime},
+          {"node_chunk", node_chunk}, {"node_memory", node_memory}, {"node_load", node_load},
+          {"rank_chunk", rank_chunk}, {"rank_memory", rank_memory}, {"rank_load", rank_load}};
+
+      savefile(config, result);
+    }
+  }
+
+  void savefile(json& config, json& result)
+  {
+    // output from root
+    if (result["rank"] == 0) {
+      std::string filename = format_filename(config, ".msgpack", basedir, ".", "resource");
+
+      json record    = {};
+      record["step"] = result["step"];
+      record["time"] = result["time"];
+
+      // node
+      if (config.contains("node") == true) {
+        auto node_chunk  = result["node_chunk"].get<std::vector<int>>();
+        auto node_memory = result["node_memory"].get<std::vector<float64>>();
+        auto node_load   = result["node_load"].get<std::vector<float64>>();
+        json chunk       = {};
+        json memory      = {};
+        json load        = {};
+
+        if (config["node"] == "stats" || config["node"] == "full") {
+          chunk["stats"]  = statistics(node_chunk);
+          memory["stats"] = statistics(node_memory);
+          load["stats"]   = statistics(node_load);
+        }
+
+        if (config["node"] == "full") {
+          chunk["full"]  = node_chunk;
+          memory["full"] = node_memory;
+          load["full"]   = node_load;
+        }
+
+        record["node"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+      }
+
+      // rank
+      if (config.contains("rank") == true) {
+        auto rank_chunk  = result["rank_chunk"].get<std::vector<int>>();
+        auto rank_memory = result["rank_memory"].get<std::vector<float64>>();
+        auto rank_load   = result["rank_load"].get<std::vector<float64>>();
+        json chunk       = {};
+        json memory      = {};
+        json load        = {};
+
+        if (config["rank"] == "stats" || config["rank"] == "full") {
+          chunk["stats"]  = statistics(rank_chunk);
+          memory["stats"] = statistics(rank_memory);
+          load["stats"]   = statistics(rank_load);
+        }
+
+        if (config["rank"] == "full") {
+          chunk["full"]  = rank_chunk;
+          memory["full"] = rank_memory;
+          load["full"]   = rank_load;
+        }
+
+        record["rank"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+      }
+
+      // initial call
+      if (result["curstep"] == 0) {
+        std::filesystem::remove(filename);
+      }
 
       // append to file
-      {
-        std::ofstream ofs(filename, nix::text_append);
-        ofs << msg << std::flush;
+      if (make_sure_directory_exists(filename) == true) {
+        std::ofstream             ofs(filename, std::ios::binary | std::ios::app);
+        std::vector<std::uint8_t> buffer = json::to_msgpack(record);
+        ofs.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
         ofs.close();
       }
     }
@@ -392,7 +621,7 @@ protected:
 
 public:
   /// constructor
-  LoadDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, 2)
+  LoadDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, "load", 2)
   {
   }
 
@@ -400,24 +629,23 @@ public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    namespace fs = std::filesystem;
-
-    if (require_output(data.curstep, config) == false)
+    if (require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nc = data.cdims[3];
 
-    // filename
-    fs::path    path              = fs::path(basedir) / config.value("path", ".");
-    std::string fn_prefix         = config.value("prefix", "load");
-    std::string fn_step           = nix::format_step(data.curstep);
-    std::string fn_json           = tfm::format("%s_%s.json", fn_prefix, fn_step);
-    std::string fn_data           = tfm::format("%s_%s.data", fn_prefix, fn_step);
-    std::string fn_json_with_path = (path / fn_json).string();
-    std::string fn_data_with_path = (path / fn_data).string();
+    size_t      disp    = 0;
+    json        dataset = {};
+    std::string fn_data = format_filename(config, ".data", "load", data.curstep);
+    std::string fn_json = format_filename(config, ".json", "load", data.curstep);
+    std::string fn_data_with_path =
+        format_filename(config, ".data", basedir, ".", "load", data.curstep);
+    std::string fn_json_with_path =
+        format_filename(config, ".json", basedir, ".", "load", data.curstep);
 
-    size_t disp;
-    json   dataset;
+    if (data.thisrank == 0) {
+      make_sure_directory_exists(fn_data_with_path);
+    }
 
     open_file(fn_data_with_path, &disp, "w");
 
@@ -529,7 +757,7 @@ protected:
 
 public:
   // constructor
-  FieldDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, 3)
+  FieldDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, "field", 3)
   {
   }
 
@@ -537,9 +765,7 @@ public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    namespace fs = std::filesystem;
-
-    if (require_output(data.curstep, config) == false)
+    if (require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
@@ -548,17 +774,18 @@ public:
     const int nc = data.cdims[3];
     const int Ns = app.get_Ns();
 
-    // filename
-    fs::path    path              = fs::path(basedir) / config.value("path", ".");
-    std::string fn_prefix         = config.value("prefix", "load");
-    std::string fn_step           = nix::format_step(data.curstep);
-    std::string fn_json           = tfm::format("%s_%s.json", fn_prefix, fn_step);
-    std::string fn_data           = tfm::format("%s_%s.data", fn_prefix, fn_step);
-    std::string fn_json_with_path = (path / fn_json).string();
-    std::string fn_data_with_path = (path / fn_data).string();
+    size_t      disp    = 0;
+    json        dataset = {};
+    std::string fn_data = format_filename(config, ".data", "field", data.curstep);
+    std::string fn_json = format_filename(config, ".json", "field", data.curstep);
+    std::string fn_data_with_path =
+        format_filename(config, ".data", basedir, ".", "field", data.curstep);
+    std::string fn_json_with_path =
+        format_filename(config, ".json", basedir, ".", "field", data.curstep);
 
-    size_t disp;
-    json   dataset;
+    if (data.thisrank == 0) {
+      make_sure_directory_exists(fn_data_with_path);
+    }
 
     open_file(fn_data_with_path, &disp, "w");
 
@@ -692,7 +919,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, max_species)
+  ParticleDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, "particle", max_species)
   {
   }
 
@@ -700,9 +927,7 @@ public:
   template <typename App, typename Data>
   void operator()(json& config, App& app, Data& data)
   {
-    namespace fs = std::filesystem;
-
-    if (require_output(data.curstep, config) == false)
+    if (require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
@@ -713,17 +938,18 @@ public:
 
     assert(Ns <= max_species);
 
-    // filename
-    fs::path    path              = fs::path(basedir) / config.value("path", ".");
-    std::string fn_prefix         = config.value("prefix", "load");
-    std::string fn_step           = nix::format_step(data.curstep);
-    std::string fn_json           = tfm::format("%s_%s.json", fn_prefix, fn_step);
-    std::string fn_data           = tfm::format("%s_%s.data", fn_prefix, fn_step);
-    std::string fn_json_with_path = (path / fn_json).string();
-    std::string fn_data_with_path = (path / fn_data).string();
+    size_t      disp    = 0;
+    json        dataset = {};
+    std::string fn_data = format_filename(config, ".data", "particle", data.curstep);
+    std::string fn_json = format_filename(config, ".json", "particle", data.curstep);
+    std::string fn_data_with_path =
+        format_filename(config, ".data", basedir, ".", "particle", data.curstep);
+    std::string fn_json_with_path =
+        format_filename(config, ".json", basedir, ".", "particle", data.curstep);
 
-    size_t disp;
-    json   dataset;
+    if (data.thisrank == 0) {
+      make_sure_directory_exists(fn_data_with_path);
+    }
 
     open_file(fn_data_with_path, &disp, "w");
 
@@ -788,14 +1014,14 @@ class Diagnoser
 {
 protected:
   HistoryDiagnoser  history;
-  MemoryDiagnoser   memory;
+  ResourceDiagnoser resource;
   LoadDiagnoser     load;
   FieldDiagnoser    field;
   ParticleDiagnoser particle;
 
 public:
   Diagnoser(std::string basedir)
-      : history(basedir), memory(basedir), load(basedir), field(basedir), particle(basedir)
+      : history(basedir), resource(basedir), load(basedir), field(basedir), particle(basedir)
   {
   }
 
@@ -805,27 +1031,27 @@ public:
     if (config.contains("name") == false)
       return;
 
-    if (config["name"] == "history") {
+    if (history.match(config["name"]) == true) {
       history(config, app, data);
       return;
     }
 
-    if (config["name"] == "memory") {
-      memory(config, app, data);
+    if (resource.match(config["name"]) == true) {
+      resource(config, app, data);
       return;
     }
 
-    if (config["name"] == "load") {
+    if (load.match(config["name"]) == true) {
       load(config, app, data);
       return;
     }
 
-    if (config["name"] == "field") {
+    if (field.match(config["name"]) == true) {
       field(config, app, data);
       return;
     }
 
-    if (config["name"] == "particle") {
+    if (particle.match(config["name"]) == true) {
       particle(config, app, data);
       return;
     }
