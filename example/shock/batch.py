@@ -46,6 +46,7 @@ class Run(analysis.Run):
             ylim1 = kwargs.get("ylim1", None)
             roe = kwargs["roe"]
             roi = kwargs["roi"]
+            b0 = kwargs["b0"]
         except Exception as e:
             print("Inappropriate keyword arguments")
             raise e
@@ -78,9 +79,9 @@ class Run(analysis.Run):
             axs[0].set_ylim(ylim0)
 
         ## magnetic field
-        bx = uf[..., 3].mean(axis=(0, 1))
-        by = uf[..., 4].mean(axis=(0, 1))
-        bz = uf[..., 5].mean(axis=(0, 1))
+        bx = uf[..., 3].mean(axis=(0, 1)) / b0
+        by = uf[..., 4].mean(axis=(0, 1)) / b0
+        bz = uf[..., 5].mean(axis=(0, 1)) / b0
         plt.sca(axs[1])
         plt.plot(xc, bx, "r-", lw=1.0)
         plt.plot(xc, by, "g-", lw=1.0)
@@ -134,9 +135,11 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
 
     mime = run.config["parameter"]["mime"]
     sigma = run.config["parameter"]["sigma"]
+    u0 = run.config["parameter"]["u0"]
 
-    roe = 1.0 / sigma
-    roi = 1.0 / sigma * mime
+    roe = 1.0
+    roi = 1.0 * mime
+    b0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
 
     # setup plot
     ebinx = (0, run.Nx, run.Nx + 1)
@@ -151,6 +154,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
         ylim1=(-1, +10),
         roe=roe,
         roi=roi,
+        b0=b0,
     )
 
     # for all snapshots

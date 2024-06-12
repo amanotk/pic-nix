@@ -553,7 +553,7 @@ public:
 
       // append to file
       if (make_sure_directory_exists(filename) == true) {
-        std::ofstream             ofs(filename, std::ios::binary | std::ios::app);
+        std::ofstream             ofs(filename, nix::binary_append);
         std::vector<std::uint8_t> buffer = json::to_msgpack(record);
         ofs.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
         ofs.close();

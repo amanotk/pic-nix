@@ -173,10 +173,14 @@ def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w", width=1):
     ysegments[:, :, 1, 1] = dely * Iy[+1:, :]
     # line segments
     segments = xsegments.reshape(Ny * (Nx - 1), 2, 2)
-    xlines = mpl.collections.LineCollection(segments, linewidths=diffx.flat, colors=colors)
+    xlines = mpl.collections.LineCollection(
+        segments, linewidths=diffx.flat, colors=colors
+    )
     ax.add_collection(xlines)
     segments = ysegments.reshape((Ny - 1) * Nx, 2, 2)
-    ylines = mpl.collections.LineCollection(segments, linewidths=diffy.flat, colors=colors)
+    ylines = mpl.collections.LineCollection(
+        segments, linewidths=diffy.flat, colors=colors
+    )
     ax.add_collection(ylines)
 
 
@@ -252,7 +256,9 @@ def plot_loadbalance(run, axs):
     plt.xlabel("Time step")
     plt.xlim(0, stepload[-1])
     plt.suptitle(
-        "# Rank = {:d}, # Chunk = {:d}, Average Imbalance = {:6.2}%".format(Nr, Nc, Nr / Nc * 100)
+        "# Rank = {:d}, # Chunk = {:d}, Average Imbalance = {:6.2}%".format(
+            Nr, Nc, Nr / Nc * 100
+        )
     )
 
     return True
@@ -320,7 +326,9 @@ class Run(object):
         prefix = kwargs.get("prefix", "")
         interval = kwargs.get("interval", 1)
         if step is not None:
-            filename = "{:s}_{:08d}.msgpack".format(prefix, (step // interval) * interval)
+            filename = "{:s}_{:08d}.msgpack".format(
+                prefix, (step // interval) * interval
+            )
         else:
             filename = "{:s}_*.msgpack".format(prefix)
         return str(basedir / path / filename)
@@ -361,24 +369,24 @@ class Run(object):
         basedir = pathlib.Path(profile).parent
         for diagnostic in self.config["diagnostic"]:
             interval = diagnostic["interval"]
-            path = basedir / diagnostic["path"]
+            path = basedir / diagnostic.get("path", ".")
             # load
             if diagnostic["name"] == "load":
-                data = "{}_*.{}".format(diagnostic["prefix"], ext)
+                data = "{}_*.{}".format(diagnostic.get("prefix", "load"), ext)
                 file = sorted(glob.glob(str(path / data)))
                 self.step_load = np.arange(len(file)) * interval
                 self.time_load = np.arange(len(file)) * self.delt * interval
                 self.file_load = file
             # field
             if diagnostic["name"] == "field":
-                data = "{}_*.{}".format(diagnostic["prefix"], ext)
+                data = "{}_*.{}".format(diagnostic.get("prefix", "field"), ext)
                 file = sorted(glob.glob(str(path / data)))
                 self.step_field = np.arange(len(file)) * interval
                 self.time_field = np.arange(len(file)) * self.delt * interval
                 self.file_field = file
             # particle
             if diagnostic["name"] == "particle":
-                data = "{}_*.{}".format(diagnostic["prefix"], ext)
+                data = "{}_*.{}".format(diagnostic.get("prefix", "particle"), ext)
                 file = sorted(glob.glob(str(path / data)))
                 self.step_particle = np.arange(len(file)) * interval
                 self.time_particle = np.arange(len(file)) * self.delt * interval
@@ -399,7 +407,9 @@ class Run(object):
 
     def find_rebalance_log_at(self, step):
         filename = self.format_log_filename()
-        data = find_record_from_msgpack(filename, rank=0, step=step, name="rebalance")[0]
+        data = find_record_from_msgpack(filename, rank=0, step=step, name="rebalance")[
+            0
+        ]
         return data
 
     def find_step_index_load(self, step):
