@@ -238,7 +238,6 @@ DEFINE_MEMBER(void, setup)(json& config)
   // misc
   {
     option["cell_load"]           = opt.value("cell_load", 1.0);
-    option["mpi_buffer_fraction"] = opt.value("mpi_buffer_fraction", 2.0);
   }
 }
 
