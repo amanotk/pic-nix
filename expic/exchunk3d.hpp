@@ -156,8 +156,6 @@ public:
 
   virtual int64_t get_size_byte() override;
 
-  virtual void setup_particle_mpi_buffer(float64 fraction);
-
   virtual int pack(void* buffer, int address) override;
 
   virtual int unpack(void* buffer, int address) override;
@@ -178,7 +176,7 @@ public:
 
   virtual void push_bfd(float64 delt);
 
-  virtual bool set_boundary_probe(int mode = 0, bool wait = true);
+  virtual bool set_boundary_probe(int mode = 0, bool wait = true) override;
 
   virtual void set_boundary_begin(int mode = 0) override;
 

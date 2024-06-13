@@ -47,6 +47,13 @@ public:
     return (curstep >= begin) && (curstep < end) && ((curstep - begin) % interval == 0);
   }
 
+  // check if the given step is the initial step
+  bool is_initial_step(int curstep, json& config)
+  {
+    int begin = config.value("begin", 0);
+    return curstep == begin;
+  }
+
   // check if the parent directory of the given path exists
   bool make_sure_directory_exists(std::string path)
   {
@@ -290,7 +297,7 @@ public:
       std::string msg      = "";
 
       // initial call
-      if (data.curstep == 0) {
+      if (is_initial_step(data.curstep, config) == true) {
         // header
         msg += tfm::format("# %8s %15s", "step", "time");
         msg += tfm::format(" %15s", "div(E)");
@@ -547,7 +554,7 @@ public:
       }
 
       // initial call
-      if (result["curstep"] == 0) {
+      if (is_initial_step(result["step"], config) == true) {
         std::filesystem::remove(filename);
       }
 
