@@ -178,6 +178,8 @@ public:
 
   virtual void push_bfd(float64 delt);
 
+  virtual bool set_boundary_probe(int mode = 0, bool wait = true);
+
   virtual void set_boundary_begin(int mode = 0) override;
 
   virtual void set_boundary_end(int mode = 0) override;

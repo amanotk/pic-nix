@@ -457,6 +457,23 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
   }
 }
 
+DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
+{
+  if (mode == BoundaryParticle) {
+    if (wait == true) {
+      while (this->probe_bc_exchange(mpibufvec[mode]) == false) {
+        // wait for completion
+      }
+      return true;
+    } else {
+      // immediately return status
+      return this->probe_bc_exchange(mpibufvec[mode]);
+    }
+  }
+
+  return true;
+}
+
 DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
   switch (mode) {

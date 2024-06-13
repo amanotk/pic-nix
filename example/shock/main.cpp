@@ -196,9 +196,6 @@ public:
 
         // initial sort
         this->sort_particle(up);
-
-        // allocate MPI buffer for particle
-        setup_particle_mpi_buffer(option["mpi_buffer_fraction"].get<float64>());
       }
     }
 

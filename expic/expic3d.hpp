@@ -254,6 +254,11 @@ DEFINE_MEMBER(void, push)()
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
+      chunkvec[i]->set_boundary_probe(Chunk::BoundaryParticle, true);
+    }
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryParticle);
     }
 
