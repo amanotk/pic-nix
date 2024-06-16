@@ -3,6 +3,15 @@
 
 import json
 
+caution = """
+     <<< CAUTION >>>
+Note that this estimate does not include particle send/recv buffers,
+which will be automatically allocated and thus kept minimum.
+Also, the memory usage of MPI and other libraries are not included.
+Therefore, it is desirable to run the code on a system with the physical
+memory more than twice of the estimate given here.
+"""
+
 
 def doit(config, **kwargs):
     with open(config, "r") as f:
@@ -16,54 +25,61 @@ def doit(config, **kwargs):
     Cy = parameter["Cy"]
     Cz = parameter["Cz"]
     Ns = parameter["Ns"]
-    Nb = parameter["nb"]
-    Mp = parameter["nppc"]
-    Nc = Cx * Cy * Cz
-
-    byte_per_em_field = 8 * (6 + 4 + Ns * 11)
-    byte_per_particle = 8 * 7
-    particle_duplicate = 2
+    nb = parameter["nb"]
+    nproc = parameter.get("nproc", 1)
+    nppc = parameter.get("nppc", 32)
 
     mx = Nx // Cx
     my = Ny // Cy
     mz = Nz // Cz
     volume0 = mx * my * mz
-    volume1 = (mx + 2) * (my + 2) * (mz + 2)
-    volume2 = (mx + 2 * Nb) * (my + 2 * Nb) * (mz + 2 * Nb)
-    halo1 = volume1 - volume0
-    halo2 = volume2 - volume0
+    volume1 = (mx + 2 * nb) * (my + 2 * nb) * (mz + 2 * nb)
 
-    # particle data size
-    num_particle = volume0 * Mp * 2
-    misc_particle = num_particle * 4 + (volume2 + 1) * 9 * 4
-    domain_particle = (
-        num_particle * byte_per_particle * particle_duplicate + misc_particle
-    ) * Ns
-    halo_particle = halo1 * 4 * Ns * Mp * byte_per_particle
+    ###
+    ### particle data size
+    ###
+    # 3 for position, 3 for velocity, 1 for ID, which are all duplicated
+    byte_per_particle = 8 * (3 + 3 + 1) * 2
 
-    # field data size
-    halo_field = halo2 * 2 * byte_per_em_field
-    domain_field = volume2 * byte_per_em_field
+    # particle data size (assuming default buffer ratio of 0.2)
+    num_particle = volume0 * nppc * 1.2
+
+    # misc arrays for sorting
+    misc_particle = num_particle * 4 + (volume1 + 1) * 9 * 4
+
+    # physical domain
+    domain_particle = (num_particle * byte_per_particle + misc_particle) * Ns
+
+    ###
+    ### field data size
+    ###
+    # 3 for E, 3 for B, 4 for J, and 11 for moments for each species
+    byte_per_em_field = 8 * (6 + 4 + Ns * 11)
+
+    # field data size (send + recv buffers)
+    halo_field = 2 * byte_per_em_field * (volume1 - volume0)
+
+    # physical domain
+    domain_field = volume0 * byte_per_em_field
 
     # chunk data size
-    chunk_total = halo_particle + domain_particle + halo_field + domain_field
-    global_total = chunk_total * Nc
+    chunk_total = domain_particle + halo_field + domain_field
+    global_total = chunk_total * Cx * Cy * Cz
 
     MB = 1 / (1024 * 1024)
     GB = 1 / (1024 * 1024 * 1024)
 
-    print("### Estimated Memory Usage (Nb = {:1d}, Nppc = {:3d}) ###".format(Nb, Mp))
-    print("Particle          = {:10.3e} [MB]".format(domain_particle * MB))
-    print("Particle Halo     = {:10.3e} [MB]".format(halo_particle * MB))
+
+    print("###")
+    print("### Estimated Memory Usage (Nb = {:1d}, Nppc = {:3d}, Nproc = {:6d})".format(nb, nppc, nproc))
+    print("###")
     print("Field             = {:10.3e} [MB]".format(domain_field * MB))
     print("Field Halo        = {:10.3e} [MB]".format(halo_field * MB))
+    print("Particle          = {:10.3e} [MB]".format(domain_particle * MB))
     print("Total per Chunk   = {:10.3e} [MB]".format(chunk_total * MB))
-
-    if "nproc" in kwargs:
-        nproc = parameter["nproc"]
-        print("Total per Process = {:10.3e} [GB]".format(global_total / nproc * GB))
+    print("Total per Process = {:10.3e} [GB]".format(global_total / nproc * GB))
     print("Total             = {:10.3e} [GB]".format(global_total * GB))
-
+    print(caution)
 
 if __name__ == "__main__":
     import argparse
@@ -79,7 +95,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nppc",
         type=int,
-        default=10,
+        default=None,
         help="Number of particles per cell",
     )
     parser.add_argument(

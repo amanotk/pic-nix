@@ -18,6 +18,8 @@
 		},
 		{
 			"name": "resource",
+			"node": "stats",
+			"rank": "stats",
 			"interval": 10
 		},
 		{
