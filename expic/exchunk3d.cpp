@@ -7,7 +7,7 @@
   type ExChunk3D<Order>::name
 
 DEFINE_MEMBER(, ExChunk3D)
-(const int dims[3], int id) : Chunk(dims, id), Ns(1), option({})
+(const int dims[3], int id) : Chunk(dims, id), Ns(1)
 {
   // check the minimum number of grids
   {
@@ -237,7 +237,8 @@ DEFINE_MEMBER(void, setup)(json& config)
 
   // misc
   {
-    option["cell_load"]           = opt.value("cell_load", 1.0);
+    option["cell_load"]    = opt.value("cell_load", 1.0);
+    option["buffer_ratio"] = opt.value("buffer_ratio", 0.2);
   }
 }
 
@@ -318,10 +319,11 @@ DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
 
 DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
-  const float64 theta = option["friedman"].get<float64>();
-  const float64 cflx  = cc * delt / delx;
-  const float64 cfly  = cc * delt / dely;
-  const float64 cflz  = cc * delt / delz;
+  json          option = this->option;
+  const float64 theta  = option["friedman"].get<float64>();
+  const float64 cflx   = cc * delt / delx;
+  const float64 cfly   = cc * delt / dely;
+  const float64 cflz   = cc * delt / delz;
 
   // update for Friedman filter first (boundary condition has already been set)
   for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
@@ -376,13 +378,14 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
 
 DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
-  const float64 theta = option["friedman"].get<float64>();
-  const float64 A     = 1 + 0.5 * theta;
-  const float64 B     = -theta * (1 - 0.5 * theta);
-  const float64 C     = 0.5 * theta * (1 - theta) * (1 - theta);
-  const float64 cflx  = cc * delt / delx;
-  const float64 cfly  = cc * delt / dely;
-  const float64 cflz  = cc * delt / delz;
+  json          option = this->option;
+  const float64 theta  = option["friedman"].get<float64>();
+  const float64 A      = 1 + 0.5 * theta;
+  const float64 B      = -theta * (1 - 0.5 * theta);
+  const float64 C      = 0.5 * theta * (1 - theta) * (1 - theta);
+  const float64 cflx   = cc * delt / delx;
+  const float64 cfly   = cc * delt / dely;
+  const float64 cflz   = cc * delt / delz;
 
   // update for Friedman filter first (boundary condition has already been set)
   for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
@@ -556,7 +559,8 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
-  std::string mode = option["vectorization"]["position"].get<std::string>();
+  json        option = this->option;
+  std::string mode   = option["vectorization"]["position"].get<std::string>();
 
   bool is_success = true;
 
@@ -581,6 +585,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   constexpr int WT = exchunk3d_impl::VelocityOption::InterpWT;
 
   bool        is_success = true;
+  json        option     = this->option;
   std::string mode       = option["vectorization"]["velocity"].get<std::string>();
   std::string interp     = option["interpolation"].get<std::string>();
 
@@ -624,6 +629,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
   bool        is_success = true;
+  json        option     = this->option;
   std::string mode       = option["vectorization"]["current"].get<std::string>();
 
   if (mode == "scalar") {
@@ -646,6 +652,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 DEFINE_MEMBER(void, deposit_moment)()
 {
   bool        is_success = true;
+  json        option     = this->option;
   std::string mode       = option["vectorization"]["moment"].get<std::string>();
 
   if (mode == "scalar") {

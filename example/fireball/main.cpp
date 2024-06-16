@@ -124,6 +124,7 @@ public:
     // initialize particles
     //
     {
+      float64           ratio       = this->get_buffer_ratio();
       int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
@@ -143,19 +144,19 @@ public:
         float64            x0 = 0.5 * (gxlim[0] + gxlim[1]);
 
         int   count = count_cell_within_fireball(zr, yr, xr, delz, dely, delx, z0, y0, x0, radius);
-        int   mp    = count * nfb + (dims[0] * dims[1] * dims[2] - count) * nbg;
+        int   mp    = (count * nfb + (dims[0] * dims[1] * dims[2] - count) * nbg) * (1 + ratio);
         int64 id    = dims[0] * dims[1] * dims[2] * nfb * this->myid;
 
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;

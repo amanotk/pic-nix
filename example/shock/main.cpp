@@ -141,6 +141,8 @@ public:
     // initialize particles
     //
     {
+      float64 ratio = this->get_buffer_ratio();
+
       // setup random number generator
       mt.seed(option["random_seed"].get<int>());
 
@@ -151,19 +153,19 @@ public:
         int   nz = dims[0] + 2 * Nb;
         int   ny = dims[1] + 2 * Nb;
         int   nx = dims[2] + 2 * Nb;
-        int   mp = nppc * dims[0] * dims[1] * dims[2];
+        int   mp = nppc * dims[0] * dims[1] * dims[2] * (1 + ratio);
         int64 id = static_cast<int64>(mp) * static_cast<int64>(this->myid);
 
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(2 * mp, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;
@@ -494,9 +496,15 @@ public:
       std::vector<MJ>   mj = {MJ(vte * vte, -u0), MJ(vti * vti, -u0)};
 
       // reallocate buffer if necessary
-      for (int is = 0; is < Ns; is++) {
-        if (particle[is]->Np + flux * dims[0] * dims[1] > particle[is]->Np_total) {
-          particle[is]->resize(2 * particle[is]->Np_total);
+      {
+        const float64 ratio     = this->get_buffer_ratio();
+        const float64 increased = 1 + ratio;
+
+        for (int is = 0; is < Ns; is++) {
+          int np_next = particle[is]->Np + flux * dims[0] * dims[1];
+          if (np_next > particle[is]->Np_total) {
+            particle[is]->resize(increased * particle[is]->Np_total);
+          }
         }
       }
 

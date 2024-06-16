@@ -8,6 +8,10 @@ import json
 import msgpack
 import glob
 
+DEFAULT_LOG_PREFIX = "log"
+DEFAULT_LOAD_PREFIX = "load"
+DEFAULT_FIELD_PREFIX = "field"
+DEFAULT_PARTICLE_PREFIX = "particle"
 
 def get_json_meta(obj):
     meta = obj.get("meta")
@@ -207,7 +211,7 @@ def plot_loadbalance(run, axs):
     ## read time stamp
     log = run.config["application"]["log"]
     dirname = pathlib.Path(run.profile).parent / log.get("path", ".")
-    filename = log.get("prefix", "") + ".msgpack"
+    filename = log.get("prefix", DEFAULT_LOG_PREFIX) + ".msgpack"
     data = find_record_from_msgpack(str(dirname / filename), rank=0)
     time = np.array([x["timestamp"]["unixtime"] for x in data])
     step = np.array([x["step"] for x in data])
@@ -336,7 +340,7 @@ class Run(object):
     def format_log_filename(self):
         basedir = pathlib.Path(self.profile).parent
         path = self.config["application"]["log"].get("path", ".")
-        prefix = self.config["application"]["log"].get("prefix", "")
+        prefix = self.config["application"]["log"].get("prefix", DEFAULT_LOG_PREFIX)
         filename = "{:s}.msgpack".format(prefix)
         return str(basedir / path / filename)
 
@@ -372,21 +376,21 @@ class Run(object):
             path = basedir / diagnostic.get("path", ".")
             # load
             if diagnostic["name"] == "load":
-                data = "{}_*.{}".format(diagnostic.get("prefix", "load"), ext)
+                data = "{}_*.{}".format(diagnostic.get("prefix", DEFAULT_LOAD_PREFIX), ext)
                 file = sorted(glob.glob(str(path / data)))
                 self.step_load = np.arange(len(file)) * interval
                 self.time_load = np.arange(len(file)) * self.delt * interval
                 self.file_load = file
             # field
             if diagnostic["name"] == "field":
-                data = "{}_*.{}".format(diagnostic.get("prefix", "field"), ext)
+                data = "{}_*.{}".format(diagnostic.get("prefix", DEFAULT_FIELD_PREFIX), ext)
                 file = sorted(glob.glob(str(path / data)))
                 self.step_field = np.arange(len(file)) * interval
                 self.time_field = np.arange(len(file)) * self.delt * interval
                 self.file_field = file
             # particle
             if diagnostic["name"] == "particle":
-                data = "{}_*.{}".format(diagnostic.get("prefix", "particle"), ext)
+                data = "{}_*.{}".format(diagnostic.get("prefix", DEFAULT_PARTICLE_PREFIX), ext)
                 file = sorted(glob.glob(str(path / data)))
                 self.step_particle = np.arange(len(file)) * interval
                 self.time_particle = np.arange(len(file)) * self.delt * interval

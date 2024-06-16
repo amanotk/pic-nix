@@ -2,13 +2,10 @@
 	"application": {
 		"basedir" : "data",
 		"log": {
-			"path": ".",
-			"prefix": "log",
 			"interval": 200
 		},
 		"rebalance": {
-			"interval": 100,
-			"loglevel": 1
+			"interval": 100
 		},
 		"option": {
 			"vectorization": "vector"
@@ -17,20 +14,14 @@
 	"diagnostic": [
 		{
 			"name": "history",
-			"path": ".",
-			"prefix": "history",
 			"interval": 200
 		},
 		{
 			"name": "field",
-			"path": ".",
-			"prefix": "field",
 			"interval": 200
 		},
 		{
 			"name": "particle",
-			"path": ".",
-			"prefix": "particle",
 			"interval": 10000
 		}
 	],

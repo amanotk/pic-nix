@@ -67,6 +67,7 @@ public:
   using Chunk::ylim;
   using Chunk::zlim;
   using Chunk::mpibufvec;
+  using Chunk::option;
   using Chunk::load;
 
   // order of shape function
@@ -92,7 +93,6 @@ public:
   };
 
 protected:
-  json                    option; ///< internal option
   int                     Ns;     ///< number of particle species
   float64                 cc;     ///< speed of light
   xt::xtensor<float64, 4> uf;     ///< electromagnetic field
