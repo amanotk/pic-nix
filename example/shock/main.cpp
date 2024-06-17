@@ -481,6 +481,9 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
+      const float64 ratio     = this->get_buffer_ratio();
+      const float64 increased = 1 + ratio;
+
       float64 rc   = 1.0 / cc;
       int     nppc = option["boundary"]["nppc"].get<int>();
       float64 delt = option["boundary"]["delt"].get<float64>();
@@ -489,35 +492,42 @@ public:
       float64 vti  = option["boundary"]["vti"].get<float64>();
       float64 flux = nppc * std::abs(u0) / sqrt(1 + u0 * u0 * rc * rc) * delt / delx;
 
+      // number of injection particles
+      size_t              nz           = dims[0] + 2 * Nb;
+      size_t              ny           = dims[1] + 2 * Nb;
+      int                 np_inj_total = 0;
+      xt::xtensor<int, 3> np_inj({nz, ny});
+
       // reset random number generator
       reset_random_number();
 
       nix::rand_poisson poisson(flux);
       std::vector<MJ>   mj = {MJ(vte * vte, -u0), MJ(vti * vti, -u0)};
 
-      // reallocate buffer if necessary
-      {
-        const float64 ratio     = this->get_buffer_ratio();
-        const float64 increased = 1 + ratio;
-
-        for (int is = 0; is < Ns; is++) {
-          int np_next = particle[is]->Np + flux * dims[0] * dims[1];
-          if (np_next > particle[is]->Np_total) {
-            particle[is]->resize(increased * particle[is]->Np_total);
-          }
-        }
-      }
-
-      // number of injection particles
-      int influx = 0;
+      // calculate number of injection particles and reallocate buffer if necessary
+      np_inj.fill(0);
 
       for (int iz = Lbz; iz <= Ubz; iz++) {
         for (int iy = Lby; iy <= Uby; iy++) {
-          int np_inj = poisson(mt);
+          np_inj(iz, iy) = poisson(mt);
+          np_inj_total += np_inj(iz, iy);
+        }
+      }
+
+      for (int is = 0; is < Ns; is++) {
+        int np_next = particle[is]->Np + np_inj_total;
+        if (np_next > particle[is]->Np_total) {
+          particle[is]->resize(increased * np_next);
+        }
+      }
+
+      // inject particles
+      for (int iz = Lbz; iz <= Ubz; iz++) {
+        for (int iy = Lby; iy <= Uby; iy++) {
           for (int is = 0; is < Ns; is++) {
-            int np_old = particle[is]->Np;
-            int np_new = particle[is]->Np + np_inj;
-            for (int ip = np_old; ip < np_new; ip++) {
+            int np_prev = particle[is]->Np;
+            int np_next = particle[is]->Np + np_inj(iz, iy);
+            for (int ip = np_prev; ip < np_next; ip++) {
               auto [x, ux, uy, uz] = generate_injection_particle(mj[is], delt);
               float64 y            = ylim[0] + (iy - Lby + uniform(mt)) * dely;
               float64 z            = zlim[0] + (iz - Lbz + uniform(mt)) * delz;
@@ -530,15 +540,14 @@ public:
               particle[is]->xu(ip, 5) = uz;
             }
 
-            this->count_particle(particle[is], np_old, np_new - 1, false);
-            particle[is]->Np = np_new;
+            this->count_particle(particle[is], np_prev, np_next - 1, false);
+            particle[is]->Np = np_next;
           }
-          influx += np_inj;
         }
       }
 
       for (int is = 0; is < Ns; is++) {
-        option["boundary"]["influx"][is] = influx;
+        option["boundary"]["influx"][is] = np_inj_total;
       }
     }
   }
