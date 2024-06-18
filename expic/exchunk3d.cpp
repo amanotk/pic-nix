@@ -61,15 +61,8 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
 
   int count = address;
 
-  // option
-  {
-    std::vector<uint8_t> msgpack = json::to_msgpack(option);
-    int                  size    = msgpack.size();
-    count += memcpy_count(buffer, &size, sizeof(int), count, 0);
-    count += memcpy_count(buffer, msgpack.data(), size, count, 0);
-  }
+  count = Chunk::pack(buffer, count);
 
-  count += Chunk::pack(buffer, count);
   count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
   count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
   count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
@@ -77,7 +70,7 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
   count += memcpy_count(buffer, ff.data(), ff.size() * sizeof(float64), count, 0);
   // particle
   for (int is = 0; is < Ns; is++) {
-    count += up[is]->pack(buffer, count);
+    count = up[is]->pack(buffer, count);
   }
 
   return count;
@@ -89,18 +82,8 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
 
   int count = address;
 
-  // option
-  {
-    int size = 0;
-    count += memcpy_count(&size, buffer, sizeof(int), 0, count);
+  count = Chunk::unpack(buffer, count);
 
-    std::vector<uint8_t> msgpack(size);
-    count += memcpy_count(msgpack.data(), buffer, size, 0, count);
-
-    option = json::from_msgpack(msgpack);
-  }
-
-  count += Chunk::unpack(buffer, count);
   count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
   count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
   allocate(); // allocate memory for unpacking
@@ -111,7 +94,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
   up.resize(Ns);
   for (int is = 0; is < Ns; is++) {
     up[is] = std::make_shared<ParticleType>();
-    count += up[is]->unpack(buffer, count);
+    count = up[is]->unpack(buffer, count);
   }
 
   return count;
