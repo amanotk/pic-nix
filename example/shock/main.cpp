@@ -141,7 +141,7 @@ public:
     // initialize particles
     //
     {
-      float64 ratio = this->get_buffer_ratio();
+      float64 target = 1 + this->get_buffer_ratio();
 
       // setup random number generator
       mt.seed(option["random_seed"].get<int>());
@@ -153,19 +153,19 @@ public:
         int   nz = dims[0] + 2 * Nb;
         int   ny = dims[1] + 2 * Nb;
         int   nx = dims[2] + 2 * Nb;
-        int   mp = nppc * dims[0] * dims[1] * dims[2] * (1 + ratio);
+        int   mp = nppc * dims[0] * dims[1] * dims[2];
         int64 id = static_cast<int64>(mp) * static_cast<int64>(this->myid);
 
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;
@@ -481,8 +481,7 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      const float64 ratio     = this->get_buffer_ratio();
-      const float64 increased = 1 + ratio;
+      const float64 target = 1 + this->get_buffer_ratio();
 
       float64 rc   = 1.0 / cc;
       int     nppc = option["boundary"]["nppc"].get<int>();
@@ -496,7 +495,7 @@ public:
       size_t              nz           = dims[0] + 2 * Nb;
       size_t              ny           = dims[1] + 2 * Nb;
       int                 np_inj_total = 0;
-      xt::xtensor<int, 3> np_inj({nz, ny});
+      xt::xtensor<int, 2> np_inj({nz, ny});
 
       // reset random number generator
       reset_random_number();
@@ -517,7 +516,7 @@ public:
       for (int is = 0; is < Ns; is++) {
         int np_next = particle[is]->Np + np_inj_total;
         if (np_next > particle[is]->Np_total) {
-          particle[is]->resize(increased * np_next);
+          particle[is]->resize(target * np_next);
         }
       }
 

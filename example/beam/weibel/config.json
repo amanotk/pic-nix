@@ -5,7 +5,8 @@
 			"interval": 5000
 		},
 		"rebalance": {
-			"interval": 10
+			"interval": 10,
+			"loglevel": 1
 		},
 		"option": {
 			"vectorization": "vector"

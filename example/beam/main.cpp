@@ -71,7 +71,7 @@ public:
     // initialize particles
     //
     {
-      float64           ratio       = this->get_buffer_ratio();
+      float64           target      = 1 + this->get_buffer_ratio();
       int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
@@ -86,7 +86,7 @@ public:
         int     ny = dims[1] + 2 * Nb;
         int     nx = dims[2] + 2 * Nb;
         int     np = particle[is]["np"].get<int>();
-        int     mp = np * dims[0] * dims[1] * dims[2] * (1 + ratio);
+        int     mp = np * dims[0] * dims[1] * dims[2];
         int64   id = mp;
         float64 ro = particle[is]["ro"].get<float64>();
         float64 qm = particle[is]["qm"].get<float64>();
@@ -97,7 +97,7 @@ public:
 
         id *= this->myid;
 
-        up[is]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[is]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[is]->m  = ro / np;
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;

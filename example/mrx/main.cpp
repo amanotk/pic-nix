@@ -91,7 +91,7 @@ public:
     // initialize particles
     //
     {
-      float64           ratio       = this->get_buffer_ratio();
+      float64           target      = 1 + this->get_buffer_ratio();
       int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
@@ -107,18 +107,18 @@ public:
         float64 ymax    = (ylim[1] - ycs) / lcs;
         float64 rbg     = numcell * nbg;
         float64 rcs     = numcell * ncs * (tanh(ymax) - tanh(ymin)) / (ymax - ymin);
-        int     mp      = (rbg + rcs) * (1 + ratio);
+        int     mp      = rbg + rcs;
 
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;

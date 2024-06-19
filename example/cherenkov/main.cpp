@@ -92,7 +92,7 @@ public:
     // initialize particles
     //
     {
-      float64             ratio       = this->get_buffer_ratio();
+      float64             target      = 1 + this->get_buffer_ratio();
       int                 random_seed = option["random_seed"].get<int>();
       std::mt19937_64     mtp(random_seed);
       std::mt19937_64     mtv(random_seed);
@@ -104,19 +104,19 @@ public:
         int   nz = dims[0] + 2 * Nb;
         int   ny = dims[1] + 2 * Nb;
         int   nx = dims[2] + 2 * Nb;
-        int   mp = nppc * dims[0] * dims[1] * dims[2] * (1 + ratio);
+        int   mp = nppc * dims[0] * dims[1] * dims[2];
         int64 id = static_cast<int64>(mp) * static_cast<int64>(this->myid);
 
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;
