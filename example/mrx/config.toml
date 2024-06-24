@@ -1,0 +1,49 @@
+[application]
+  basedir = 'data'
+
+  [application.rebalance]
+    interval = 10
+    loglevel = 1
+
+  [application.log]
+    interval = 5000
+
+  [application.option]
+    vectorization = 'vector'
+
+[[diagnostic]]
+  name = 'history'
+  interval = 100
+
+[[diagnostic]]
+  name = 'resource'
+  interval = 10
+  node = 'stats'
+  rank = 'stats'
+
+[[diagnostic]]
+  name = 'field'
+  interval = 100
+
+[[diagnostic]]
+  name = 'particle'
+  interval = 1000
+
+[parameter]
+  Nx = 256
+  Ny = 256
+  Nz = 2
+  Cx = 16
+  Cy = 16
+  Cz = 1
+  Ns = 2
+  delt = 0.1
+  delh = 0.2
+  lcs = 2.5
+  ncs = 50
+  nbg = 10
+  mime = 25
+  sigma = 0.0625
+  tite = 5.0
+  bz = 0.0
+  db = 0.1

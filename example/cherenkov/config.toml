@@ -1,0 +1,44 @@
+[application]
+  basedir = 'data'
+
+  [application.log]
+    interval = 200
+
+  [application.option]
+    vectorization = 'vector'
+
+  [application.rebalance]
+    interval = 100
+
+[[diagnostic]]
+  interval = 200
+  name = 'history'
+
+[[diagnostic]]
+  interval = 200
+  name = 'field'
+
+[[diagnostic]]
+  interval = 10000
+  name = 'particle'
+
+[parameter]
+  Cx = 8
+  Cy = 8
+  Cz = 1
+  Ns = 2
+  Nx = 128
+  Ny = 128
+  Nz = 2
+  cc = 1.0
+  delh = 0.1
+  delt = 0.05
+  mime = 1
+  nppc = 32
+  phi = 0.0
+  sigma = 0.0
+  theta = 0.0
+  u0 = 0.1
+  vte = 0.1
+  vti = 0.1
+  wp = 1.0

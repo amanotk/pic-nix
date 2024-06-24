@@ -1,0 +1,78 @@
+[application]
+  basedir = 'data'
+
+  [application.log]
+    interval = 5000
+
+  [application.rebalance]
+    interval = 10
+    loglevel = 1
+
+  [application.option]
+    vectorization = 'vector'
+
+[[diagnostic]]
+  name = 'history'
+  interval = 50
+
+[[diagnostic]]
+  name = 'field'
+  interval = 50
+
+[[diagnostic]]
+  name = 'particle'
+  interval = 50
+
+[parameter]
+  Nx = 192
+  Ny = 192
+  Nz = 2
+  Cx = 24
+  Cy = 24
+  Cz = 1
+  Ex = 0.0
+  Ey = 0.0
+  Ez = 0.0
+  Bx = 0.0
+  By = 0.0
+  Bz = 0.0
+  Ns = 4
+  cc = 20.0
+  delt = 0.02
+  delh = 1.0
+
+[[parameter.particle]]
+    np = 16
+    qm = -1.0
+    ro = 0.5
+    vt = 1.0
+    vx = 0.0
+    vy = 0.0
+    vz = 10.0
+
+[[parameter.particle]]
+    np = 16
+    qm = -1.0
+    ro = 0.5
+    vt = 1.0
+    vx = 0.0
+    vy = 0.0
+    vz = -10.0
+
+[[parameter.particle]]
+    np = 16
+    qm = +1.0
+    ro = 0.5
+    vt = 1.0
+    vx = 0.0
+    vy = 0.0
+    vz = 10.0
+
+[[parameter.particle]]
+    np = 16
+    qm = +1.0
+    ro = 0.5
+    vt = 1.0
+    vx = 0.0
+    vy = 0.0
+    vz = -10.0

@@ -1,0 +1,50 @@
+[application]
+  basedir = 'data'
+
+  [application.log]
+    interval = 5000
+
+  [application.rebalance]
+    interval = 10
+    loglevel = 1
+
+  [application.option]
+    vectorization = 'vector'
+
+[[diagnostic]]
+  name = 'history'
+  interval = 100
+
+[[diagnostic]]
+  name = 'load'
+  interval = 10
+
+[[diagnostic]]
+  name = 'field'
+  interval = 100
+
+[[diagnostic]]
+  name = 'particle'
+  interval = 5000
+
+[parameter]
+  Nx = 256
+  Ny = 256
+  Nz = 2
+  Cx = 32
+  Cy = 32
+  Cz = 1
+  Ns = 2
+  Tbg = 0.1
+  Tfb = 1.0
+  cc = 1.0
+  wp = 1.0
+  delt = 0.05
+  delh = 0.1
+  mime = 1.0
+  sigma = 1.0
+  nfb = 100
+  nbg = 10
+  radius = 5.0
+  phi = 0.0
+  theta = 0.0

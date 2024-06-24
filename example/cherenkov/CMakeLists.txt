@@ -15,4 +15,4 @@ target_link_libraries(${PROJECT_NAME} std::filesystem)
 target_link_libraries(${PROJECT_NAME} nix expic)
 
 # copy
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config.json DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config.toml DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
