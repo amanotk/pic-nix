@@ -1,6 +1,5 @@
 // -*- C++ -*-
 
-#include "diagnoser.hpp"
 #include "expic3d.hpp"
 #include "nix/random.hpp"
 
@@ -8,7 +7,6 @@ constexpr int order = PICNIX_SHAPE_ORDER;
 
 class MainChunk;
 class MainApplication;
-using MainDiagnoser = Diagnoser;
 
 class MainChunk : public ExChunk3D<order>
 {
@@ -119,10 +117,10 @@ public:
   }
 };
 
-class MainApplication : public ExPIC3D<MainChunk, MainDiagnoser>
+class MainApplication : public ExPIC3D<MainChunk>
 {
 public:
-  using ExPIC3D<MainChunk, MainDiagnoser>::ExPIC3D; // inherit constructors
+  using ExPIC3D<MainChunk>::ExPIC3D; // inherit constructors
 
   std::unique_ptr<MainChunk> create_chunk(const int dims[], int id) override
   {

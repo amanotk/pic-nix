@@ -1,13 +1,11 @@
 // -*- C++ -*-
 
-#include "diagnoser.hpp"
 #include "expic3d.hpp"
 #include "nix/random.hpp"
 
 constexpr int order = PICNIX_SHAPE_ORDER;
 
 class MainApplication;
-using MainDiagnoser = Diagnoser;
 
 class MainChunk : public ExChunk3D<order>
 {
@@ -552,14 +550,14 @@ public:
   }
 };
 
-class MainApplication : public ExPIC3D<MainChunk, MainDiagnoser>
+class MainApplication : public ExPIC3D<MainChunk>
 {
 public:
-  using ExPIC3D<MainChunk, MainDiagnoser>::ExPIC3D; // inherit constructors
+  using ExPIC3D<MainChunk>::ExPIC3D; // inherit constructors
 
   PtrChunkMap create_chunkmap() override
   {
-    auto ptr = ExPIC3D<MainChunk, MainDiagnoser>::create_chunkmap();
+    auto ptr = ExPIC3D<MainChunk>::create_chunkmap();
     ptr->set_periodicity(1, 1, 0); // set non-periodic in x
     return ptr;
   }

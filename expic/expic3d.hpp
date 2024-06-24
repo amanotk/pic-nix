@@ -2,6 +2,7 @@
 #ifndef _EXPIC3D_HPP_
 #define _EXPIC3D_HPP_
 
+#include "diagnoser.hpp"
 #include "exchunk3d.hpp"
 #include "nix/application.hpp"
 #include "nix/chunkmap.hpp"
@@ -23,15 +24,16 @@ using nix::Logger;
 /// chunk instance. In addition, custom diagnostics routines may also be implemented through the
 /// virtual method diagnostic().
 ///
-template <typename Chunk, typename Diagnoser>
+template <typename Chunk>
 class ExPIC3D : public nix::Application<Chunk, nix::ChunkMap<3>>
 {
 public:
-  using ThisType     = ExPIC3D<Chunk, Diagnoser>;
-  using BaseApp      = nix::Application<Chunk, nix::ChunkMap<3>>;
-  using ChunkType    = Chunk;
-  using PtrDiagnoser = std::unique_ptr<Diagnoser>;
-  using MpiCommVec   = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
+  using ThisType      = ExPIC3D<Chunk>;
+  using BaseApp       = nix::Application<Chunk, nix::ChunkMap<3>>;
+  using ChunkType     = Chunk;
+  using DiagnoserType = Diagnoser<ThisType, typename BaseApp::InternalData>;
+  using PtrDiagnoser  = std::unique_ptr<DiagnoserType>;
+  using MpiCommVec    = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
 
 protected:
   using BaseApp::cfgparser;
@@ -64,6 +66,11 @@ protected:
 
   virtual std::unique_ptr<Chunk> create_chunk(const int dims[], int id) override = 0;
 
+  virtual std::unique_ptr<DiagnoserType> create_diagnoser()
+  {
+    return std::make_unique<DiagnoserType>(this->get_basedir());
+  }
+
 public:
   ExPIC3D(int argc, char** argv);
 
@@ -84,8 +91,8 @@ public:
 };
 
 #define DEFINE_MEMBER(type, name)                                                                  \
-  template <typename Chunk, typename Diagnoser>                                                    \
-  type ExPIC3D<Chunk, Diagnoser>::name
+  template <typename Chunk>                                                                        \
+  type ExPIC3D<Chunk>::name
 
 DEFINE_MEMBER(, ExPIC3D)
 (int argc, char** argv) : BaseApp(argc, argv), Ns(1), momstep(-1)
@@ -100,7 +107,7 @@ DEFINE_MEMBER(void, initialize)(int argc, char** argv)
   Ns = cfgparser->get_parameter()["Ns"];
 
   // diagnostics
-  diagnoser = std::make_unique<Diagnoser>(this->get_basedir());
+  diagnoser = create_diagnoser();
 
   if (cfgparser->get_diagnostic().is_array() == false) {
     ERROR << tfm::format("Invalid diagnostic");
@@ -280,13 +287,11 @@ DEFINE_MEMBER(void, diagnostic)()
   DEBUG2 << "diagnostic() start";
   float64 wclock1 = nix::wall_clock();
 
-  {
-    json config = cfgparser->get_diagnostic();
-    auto data   = this->get_internal_data();
+  json config = cfgparser->get_diagnostic();
+  auto data   = this->get_internal_data();
 
-    for (json::iterator it = config.begin(); it != config.end(); ++it) {
-      diagnoser->doit(*it, *this, data);
-    }
+  for (json::iterator it = config.begin(); it != config.end(); ++it) {
+    diagnoser->diagnose(*it, *this, data);
   }
 
   DEBUG2 << "diagnostic() end";

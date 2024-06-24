@@ -2,7 +2,7 @@
 #ifndef _DIAGNOSER_HPP_
 #define _DIAGNOSER_HPP_
 
-#include "nix/application.hpp"
+//#include "nix/application.hpp"
 #include "nix/buffer.hpp"
 #include "nix/debug.hpp"
 #include "nix/nix.hpp"
@@ -19,7 +19,8 @@ using nix::ParticlePtr;
 using nix::ParticleVec;
 using ParticleType = nix::ParticlePtr::element_type;
 
-class BaseDiagnoser
+template <typename App, typename Data>
+class BaseDiagnostic
 {
 protected:
   std::string name;
@@ -27,9 +28,12 @@ protected:
 
 public:
   // constructor
-  BaseDiagnoser(std::string basedir, std::string name) : basedir(basedir), name(name)
+  BaseDiagnostic(std::string basedir, std::string name) : basedir(basedir), name(name)
   {
   }
+
+  // main operation
+  virtual void operator()(json& config, App& app, Data& data) = 0;
 
   // check if the given key matches the name
   bool match(std::string key)
@@ -127,7 +131,8 @@ public:
   }
 };
 
-class AsynchronousDiagnoser : public BaseDiagnoser
+template <typename App, typename Data>
+class AsynchronousDiagnostic : public BaseDiagnostic<App, Data>
 {
 protected:
   MPI_File                 filehandle;
@@ -138,7 +143,7 @@ protected:
   // check if the diagnostic is required
   bool require_diagnostic(int curstep, json& config)
   {
-    bool status    = BaseDiagnoser::require_diagnostic(curstep, config);
+    bool status    = BaseDiagnostic<App, Data>::require_diagnostic(curstep, config);
     bool completed = is_completed();
 
     if (status == true) {
@@ -157,8 +162,8 @@ protected:
 
 public:
   // constructor
-  AsynchronousDiagnoser(std::string basedir, std::string name, int size)
-      : BaseDiagnoser(basedir, name), is_opened(false)
+  AsynchronousDiagnostic(std::string basedir, std::string name, int size)
+      : BaseDiagnostic<App, Data>(basedir, name), is_opened(false)
   {
     buffer.resize(size);
     request.resize(size);
@@ -209,7 +214,7 @@ public:
   }
 
   // launch asynchronous write
-  template <typename DataPacker, typename Data>
+  template <typename DataPacker>
   void launch(int jobid, DataPacker packer, Data& data, size_t& disp)
   {
     size_t bufsize = 0;
@@ -234,20 +239,23 @@ public:
 };
 
 ///
-/// @brief Diagnoser for time history
+/// @brief Diagnostic for time history
 ///
-class HistoryDiagnoser : public BaseDiagnoser
+template <typename App, typename Data>
+class HistoryDiagnostic : public BaseDiagnostic<App, Data>
 {
+protected:
+  using BaseDiagnostic<App, Data>::basedir;
+
 public:
   // constructor
-  HistoryDiagnoser(std::string basedir) : BaseDiagnoser(basedir, "history")
+  HistoryDiagnostic(std::string basedir) : BaseDiagnostic<App, Data>(basedir, "history")
   {
   }
 
-  template <typename App, typename Data>
-  void operator()(json& config, App& app, Data& data)
+  void operator()(json& config, App& app, Data& data) override
   {
-    if (require_diagnostic(data.curstep, config) == false)
+    if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
     const int            Ns = app.get_Ns();
@@ -293,11 +301,11 @@ public:
 
     // output from root
     if (data.thisrank == 0) {
-      std::string filename = format_filename(config, ".txt", basedir, ".", "history");
+      std::string filename = this->format_filename(config, ".txt", basedir, ".", "history");
       std::string msg      = "";
 
       // initial call
-      if (is_initial_step(data.curstep, config) == true) {
+      if (this->is_initial_step(data.curstep, config) == true) {
         // header
         msg += tfm::format("# %8s %15s", "step", "time");
         msg += tfm::format(" %15s", "div(E)");
@@ -327,7 +335,7 @@ public:
       std::cout << msg << std::flush;
 
       // append to file
-      if (make_sure_directory_exists(filename) == true) {
+      if (this->make_sure_directory_exists(filename) == true) {
         std::ofstream ofs(filename, nix::text_append);
         ofs << msg << std::flush;
         ofs.close();
@@ -337,11 +345,14 @@ public:
 };
 
 ///
-/// @brief Diagnoser for resource usage
+/// @brief Diagnostic for resource usage
 ///
-class ResourceDiagnoser : public BaseDiagnoser
+template <typename App, typename Data>
+class ResourceDiagnostic : public BaseDiagnostic<App, Data>
 {
 protected:
+  using BaseDiagnostic<App, Data>::basedir;
+
   // calculate statistics
   template <typename T>
   auto statistics(T& data)
@@ -353,9 +364,9 @@ protected:
     stat["min"]    = data.front();
     stat["max"]    = data.back();
     stat["mean"]   = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
-    stat["quant1"] = percentile(data, 0.25, true);
-    stat["quant2"] = percentile(data, 0.50, true);
-    stat["quant3"] = percentile(data, 0.75, true);
+    stat["quant1"] = this->percentile(data, 0.25, true);
+    stat["quant2"] = this->percentile(data, 0.50, true);
+    stat["quant3"] = this->percentile(data, 0.75, true);
     stat["size"]   = data.size();
 
     return stat;
@@ -363,14 +374,13 @@ protected:
 
 public:
   // constructor
-  ResourceDiagnoser(std::string basedir) : BaseDiagnoser(basedir, "resource")
+  ResourceDiagnostic(std::string basedir) : BaseDiagnostic<App, Data>(basedir, "resource")
   {
   }
 
-  template <typename App, typename Data>
-  void operator()(json& config, App& app, Data& data)
+  void operator()(json& config, App& app, Data& data) override
   {
-    if (require_diagnostic(data.curstep, config) == false)
+    if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
     const float64        to_gb        = 1.0 / (1024 * 1024 * 1024);
@@ -499,7 +509,7 @@ public:
   {
     // output from root
     if (result["rank"] == 0) {
-      std::string filename = format_filename(config, ".msgpack", basedir, ".", "resource");
+      std::string filename = this->format_filename(config, ".msgpack", basedir, ".", "resource");
 
       json record    = {};
       record["step"] = result["step"];
@@ -554,12 +564,12 @@ public:
       }
 
       // initial call
-      if (is_initial_step(result["step"], config) == true) {
+      if (this->is_initial_step(result["step"], config) == true) {
         std::filesystem::remove(filename);
       }
 
       // append to file
-      if (make_sure_directory_exists(filename) == true) {
+      if (this->make_sure_directory_exists(filename) == true) {
         std::ofstream             ofs(filename, nix::binary_append);
         std::vector<std::uint8_t> buffer = json::to_msgpack(record);
         ofs.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
@@ -570,17 +580,20 @@ public:
 };
 
 ///
-/// @brief Diagnoser for computational work load
+/// @brief Diagnostic for computational work load
 ///
-class LoadDiagnoser : public AsynchronousDiagnoser
+template <typename App, typename Data>
+class LoadDiagnostic : public AsynchronousDiagnostic<App, Data>
 {
 protected:
+  using BaseDiagnostic<App, Data>::basedir;
+
   // data packer for load
   class LoadPacker
   {
   public:
-    template <typename Data>
-    size_t operator()(Data data, uint8_t* buffer, int address)
+    template <typename ChunkData>
+    size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
       auto& load = data.load;
 
@@ -609,8 +622,8 @@ protected:
     {
     }
 
-    template <typename Data>
-    size_t operator()(Data data, uint8_t* buffer, int address)
+    template <typename ChunkData>
+    size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
       size_t count = sizeof(int) + address;
 
@@ -628,33 +641,32 @@ protected:
 
 public:
   /// constructor
-  LoadDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, "load", 2)
+  LoadDiagnostic(std::string basedir) : AsynchronousDiagnostic<App, Data>(basedir, "load", 2)
   {
   }
 
   // data packing functor
-  template <typename App, typename Data>
-  void operator()(json& config, App& app, Data& data)
+  void operator()(json& config, App& app, Data& data) override
   {
-    if (require_diagnostic(data.curstep, config) == false)
+    if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nc = data.cdims[3];
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string fn_data = format_filename(config, ".data", "load", data.curstep);
-    std::string fn_json = format_filename(config, ".json", "load", data.curstep);
+    std::string fn_data = this->format_filename(config, ".data", "load", data.curstep);
+    std::string fn_json = this->format_filename(config, ".json", "load", data.curstep);
     std::string fn_data_with_path =
-        format_filename(config, ".data", basedir, ".", "load", data.curstep);
+        this->format_filename(config, ".data", basedir, ".", "load", data.curstep);
     std::string fn_json_with_path =
-        format_filename(config, ".json", basedir, ".", "load", data.curstep);
+        this->format_filename(config, ".json", basedir, ".", "load", data.curstep);
 
     if (data.thisrank == 0) {
-      make_sure_directory_exists(fn_data_with_path);
+      this->make_sure_directory_exists(fn_data_with_path);
     }
 
-    open_file(fn_data_with_path, &disp, "w");
+    this->open_file(fn_data_with_path, &disp, "w");
 
     //
     // load
@@ -667,7 +679,7 @@ public:
       const int  size    = nc * App::ChunkType::NumLoadMode * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      launch(0, LoadPacker(), data, disp);
+      this->launch(0, LoadPacker(), data, disp);
     }
 
     //
@@ -681,11 +693,11 @@ public:
       const int  size    = nc * sizeof(int);
 
       nixio::put_metadata(dataset, name, "i4", desc, disp, size, ndim, dims);
-      launch(1, RankPacker(data.thisrank), data, disp);
+      this->launch(1, RankPacker(data.thisrank), data, disp);
     }
 
-    if (is_completed() == true) {
-      close_file();
+    if (this->is_completed() == true) {
+      this->close_file();
     }
 
     //
@@ -715,11 +727,14 @@ public:
 };
 
 ///
-/// @brief Diagnoser for field
+/// @brief Diagnostic for field
 ///
-class FieldDiagnoser : public AsynchronousDiagnoser
+template <typename App, typename Data>
+class FieldDiagnostic : public AsynchronousDiagnostic<App, Data>
 {
 protected:
+  using BaseDiagnostic<App, Data>::basedir;
+
   // data packer for electromagnetic field
   template <typename BasePacker>
   class FieldPacker : public BasePacker
@@ -727,8 +742,8 @@ protected:
   public:
     using BasePacker::pack_field;
 
-    template <typename Data>
-    size_t operator()(Data data, uint8_t* buffer, int address)
+    template <typename ChunkData>
+    size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
       return pack_field(data.uf, data, buffer, address);
     }
@@ -741,8 +756,8 @@ protected:
   public:
     using BasePacker::pack_field;
 
-    template <typename Data>
-    size_t operator()(Data data, uint8_t* buffer, int address)
+    template <typename ChunkData>
+    size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
       return pack_field(data.uj, data, buffer, address);
     }
@@ -755,8 +770,8 @@ protected:
   public:
     using BasePacker::pack_field;
 
-    template <typename Data>
-    size_t operator()(Data data, uint8_t* buffer, int address)
+    template <typename ChunkData>
+    size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
       return pack_field(data.um, data, buffer, address);
     }
@@ -764,15 +779,14 @@ protected:
 
 public:
   // constructor
-  FieldDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, "field", 3)
+  FieldDiagnostic(std::string basedir) : AsynchronousDiagnostic<App, Data>(basedir, "field", 3)
   {
   }
 
   // data packing functor
-  template <typename App, typename Data>
-  void operator()(json& config, App& app, Data& data)
+  void operator()(json& config, App& app, Data& data) override
   {
-    if (require_diagnostic(data.curstep, config) == false)
+    if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
@@ -783,18 +797,18 @@ public:
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string fn_data = format_filename(config, ".data", "field", data.curstep);
-    std::string fn_json = format_filename(config, ".json", "field", data.curstep);
+    std::string fn_data = this->format_filename(config, ".data", "field", data.curstep);
+    std::string fn_json = this->format_filename(config, ".json", "field", data.curstep);
     std::string fn_data_with_path =
-        format_filename(config, ".data", basedir, ".", "field", data.curstep);
+        this->format_filename(config, ".data", basedir, ".", "field", data.curstep);
     std::string fn_json_with_path =
-        format_filename(config, ".json", basedir, ".", "field", data.curstep);
+        this->format_filename(config, ".json", basedir, ".", "field", data.curstep);
 
     if (data.thisrank == 0) {
-      make_sure_directory_exists(fn_data_with_path);
+      this->make_sure_directory_exists(fn_data_with_path);
     }
 
-    open_file(fn_data_with_path, &disp, "w");
+    this->open_file(fn_data_with_path, &disp, "w");
 
     //
     // electromagnetic field
@@ -807,7 +821,7 @@ public:
       const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      launch(0, FieldPacker<XtensorPacker3D>(), data, disp);
+      this->launch(0, FieldPacker<XtensorPacker3D>(), data, disp);
     }
 
     //
@@ -821,7 +835,7 @@ public:
       const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
 
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      launch(1, CurrentPacker<XtensorPacker3D>(), data, disp);
+      this->launch(1, CurrentPacker<XtensorPacker3D>(), data, disp);
     }
 
     //
@@ -839,11 +853,11 @@ public:
 
       // write
       nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      launch(2, MomentPacker<XtensorPacker3D>(), data, disp);
+      this->launch(2, MomentPacker<XtensorPacker3D>(), data, disp);
     }
 
-    if (is_completed() == true) {
-      close_file();
+    if (this->is_completed() == true) {
+      this->close_file();
     }
 
     //
@@ -873,11 +887,13 @@ public:
 };
 
 ///
-/// @brief Diagnoser for particle
+/// @brief Diagnostic for particle
 ///
-class ParticleDiagnoser : public AsynchronousDiagnoser
+template <typename App, typename Data>
+class ParticleDiagnostic : public AsynchronousDiagnostic<App, Data>
 {
 protected:
+  using BaseDiagnostic<App, Data>::basedir;
   constexpr static int max_species = 10;
 
   // data packer for particle
@@ -910,8 +926,8 @@ protected:
       return index;
     }
 
-    template <typename Data>
-    size_t operator()(Data data, uint8_t* buffer, int address)
+    template <typename ChunkData>
+    size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
       if (fraction < 1.0) {
         const int N     = data.up[species]->Np;
@@ -926,15 +942,15 @@ protected:
 
 public:
   // constructor
-  ParticleDiagnoser(std::string basedir) : AsynchronousDiagnoser(basedir, "particle", max_species)
+  ParticleDiagnostic(std::string basedir)
+      : AsynchronousDiagnostic<App, Data>(basedir, "particle", max_species)
   {
   }
 
   // data packing functor
-  template <typename App, typename Data>
-  void operator()(json& config, App& app, Data& data)
+  void operator()(json& config, App& app, Data& data) override
   {
-    if (require_diagnostic(data.curstep, config) == false)
+    if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
@@ -947,18 +963,18 @@ public:
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string fn_data = format_filename(config, ".data", "particle", data.curstep);
-    std::string fn_json = format_filename(config, ".json", "particle", data.curstep);
+    std::string fn_data = this->format_filename(config, ".data", "particle", data.curstep);
+    std::string fn_json = this->format_filename(config, ".json", "particle", data.curstep);
     std::string fn_data_with_path =
-        format_filename(config, ".data", basedir, ".", "particle", data.curstep);
+        this->format_filename(config, ".data", basedir, ".", "particle", data.curstep);
     std::string fn_json_with_path =
-        format_filename(config, ".json", basedir, ".", "particle", data.curstep);
+        this->format_filename(config, ".json", basedir, ".", "particle", data.curstep);
 
     if (data.thisrank == 0) {
-      make_sure_directory_exists(fn_data_with_path);
+      this->make_sure_directory_exists(fn_data_with_path);
     }
 
-    open_file(fn_data_with_path, &disp, "w");
+    this->open_file(fn_data_with_path, &disp, "w");
 
     //
     // for each particle
@@ -968,7 +984,7 @@ public:
       size_t  disp0    = disp;
       int     seed     = data.thisrank;
       float64 fraction = config.value("fraction", 0.01);
-      launch(is, ParticlePacker<XtensorPacker3D>(is, seed, fraction), data, disp);
+      this->launch(is, ParticlePacker<XtensorPacker3D>(is, seed, fraction), data, disp);
 
       // meta data
       {
@@ -984,8 +1000,8 @@ public:
       }
     }
 
-    if (is_completed() == true) {
-      close_file();
+    if (this->is_completed() == true) {
+      this->close_file();
     }
 
     //
@@ -1017,50 +1033,33 @@ public:
 ///
 /// @brief Diagnoser
 ///
+template <typename App, typename Data>
 class Diagnoser
 {
 protected:
-  HistoryDiagnoser  history;
-  ResourceDiagnoser resource;
-  LoadDiagnoser     load;
-  FieldDiagnoser    field;
-  ParticleDiagnoser particle;
+  using PtrDiagnostic = std::unique_ptr<BaseDiagnostic<App, Data>>;
+  std::vector<PtrDiagnostic> diagnostics;
 
 public:
   Diagnoser(std::string basedir)
-      : history(basedir), resource(basedir), load(basedir), field(basedir), particle(basedir)
   {
+    diagnostics.push_back(std::make_unique<HistoryDiagnostic<App, Data>>(basedir));
+    diagnostics.push_back(std::make_unique<ResourceDiagnostic<App, Data>>(basedir));
+    diagnostics.push_back(std::make_unique<LoadDiagnostic<App, Data>>(basedir));
+    diagnostics.push_back(std::make_unique<FieldDiagnostic<App, Data>>(basedir));
+    diagnostics.push_back(std::make_unique<ParticleDiagnostic<App, Data>>(basedir));
   }
 
-  template <typename App, typename Data>
-  void doit(json& config, App& app, Data& data)
+  void diagnose(json& config, App& app, Data& data)
   {
     if (config.contains("name") == false)
       return;
 
-    if (history.match(config["name"]) == true) {
-      history(config, app, data);
-      return;
-    }
-
-    if (resource.match(config["name"]) == true) {
-      resource(config, app, data);
-      return;
-    }
-
-    if (load.match(config["name"]) == true) {
-      load(config, app, data);
-      return;
-    }
-
-    if (field.match(config["name"]) == true) {
-      field(config, app, data);
-      return;
-    }
-
-    if (particle.match(config["name"]) == true) {
-      particle(config, app, data);
-      return;
+    for (auto& diag : diagnostics) {
+      if (diag->match(config["name"])) {
+        (*diag)(config, app, data);
+        break;
+      }
     }
   }
 };
