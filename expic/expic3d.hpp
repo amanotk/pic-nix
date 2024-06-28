@@ -7,6 +7,8 @@
 #include "nix/application.hpp"
 #include "nix/chunkmap.hpp"
 
+#include <taskflow/taskflow.hpp>
+
 using namespace nix::typedefs;
 using nix::json;
 using nix::Balancer;
@@ -78,11 +80,56 @@ public:
 
   virtual bool from_json(json& state) override;
 
-  virtual void push() override;
-
   virtual void diagnostic() override;
 
-  virtual void calculate_moment();
+  virtual void push_taskflow();
+
+  virtual void calculate_moment_taskflow();
+
+  virtual void push_openmp();
+
+  virtual void calculate_moment_openmp();
+
+  virtual void push() override
+  {
+    DEBUG2 << "push() start";
+    float64 wclock1 = nix::wall_clock();
+
+    auto option = cfgparser->get_application()["option"];
+
+    if (option.contains("thread") == false || option["thread"] == "openmp") {
+      DEBUG2 << "push_openmp() start";
+      push_openmp();
+      DEBUG2 << "push_openmp() end";
+    } else if (option["thread"] == "taskflow") {
+      DEBUG2 << "push_taskflow() start";
+      push_taskflow();
+      DEBUG2 << "push_taskflow() end";
+    }
+
+    DEBUG2 << "push() end";
+    float64 wclock2 = nix::wall_clock();
+
+    json log = {{"elapsed", wclock2 - wclock1}};
+    logger->append(curstep, "push", log);
+  }
+
+  virtual void calculate_moment()
+  {
+    if (curstep == momstep)
+      return;
+
+    auto option = cfgparser->get_application()["option"];
+
+    if (option.contains("thread") == false || option["thread"] == "openmp") {
+      calculate_moment_openmp();
+    } else if (option["thread"] == "taskflow") {
+      calculate_moment_taskflow();
+    }
+
+    // cache
+    momstep = curstep;
+  }
 
   int get_Ns()
   {
@@ -214,11 +261,141 @@ DEFINE_MEMBER(void, finalize)()
   BaseApp::finalize();
 }
 
-DEFINE_MEMBER(void, push)()
+DEFINE_MEMBER(void, diagnostic)()
 {
-  DEBUG2 << "push() start";
+  DEBUG2 << "diagnostic() start";
   float64 wclock1 = nix::wall_clock();
 
+  json config = cfgparser->get_diagnostic();
+  auto data   = this->get_internal_data();
+
+  for (json::iterator it = config.begin(); it != config.end(); ++it) {
+    diagnoser->diagnose(*it, *this, data);
+  }
+
+  DEBUG2 << "diagnostic() end";
+  float64 wclock2 = nix::wall_clock();
+
+  json log = {{"elapsed", wclock2 - wclock1}};
+  logger->append(curstep, "diagnostic", log);
+}
+
+DEFINE_MEMBER(void, push_taskflow)()
+{
+  const float64 delt = cfgparser->get_delt();
+
+  tf::Executor executor(nix::get_max_threads());
+  tf::Taskflow taskflow;
+
+  auto push1 = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto local = subflow.emplace([&]() {
+        chunk->reset_load();
+        chunk->push_bfd(0.5 * delt);
+        chunk->push_velocity(delt);
+        chunk->push_position(delt);
+        chunk->deposit_current(delt);
+        chunk->set_boundary_begin(Chunk::BoundaryCur);
+        chunk->set_boundary_begin(Chunk::BoundaryParticle);
+        chunk->push_bfd(0.5 * delt);
+      });
+    }
+  });
+
+  auto push2 = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto local = subflow.emplace([&]() {
+        chunk->push_efd(delt);
+        chunk->set_boundary_begin(Chunk::BoundaryEmf);
+      });
+    }
+  });
+
+  auto particle_bc_probe = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto start = subflow.emplace([&]() {});
+      auto probe = subflow.emplace(
+          [&]() { return chunk->set_boundary_probe(Chunk::BoundaryParticle, false) == true; });
+      auto end = subflow.emplace([&]() {});
+
+      start.precede(probe);
+      probe.precede(probe, end);
+    }
+  });
+
+  auto particle_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto start = subflow.emplace([&]() {});
+      auto query = subflow.emplace(
+          [&]() { return chunk->set_boundary_query(Chunk::BoundaryParticle, 0) == true; });
+      auto end = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryParticle); });
+
+      start.precede(query);
+      query.precede(query, end);
+    }
+  });
+
+  auto cur_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto start = subflow.emplace([&]() {});
+      auto query = subflow.emplace(
+          [&]() { return chunk->set_boundary_query(Chunk::BoundaryCur, 0) == true; });
+      auto end = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryCur); });
+
+      start.precede(query);
+      query.precede(query, end);
+    }
+  });
+
+  auto emf_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto start = subflow.emplace([&]() {});
+      auto query = subflow.emplace(
+          [&]() { return chunk->set_boundary_query(Chunk::BoundaryEmf, 0) == true; });
+      auto end = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryEmf); });
+
+      start.precede(query);
+      query.precede(query, end);
+    }
+  });
+
+  // dependency
+  push1.precede(cur_bc_end);
+  push1.precede(particle_bc_probe);
+  push2.succeed(cur_bc_end);
+  push2.precede(emf_bc_end);
+  particle_bc_probe.precede(particle_bc_end);
+
+  executor.run(taskflow).wait();
+}
+
+DEFINE_MEMBER(void, calculate_moment_taskflow)()
+{
+  tf::Executor executor(nix::get_max_threads());
+  tf::Taskflow taskflow;
+
+  auto deposit = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto local = subflow.emplace([&]() { chunk->deposit_moment(); });
+      auto begin = subflow.emplace([&]() { chunk->set_boundary_begin(Chunk::BoundaryMom); });
+
+      local.precede(begin);
+    }
+  });
+
+  auto bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
+    for (auto& chunk : chunkvec) {
+      auto local = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryMom); });
+    }
+  });
+
+  deposit.precede(bc_end);
+
+  executor.run(taskflow).wait();
+}
+
+DEFINE_MEMBER(void, push_openmp)()
+{
 #pragma omp parallel
   {
     const float64 delt = cfgparser->get_delt();
@@ -274,38 +451,10 @@ DEFINE_MEMBER(void, push)()
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
     }
   }
-
-  DEBUG2 << "push() end";
-  float64 wclock2 = nix::wall_clock();
-
-  json log = {{"elapsed", wclock2 - wclock1}};
-  logger->append(curstep, "push", log);
 }
 
-DEFINE_MEMBER(void, diagnostic)()
+DEFINE_MEMBER(void, calculate_moment_openmp)()
 {
-  DEBUG2 << "diagnostic() start";
-  float64 wclock1 = nix::wall_clock();
-
-  json config = cfgparser->get_diagnostic();
-  auto data   = this->get_internal_data();
-
-  for (json::iterator it = config.begin(); it != config.end(); ++it) {
-    diagnoser->diagnose(*it, *this, data);
-  }
-
-  DEBUG2 << "diagnostic() end";
-  float64 wclock2 = nix::wall_clock();
-
-  json log = {{"elapsed", wclock2 - wclock1}};
-  logger->append(curstep, "diagnostic", log);
-}
-
-DEFINE_MEMBER(void, calculate_moment)()
-{
-  if (curstep == momstep)
-    return;
-
 #pragma parallel
   {
 #pragma omp for schedule(dynamic)
@@ -319,9 +468,6 @@ DEFINE_MEMBER(void, calculate_moment)()
       chunkvec[i]->set_boundary_end(Chunk::BoundaryMom);
     }
   }
-
-  // cache
-  momstep = curstep;
 }
 
 #undef DEFINE_MEMBER
