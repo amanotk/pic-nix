@@ -432,6 +432,68 @@ DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
   return true;
 }
 
+DEFINE_MEMBER(void, set_boundary_pack)(int mode)
+{
+  switch (mode) {
+  case BoundaryEmf: {
+    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
+    this->pack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryCur: {
+    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
+    this->pack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryMom: {
+    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
+    this->pack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryParticle: {
+    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
+    this->inject_particle(up);
+    this->pack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  default:
+    ERROR << tfm::format("No such boundary mode exists!");
+    break;
+  }
+}
+
+DEFINE_MEMBER(void, set_boundary_unpack)(int mode)
+{
+  switch (mode) {
+  case BoundaryEmf: {
+    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
+    this->unpack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryCur: {
+    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
+    this->unpack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryMom: {
+    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
+    this->unpack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryParticle: {
+    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
+    this->unpack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  default:
+    ERROR << tfm::format("No such boundary mode exists!");
+    break;
+  }
+
+  // physical boundary for field
+  this->set_boundary_field(mode);
+}
+
 DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
   switch (mode) {
@@ -452,7 +514,6 @@ DEFINE_MEMBER(void, set_boundary_begin)(int mode)
   }
   case BoundaryParticle: {
     auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
-    this->inject_particle(up);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
@@ -489,9 +550,6 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
     ERROR << tfm::format("No such boundary mode exists!");
     break;
   }
-
-  // physical boundary for field
-  this->set_boundary_field(mode);
 }
 
 DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)

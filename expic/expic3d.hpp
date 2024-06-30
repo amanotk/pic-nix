@@ -197,12 +197,14 @@ DEFINE_MEMBER(void, setup_chunks)()
   {
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
+      chunkvec[i]->set_boundary_pack(Chunk::BoundaryEmf);
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
+      chunkvec[i]->set_boundary_unpack(Chunk::BoundaryEmf);
     }
   }
 }
@@ -287,27 +289,56 @@ DEFINE_MEMBER(void, push_taskflow)()
   tf::Executor executor(nix::get_max_threads());
   tf::Taskflow taskflow;
 
+  // critical section if MPI_THREAD_MULTIPLE is not supported
+  tf::CriticalSection critical_section;
+
   auto push1 = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
-      auto local = subflow.emplace([&]() {
+      auto task = subflow.emplace([&]() {
         chunk->reset_load();
         chunk->push_bfd(0.5 * delt);
         chunk->push_velocity(delt);
         chunk->push_position(delt);
         chunk->deposit_current(delt);
-        chunk->set_boundary_begin(Chunk::BoundaryCur);
-        chunk->set_boundary_begin(Chunk::BoundaryParticle);
+
+        // packing for boundary exchange
+        chunk->set_boundary_pack(Chunk::BoundaryCur);
+        chunk->set_boundary_pack(Chunk::BoundaryParticle);
+
         chunk->push_bfd(0.5 * delt);
       });
+
+      // boundary exchange
+      auto bc_begin = subflow.emplace([&]() {
+        chunk->set_boundary_begin(Chunk::BoundaryCur);
+        chunk->set_boundary_begin(Chunk::BoundaryParticle);
+      });
+
+      // dependency
+      task.precede(bc_begin);
+
+      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
+        critical_section.add(bc_begin);
+      }
     }
   });
 
   auto push2 = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
-      auto local = subflow.emplace([&]() {
+      auto task = subflow.emplace([&]() {
         chunk->push_efd(delt);
-        chunk->set_boundary_begin(Chunk::BoundaryEmf);
+        chunk->set_boundary_pack(Chunk::BoundaryEmf);
       });
+
+      // boundary exchange
+      auto bc_begin = subflow.emplace([&]() { chunk->set_boundary_begin(Chunk::BoundaryEmf); });
+
+      // dependency
+      task.precede(bc_begin);
+
+      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
+        critical_section.add(bc_begin);
+      }
     }
   });
 
@@ -315,47 +346,76 @@ DEFINE_MEMBER(void, push_taskflow)()
     for (auto& chunk : chunkvec) {
       auto start = subflow.emplace([&]() {});
       auto probe = subflow.emplace(
-          [&]() { return chunk->set_boundary_probe(Chunk::BoundaryParticle, false) == true; });
+          [&]() { return chunk->set_boundary_probe(Chunk::BoundaryParticle, false); });
       auto end = subflow.emplace([&]() {});
 
+      // dependency
       start.precede(probe);
       probe.precede(probe, end);
+
+      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
+        critical_section.add(probe);
+      }
     }
   });
 
   auto particle_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
       auto start = subflow.emplace([&]() {});
-      auto query = subflow.emplace(
-          [&]() { return chunk->set_boundary_query(Chunk::BoundaryParticle, 0) == true; });
-      auto end = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryParticle); });
+      auto query =
+          subflow.emplace([&]() { return chunk->set_boundary_query(Chunk::BoundaryParticle, 0); });
+      auto end    = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryParticle); });
+      auto unpack = subflow.emplace([&]() { chunk->set_boundary_unpack(Chunk::BoundaryParticle); });
 
+      // dependency
       start.precede(query);
       query.precede(query, end);
+      end.precede(unpack);
+
+      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
+        critical_section.add(query);
+        critical_section.add(end);
+      }
     }
   });
 
   auto cur_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
       auto start = subflow.emplace([&]() {});
-      auto query = subflow.emplace(
-          [&]() { return chunk->set_boundary_query(Chunk::BoundaryCur, 0) == true; });
-      auto end = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryCur); });
+      auto query =
+          subflow.emplace([&]() { return chunk->set_boundary_query(Chunk::BoundaryCur, 0); });
+      auto end    = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryCur); });
+      auto unpack = subflow.emplace([&]() { chunk->set_boundary_unpack(Chunk::BoundaryCur); });
 
+      // dependency
       start.precede(query);
       query.precede(query, end);
+      end.precede(unpack);
+
+      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
+        critical_section.add(query);
+        critical_section.add(end);
+      }
     }
   });
 
   auto emf_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
       auto start = subflow.emplace([&]() {});
-      auto query = subflow.emplace(
-          [&]() { return chunk->set_boundary_query(Chunk::BoundaryEmf, 0) == true; });
-      auto end = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryEmf); });
+      auto query =
+          subflow.emplace([&]() { return chunk->set_boundary_query(Chunk::BoundaryEmf, 0); });
+      auto end    = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryEmf); });
+      auto unpack = subflow.emplace([&]() { chunk->set_boundary_unpack(Chunk::BoundaryEmf); });
 
+      // dependency
       start.precede(query);
       query.precede(query, end);
+      end.precede(unpack);
+
+      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
+        critical_section.add(query);
+        critical_section.add(end);
+      }
     }
   });
 
@@ -377,7 +437,10 @@ DEFINE_MEMBER(void, calculate_moment_taskflow)()
   auto deposit = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
       auto local = subflow.emplace([&]() { chunk->deposit_moment(); });
-      auto begin = subflow.emplace([&]() { chunk->set_boundary_begin(Chunk::BoundaryMom); });
+      auto begin = subflow.emplace([&]() {
+        chunk->set_boundary_pack(Chunk::BoundaryMom);
+        chunk->set_boundary_begin(Chunk::BoundaryMom);
+      });
 
       local.precede(begin);
     }
@@ -385,7 +448,10 @@ DEFINE_MEMBER(void, calculate_moment_taskflow)()
 
   auto bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
     for (auto& chunk : chunkvec) {
-      auto local = subflow.emplace([&]() { chunk->set_boundary_end(Chunk::BoundaryMom); });
+      auto local = subflow.emplace([&]() {
+        chunk->set_boundary_end(Chunk::BoundaryMom);
+        chunk->set_boundary_unpack(Chunk::BoundaryMom);
+      });
     }
   });
 
@@ -416,9 +482,11 @@ DEFINE_MEMBER(void, push_openmp)()
       chunkvec[i]->deposit_current(delt);
 
       // begin boundary exchange for current
+      chunkvec[i]->set_boundary_pack(Chunk::BoundaryCur);
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryCur);
 
       // begin boundary exchange for particle
+      chunkvec[i]->set_boundary_pack(Chunk::BoundaryParticle);
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryParticle);
 
       // push B for a half step
@@ -428,11 +496,13 @@ DEFINE_MEMBER(void, push_openmp)()
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryCur);
+      chunkvec[i]->set_boundary_unpack(Chunk::BoundaryCur);
 
       // push E
       chunkvec[i]->push_efd(delt);
 
       // begin boundary exchange for field
+      chunkvec[i]->set_boundary_pack(Chunk::BoundaryEmf);
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryEmf);
     }
 
@@ -444,11 +514,13 @@ DEFINE_MEMBER(void, push_openmp)()
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryParticle);
+      chunkvec[i]->set_boundary_unpack(Chunk::BoundaryParticle);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryEmf);
+      chunkvec[i]->set_boundary_unpack(Chunk::BoundaryEmf);
     }
   }
 }
@@ -460,12 +532,14 @@ DEFINE_MEMBER(void, calculate_moment_openmp)()
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->deposit_moment();
+      chunkvec[i]->set_boundary_pack(Chunk::BoundaryMom);
       chunkvec[i]->set_boundary_begin(Chunk::BoundaryMom);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       chunkvec[i]->set_boundary_end(Chunk::BoundaryMom);
+      chunkvec[i]->set_boundary_unpack(Chunk::BoundaryMom);
     }
   }
 }
