@@ -91,6 +91,9 @@ public:
     float64 Ey0   = +(-u0) * Bz0 / (gamma * cc);
     float64 Ez0   = -(-u0) * By0 / (gamma * cc);
 
+    // particle ID
+    int64 lastid = 0;
+
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
 
@@ -148,11 +151,20 @@ public:
       std::vector<MJ> mj = {MJ(vte * vte, 0.0), MJ(vti * vti, 0.0)};
 
       {
-        int   nz = dims[0] + 2 * Nb;
-        int   ny = dims[1] + 2 * Nb;
-        int   nx = dims[2] + 2 * Nb;
-        int   mp = nppc * dims[0] * dims[1] * dims[2];
-        int64 id = static_cast<int64>(mp) * static_cast<int64>(this->myid);
+        int nz = dims[0] + 2 * Nb;
+        int ny = dims[1] + 2 * Nb;
+        int nx = dims[2] + 2 * Nb;
+        int mp = nppc * dims[0] * dims[1] * dims[2];
+
+        // determine particle ID offset
+        int   cz    = gdims[0] / dims[0];
+        int   cy    = gdims[1] / dims[1];
+        int   cx    = gdims[2] / dims[2];
+        int64 maxid = std::numeric_limits<int64_t>::max() / (cy * cz);
+        int64 ciz   = static_cast<int64>(offset[0] / dims[0]);
+        int64 ciy   = static_cast<int64>(offset[1] / dims[1]);
+        int64 cix   = static_cast<int64>(offset[2] / dims[2]);
+        lastid      = (ciy + ciz * cy) * maxid + cix * mp;
 
         up.resize(Ns);
 
@@ -188,11 +200,16 @@ public:
                   up[is]->xu(ip, 3) = ux;
                   up[is]->xu(ip, 4) = uy;
                   up[is]->xu(ip, 5) = uz;
+
+                  // set particle ID
+                  int64 id64 = lastid + ip;
+                  std::memcpy(&up[is]->xu(ip, 6), &id64, sizeof(int64));
                 }
               }
             }
           }
         }
+        lastid += mp;
 
         // initial sort
         this->sort_particle(up);
@@ -212,7 +229,8 @@ public:
                           {"By0", By0},
                           {"Bz0", Bz0},
                           {"influx", std::array<int, 2>{0, 0}},
-                          {"efflux", std::array<int, 2>{0, 0}}};
+                          {"efflux", std::array<int, 2>{0, 0}},
+                          {"lastid", lastid}};
   }
 
   void get_diverror(float64& efd, float64& bfd) override
@@ -481,19 +499,21 @@ public:
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
       const float64 target = 1 + this->get_buffer_ratio();
 
-      float64 rc   = 1.0 / cc;
-      int     nppc = option["boundary"]["nppc"].get<int>();
-      float64 delt = option["boundary"]["delt"].get<float64>();
-      float64 u0   = option["boundary"]["u0"].get<float64>();
-      float64 vte  = option["boundary"]["vte"].get<float64>();
-      float64 vti  = option["boundary"]["vti"].get<float64>();
-      float64 flux = nppc * std::abs(u0) / sqrt(1 + u0 * u0 * rc * rc) * delt / delx;
+      float64 rc     = 1.0 / cc;
+      int64   lastid = option["boundary"]["lastid"].get<int64>();
+      int     nppc   = option["boundary"]["nppc"].get<int>();
+      float64 delt   = option["boundary"]["delt"].get<float64>();
+      float64 u0     = option["boundary"]["u0"].get<float64>();
+      float64 vte    = option["boundary"]["vte"].get<float64>();
+      float64 vti    = option["boundary"]["vti"].get<float64>();
+      float64 flux   = nppc * std::abs(u0) / sqrt(1 + u0 * u0 * rc * rc) * delt / delx;
 
       // number of injection particles
       size_t              nz           = dims[0] + 2 * Nb;
       size_t              ny           = dims[1] + 2 * Nb;
       int                 np_inj_total = 0;
       xt::xtensor<int, 2> np_inj({nz, ny});
+      std::vector<int64>  id64(Ns, lastid);
 
       // reset random number generator
       reset_random_number();
@@ -535,6 +555,10 @@ public:
               particle[is]->xu(ip, 3) = ux;
               particle[is]->xu(ip, 4) = uy;
               particle[is]->xu(ip, 5) = uz;
+
+              // set particle ID
+              std::memcpy(&particle[is]->xu(ip, 6), &id64[is], sizeof(int64));
+              id64[is]++;
             }
 
             this->count_particle(particle[is], np_prev, np_next - 1, false);
@@ -542,6 +566,7 @@ public:
           }
         }
       }
+      option["boundary"]["lastid"] = lastid + np_inj_total;
 
       for (int is = 0; is < Ns; is++) {
         option["boundary"]["influx"][is] = np_inj_total;
