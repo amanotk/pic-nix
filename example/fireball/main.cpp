@@ -252,9 +252,9 @@ public:
     float64 dx          = cfgparser->get_delx();
     float64 dy          = cfgparser->get_dely();
     float64 dz          = cfgparser->get_delz();
-    float64 x0          = 0.5 * dx * dims[2];
-    float64 y0          = 0.5 * dy * dims[1];
-    float64 z0          = 0.5 * dz * dims[0];
+    float64 x0          = 0.5 * dx * ndims[2];
+    float64 y0          = 0.5 * dy * ndims[1];
+    float64 z0          = 0.5 * dz * ndims[0];
 
     for (int i = 0; i < nchunk_global; i++) {
       int cx, cy, cz;
