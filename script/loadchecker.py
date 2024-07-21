@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import sys
-import pathlib
-
 import numpy as np
 import matplotlib as mpl
 
@@ -14,11 +10,11 @@ from matplotlib import pyplot as plt
 # global configuration
 plt.rcParams.update({"font.size": 12})
 
-import analysis
+import picnix
 
 
 def doit_job(profile, prefix):
-    run = analysis.Run(profile)
+    run = picnix.Run(profile)
 
     fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     fig.subplots_adjust(
@@ -29,7 +25,7 @@ def doit_job(profile, prefix):
         hspace=0.10,
         wspace=0.10,
     )
-    status = analysis.plot_loadbalance(run, axs)
+    status = picnix.plot_loadbalance(run, axs)
 
     if status == True:
         fig.savefig(prefix + ".png", dpi=120)

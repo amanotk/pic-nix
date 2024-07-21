@@ -16,10 +16,10 @@ plt.rcParams.update({"font.size": 12})
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
-import analysis
+import picnix
 
 
-class Run(analysis.Run):
+class Run(picnix.Run):
     def __init__(self, profile, boundary=True):
         super().__init__(profile)
         self.plot_chunk_boundary = boundary
@@ -91,7 +91,7 @@ class Run(analysis.Run):
             axs[1].set_ylim(ylim1)
 
         ## electron phase space
-        fvxe = analysis.Histogram2D(up[0][:, 0], up[0][:, 3], binx[0], biny[0])
+        fvxe = picnix.Histogram2D(up[0][:, 0], up[0][:, 3], binx[0], biny[0])
         Xe, Ye, Ze = fvxe.pcolormesh_args()
         plt.sca(axs[2])
         plt.pcolormesh(Xe, Ye, Ze, shading="nearest")
@@ -102,7 +102,7 @@ class Run(analysis.Run):
         plt.colorbar(cax=cax, format=fmt, label=r"$f_e(x, v_x)$")
 
         ## ion phase space
-        fvxi = analysis.Histogram2D(up[1][:, 0], up[1][:, 3], binx[2], biny[2])
+        fvxi = picnix.Histogram2D(up[1][:, 0], up[1][:, 3], binx[2], biny[2])
         Xi, Yi, Zi = fvxi.pcolormesh_args()
         plt.sca(axs[3])
         plt.pcolormesh(Xi, Yi, Zi, shading="nearest")
@@ -123,7 +123,7 @@ class Run(analysis.Run):
             rank = self.get_chunk_rank(step)
             cdelx = self.delh * (self.Nx // self.Cx)
             for i in range(4):
-                analysis.plot_chunk_dist1d(axs[i], coord, rank, cdelx, colors="gray")
+                picnix.plot_chunk_dist1d(axs[i], coord, rank, cdelx, colors="gray")
 
         fig.suptitle(r"$t = {:6.2f}$".format(tt))
 
@@ -164,7 +164,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
         plt.close(fig)
 
     # convert to mp4
-    analysis.convert_to_mp4("{:s}".format(prefix), fps, cleanup)
+    picnix.convert_to_mp4("{:s}".format(prefix), fps, cleanup)
 
 
 if __name__ == "__main__":

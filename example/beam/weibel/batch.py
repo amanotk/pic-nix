@@ -16,10 +16,10 @@ plt.rcParams.update({"font.size": 12})
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
-import analysis
+import picnix
 
 
-class Run(analysis.Run):
+class Run(picnix.Run):
     def __init__(self, profile, boundary=True):
         super().__init__(profile)
         self.plot_chunk_boundary = boundary
@@ -101,7 +101,9 @@ class Run(analysis.Run):
             cdelx = self.delh * self.Nx // self.Cx
             cdely = self.delh * self.Ny // self.Cy
             for i in range(3):
-                analysis.plot_chunk_dist2d(axs[i], coord, rank, cdelx, cdely, colors="white")
+                picnix.plot_chunk_dist2d(
+                    axs[i], coord, rank, cdelx, cdely, colors="white"
+                )
 
         fig.suptitle(r"$\omega_{{pe}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
 
@@ -118,7 +120,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
         plt.close(fig)
 
     # convert to mp4
-    analysis.convert_to_mp4("{:s}".format(prefix), fps, cleanup)
+    picnix.convert_to_mp4("{:s}".format(prefix), fps, cleanup)
 
 
 if __name__ == "__main__":

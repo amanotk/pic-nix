@@ -16,10 +16,10 @@ plt.rcParams.update({"font.size": 12})
 
 if "PICNIX_DIR" in os.environ:
     sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
-import analysis
+import picnix
 
 
-class Run(analysis.Run):
+class Run(picnix.Run):
     def __init__(self, profile, boundary=True):
         super().__init__(profile)
         self.plot_chunk_boundary = boundary
@@ -35,7 +35,7 @@ class Run(analysis.Run):
         um = data["um"]
         iy = self.Ny // 2
 
-        return 0.5 * np.sum(np.abs(uf[:,iy,:,4]) * delh) / (b0 * self.Nz)
+        return 0.5 * np.sum(np.abs(uf[:, iy, :, 4]) * delh) / (b0 * self.Nz)
 
     def plot_reconnected_flux(self, time, flux, filename):
         fig = plt.figure(1, figsize=(8, 6), dpi=120)
@@ -58,7 +58,7 @@ class Run(analysis.Run):
         wci = wce / mi
         vae = wce / wpe
         vai = wci / wpi
-        b0  = wce / wpe
+        b0 = wce / wpe
         ncs = parameter["ncs"]
         nbg = parameter["nbg"]
         T = 1 / wci
@@ -83,7 +83,9 @@ class Run(analysis.Run):
             hspace=0.10,
             wspace=0.25,
         )
-        gridspec = fig.add_gridspec(3, 5, height_ratios=[50, 5, 50], width_ratios=[50, 2, 10, 50, 2])
+        gridspec = fig.add_gridspec(
+            3, 5, height_ratios=[50, 5, 50], width_ratios=[50, 2, 10, 50, 2]
+        )
         axs = [0] * 4
         cxs = [0] * 4
         # main axes
@@ -109,7 +111,8 @@ class Run(analysis.Run):
 
         # normalization and smoothiing
         from scipy import signal
-        win = np.hanning(3)[:,None] * np.hanning(3)[None,:]
+
+        win = np.hanning(3)[:, None] * np.hanning(3)[None, :]
         roe = signal.convolve2d(roe, win, mode="same", boundary="wrap") / me
         roi = signal.convolve2d(roi, win, mode="same", boundary="wrap") / mi
         vex = signal.convolve2d(vex, win, mode="same", boundary="wrap") / vai
@@ -118,8 +121,8 @@ class Run(analysis.Run):
 
         data = [roe, bz, vex, vix]
         name = [r"$n_e$", r"$B_z/B_0$", r"$V_{e,x}/V_{A,i}$", r"$V_{i,x}/V_{A,i}$"]
-        vmin = [- 0.9*np.max(np.abs(v[+10:-10,:])) for v in data]
-        vmax = [+ 0.9*np.max(np.abs(v[+10:-10,:])) for v in data]
+        vmin = [-0.9 * np.max(np.abs(v[+10:-10, :])) for v in data]
+        vmax = [+0.9 * np.max(np.abs(v[+10:-10, :])) for v in data]
         vmin[0] = 0.0
 
         for i in range(4):
@@ -152,7 +155,9 @@ class Run(analysis.Run):
             rank = self.get_chunk_rank(step)
             cdelx = self.delh * self.Nx / self.Cx / L
             cdely = self.delh * self.Ny / self.Cy / L
-            analysis.plot_chunk_dist2d(axs[0], coord, rank, cdelx, cdely, colors="white", width=0.5)
+            picnix.plot_chunk_dist2d(
+                axs[0], coord, rank, cdelx, cdely, colors="white", width=0.5
+            )
 
         # title
         fig.suptitle(r"$\Omega_{{ci}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
@@ -164,7 +169,7 @@ def doit_job(profile, prefix, fps, cleanup):
     run = Run(profile)
 
     mime = run.config["parameter"]["mime"]
-    wce  = np.sqrt(run.config["parameter"]["sigma"])
+    wce = np.sqrt(run.config["parameter"]["sigma"])
     time = run.time_field * wce / mime
     flux = np.zeros((len(time),))
 
@@ -179,7 +184,7 @@ def doit_job(profile, prefix, fps, cleanup):
     run.plot_reconnected_flux(time, flux, "recflux.png")
 
     # convert to mp4
-    analysis.convert_to_mp4("{:s}".format(prefix), fps, cleanup)
+    picnix.convert_to_mp4("{:s}".format(prefix), fps, cleanup)
 
 
 if __name__ == "__main__":
