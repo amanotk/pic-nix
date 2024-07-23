@@ -16,8 +16,7 @@ template <typename App, typename Data>
 class ParticleDiag : public AsyncDiag<App, Data>
 {
 protected:
-  using BaseDiag<App, Data>::basedir;
-  constexpr static int max_species = 10;
+  using BaseDiag<App, Data>::info;
 
   // data packer for particle
   template <typename BasePacker>
@@ -65,8 +64,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(std::string basedir)
-      : AsyncDiag<App, Data>(basedir, "particle", max_species)
+  ParticleDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("particle", info)
   {
   }
 
@@ -82,22 +80,17 @@ public:
     const int nc = data.cdims[3];
     const int Ns = app.get_Ns();
 
-    assert(Ns <= max_species);
+    this->set_queue_size(Ns);
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string fn_data = this->format_filename(config, ".data", "particle", data.curstep);
-    std::string fn_json = this->format_filename(config, ".json", "particle", data.curstep);
-    std::string fn_data_with_path =
-        this->format_filename(config, ".data", basedir, ".", "particle", data.curstep);
-    std::string fn_json_with_path =
-        this->format_filename(config, ".json", basedir, ".", "particle", data.curstep);
+    std::string prefix  = this->get_prefix(config, "particle");
+    std::string dirname = this->format_dirname(prefix);
+    std::string fn_data = this->format_filename("", ".data", data.curstep);
+    std::string fn_json = this->format_filename("", ".json", data.curstep);
 
-    if (data.thisrank == 0) {
-      this->make_sure_directory_exists(fn_data_with_path);
-    }
-
-    this->open_file(fn_data_with_path, &disp, "w");
+    this->make_sure_directory_exists(dirname + fn_data);
+    this->open_file(dirname + fn_data, &disp, "w");
 
     //
     // for each particle
@@ -143,7 +136,7 @@ public:
       root["dataset"] = dataset;
 
       if (data.thisrank == 0) {
-        std::ofstream ofs(fn_json_with_path);
+        std::ofstream ofs(dirname + fn_json);
         ofs << std::setw(2) << root;
         ofs.close();
       }

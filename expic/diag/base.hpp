@@ -9,21 +9,61 @@
 #include "nix/random.hpp"
 #include "nix/xtensor_packer3d.hpp"
 
+#include "mpi.h"
+
 using namespace nix::typedefs;
 using nix::json;
 using nix::Buffer;
 using nix::XtensorPacker3D;
 
+class DiagInfo
+{
+public:
+  MPI_Comm    intra_comm;
+  MPI_Comm    inter_comm;
+  int         world_rank;
+  int         world_size;
+  int         intra_size;
+  int         inter_size;
+  int         intra_rank;
+  int         inter_rank;
+  std::string basedir;
+  std::string iomode;
+
+  DiagInfo(std::string basedir, std::string iomode) : basedir(basedir), iomode(iomode)
+  {
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+    // intra-node communicator
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, world_rank, MPI_INFO_NULL,
+                        &intra_comm);
+    MPI_Comm_size(intra_comm, &intra_size);
+    MPI_Comm_rank(intra_comm, &intra_rank);
+
+    // inter-node communicator
+    MPI_Comm_split(MPI_COMM_WORLD, intra_rank != 0, world_rank, &inter_comm);
+    MPI_Comm_size(inter_comm, &inter_size);
+    MPI_Comm_rank(inter_comm, &inter_rank);
+  }
+
+  ~DiagInfo()
+  {
+    MPI_Comm_free(&intra_comm);
+    MPI_Comm_free(&inter_comm);
+  }
+};
+
 template <typename App, typename Data>
 class BaseDiag
 {
 protected:
-  std::string name;
-  std::string basedir;
+  std::string               name;
+  std::shared_ptr<DiagInfo> info;
 
 public:
   // constructor
-  BaseDiag(std::string basedir, std::string name) : basedir(basedir), name(name)
+  BaseDiag(std::string name, std::shared_ptr<DiagInfo> info) : name(name), info(info)
   {
   }
 
@@ -61,50 +101,55 @@ public:
   {
     namespace fs = std::filesystem;
 
-    fs::path filepath(path);
-    fs::path dirpath = filepath.parent_path();
+    bool is_check_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
+    bool is_check_required_posix = info->iomode == "posix";
 
-    if (fs::exists(dirpath) == true) {
-      return true;
+    if (is_check_required_mpiio || is_check_required_posix) {
+      fs::path filepath(path);
+      fs::path dirpath = filepath.parent_path();
+
+      if (fs::exists(dirpath) == true) {
+        return true;
+      }
+
+      if (fs::create_directory(dirpath) == true) {
+        return true;
+      }
+
+      ERROR << tfm::format("Failed to create directory: %s", path);
+
+      return false;
     }
 
-    if (fs::create_directory(dirpath) == true) {
-      return true;
-    }
-
-    ERROR << tfm::format("Failed to create directory: %s", path);
-
-    return false;
+    return true;
   }
 
-  // return formatted filename without directory
-  std::string format_filename(json& config, std::string ext, std::string prefix, int step = -1)
+  std::string get_prefix(json& config, std::string prefix)
+  {
+    return config.value("prefix", prefix);
+  }
+
+  std::string format_dirname(std::string prefix)
   {
     namespace fs = std::filesystem;
 
-    prefix = config.value("prefix", prefix);
+    std::string basedir = info->basedir;
 
-    if (step >= 0) {
-      prefix = tfm::format("%s_%s", prefix, nix::format_step(step));
+    fs::path dirname = fs::path(basedir) / fs::path(prefix) / "";
+
+    if (info->iomode == "mpiio") {
+      return dirname.string();
+    } else if (info->iomode == "posix") {
+      return dirname.string();
+    } else {
+      ERROR << tfm::format("Unknown I/O mode: %s", info->iomode);
+      return "";
     }
-
-    return prefix + ext;
   }
 
-  // return formatted filename
-  std::string format_filename(json& config, std::string ext, std::string basedir, std::string path,
-                              std::string prefix, int step = -1)
+  std::string format_filename(std::string prefix, std::string ext, int step)
   {
-    namespace fs = std::filesystem;
-
-    path   = config.value("path", path);
-    prefix = config.value("prefix", prefix);
-
-    if (step >= 0) {
-      prefix = tfm::format("%s_%s", prefix, nix::format_step(step));
-    }
-
-    return (fs::path(basedir) / path / prefix).string() + ext;
+    return prefix + nix::format_step(step) + ext;
   }
 
   // calculate percentile assuming pre-sorted data

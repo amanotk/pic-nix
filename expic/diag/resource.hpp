@@ -11,7 +11,7 @@ template <typename App, typename Data>
 class ResourceDiag : public BaseDiag<App, Data>
 {
 protected:
-  using BaseDiag<App, Data>::basedir;
+  using BaseDiag<App, Data>::info;
 
   // calculate statistics
   template <typename T>
@@ -34,7 +34,7 @@ protected:
 
 public:
   // constructor
-  ResourceDiag(std::string basedir) : BaseDiag<App, Data>(basedir, "resource")
+  ResourceDiag(std::shared_ptr<DiagInfo> info) : BaseDiag<App, Data>("resource", info)
   {
   }
 
@@ -74,84 +74,66 @@ public:
     MPI_Reduce(&local_load, &total_load, 1, MPI_FLOAT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
 
     //
-    // resource usage
+    // resource usage for each node
     //
-    {
-      MPI_Comm node_comm;
-      MPI_Comm internode_comm;
-      int      node_rank;
-      int      node_color;
-      int      internode_size;
-      MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, data.thisrank, MPI_INFO_NULL,
-                          &node_comm);
-      MPI_Comm_rank(node_comm, &node_rank);
+    if (config.contains("node") == true) {
+      // chunk
+      {
+        int sum = 0;
+        MPI_Reduce(&local_chunk, &sum, 1, MPI_INT, MPI_SUM, 0, info->intra_comm);
 
-      node_color = node_rank == 0 ? 0 : 1;
-      MPI_Comm_split(MPI_COMM_WORLD, node_color, data.thisrank, &internode_comm);
-      MPI_Comm_size(internode_comm, &internode_size);
-
-      // for each node
-      if (config.contains("node") == true) {
-        node_chunk.resize(internode_size, 0);
-        node_memory.resize(internode_size, 0);
-        node_load.resize(internode_size, 0);
-
-        // chunk
-        {
-          int  sum = 0;
-          int* ptr = node_chunk.data();
-          MPI_Reduce(&local_chunk, &sum, 1, MPI_INT, MPI_SUM, 0, node_comm);
-          MPI_Gather(&sum, 1, MPI_INT, ptr, 1, MPI_INT, 0, internode_comm);
+        if (info->intra_rank == 0) {
+          node_chunk.resize(info->inter_size, 0);
+          MPI_Gather(&sum, 1, MPI_INT, node_chunk.data(), 1, MPI_INT, 0, info->inter_comm);
         }
+      }
 
-        // memory
-        {
-          float64  sum = 0;
-          float64* ptr = node_memory.data();
-          MPI_Reduce(&local_memory, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, node_comm);
-          MPI_Gather(&sum, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, internode_comm);
+      // memory
+      {
+        float64 sum = 0;
+        MPI_Reduce(&local_memory, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, info->intra_comm);
+
+        if (info->intra_rank == 0) {
+          node_memory.resize(info->inter_size, 0);
+          MPI_Gather(&sum, 1, MPI_FLOAT64_T, node_memory.data(), 1, MPI_FLOAT64_T, 0,
+                     info->inter_comm);
         }
+      }
 
-        // load
-        {
-          float64  sum = 0;
-          float64* ptr = node_load.data();
-          MPI_Reduce(&local_load, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, node_comm);
-          MPI_Gather(&sum, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, internode_comm);
+      // load
+      {
+        float64 sum = 0;
+        MPI_Reduce(&local_load, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, info->intra_comm);
+
+        if (info->intra_rank == 0) {
+          node_load.resize(info->inter_size, 0);
+          MPI_Gather(&sum, 1, MPI_FLOAT64_T, node_load.data(), 1, MPI_FLOAT64_T, 0,
+                     info->inter_comm);
           // normalize
           std::for_each(node_load.begin(), node_load.end(), [=](auto& x) { x /= total_load; });
         }
       }
+    }
 
-      // for each rank
-      if (config.contains("rank") == true) {
-        rank_chunk.resize(data.nprocess, 0);
-        rank_memory.resize(data.nprocess, 0);
-        rank_load.resize(data.nprocess, 0);
+    //
+    // resource usage for each rank
+    //
+    if (config.contains("rank") == true) {
+      // chunk
+      rank_chunk.resize(data.nprocess, 0);
+      MPI_Gather(&local_chunk, 1, MPI_INT, rank_chunk.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-        // chunk
-        {
-          int* ptr = rank_chunk.data();
-          MPI_Gather(&local_chunk, 1, MPI_INT, ptr, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        }
+      // memory
+      rank_memory.resize(data.nprocess, 0);
+      MPI_Gather(&local_memory, 1, MPI_FLOAT64_T, rank_memory.data(), 1, MPI_FLOAT64_T, 0,
+                 MPI_COMM_WORLD);
 
-        // memory
-        {
-          float64* ptr = rank_memory.data();
-          MPI_Gather(&local_memory, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, MPI_COMM_WORLD);
-        }
-
-        // load
-        {
-          float64* ptr = rank_load.data();
-          MPI_Gather(&local_load, 1, MPI_FLOAT64_T, ptr, 1, MPI_FLOAT64_T, 0, MPI_COMM_WORLD);
-          // normalize
-          std::for_each(rank_load.begin(), rank_load.end(), [=](auto& x) { x /= total_load; });
-        }
-      }
-
-      MPI_Comm_free(&internode_comm);
-      MPI_Comm_free(&node_comm);
+      // load
+      rank_load.resize(data.nprocess, 0);
+      MPI_Gather(&local_load, 1, MPI_FLOAT64_T, rank_load.data(), 1, MPI_FLOAT64_T, 0,
+                 MPI_COMM_WORLD);
+      // normalize
+      std::for_each(rank_load.begin(), rank_load.end(), [=](auto& x) { x /= total_load; });
     }
 
     // save to file
@@ -161,80 +143,80 @@ public:
           {"node_chunk", node_chunk}, {"node_memory", node_memory}, {"node_load", node_load},
           {"rank_chunk", rank_chunk}, {"rank_memory", rank_memory}, {"rank_load", rank_load}};
 
-      savefile(config, result);
+      if (data.thisrank == 0) {
+        savefile(config, result);
+      }
     }
   }
 
   void savefile(json& config, json& result)
   {
-    // output from root
-    if (result["rank"] == 0) {
-      std::string filename = this->format_filename(config, ".msgpack", basedir, ".", "resource");
+    std::string dirname  = this->format_dirname("");
+    std::string filename = dirname + "resource.msgpack";
 
-      json record    = {};
-      record["step"] = result["step"];
-      record["time"] = result["time"];
+    json record    = {};
+    record["step"] = result["step"];
+    record["time"] = result["time"];
 
-      // node
-      if (config.contains("node") == true) {
-        auto node_chunk  = result["node_chunk"].get<std::vector<int>>();
-        auto node_memory = result["node_memory"].get<std::vector<float64>>();
-        auto node_load   = result["node_load"].get<std::vector<float64>>();
-        json chunk       = {};
-        json memory      = {};
-        json load        = {};
+    // node
+    if (config.contains("node") == true) {
+      auto node_chunk  = result["node_chunk"].get<std::vector<int>>();
+      auto node_memory = result["node_memory"].get<std::vector<float64>>();
+      auto node_load   = result["node_load"].get<std::vector<float64>>();
+      json chunk       = {};
+      json memory      = {};
+      json load        = {};
 
-        if (config["node"] == "stats" || config["node"] == "full") {
-          chunk["stats"]  = statistics(node_chunk);
-          memory["stats"] = statistics(node_memory);
-          load["stats"]   = statistics(node_load);
-        }
-
-        if (config["node"] == "full") {
-          chunk["full"]  = node_chunk;
-          memory["full"] = node_memory;
-          load["full"]   = node_load;
-        }
-
-        record["node"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+      if (config["node"] == "stats" || config["node"] == "full") {
+        chunk["stats"]  = statistics(node_chunk);
+        memory["stats"] = statistics(node_memory);
+        load["stats"]   = statistics(node_load);
       }
 
-      // rank
-      if (config.contains("rank") == true) {
-        auto rank_chunk  = result["rank_chunk"].get<std::vector<int>>();
-        auto rank_memory = result["rank_memory"].get<std::vector<float64>>();
-        auto rank_load   = result["rank_load"].get<std::vector<float64>>();
-        json chunk       = {};
-        json memory      = {};
-        json load        = {};
-
-        if (config["rank"] == "stats" || config["rank"] == "full") {
-          chunk["stats"]  = statistics(rank_chunk);
-          memory["stats"] = statistics(rank_memory);
-          load["stats"]   = statistics(rank_load);
-        }
-
-        if (config["rank"] == "full") {
-          chunk["full"]  = rank_chunk;
-          memory["full"] = rank_memory;
-          load["full"]   = rank_load;
-        }
-
-        record["rank"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+      if (config["node"] == "full") {
+        chunk["full"]  = node_chunk;
+        memory["full"] = node_memory;
+        load["full"]   = node_load;
       }
 
-      // initial call
-      if (this->is_initial_step(result["step"], config) == true) {
-        std::filesystem::remove(filename);
+      record["node"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+    }
+
+    // rank
+    if (config.contains("rank") == true) {
+      auto rank_chunk  = result["rank_chunk"].get<std::vector<int>>();
+      auto rank_memory = result["rank_memory"].get<std::vector<float64>>();
+      auto rank_load   = result["rank_load"].get<std::vector<float64>>();
+      json chunk       = {};
+      json memory      = {};
+      json load        = {};
+
+      if (config["rank"] == "stats" || config["rank"] == "full") {
+        chunk["stats"]  = statistics(rank_chunk);
+        memory["stats"] = statistics(rank_memory);
+        load["stats"]   = statistics(rank_load);
       }
 
-      // append to file
-      if (this->make_sure_directory_exists(filename) == true) {
-        std::ofstream             ofs(filename, nix::binary_append);
-        std::vector<std::uint8_t> buffer = json::to_msgpack(record);
-        ofs.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
-        ofs.close();
+      if (config["rank"] == "full") {
+        chunk["full"]  = rank_chunk;
+        memory["full"] = rank_memory;
+        load["full"]   = rank_load;
       }
+
+      record["rank"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+    }
+
+    // initial call
+    if (this->is_initial_step(result["step"], config) == true) {
+      std::filesystem::remove(filename);
+    }
+
+    // append to file
+    if (this->make_sure_directory_exists(filename) == true) {
+      std::ofstream             ofs(filename, nix::binary_append);
+      std::vector<std::uint8_t> buffer = json::to_msgpack(record);
+      ofs.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+      ofs.close();
     }
   }
 };

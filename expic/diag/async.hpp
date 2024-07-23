@@ -35,12 +35,20 @@ protected:
 
 public:
   // constructor
-  AsyncDiag(std::string basedir, std::string name, int size)
-      : BaseDiag<App, Data>(basedir, name), is_opened(false)
+  AsyncDiag(std::string name, std::shared_ptr<DiagInfo> info, int size = 0)
+      : BaseDiag<App, Data>(name, info), is_opened(false)
   {
+    set_queue_size(size);
+  }
+
+  void set_queue_size(int size)
+  {
+    if (size == buffer.size() && size == request.size())
+      return;
+
+    // resize
     buffer.resize(size);
     request.resize(size);
-
     std::fill(request.begin(), request.end(), MPI_REQUEST_NULL);
   }
 
@@ -73,9 +81,9 @@ public:
   }
 
   // wait for the completion of the job
-  void wait(int jobid)
+  void wait(int index)
   {
-    MPI_Wait(&request[jobid], MPI_STATUS_IGNORE);
+    MPI_Wait(&request[index], MPI_STATUS_IGNORE);
   }
 
   // wait for the completion of all the jobs and close the file
@@ -88,7 +96,7 @@ public:
 
   // launch asynchronous write
   template <typename DataPacker>
-  void launch(int jobid, DataPacker packer, Data& data, size_t& disp)
+  void launch(int index, DataPacker packer, Data& data, size_t& disp)
   {
     size_t bufsize = 0;
 
@@ -98,16 +106,16 @@ public:
     }
 
     // pack data
-    buffer[jobid].resize(bufsize);
-    uint8_t* bufptr = buffer[jobid].get();
+    buffer[index].resize(bufsize);
+    uint8_t* bufptr = buffer[index].get();
 
     for (int i = 0, address = 0; i < data.chunkvec.size(); i++) {
       address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
     }
 
     // write to the disk
-    nixio::write_contiguous(&filehandle, &disp, bufptr, bufsize, 1, 1, &request[jobid]);
-    wait(jobid);
+    nixio::write_contiguous(&filehandle, &disp, bufptr, bufsize, 1, 1, &request[index]);
+    wait(index);
   }
 };
 

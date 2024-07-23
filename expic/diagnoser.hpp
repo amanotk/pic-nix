@@ -24,18 +24,22 @@ class Diagnoser
 {
 protected:
   using PtrDiagnostic = std::unique_ptr<BaseDiag<App, Data>>;
+
+  std::shared_ptr<DiagInfo>  info;
   std::vector<PtrDiagnostic> diagnostics;
 
 public:
-  Diagnoser(std::string basedir)
+  Diagnoser(std::string basedir, std::string iomode)
   {
-    diagnostics.push_back(std::make_unique<HistoryDiag<App, Data>>(basedir));
-    diagnostics.push_back(std::make_unique<ResourceDiag<App, Data>>(basedir));
-    diagnostics.push_back(std::make_unique<LoadDiag<App, Data>>(basedir));
-    diagnostics.push_back(std::make_unique<FieldDiag<App, Data>>(basedir));
-    diagnostics.push_back(std::make_unique<ParticleDiag<App, Data>>(basedir));
-    diagnostics.push_back(std::make_unique<PickupTracerDiag<App, Data>>(basedir));
-    diagnostics.push_back(std::make_unique<TracerDiag<App, Data>>(basedir));
+    info = std::make_shared<DiagInfo>(basedir, iomode);
+
+    diagnostics.push_back(std::make_unique<HistoryDiag<App, Data>>(info));
+    diagnostics.push_back(std::make_unique<ResourceDiag<App, Data>>(info));
+    diagnostics.push_back(std::make_unique<LoadDiag<App, Data>>(info));
+    diagnostics.push_back(std::make_unique<FieldDiag<App, Data>>(info));
+    diagnostics.push_back(std::make_unique<ParticleDiag<App, Data>>(info));
+    diagnostics.push_back(std::make_unique<PickupTracerDiag<App, Data>>(info));
+    diagnostics.push_back(std::make_unique<TracerDiag<App, Data>>(info));
   }
 
   void diagnose(json& config, App& app, Data& data)

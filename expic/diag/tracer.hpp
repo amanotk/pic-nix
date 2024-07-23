@@ -16,7 +16,7 @@ template <typename App, typename Data>
 class PickupTracerDiag : public BaseDiag<App, Data>
 {
 protected:
-  using BaseDiag<App, Data>::basedir;
+  using BaseDiag<App, Data>::info;
 
   // dummy data packer for pickup tracer
   template <typename BasePacker>
@@ -76,7 +76,7 @@ protected:
 
 public:
   // constructor
-  PickupTracerDiag(std::string basedir) : BaseDiag<App, Data>(basedir, "pickup_tracer")
+  PickupTracerDiag(std::shared_ptr<DiagInfo> info) : BaseDiag<App, Data>("pickup_tracer", info)
   {
   }
 
@@ -101,8 +101,7 @@ template <typename App, typename Data>
 class TracerDiag : public AsyncDiag<App, Data>
 {
 protected:
-  using BaseDiag<App, Data>::basedir;
-  constexpr static int max_species = 10;
+  using BaseDiag<App, Data>::info;
 
   // data packer for particle
   template <typename BasePacker>
@@ -128,7 +127,7 @@ protected:
 
 public:
   // constructor
-  TracerDiag(std::string basedir) : AsyncDiag<App, Data>(basedir, "tracer", max_species)
+  TracerDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("tracer", info)
   {
   }
 
@@ -144,22 +143,17 @@ public:
     const int nc = data.cdims[3];
     const int Ns = app.get_Ns();
 
-    assert(Ns <= max_species);
+    this->set_queue_size(Ns);
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string fn_data = this->format_filename(config, ".data", "tracer", data.curstep);
-    std::string fn_json = this->format_filename(config, ".json", "tracer", data.curstep);
-    std::string fn_data_with_path =
-        this->format_filename(config, ".data", basedir, ".", "tracer", data.curstep);
-    std::string fn_json_with_path =
-        this->format_filename(config, ".json", basedir, ".", "tracer", data.curstep);
+    std::string prefix  = this->get_prefix(config, "tracer");
+    std::string dirname = this->format_dirname(prefix);
+    std::string fn_data = this->format_filename("", ".data", data.curstep);
+    std::string fn_json = this->format_filename("", ".json", data.curstep);
 
-    if (data.thisrank == 0) {
-      this->make_sure_directory_exists(fn_data_with_path);
-    }
-
-    this->open_file(fn_data_with_path, &disp, "w");
+    this->make_sure_directory_exists(dirname + fn_data);
+    this->open_file(dirname + fn_data, &disp, "w");
 
     //
     // for each particle
@@ -204,7 +198,7 @@ public:
       root["dataset"] = dataset;
 
       if (data.thisrank == 0) {
-        std::ofstream ofs(fn_json_with_path);
+        std::ofstream ofs(dirname + fn_json);
         ofs << std::setw(2) << root;
         ofs.close();
       }

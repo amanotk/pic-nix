@@ -11,11 +11,11 @@ template <typename App, typename Data>
 class HistoryDiag : public BaseDiag<App, Data>
 {
 protected:
-  using BaseDiag<App, Data>::basedir;
+  using BaseDiag<App, Data>::info;
 
 public:
   // constructor
-  HistoryDiag(std::string basedir) : BaseDiag<App, Data>(basedir, "history")
+  HistoryDiag(std::shared_ptr<DiagInfo> info) : BaseDiag<App, Data>("history", info)
   {
   }
 
@@ -67,19 +67,21 @@ public:
 
     // output from root
     if (data.thisrank == 0) {
-      std::string filename = this->format_filename(config, ".txt", basedir, ".", "history");
+      std::string dirname  = this->format_dirname("");
+      std::string filename = dirname + "history.txt";
       std::string msg      = "";
 
       // initial call
       if (this->is_initial_step(data.curstep, config) == true) {
         // header
-        msg += tfm::format("# %8s %15s", "step", "time");
-        msg += tfm::format(" %15s", "div(E)");
-        msg += tfm::format(" %15s", "div(B)");
-        msg += tfm::format(" %15s", "E^2/2");
-        msg += tfm::format(" %15s", "B^2/2");
+        msg += tfm::format("# %8s %13s", "step", "time");
+        msg += tfm::format(" %13s", "div(E)");
+        msg += tfm::format(" %13s", "div(B)");
+        msg += tfm::format(" %13s", "E^2/2");
+        msg += tfm::format(" %13s", "B^2/2");
         for (int is = 0; is < Ns; is++) {
-          msg += tfm::format("    Particle #%02d", is);
+          std::string label = tfm::format("Particle #%02d", is);
+          msg += tfm::format(" %13s", label);
         }
         msg += "\n";
 
@@ -87,13 +89,13 @@ public:
         std::filesystem::remove(filename);
       }
 
-      msg += tfm::format("  %8s %15.6e", nix::format_step(data.curstep), data.curtime);
-      msg += tfm::format(" %15.6e", history[0]);
-      msg += tfm::format(" %15.6e", history[1]);
-      msg += tfm::format(" %15.6e", history[2]);
-      msg += tfm::format(" %15.6e", history[3]);
+      msg += tfm::format("  %8s %13.6e", nix::format_step(data.curstep), data.curtime);
+      msg += tfm::format(" %13.6e", history[0]);
+      msg += tfm::format(" %13.6e", history[1]);
+      msg += tfm::format(" %13.6e", history[2]);
+      msg += tfm::format(" %13.6e", history[3]);
       for (int is = 0; is < Ns; is++) {
-        msg += tfm::format(" %15.6e", history[is + 4]);
+        msg += tfm::format(" %13.6e", history[is + 4]);
       }
       msg += "\n";
 

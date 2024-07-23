@@ -31,25 +31,25 @@ class ExPIC3D : public nix::Application<Chunk, nix::ChunkMap<3>>
 {
 public:
   using ThisType      = ExPIC3D<Chunk>;
-  using BaseApp       = nix::Application<Chunk, nix::ChunkMap<3>>;
+  using BaseType      = nix::Application<Chunk, nix::ChunkMap<3>>;
   using ChunkType     = Chunk;
-  using DiagnoserType = Diagnoser<ThisType, typename BaseApp::InternalData>;
+  using DiagnoserType = Diagnoser<ThisType, typename BaseType::InternalData>;
   using PtrDiagnoser  = std::unique_ptr<DiagnoserType>;
   using MpiCommVec    = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
 
 protected:
-  using BaseApp::cfgparser;
-  using BaseApp::argparser;
-  using BaseApp::balancer;
-  using BaseApp::logger;
-  using BaseApp::chunkvec;
-  using BaseApp::chunkmap;
-  using BaseApp::ndims;
-  using BaseApp::cdims;
-  using BaseApp::curstep;
-  using BaseApp::curtime;
-  using BaseApp::nprocess;
-  using BaseApp::thisrank;
+  using BaseType::cfgparser;
+  using BaseType::argparser;
+  using BaseType::balancer;
+  using BaseType::logger;
+  using BaseType::chunkvec;
+  using BaseType::chunkmap;
+  using BaseType::ndims;
+  using BaseType::cdims;
+  using BaseType::curstep;
+  using BaseType::curtime;
+  using BaseType::nprocess;
+  using BaseType::thisrank;
 
   int          Ns;         ///< number of species
   int          momstep;    ///< step at which moment quantities are cached
@@ -70,7 +70,24 @@ protected:
 
   virtual std::unique_ptr<DiagnoserType> create_diagnoser()
   {
-    return std::make_unique<DiagnoserType>(this->get_basedir());
+    return std::make_unique<DiagnoserType>(this->get_basedir(), this->get_iomode());
+  }
+
+  virtual std::string get_basedir() override
+  {
+    auto tmpdir  = std::getenv("PICNIX_TMPDIR");
+    auto basedir = cfgparser->get_application().value("basedir", "");
+
+    if (tmpdir == nullptr) {
+      return basedir;
+    } else {
+      return std::filesystem::path(tmpdir) / basedir;
+    }
+  }
+
+  virtual std::string get_iomode()
+  {
+    return cfgparser->get_application().value("iomode", "mpiio");
   }
 
 public:
@@ -142,13 +159,13 @@ public:
   type ExPIC3D<Chunk>::name
 
 DEFINE_MEMBER(, ExPIC3D)
-(int argc, char** argv) : BaseApp(argc, argv), Ns(1), momstep(-1)
+(int argc, char** argv) : BaseType(argc, argv), Ns(1), momstep(-1)
 {
 }
 
 DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 {
-  BaseApp::initialize(argc, argv);
+  BaseType::initialize(argc, argv);
 
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
@@ -189,7 +206,7 @@ DEFINE_MEMBER(void, set_chunk_communicator)()
 
 DEFINE_MEMBER(void, setup_chunks)()
 {
-  BaseApp::setup_chunks();
+  BaseType::setup_chunks();
   set_chunk_communicator();
 
   // apply boundary condition just in case
@@ -211,7 +228,7 @@ DEFINE_MEMBER(void, setup_chunks)()
 
 DEFINE_MEMBER(json, to_json)()
 {
-  json state = BaseApp::to_json();
+  json state = BaseType::to_json();
 
   state["order"]   = Chunk::order;
   state["Ns"]      = Ns;
@@ -222,7 +239,7 @@ DEFINE_MEMBER(json, to_json)()
 
 DEFINE_MEMBER(bool, from_json)(json& state)
 {
-  if (BaseApp::from_json(state) == false) {
+  if (BaseType::from_json(state) == false) {
     return false;
   }
 
@@ -238,7 +255,7 @@ DEFINE_MEMBER(bool, from_json)(json& state)
 
 DEFINE_MEMBER(bool, rebalance)()
 {
-  if (BaseApp::rebalance()) {
+  if (BaseType::rebalance()) {
     set_chunk_communicator();
     return true;
   }
@@ -259,8 +276,11 @@ DEFINE_MEMBER(void, finalize)()
     }
   }
 
+  // free diagnoser (internal MPI communicator)
+  diagnoser.reset();
+
   // finalize
-  BaseApp::finalize();
+  BaseType::finalize();
 }
 
 DEFINE_MEMBER(void, diagnostic)()

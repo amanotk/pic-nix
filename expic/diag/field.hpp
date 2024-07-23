@@ -11,7 +11,7 @@ template <typename App, typename Data>
 class FieldDiag : public AsyncDiag<App, Data>
 {
 protected:
-  using BaseDiag<App, Data>::basedir;
+  using BaseDiag<App, Data>::info;
 
   // data packer for electromagnetic field
   template <typename BasePacker>
@@ -57,7 +57,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(std::string basedir) : AsyncDiag<App, Data>(basedir, "field", 3)
+  FieldDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("field", info, 3)
   {
   }
 
@@ -75,18 +75,13 @@ public:
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string fn_data = this->format_filename(config, ".data", "field", data.curstep);
-    std::string fn_json = this->format_filename(config, ".json", "field", data.curstep);
-    std::string fn_data_with_path =
-        this->format_filename(config, ".data", basedir, ".", "field", data.curstep);
-    std::string fn_json_with_path =
-        this->format_filename(config, ".json", basedir, ".", "field", data.curstep);
+    std::string prefix  = this->get_prefix(config, "field");
+    std::string dirname = this->format_dirname(prefix);
+    std::string fn_data = this->format_filename("", ".data", data.curstep);
+    std::string fn_json = this->format_filename("", ".json", data.curstep);
 
-    if (data.thisrank == 0) {
-      this->make_sure_directory_exists(fn_data_with_path);
-    }
-
-    this->open_file(fn_data_with_path, &disp, "w");
+    this->make_sure_directory_exists(dirname + fn_data);
+    this->open_file(dirname + fn_data, &disp, "w");
 
     //
     // electromagnetic field
@@ -154,7 +149,7 @@ public:
       root["dataset"] = dataset;
 
       if (data.thisrank == 0) {
-        std::ofstream ofs(fn_json_with_path);
+        std::ofstream ofs(dirname + fn_json);
         ofs << std::setw(2) << root;
         ofs.close();
       }
