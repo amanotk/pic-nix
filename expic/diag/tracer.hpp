@@ -141,9 +141,6 @@ public:
     const int ny = data.ndims[1] / data.cdims[1];
     const int nx = data.ndims[2] / data.cdims[2];
     const int nc = data.cdims[3];
-    const int Ns = app.get_Ns();
-
-    this->set_queue_size(Ns);
 
     size_t      disp    = 0;
     json        dataset = {};
@@ -155,19 +152,17 @@ public:
     this->make_sure_directory_exists(dirname + fn_data);
     this->open_file(dirname + fn_data, &disp, "w");
 
-    //
-    // for each particle
-    //
-    for (int is = 0; is < Ns; is++) {
+    {
       // write particles
-      size_t disp0 = disp;
-      int    seed  = data.thisrank;
-      this->launch(is, TracerPacker<XtensorPacker3D>(is, seed), data, disp);
+      size_t disp0   = disp;
+      int    seed    = data.thisrank;
+      int    species = config.value("species", 0);
+      this->launch(0, TracerPacker<XtensorPacker3D>(species, seed), data, disp);
 
       // meta data
       {
-        std::string name = tfm::format("up%02d", is);
-        std::string desc = tfm::format("particle species %02d", is);
+        std::string name = tfm::format("up%02d", species);
+        std::string desc = tfm::format("tracer particle species %02d", species);
 
         const int size    = ParticleType::get_particle_size();
         const int Np      = (disp - disp0) / size;
