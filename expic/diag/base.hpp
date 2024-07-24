@@ -27,10 +27,12 @@ public:
   int         inter_size;
   int         intra_rank;
   int         inter_rank;
+  int         Ns;
   std::string basedir;
   std::string iomode;
 
-  DiagInfo(std::string basedir, std::string iomode) : basedir(basedir), iomode(iomode)
+  DiagInfo(std::string basedir, std::string iomode, int Ns)
+      : basedir(basedir), iomode(iomode), Ns(Ns)
   {
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -87,6 +89,14 @@ public:
     int end      = config.value("end", std::numeric_limits<int>::max());
 
     return (curstep >= begin) && (curstep <= end) && ((curstep - begin) % interval == 0);
+  }
+
+  bool is_json_required()
+  {
+    bool is_json_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
+    bool is_json_required_posix = info->iomode == "posix";
+
+    return is_json_required_mpiio || is_json_required_posix;
   }
 
   // check if the given step is the initial step
@@ -150,6 +160,11 @@ public:
   std::string format_filename(std::string prefix, std::string ext, int step)
   {
     return prefix + nix::format_step(step) + ext;
+  }
+
+  int get_num_species()
+  {
+    return info->Ns;
   }
 
   // calculate percentile assuming pre-sorted data

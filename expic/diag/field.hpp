@@ -27,20 +27,6 @@ protected:
     }
   };
 
-  // data packer for current
-  template <typename BasePacker>
-  class CurrentPacker : public BasePacker
-  {
-  public:
-    using BasePacker::pack_field;
-
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
-    {
-      return pack_field(data.uj, data, buffer, address);
-    }
-  };
-
   // data packer for moment
   template <typename BasePacker>
   class MomentPacker : public BasePacker
@@ -57,7 +43,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("field", info, 3)
+  FieldDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("field", info, 2)
   {
   }
 
@@ -70,8 +56,7 @@ public:
     const int nz = data.ndims[0] / data.cdims[0];
     const int ny = data.ndims[1] / data.cdims[1];
     const int nx = data.ndims[2] / data.cdims[2];
-    const int nc = data.cdims[3];
-    const int Ns = app.get_Ns();
+    const int Ns = this->get_num_species();
 
     size_t      disp    = 0;
     json        dataset = {};
@@ -87,46 +72,39 @@ public:
     // electromagnetic field
     //
     {
+      // data
+      auto   packer = FieldPacker<XtensorPacker3D>();
+      size_t disp0  = disp;
+      size_t size   = nz * ny * nx * 6 * sizeof(float64);
+      size_t nbyte  = this->launch(0, packer, data, disp);
+      int    nc     = static_cast<int>(nbyte / size);
+
+      // metadata
       const char name[]  = "uf";
       const char desc[]  = "electromagnetic field";
-      const int  ndim    = 5;
-      const int  dims[5] = {nc, nz, ny, nx, 6};
-      const int  size    = nc * nz * ny * nx * 6 * sizeof(float64);
-
-      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      this->launch(0, FieldPacker<XtensorPacker3D>(), data, disp);
-    }
-
-    //
-    // current
-    //
-    {
-      const char name[]  = "uj";
-      const char desc[]  = "current";
-      const int  ndim    = 5;
-      const int  dims[5] = {nc, nz, ny, nx, 4};
-      const int  size    = nc * nz * ny * nx * 4 * sizeof(float64);
-
-      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      this->launch(1, CurrentPacker<XtensorPacker3D>(), data, disp);
+      int        ndim    = 5;
+      int        dims[5] = {nc, nz, ny, nx, 6};
+      nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 
     //
     // moment
     //
+    app.calculate_moment();
     {
+      // data
+      auto   packer = MomentPacker<XtensorPacker3D>();
+      size_t disp0  = disp;
+      size_t size   = nz * ny * nx * Ns * 11 * sizeof(float64);
+      size_t nbyte  = this->launch(1, packer, data, disp);
+      int    nc     = static_cast<int>(nbyte / size);
+
+      // metadata
       const char name[]  = "um";
       const char desc[]  = "moment";
-      const int  ndim    = 6;
-      const int  dims[6] = {nc, nz, ny, nx, Ns, 11};
-      const int  size    = nc * nz * ny * nx * Ns * 11 * sizeof(float64);
-
-      // calculate moment if not cached
-      app.calculate_moment();
-
-      // write
-      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      this->launch(2, MomentPacker<XtensorPacker3D>(), data, disp);
+      int        ndim    = 6;
+      int        dims[6] = {nc, nz, ny, nx, Ns, 11};
+      nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 
     if (this->is_completed() == true) {
@@ -136,7 +114,7 @@ public:
     //
     // output json file
     //
-    {
+    if (this->is_json_required() == true) {
       json root;
 
       // meta data
@@ -148,14 +126,12 @@ public:
       // dataset
       root["dataset"] = dataset;
 
-      if (data.thisrank == 0) {
-        std::ofstream ofs(dirname + fn_json);
-        ofs << std::setw(2) << root;
-        ofs.close();
-      }
-
-      MPI_Barrier(MPI_COMM_WORLD);
+      std::ofstream ofs(dirname + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
     }
+
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 };
 

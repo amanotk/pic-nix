@@ -24,7 +24,7 @@ public:
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
-    const int            Ns = app.get_Ns();
+    const int            Ns = this->get_num_species();
     std::vector<float64> history(Ns + 4);
 
     // clear

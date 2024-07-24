@@ -29,9 +29,9 @@ protected:
   std::vector<PtrDiagnostic> diagnostics;
 
 public:
-  Diagnoser(std::string basedir, std::string iomode)
+  Diagnoser(std::string basedir, std::string iomode, int Ns)
   {
-    info = std::make_shared<DiagInfo>(basedir, iomode);
+    info = std::make_shared<DiagInfo>(basedir, iomode, Ns);
 
     diagnostics.push_back(std::make_unique<HistoryDiag<App, Data>>(info));
     diagnostics.push_back(std::make_unique<ResourceDiag<App, Data>>(info));

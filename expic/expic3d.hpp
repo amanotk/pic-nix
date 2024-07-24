@@ -70,7 +70,7 @@ protected:
 
   virtual std::unique_ptr<DiagnoserType> create_diagnoser()
   {
-    return std::make_unique<DiagnoserType>(this->get_basedir(), this->get_iomode());
+    return std::make_unique<DiagnoserType>(this->get_basedir(), this->get_iomode(), this->Ns);
   }
 
   virtual std::string get_basedir() override
@@ -146,11 +146,6 @@ public:
 
     // cache
     momstep = curstep;
-  }
-
-  int get_Ns()
-  {
-    return Ns;
   }
 };
 

@@ -76,8 +76,6 @@ public:
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
-    const int nc = data.cdims[3];
-
     size_t      disp    = 0;
     json        dataset = {};
     std::string prefix  = this->get_prefix(config, "load");
@@ -92,28 +90,38 @@ public:
     // load
     //
     {
+      // data
+      auto   packer = LoadPacker();
+      size_t disp0  = disp;
+      size_t size   = App::ChunkType::NumLoadMode * sizeof(float64);
+      size_t nbyte  = this->launch(0, packer, data, disp);
+      int    nc     = static_cast<int>(nbyte / size);
+
+      // metadata
       const char name[]  = "load";
       const char desc[]  = "computational work load";
-      const int  ndim    = 2;
-      const int  dims[2] = {nc, App::ChunkType::NumLoadMode};
-      const int  size    = nc * App::ChunkType::NumLoadMode * sizeof(float64);
-
-      nixio::put_metadata(dataset, name, "f8", desc, disp, size, ndim, dims);
-      this->launch(0, LoadPacker(), data, disp);
+      int        ndim    = 2;
+      int        dims[2] = {nc, App::ChunkType::NumLoadMode};
+      nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 
     //
     // rank
     //
     {
+      // data
+      auto   packer = RankPacker(data.thisrank);
+      size_t disp0  = disp;
+      size_t size   = sizeof(int);
+      size_t nbyte  = this->launch(1, packer, data, disp);
+      int    nc     = static_cast<int>(nbyte / size);
+
+      // metadata
       const char name[]  = "rank";
       const char desc[]  = "MPI rank";
-      const int  ndim    = 1;
-      const int  dims[1] = {nc};
-      const int  size    = nc * sizeof(int);
-
-      nixio::put_metadata(dataset, name, "i4", desc, disp, size, ndim, dims);
-      this->launch(1, RankPacker(data.thisrank), data, disp);
+      int        ndim    = 1;
+      int        dims[1] = {nc};
+      nixio::put_metadata(dataset, name, "i4", desc, disp0, nbyte, ndim, dims);
     }
 
     if (this->is_completed() == true) {
@@ -123,7 +131,7 @@ public:
     //
     // output json file
     //
-    {
+    if (this->is_json_required() == true) {
       json root;
 
       // meta data
@@ -135,14 +143,12 @@ public:
       // dataset
       root["dataset"] = dataset;
 
-      if (data.thisrank == 0) {
-        std::ofstream ofs(dirname + fn_json);
-        ofs << std::setw(2) << root;
-        ofs.close();
-      }
-
-      MPI_Barrier(MPI_COMM_WORLD);
+      std::ofstream ofs(dirname + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
     }
+
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 };
 

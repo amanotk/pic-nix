@@ -127,7 +127,7 @@ protected:
 
 public:
   // constructor
-  TracerDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("tracer", info)
+  TracerDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("tracer", info, 1)
   {
   }
 
@@ -136,11 +136,6 @@ public:
   {
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
-
-    const int nz = data.ndims[0] / data.cdims[0];
-    const int ny = data.ndims[1] / data.cdims[1];
-    const int nx = data.ndims[2] / data.cdims[2];
-    const int nc = data.cdims[3];
 
     size_t      disp    = 0;
     json        dataset = {};
@@ -154,10 +149,11 @@ public:
 
     {
       // write particles
-      size_t disp0   = disp;
-      int    seed    = data.thisrank;
       int    species = config.value("species", 0);
-      this->launch(0, TracerPacker<XtensorPacker3D>(species, seed), data, disp);
+      int    seed    = data.thisrank;
+      auto   packer  = TracerPacker<XtensorPacker3D>(species, seed);
+      size_t disp0   = disp;
+      size_t nbyte   = this->launch(0, packer, data, disp);
 
       // meta data
       {
@@ -165,11 +161,11 @@ public:
         std::string desc = tfm::format("tracer particle species %02d", species);
 
         const int size    = ParticleType::get_particle_size();
-        const int Np      = (disp - disp0) / size;
+        const int Np      = nbyte / size;
         const int ndim    = 2;
         const int dims[2] = {Np, ParticleType::Nc};
 
-        nixio::put_metadata(dataset, name, "f8", desc, disp0, Np * size, ndim, dims);
+        nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
       }
     }
 
@@ -180,7 +176,7 @@ public:
     //
     // output json file
     //
-    {
+    if (this->is_json_required() == true) {
       json root;
 
       // meta data
@@ -192,14 +188,12 @@ public:
       // dataset
       root["dataset"] = dataset;
 
-      if (data.thisrank == 0) {
-        std::ofstream ofs(dirname + fn_json);
-        ofs << std::setw(2) << root;
-        ofs.close();
-      }
-
-      MPI_Barrier(MPI_COMM_WORLD);
+      std::ofstream ofs(dirname + fn_json);
+      ofs << std::setw(2) << root;
+      ofs.close();
     }
+
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 };
 
