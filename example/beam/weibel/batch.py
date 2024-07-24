@@ -25,13 +25,13 @@ class Run(picnix.Run):
         self.plot_chunk_boundary = boundary
 
     def summary(self, step):
-        data = self.read_field_at(step)
+        data = self.read_at("field", step)
         xc = self.xc
         yc = self.yc
         uf = data["uf"]
         um = data["um"]
         uj = data["uj"]
-        tt = self.get_field_time_at(step)
+        tt = self.get_time_at("field", step)
         xlim = (0, self.Nx * self.delh)
         ylim = (0, self.Ny * self.delh)
 
@@ -114,7 +114,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
     run = Run(profile, boundary)
 
     # for all snapshots
-    for step in run.step_field:
+    for step in run.get_step("field"):
         fig = run.summary(step)
         fig.savefig("{:s}-{:08d}.png".format(prefix, step))
         plt.close(fig)

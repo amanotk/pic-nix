@@ -8,6 +8,7 @@ DEFAULT_LOG_PREFIX = "log"
 DEFAULT_LOAD_PREFIX = "load"
 DEFAULT_FIELD_PREFIX = "field"
 DEFAULT_PARTICLE_PREFIX = "particle"
+DEFAULT_TRACER_PREFIX = "tracer"
 
 from .utils import *
 from .field import *

@@ -30,7 +30,7 @@ class Run(picnix.Run):
         delh = parameter["delh"] / np.sqrt(mime)
         b0 = np.sqrt(parameter["sigma"])
 
-        data = self.read_field_at(step)
+        data = self.read_at("field", step)
         uf = data["uf"]
         um = data["um"]
         iy = self.Ny // 2
@@ -64,10 +64,10 @@ class Run(picnix.Run):
         T = 1 / wci
         L = cc / wpi
 
-        data = self.read_field_at(step)
+        data = self.read_at("field", step)
         uf = data["uf"]
         um = data["um"]
-        tt = self.get_field_time_at(step) / T
+        tt = self.get_time_at("field", step) / T
         xc = self.xc / L
         yc = self.yc / L
         xlim = (0, self.Nx * self.delh / L)
@@ -170,11 +170,11 @@ def doit_job(profile, prefix, fps, cleanup):
 
     mime = run.config["parameter"]["mime"]
     wce = np.sqrt(run.config["parameter"]["sigma"])
-    time = run.time_field * wce / mime
+    time = run.get_time("field") * wce / mime
     flux = np.zeros((len(time),))
 
     # for all snapshots
-    for i, step in enumerate(run.step_field):
+    for i, step in enumerate(run.get_step("field")):
         flux[i] = run.calc_reconnexted_flux(step)
         fig = run.summary2d(step)
         fig.savefig("{:s}-{:08d}.png".format(prefix, step))

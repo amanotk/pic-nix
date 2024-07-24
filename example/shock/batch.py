@@ -25,12 +25,15 @@ class Run(picnix.Run):
         self.plot_chunk_boundary = boundary
 
     def summary(self, step, **kwargs):
-        data = self.read_field_at(step)
         xc = self.xc
-        uf = data["uf"]
-        um = data["um"]
-        up = self.read_particle_at(step)
-        tt = self.get_particle_time_at(step)
+        # field
+        field = self.read_at("field", step)
+        uf = field["uf"]
+        um = field["um"]
+        # particle
+        particle = self.read_at("particle", step)
+        up = [particle["up00"], particle["up01"]]
+        tt = self.get_time_at("particle", step)
 
         binx = [0] * 3
         biny = [0] * 3
@@ -158,7 +161,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
     )
 
     # for all snapshots
-    for step in run.step_particle:
+    for step in run.get_step("particle"):
         fig = run.summary(step, **kwargs)
         fig.savefig("{:s}-{:08d}.png".format(prefix, step))
         plt.close(fig)
