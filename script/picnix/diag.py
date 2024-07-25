@@ -37,26 +37,34 @@ class DiagHandler(object):
     def setup(self, config):
         self.config = config
         prefix = config.get("prefix", self.prefix)
-        dirname = self.format_dirname(prefix)
-        pattern = self.pattern_filename("", ".json")
-        self.file = sorted(glob.glob(dirname + pattern))
-        self.step = np.arange(len(self.file), dtype=np.int32)
-        self.time = np.arange(len(self.file), dtype=np.float64)
-        for i, file in enumerate(self.file):
-            with open(file, "r") as fp:
-                obj = json.load(fp)
-                self.step[i] = obj["meta"]["step"]
-                self.time[i] = obj["meta"]["time"]
+        self.file = self.get_file_array(prefix)
+        self.step = np.arange(self.file.shape[1], dtype=np.int32)
+        self.time = np.arange(self.file.shape[1], dtype=np.float64)
+        for i, file in enumerate(self.file[0, :]):
+            self.step[i], self.time[i] = self.read_time_and_step(file)
 
-    def format_dirname(self, prefix):
-        dirname = os.sep.join([self.basedir, prefix]) + os.sep
+    def get_file_array(self, prefix):
         if self.iomode == "mpiio":
-            return dirname
+            dirname = os.sep.join([self.basedir, prefix]) + os.sep
+            pattern = self.pattern_filename("", ".json")
+            file = sorted(glob.glob(dirname + pattern))
+            return np.array(file).reshape((1, len(file)))
         elif self.iomode == "posix":
-            return dirname
+            nodedir = sorted(glob.glob(os.sep.join([self.basedir, "node*"]) + os.sep))
+            nodenum = len(nodedir)
+            file = [0] * nodenum
+            for i in range(nodenum):
+                dirname = os.sep.join([nodedir[i], prefix]) + os.sep
+                pattern = self.pattern_filename("", ".json")
+                file[i] = sorted(glob.glob(dirname + pattern))
+            return np.array(file)
 
-    def format_filename(self, prefix, ext, step):
-        return prefix + "{:08d}".format(step) + ext
+    def read_time_and_step(self, filename):
+        with open(filename, "r") as fp:
+            obj = json.load(fp)
+            step = obj["meta"]["step"]
+            time = obj["meta"]["time"]
+        return step, time
 
     def pattern_filename(self, prefix, ext):
         return prefix + "*" + ext
@@ -84,7 +92,7 @@ class DiagHandler(object):
     def find_json_at_step(self, step):
         index = self.find_index_at_step(step)
         if index is not None:
-            return self.file[index]
+            return self.file[:, index]
         else:
             return None
 

@@ -19,17 +19,17 @@ using nix::XtensorPacker3D;
 class DiagInfo
 {
 public:
-  MPI_Comm    intra_comm;
-  MPI_Comm    inter_comm;
-  int         world_rank;
-  int         world_size;
-  int         intra_size;
-  int         inter_size;
-  int         intra_rank;
-  int         inter_rank;
-  int         Ns;
-  std::string basedir;
-  std::string iomode;
+  MPI_Comm    intra_comm; // intra-node communicator
+  MPI_Comm    inter_comm; // inter-node communicator
+  int         world_rank; // rank
+  int         world_size; // number of processes
+  int         intra_size; // number of processes in the same node
+  int         inter_size; // number of nodes
+  int         intra_rank; // rank in the same node
+  int         inter_rank; // rank of the node
+  int         Ns;         // number of species
+  std::string basedir;    // base directory
+  std::string iomode;     // I/O mode
 
   DiagInfo(std::string basedir, std::string iomode, int Ns)
       : basedir(basedir), iomode(iomode), Ns(Ns)
@@ -45,8 +45,17 @@ public:
 
     // inter-node communicator
     MPI_Comm_split(MPI_COMM_WORLD, intra_rank != 0, world_rank, &inter_comm);
-    MPI_Comm_size(inter_comm, &inter_size);
-    MPI_Comm_rank(inter_comm, &inter_rank);
+    {
+      int buffer[2] = {0, 0};
+
+      MPI_Comm_size(inter_comm, &buffer[0]);
+      MPI_Comm_rank(inter_comm, &buffer[1]);
+
+      MPI_Bcast(buffer, 2, MPI_INT, 0, intra_comm);
+
+      inter_size = buffer[0];
+      inter_rank = buffer[1];
+    }
   }
 
   ~DiagInfo()
@@ -94,7 +103,7 @@ public:
   bool is_json_required()
   {
     bool is_json_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
-    bool is_json_required_posix = info->iomode == "posix";
+    bool is_json_required_posix = info->iomode == "posix" && info->intra_rank == 0;
 
     return is_json_required_mpiio || is_json_required_posix;
   }
@@ -112,7 +121,7 @@ public:
     namespace fs = std::filesystem;
 
     bool is_check_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
-    bool is_check_required_posix = info->iomode == "posix";
+    bool is_check_required_posix = info->iomode == "posix" && info->intra_rank == 0;
 
     if (is_check_required_mpiio || is_check_required_posix) {
       fs::path filepath(path);
@@ -145,11 +154,12 @@ public:
 
     std::string basedir = info->basedir;
 
-    fs::path dirname = fs::path(basedir) / fs::path(prefix) / "";
-
     if (info->iomode == "mpiio") {
+      fs::path dirname = fs::path(basedir) / fs::path(prefix) / "";
       return dirname.string();
     } else if (info->iomode == "posix") {
+      std::string nodedir = tfm::format("node%06d", info->inter_rank);
+      fs::path    dirname = fs::path(basedir) / fs::path(nodedir) / fs::path(prefix) / "";
       return dirname.string();
     } else {
       ERROR << tfm::format("Unknown I/O mode: %s", info->iomode);

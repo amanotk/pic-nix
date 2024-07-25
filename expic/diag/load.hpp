@@ -131,6 +131,8 @@ public:
     //
     // output json file
     //
+    auto chunk_id_range = this->get_chunk_id_range(data);
+
     if (this->is_json_required() == true) {
       json root;
 
@@ -139,7 +141,8 @@ public:
                       {"rawfile", fn_data},
                       {"order", 1},
                       {"time", data.curtime},
-                      {"step", data.curstep}};
+                      {"step", data.curstep},
+                      {"chunk_id_range", chunk_id_range}};
       // dataset
       root["dataset"] = dataset;
 

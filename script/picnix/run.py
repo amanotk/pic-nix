@@ -98,8 +98,26 @@ class Run(object):
     def read_at(self, prefix, step):
         handler = self.diag_handlers[prefix]
 
-        # read json
-        jsonfile = handler.find_json_at_step(step)
+        # read data
+        data = dict()
+        for jsonfile in handler.find_json_at_step(step):
+            chunk_split_data = self.read_at_single(jsonfile)
+            for key, val in chunk_split_data.items():
+                if not key in data:
+                    data[key] = []
+                data[key].append(val)
+
+        # concatenate to global array
+        for key, val in data.items():
+            data[key] = np.concatenate(val, axis=0)
+
+        # convert array format
+        if handler.is_chunked_array_conversion_required():
+            data = convert_array_format(data, self.chunkmap)
+
+        return data
+
+    def read_at_single(self, jsonfile):
         with open(jsonfile, "r") as fp:
             obj = json.load(fp)
             byteorder, datafile, order = get_json_meta(obj)
@@ -114,9 +132,5 @@ class Run(object):
                 if order == 0:
                     shape == shape[::-1]
                 data[dsname] = get_dataset_data(fp, offset, dtype, shape)
-
-        # convert array format
-        if handler.is_chunked_array_conversion_required():
-            data = convert_array_format(data, self.chunkmap)
 
         return data
