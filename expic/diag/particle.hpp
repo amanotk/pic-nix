@@ -2,8 +2,8 @@
 #ifndef _PARTICLE_DIAG_HPP_
 #define _PARTICLE_DIAG_HPP_
 
-#include "async.hpp"
 #include "nix/xtensor_particle.hpp"
+#include "parallel.hpp"
 
 using nix::ParticlePtr;
 using nix::ParticleVec;
@@ -13,7 +13,7 @@ using ParticleType = nix::ParticlePtr::element_type;
 /// @brief Diagnostic for particle
 ///
 template <typename App, typename Data>
-class ParticleDiag : public AsyncDiag<App, Data>
+class ParticleDiag : public ParallelDiag<App, Data>
 {
 protected:
   using BaseDiag<App, Data>::info;
@@ -64,7 +64,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("particle", info)
+  ParticleDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("particle", info)
   {
   }
 
@@ -83,7 +83,6 @@ public:
     std::string fn_data = this->format_filename("", ".data", data.curstep);
     std::string fn_json = this->format_filename("", ".json", data.curstep);
 
-    this->set_queue_size(Ns);
     this->make_sure_directory_exists(dirname + fn_data);
     this->open_file(dirname + fn_data, &disp, "w");
 
@@ -96,7 +95,7 @@ public:
       float64 fraction = config.value("fraction", 0.01);
       auto    packer   = ParticlePacker<XtensorPacker3D>(is, seed, fraction);
       size_t  disp0    = disp;
-      size_t  nbyte    = this->launch(is, packer, data, disp);
+      size_t  nbyte    = this->queue(packer, data, disp);
 
       // meta data
       {

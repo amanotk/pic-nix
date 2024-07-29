@@ -1,24 +1,22 @@
 // -*- C++ -*-
-#ifndef _ASYNC_DIAG_HPP_
-#define _ASYNC_DIAG_HPP_
+#ifndef _PARALLEL_DIAG_HPP_
+#define _PARALLEL_DIAG_HPP_
 
 #include "base.hpp"
 
-class AsyncHandler
+class ParallelHandler
 {
 protected:
   std::shared_ptr<DiagInfo> info;
 
 public:
-  AsyncHandler(std::shared_ptr<DiagInfo> info) : info(info)
+  ParallelHandler(std::shared_ptr<DiagInfo> info) : info(info)
   {
   }
 
-  virtual ~AsyncHandler()
+  virtual ~ParallelHandler()
   {
   }
-
-  virtual void set_queue_size(int size) = 0;
 
   virtual void open_file(std::string filename, size_t* disp, const char* mode) = 0;
 
@@ -34,10 +32,10 @@ public:
 
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) = 0;
 
-  virtual size_t write(int index, uint8_t* buf, size_t bufsize, size_t& disp) = 0;
+  virtual size_t queue(int index, Buffer& buffer, size_t& disp) = 0;
 };
 
-class MpiioHandler : public AsyncHandler
+class MpiioHandler : public ParallelHandler
 {
 protected:
   MPI_File                 filehandle;
@@ -45,18 +43,8 @@ protected:
   std::vector<MPI_Request> request;
 
 public:
-  MpiioHandler(std::shared_ptr<DiagInfo> info) : AsyncHandler(info), is_opened(false)
+  MpiioHandler(std::shared_ptr<DiagInfo> info) : ParallelHandler(info), is_opened(false)
   {
-  }
-
-  virtual void set_queue_size(int size) override
-  {
-    if (size == request.size())
-      return;
-
-    // resize
-    request.resize(size);
-    std::fill(request.begin(), request.end(), MPI_REQUEST_NULL);
   }
 
   virtual void open_file(std::string filename, size_t* disp, const char* mode) override
@@ -115,26 +103,25 @@ public:
     return std::vector<int>({global_id_min, global_id_max});
   }
 
-  virtual size_t write(int index, uint8_t* buf, size_t bufsize, size_t& disp) override
+  virtual size_t queue(int index, Buffer& buffer, size_t& disp) override
   {
-    auto size = nixio::write_contiguous(&filehandle, &disp, buf, bufsize, 1, 1, &request[index]);
-    wait(index);
+    if (request.size() <= index) {
+      request.resize(index + 1, MPI_REQUEST_NULL);
+    }
+    auto count = nixio::write_contiguous(&filehandle, &disp, buffer.get(), buffer.size, 1, 1,
+                                         &request[index]);
 
-    return size;
+    return count;
   }
 };
 
-class PosixHandler : public AsyncHandler
+class PosixHandler : public ParallelHandler
 {
 protected:
   std::ofstream file;
 
 public:
-  PosixHandler(std::shared_ptr<DiagInfo> info) : AsyncHandler(info)
-  {
-  }
-
-  virtual void set_queue_size(int size) override
+  PosixHandler(std::shared_ptr<DiagInfo> info) : ParallelHandler(info)
   {
   }
 
@@ -194,11 +181,11 @@ public:
     return std::vector<int>({node_id_min, node_id_max});
   }
 
-  virtual size_t write(int index, uint8_t* buf, size_t bufsize, size_t& disp) override
+  virtual size_t queue(int index, Buffer& buffer, size_t& disp) override
   {
-    Buffer           buffer;
-    int              totsize = 0;
-    int              sendcnt = static_cast<int>(bufsize);
+    Buffer           totbuf;
+    int              totcnt  = 0;
+    int              sendcnt = static_cast<int>(buffer.size);
     std::vector<int> recvcnt(info->intra_size + 1, 0);
     std::vector<int> recvpos(info->intra_size + 1, 0);
 
@@ -206,27 +193,27 @@ public:
 
     std::partial_sum(recvcnt.begin(), recvcnt.end() - 1, recvpos.begin() + 1);
 
-    totsize = recvpos[info->intra_size];
-    buffer.resize(totsize);
-    MPI_Gatherv(buf, sendcnt, MPI_BYTE, buffer.get(), recvcnt.data(), recvpos.data(), MPI_BYTE, 0,
-                info->intra_comm);
+    totcnt = recvpos[info->intra_size];
+    totbuf.resize(totcnt);
+    MPI_Gatherv(buffer.get(), sendcnt, MPI_BYTE, totbuf.get(), recvcnt.data(), recvpos.data(),
+                MPI_BYTE, 0, info->intra_comm);
 
     if (info->intra_rank == 0) {
       file.seekp(disp);
-      file.write(reinterpret_cast<char*>(buffer.get()), totsize);
+      file.write(reinterpret_cast<char*>(totbuf.get()), totcnt);
     }
 
-    disp += totsize;
+    disp += totcnt;
 
-    return totsize;
+    return totcnt;
   }
 };
 
 template <typename App, typename Data>
-class AsyncDiag : public BaseDiag<App, Data>
+class ParallelDiag : public BaseDiag<App, Data>
 {
 protected:
-  std::unique_ptr<AsyncHandler> handler;
+  std::unique_ptr<ParallelHandler> handler;
   std::vector<Buffer>           buffer;
 
   // check if the diagnostic is required
@@ -252,7 +239,7 @@ protected:
 
 public:
   // constructor
-  AsyncDiag(std::string name, std::shared_ptr<DiagInfo> info, int size = 0)
+  ParallelDiag(std::string name, std::shared_ptr<DiagInfo> info, int size = 0)
       : BaseDiag<App, Data>(name, info)
   {
     // create handler
@@ -261,17 +248,6 @@ public:
     } else if (info->iomode == "posix") {
       handler = std::make_unique<PosixHandler>(info);
     }
-
-    set_queue_size(size);
-  }
-
-  void set_queue_size(int size)
-  {
-    if (size != buffer.size()) {
-      buffer.resize(size);
-    }
-
-    handler->set_queue_size(size);
   }
 
   // open file
@@ -296,12 +272,14 @@ public:
   void wait(int index)
   {
     handler->wait(index);
+    buffer.erase(buffer.begin() + index);
   }
 
   // wait for the completion of all the jobs and close the file
   void wait_all()
   {
     handler->wait_all();
+    buffer.clear();
   }
 
   bool test_all()
@@ -324,9 +302,9 @@ public:
     return handler->get_chunk_id_range(id_min, id_max);
   }
 
-  // launch asynchronous write
+  // queue write request
   template <typename DataPacker>
-  size_t launch(int index, DataPacker packer, Data& data, size_t& disp)
+  size_t queue(DataPacker packer, Data& data, size_t& disp)
   {
     size_t bufsize = 0;
 
@@ -336,15 +314,21 @@ public:
     }
 
     // pack data
-    buffer[index].resize(bufsize);
-    uint8_t* bufptr = buffer[index].get();
+    buffer.emplace_back(bufsize);
+    int  index  = buffer.size() - 1;
+    auto bufptr = buffer[index].get();
 
     for (int i = 0, address = 0; i < data.chunkvec.size(); i++) {
       address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
     }
 
     // write to the disk
-    return handler->write(index, bufptr, bufsize, disp);
+    auto count = handler->queue(index, buffer[index], disp);
+
+    // TODO: implement asynchronous write
+    wait(index);
+
+    return count;
   }
 };
 

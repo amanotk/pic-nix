@@ -2,8 +2,8 @@
 #ifndef _TRACER_DIAG_HPP_
 #define _TRACER_DIAG_HPP_
 
-#include "async.hpp"
 #include "nix/xtensor_particle.hpp"
+#include "parallel.hpp"
 
 using nix::ParticlePtr;
 using nix::ParticleVec;
@@ -98,7 +98,7 @@ public:
 /// @brief Diagnostic for tracer
 ///
 template <typename App, typename Data>
-class TracerDiag : public AsyncDiag<App, Data>
+class TracerDiag : public ParallelDiag<App, Data>
 {
 protected:
   using BaseDiag<App, Data>::info;
@@ -127,7 +127,7 @@ protected:
 
 public:
   // constructor
-  TracerDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("tracer", info, 1)
+  TracerDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("tracer", info)
   {
   }
 
@@ -153,7 +153,7 @@ public:
       int    seed    = data.thisrank;
       auto   packer  = TracerPacker<XtensorPacker3D>(species, seed);
       size_t disp0   = disp;
-      size_t nbyte   = this->launch(0, packer, data, disp);
+      size_t nbyte   = this->queue(packer, data, disp);
 
       // meta data
       {

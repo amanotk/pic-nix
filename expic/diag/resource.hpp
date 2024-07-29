@@ -2,7 +2,7 @@
 #ifndef _RESOURCE_DIAG_HPP_
 #define _RESOURCE_DIAG_HPP_
 
-#include "async.hpp"
+#include "base.hpp"
 
 ///
 /// @brief Diagnostic for resource usage

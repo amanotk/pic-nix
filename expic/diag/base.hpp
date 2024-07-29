@@ -76,6 +76,7 @@ public:
   // constructor
   BaseDiag(std::string name, std::shared_ptr<DiagInfo> info) : name(name), info(info)
   {
+    make_sure_directory_exists(format_dirname(""));
   }
 
   // destructor

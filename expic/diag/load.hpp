@@ -2,13 +2,13 @@
 #ifndef _LOAD_DIAG_HPP_
 #define _LOAD_DIAG_HPP_
 
-#include "async.hpp"
+#include "parallel.hpp"
 
 ///
 /// @brief Diagnostic for computational work load
 ///
 template <typename App, typename Data>
-class LoadDiag : public AsyncDiag<App, Data>
+class LoadDiag : public ParallelDiag<App, Data>
 {
 protected:
   using BaseDiag<App, Data>::info;
@@ -66,7 +66,7 @@ protected:
 
 public:
   /// constructor
-  LoadDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("load", info, 2)
+  LoadDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("load", info)
   {
   }
 
@@ -94,7 +94,7 @@ public:
       auto   packer = LoadPacker();
       size_t disp0  = disp;
       size_t size   = App::ChunkType::NumLoadMode * sizeof(float64);
-      size_t nbyte  = this->launch(0, packer, data, disp);
+      size_t nbyte  = this->queue(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata
@@ -113,7 +113,7 @@ public:
       auto   packer = RankPacker(data.thisrank);
       size_t disp0  = disp;
       size_t size   = sizeof(int);
-      size_t nbyte  = this->launch(1, packer, data, disp);
+      size_t nbyte  = this->queue(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata

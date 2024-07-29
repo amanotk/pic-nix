@@ -2,13 +2,13 @@
 #ifndef _FIELD_DIAG_HPP_
 #define _FIELD_DIAG_HPP_
 
-#include "async.hpp"
+#include "parallel.hpp"
 
 ///
 /// @brief Diagnostic for field
 ///
 template <typename App, typename Data>
-class FieldDiag : public AsyncDiag<App, Data>
+class FieldDiag : public ParallelDiag<App, Data>
 {
 protected:
   using BaseDiag<App, Data>::info;
@@ -43,7 +43,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(std::shared_ptr<DiagInfo> info) : AsyncDiag<App, Data>("field", info, 2)
+  FieldDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("field", info)
   {
   }
 
@@ -76,7 +76,7 @@ public:
       auto   packer = FieldPacker<XtensorPacker3D>();
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * 6 * sizeof(float64);
-      size_t nbyte  = this->launch(0, packer, data, disp);
+      size_t nbyte  = this->queue(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata
@@ -96,7 +96,7 @@ public:
       auto   packer = MomentPacker<XtensorPacker3D>();
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * Ns * 11 * sizeof(float64);
-      size_t nbyte  = this->launch(1, packer, data, disp);
+      size_t nbyte  = this->queue(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata
