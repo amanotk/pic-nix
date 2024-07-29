@@ -124,6 +124,8 @@ public:
       DEBUG2 << "push_taskflow() end";
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
+
     DEBUG2 << "push() end";
     float64 wclock2 = nix::wall_clock();
 
@@ -289,6 +291,8 @@ DEFINE_MEMBER(void, diagnostic)()
   for (json::iterator it = config.begin(); it != config.end(); ++it) {
     diagnoser->diagnose(*it, *this, data);
   }
+
+  MPI_Barrier(MPI_COMM_WORLD);
 
   DEBUG2 << "diagnostic() end";
   float64 wclock2 = nix::wall_clock();
