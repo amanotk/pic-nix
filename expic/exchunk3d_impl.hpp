@@ -347,17 +347,20 @@ struct Current {
 //
 template <int Order, typename T_float>
 struct Moment {
-  static constexpr int index_ro = 0;
-  static constexpr int index_tx = 1;
-  static constexpr int index_ty = 2;
-  static constexpr int index_tz = 3;
+  static constexpr int index_t  = 0;
+  static constexpr int index_x  = 1;
+  static constexpr int index_y  = 2;
+  static constexpr int index_z  = 3;
   static constexpr int index_tt = 4;
   static constexpr int index_xx = 5;
   static constexpr int index_yy = 6;
   static constexpr int index_zz = 7;
-  static constexpr int index_xy = 8;
-  static constexpr int index_yz = 9;
-  static constexpr int index_zx = 10;
+  static constexpr int index_tx = 8;
+  static constexpr int index_ty = 9;
+  static constexpr int index_tz = 10;
+  static constexpr int index_xy = 11;
+  static constexpr int index_yz = 12;
+  static constexpr int index_zx = 13;
   static constexpr int size     = Order + 1;
   static constexpr int is_odd   = Order % 2 == 0 ? 0 : 1;
   using simd_f64                = simd::simd_f64;
@@ -400,7 +403,7 @@ struct Moment {
 
   template <typename T_array, typename T_int>
   static void append_moment3d(T_array& um, T_int iz0, T_int iy0, T_int ix0, int is,
-                              T_float moment[size][size][size][11])
+                              T_float moment[size][size][size][14])
   {
     constexpr bool is_scalar = std::is_integral_v<T_int> && std::is_floating_point_v<T_float>;
     constexpr bool is_vector = std::is_integral_v<T_int> && std::is_same_v<T_float, simd_f64>;
@@ -410,7 +413,7 @@ struct Moment {
       for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
         for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
           for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
-            for (int k = 0; k < 11; k++) {
+            for (int k = 0; k < 14; k++) {
               um(iz, iy, ix, is, k) += moment[jz][jy][jx][k];
             }
           }
@@ -421,7 +424,7 @@ struct Moment {
       for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
         for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
           for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
-            for (int k = 0; k < 11; k++) {
+            for (int k = 0; k < 14; k++) {
               um(iz, iy, ix, is, k) += xsimd::reduce_add(moment[jz][jy][jx][k]);
             }
           }
@@ -432,7 +435,7 @@ struct Moment {
     }
   }
 
-  auto calc_local_moment(T_float xu[], T_float ms, T_float mom[size][size][size][11])
+  auto calc_local_moment(T_float xu[], T_float ms, T_float mom[size][size][size][14])
   {
     using T_int = xsimd::as_integer_t<T_float>;
 
@@ -459,7 +462,10 @@ struct Moment {
           T_float ww = ms * wx[jx] * wy[jy] * wz[jz];
           T_float gm = lorentz_factor(xu[3], xu[4], xu[5], rc);
 
-          mom[jz][jy][jx][index_ro] += ww;
+          mom[jz][jy][jx][index_t] += ww;
+          mom[jz][jy][jx][index_x] += ww * xu[3] / gm;
+          mom[jz][jy][jx][index_y] += ww * xu[4] / gm;
+          mom[jz][jy][jx][index_z] += ww * xu[5] / gm;
           mom[jz][jy][jx][index_tx] += ww * xu[3];
           mom[jz][jy][jx][index_ty] += ww * xu[4];
           mom[jz][jy][jx][index_tz] += ww * xu[5];
@@ -479,7 +485,7 @@ struct Moment {
 
   template <typename T_array, typename T_int>
   void deposit_global_moment(T_array& um, T_int iz, T_int iy, T_int ix, int is,
-                             T_float mom[size][size][size][11])
+                             T_float mom[size][size][size][14])
   {
     ix -= ((Order + 1) / 2) + 1;
     iy -= ((Order + 1) / 2) + 1;
@@ -490,7 +496,7 @@ struct Moment {
   template <typename T_array>
   void unsorted(T_array& um, int is, T_float xu[], float64 ms)
   {
-    T_float mom[size][size][size][11] = {0};
+    T_float mom[size][size][size][14] = {0};
 
     // calculate local current
     auto [ix0, iy0, iz0] = calc_local_moment(xu, ms, mom);

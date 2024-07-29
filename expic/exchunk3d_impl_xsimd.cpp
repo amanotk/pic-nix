@@ -340,8 +340,8 @@ DEFINE_MEMBER(void, deposit_moment)()
         // process particles in the cell
         for (int is = 0; is < Ns; is++) {
           // local moment
-          float64  mom[size][size][size][11]      = {0}; // scalar
-          simd_f64 mom_simd[size][size][size][11] = {0}; // SIMD register
+          float64  mom[size][size][size][14]      = {0}; // scalar
+          simd_f64 mom_simd[size][size][size][14] = {0}; // SIMD register
 
           int ip_zero = up[is]->pindex(ii);
           int np_cell = up[is]->pindex(ii + 1) - ip_zero;

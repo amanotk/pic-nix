@@ -132,7 +132,7 @@ public:
       // allocate MPI buffer for field
       this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, 0, sizeof(float64) * 6);
       this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, 0, sizeof(float64) * 4);
-      this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 11);
+      this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
 
       // setup for Friedman filter
       this->setup_friedman_filter();
@@ -397,7 +397,7 @@ public:
         int ix2 = Lbx + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            for (int ik = 0; ik < 11; ik++) {
+            for (int ik = 0; ik < 14; ik++) {
               um(iz, iy, ix1, ik) = um(iz, iy, ix2, ik);
             }
           }
@@ -414,7 +414,7 @@ public:
         int ix2 = Ubx - Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            for (int ik = 0; ik < 11; ik++) {
+            for (int ik = 0; ik < 14; ik++) {
               um(iz, iy, ix1, ik) = um(iz, iy, ix2, ik);
             }
           }

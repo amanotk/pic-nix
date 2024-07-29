@@ -95,7 +95,7 @@ public:
       // data
       auto   packer = MomentPacker<XtensorPacker3D>();
       size_t disp0  = disp;
-      size_t size   = nz * ny * nx * Ns * 11 * sizeof(float64);
+      size_t size   = nz * ny * nx * Ns * 14 * sizeof(float64);
       size_t nbyte  = this->queue(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
@@ -103,7 +103,7 @@ public:
       const char name[]  = "um";
       const char desc[]  = "moment";
       int        ndim    = 6;
-      int        dims[6] = {nc, nz, ny, nx, Ns, 11};
+      int        dims[6] = {nc, nz, ny, nx, Ns, 14};
       nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 

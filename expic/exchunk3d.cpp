@@ -110,7 +110,7 @@ DEFINE_MEMBER(void, allocate)()
   // memory allocation
   uf.resize({nz, ny, nx, 6});
   uj.resize({nz, ny, nx, 4});
-  um.resize({nz, ny, nx, ns, 11});
+  um.resize({nz, ny, nx, ns, 14});
   ff.resize({nz, ny, nx, 3, 6});
   uf.fill(0);
   uj.fill(0);
