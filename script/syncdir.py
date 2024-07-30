@@ -20,6 +20,14 @@ class OutputHandler(FileSystemEventHandler):
         self.src_dir = Path(src)
         self.dst_dir = Path(dst)
         self.executor = executor
+        self.future = list()
+
+    def cleanup_future(self):
+        for item in self.future:
+            src, dst, future = item
+            if future.done():
+                self.future.remove(item)
+                logger.info(f"File successfully moved from {src} to {dst}")
 
     def on_closed(self, event):
         src_path = Path(event.src_path)
@@ -28,7 +36,8 @@ class OutputHandler(FileSystemEventHandler):
             rel_path = src_path.relative_to(self.src_dir)
             dst_path = self.dst_dir / rel_path
             # run copy_file in a separate thread
-            self.executor.submit(copy_file, src_path, dst_path)
+            future = self.executor.submit(copy_file, src_path, dst_path)
+            self.future.append((src_path, dst_path, future))
 
     def on_created(self, event):
         src_path = Path(event.src_path)
@@ -51,7 +60,6 @@ def copy_file(src_path, dst_path):
         # remove the source file
         if src_path.is_file():
             src_path.unlink()
-            logger.info(f"File successfully moved from {src_path} to {dst_path}")
     except Exception as e:
         logger.error(f"Error copying {src_path} to {dst_path}: {e}")
 
@@ -141,6 +149,12 @@ if __name__ == "__main__":
             print("Error: PICNIX_TMPDIR is not set")
             sys.exit(1)
 
+    # make sure that the directories exist
+    if not os.path.exists(src_dir):
+        os.makedirs(src_dir)
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
     # logging
     logfile = os.sep.join([dst_dir, args.log]) + "{:06d}.txt".format(args.rank)
     basicConfig(
@@ -170,6 +184,7 @@ if __name__ == "__main__":
         try:
             while observer.is_alive():
                 observer.join(1)
+                event_handler.cleanup_future()
         finally:
             observer.stop()
             observer.join()
