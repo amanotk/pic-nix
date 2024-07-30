@@ -133,6 +133,7 @@ public:
       }
 
       if (fs::create_directory(dirpath) == true) {
+        nix::sync();
         return true;
       }
 
