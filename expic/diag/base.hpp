@@ -133,11 +133,11 @@ public:
       }
 
       if (fs::create_directory(dirpath) == true) {
-        nix::sync();
+        nix::sync_directory(dirpath.string());
         return true;
       }
 
-      ERROR << tfm::format("Failed to create directory: %s", path);
+      ERROR << tfm::format("Failed to create directory: %s", dirpath.string());
 
       return false;
     }
