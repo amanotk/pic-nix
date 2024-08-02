@@ -32,7 +32,13 @@ class Run(object):
         return str(basedir / path / filename)
 
     def get_basedir(self):
-        return self.config["application"].get("basedir", ".")
+        profile = pathlib.Path(self.profile)
+        basedir = pathlib.Path(self.config["application"].get("basedir", "."))
+        basedir1 = profile.parent.parent / basedir
+        basedir2 = profile.parent
+        if basedir1.absolute() != basedir2.absolute():
+            raise ValueError("Inconsistent basedir in profile and application")
+        return str(basedir1)
 
     def get_iomode(self):
         return self.config["application"].get("iomode", "mpiio")
