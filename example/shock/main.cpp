@@ -288,8 +288,8 @@ public:
         int ix2 = Lbx + ix + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-            uf(iz, iy, ix1, 1) = -uf(iz, iy, ix2, 1);
-            uf(iz, iy, ix1, 2) = -uf(iz, iy, ix2, 2);
+            uf(iz, iy, ix1, 1) = 0;
+            uf(iz, iy, ix1, 2) = 0;
           }
         }
       }
@@ -299,16 +299,14 @@ public:
         int ix2 = ix1 + 1;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb - 1; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb - 1; iy++) {
-            uf(iz, iy, ix1, 0) = -delx * uj(iz, iy, ix1, 0) + uf(iz, iy, ix2, 0) +
-                                 delxy * (uf(iz, iy + 1, ix1, 1) - uf(iz, iy, ix1, 1)) +
-                                 delxz * (uf(iz + 1, iy, ix1, 2) - uf(iz, iy, ix1, 2));
+            uf(iz, iy, ix1, 0) = 0;
           }
         }
       }
       // transverse B: By, Bz
       for (int ix = 0; ix < 2 * Nb; ix++) {
         int ix1 = Lbx - ix + Nb - 1;
-        int ix2 = Lbx + ix + Nb + 1;
+        int ix2 = Lbx + Nb;
         for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
             uf(iz, iy, ix1, 4) = uf(iz, iy, ix2, 4);
@@ -319,12 +317,10 @@ public:
       // normal B: Bx
       for (int ix = 0; ix < 2 * Nb; ix++) {
         int ix1 = Lbx - ix + Nb - 1;
-        int ix2 = ix1 + 1;
+        int ix2 = Lbx + Nb;
         for (int iz = Lbz - Nb + 1; iz <= Ubz + Nb; iz++) {
           for (int iy = Lby - Nb + 1; iy <= Uby + Nb; iy++) {
-            uf(iz, iy, ix1, 3) = uf(iz, iy, ix2, 3) +
-                                 delxy * (uf(iz, iy, ix2, 4) - uf(iz, iy - 1, ix2, 4)) +
-                                 delxz * (uf(iz, iy, ix2, 5) - uf(iz - 1, iy, ix2, 5));
+            uf(iz, iy, ix1, 3) = uf(iz, iy, ix2, 3);
           }
         }
       }
