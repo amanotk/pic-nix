@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import os
+import re
 import pathlib
 import json
 import msgpack
@@ -20,6 +20,7 @@ from .diag import DiagHandler
 
 class Run(object):
     def __init__(self, profile):
+        self.cache = dict()
         self.profile = profile
         self.read_profile(profile)
         self.set_coordinate()
@@ -30,6 +31,9 @@ class Run(object):
         prefix = self.config["application"]["log"].get("prefix", DEFAULT_LOG_PREFIX)
         filename = "{:s}.msgpack".format(prefix)
         return str(basedir / path / filename)
+
+    def clear_cache(self):
+        self.cache = dict()
 
     def get_basedir(self):
         profile = pathlib.Path(self.profile)
@@ -75,9 +79,9 @@ class Run(object):
                 self.diag_handlers[handler.get_prefix()] = handler
 
     def set_coordinate(self):
-        self.xc = self.delh * np.arange(self.Nx)
-        self.yc = self.delh * np.arange(self.Ny)
-        self.zc = self.delh * np.arange(self.Nz)
+        self.xc = self.delh * (np.arange(self.Nx) + 0.5)
+        self.yc = self.delh * (np.arange(self.Ny) + 0.5)
+        self.zc = self.delh * (np.arange(self.Nz) + 0.5)
 
     def get_chunk_rank(self, step):
         rebalance = self.find_rebalance_log_at(step)
@@ -101,13 +105,27 @@ class Run(object):
     def get_time_at(self, prefix, step):
         return self.diag_handlers[prefix].get_time_at_step(step)
 
-    def read_at(self, prefix, step):
+    def read_at(self, prefix, step, pattern=None):
+        # return cache if exists
+        if prefix in self.cache:
+            cache = self.cache[prefix]
+            cache_step = cache.get("step", None)
+            cache_pattern = cache.get("pattern", None)
+            cache_data = cache.get("data", None)
+            if (
+                cache_data is not None
+                and cache_step == step
+                and cache_pattern == pattern
+            ):
+                return cache_data
+
+        # otherwise, read data
         handler = self.diag_handlers[prefix]
 
         # read data
         data = dict()
         for jsonfile in handler.find_json_at_step(step):
-            chunk_split_data = self.read_at_single(jsonfile)
+            chunk_split_data = self.read_at_single(jsonfile, pattern)
             for key, val in chunk_split_data.items():
                 if not key in data:
                     data[key] = []
@@ -121,9 +139,15 @@ class Run(object):
         if handler.is_chunked_array_conversion_required():
             data = convert_array_format(data, self.chunkmap)
 
+        # store cache
+        self.cache[prefix] = {"step": step, "pattern": pattern, "data": data}
+
         return data
 
-    def read_at_single(self, jsonfile):
+    def read_at_single(self, jsonfile, pattern=None):
+        if pattern is None:
+            pattern = ".*"
+
         with open(jsonfile, "r") as fp:
             obj = json.load(fp)
             byteorder, datafile, order = get_json_meta(obj)
@@ -134,6 +158,8 @@ class Run(object):
         with open(datafile, "r") as fp:
             data = {}
             for dsname in dataset:
+                if not re.match(pattern, dsname):
+                    continue
                 offset, dtype, shape = get_dataset_info(dataset.get(dsname), byteorder)
                 if order == 0:
                     shape == shape[::-1]
