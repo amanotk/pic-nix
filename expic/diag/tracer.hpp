@@ -53,10 +53,11 @@ protected:
     template <typename ChunkData>
     size_t operator()(ChunkData data, uint8_t* buffer, int address)
     {
-      std::mt19937_64   mt;
-      nix::rand_uniform uniform(0.0, 1.0);
-      int               Np = data.up[species]->Np;
-      auto&             xu = data.up[species]->xu;
+      std::random_device rd;
+      std::mt19937_64    mt(rd());
+      nix::rand_uniform  uniform(0.0, 1.0);
+      int                Np = data.up[species]->Np;
+      auto&              xu = data.up[species]->xu;
 
       for (int ip = 0; ip < Np; ip++) {
         bool x = xmin <= xu(ip, 0) && xu(ip, 0) <= xmax;
@@ -65,8 +66,11 @@ protected:
         bool r = uniform(mt) < fraction;
 
         if (x && y && z && r) {
-          int64& id64 = *reinterpret_cast<int64*>(&xu(ip, 6));
-          id64        = -std::abs(id64);
+          // make ID negative
+          int64 id64;
+          std::memcpy(&id64, &xu(ip, 6), sizeof(int64));
+          id64 = -std::abs(id64);
+          std::memcpy(&xu(ip, 6), &id64, sizeof(int64));
         }
       }
 
