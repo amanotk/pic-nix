@@ -3,8 +3,9 @@
 
 import numpy as np
 import os
+import re
 import json
-import glob
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from picnix import (
     DEFAULT_LOG_PREFIX,
@@ -21,6 +22,8 @@ class DiagHandler(object):
         self.prefix = prefix
         self.basedir = basedir
         self.iomode = iomode
+        self.file_pattern = re.compile(rf"\d+\.json$")
+        self.node_pattern = re.compile(r"node\d+$")
 
     def match(self, name):
         return name == self.name
@@ -40,23 +43,47 @@ class DiagHandler(object):
         self.file = self.get_file_array(prefix)
         self.step = np.arange(self.file.shape[1], dtype=np.int32)
         self.time = np.arange(self.file.shape[1], dtype=np.float64)
-        for i, file in enumerate(self.file[0, :]):
-            self.step[i], self.time[i] = self.read_time_and_step(file)
+
+        # read time and step
+        with ThreadPoolExecutor() as executor:
+            future_to_index = {
+                executor.submit(self.read_time_and_step, file): i
+                for i, file in enumerate(self.file[0, :])
+            }
+
+            for future in as_completed(future_to_index):
+                i = future_to_index[future]
+                try:
+                    self.step[i], self.time[i] = future.result()
+                except Exception as exc:
+                    print(f"File at index {i} generated an exception: {exc}")
+
+    def get_matching_jsons(self, dirname):
+        files = []
+        for f in os.listdir(dirname):
+            if self.file_pattern.match(f):
+                files.append(os.path.join(dirname, f))
+        return sorted(files)
+
+    def get_matching_nodes(self, dirname):
+        nodes = []
+        for f in os.listdir(dirname):
+            if self.node_pattern.match(f):
+                nodes.append(os.path.join(dirname, f))
+        return sorted(nodes)
 
     def get_file_array(self, prefix):
         if self.iomode == "mpiio":
-            dirname = os.sep.join([self.basedir, prefix]) + os.sep
-            pattern = self.pattern_filename("", ".json")
-            file = sorted(glob.glob(dirname + pattern))
+            dirname = os.sep.join([self.basedir, prefix])
+            file = self.get_matching_jsons(dirname)
             return np.array(file).reshape((1, len(file)))
         elif self.iomode == "posix":
-            nodedir = sorted(glob.glob(os.sep.join([self.basedir, "node*"]) + os.sep))
+            nodedir = self.get_matching_nodes(self.basedir)
             nodenum = len(nodedir)
             file = [0] * nodenum
             for i in range(nodenum):
-                dirname = os.sep.join([nodedir[i], prefix]) + os.sep
-                pattern = self.pattern_filename("", ".json")
-                file[i] = sorted(glob.glob(dirname + pattern))
+                dirname = os.sep.join([nodedir[i], prefix])
+                file[i] = self.get_matching_jsons(dirname)
             return np.array(file)
 
     def read_time_and_step(self, filename):
@@ -65,9 +92,6 @@ class DiagHandler(object):
             step = obj["meta"]["step"]
             time = obj["meta"]["time"]
         return step, time
-
-    def pattern_filename(self, prefix, ext):
-        return prefix + "*" + ext
 
     def find_index_at_step(self, step):
         index = np.searchsorted(self.step, step)

@@ -96,6 +96,9 @@ class Run(object):
         data = find_record_from_msgpack(filename, rank=0, step=step, name="rebalance")
         return data[0]
 
+    def get_diag_handler(self, prefix):
+        return self.diag_handlers[prefix]
+
     def get_step(self, prefix):
         return self.diag_handlers[prefix].get_step()
 
