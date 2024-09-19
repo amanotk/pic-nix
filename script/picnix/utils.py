@@ -1,10 +1,49 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+import re
+import pathlib
 import numpy as np
+import json
 import msgpack
 
 from picnix import DEFAULT_LOG_PREFIX
+
+
+def read_jsonfile(filename):
+    with open(filename, "r") as fp:
+        obj = json.load(fp)
+        byteorder, datafile, layout, chunk_id_range = get_json_meta(obj)
+        meta = {
+            "byteorder": byteorder,
+            "datafile": datafile,
+            "layout": layout,
+            "chunk_id_range": chunk_id_range,
+            "dirname": str(pathlib.Path(filename).parent),
+        }
+        dataset = obj["dataset"]
+
+    return dataset, meta
+
+
+def read_datafile(dataset, meta, pattern):
+    byteorder = meta["byteorder"]
+    layout = meta["layout"]
+    dirname = meta["dirname"]
+    datafile = os.sep.join([dirname, meta["datafile"]])
+
+    with open(datafile, "r") as fp:
+        data = {}
+        for dsname in dataset:
+            if not re.match(pattern, dsname):
+                continue
+            offset, dtype, shape = get_dataset_info(dataset[dsname], byteorder)
+            if layout == 0:
+                shape = shape[::-1]
+            data[dsname] = get_dataset_data(fp, offset, dtype, shape)
+
+    return data
 
 
 def get_json_meta(obj):
@@ -17,22 +56,20 @@ def get_json_meta(obj):
     elif endian == 16777216:  # big endian
         byteorder = ">"
     else:
+        byteorder = ""
         print("unrecognized endian flag: {}".format(endian))
 
-    # check raw data file
     datafile = meta.get("rawfile")
+    layout = meta.get("order", 0)
+    chunk_id_range = meta.get("chunk_id_range", None)
 
-    # check array order
-    order = meta.get("order", 0)
-
-    return byteorder, datafile, order
+    return byteorder, datafile, layout, chunk_id_range
 
 
 def get_dataset_info(obj, byteorder):
     offset = obj["offset"]
     datatype = byteorder + obj["datatype"]
     shape = obj["shape"]
-    datasize = np.product(shape) * np.dtype(datatype).itemsize
     return offset, datatype, shape
 
 

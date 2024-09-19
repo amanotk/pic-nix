@@ -122,24 +122,21 @@ class Run(object):
             ):
                 return cache_data
 
+        # default pattern (read everything)
+        if pattern is None:
+            pattern = ".*"
+
         # otherwise, read data
         handler = self.diag_handlers[prefix]
-
-        # read data
         data = dict()
-        for jsonfile in handler.find_json_at_step(step):
-            chunk_split_data = self.read_at_single(jsonfile, pattern)
-            for key, val in chunk_split_data.items():
-                if not key in data:
-                    data[key] = []
-                data[key].append(val)
 
-        # concatenate to global array
-        for key, val in data.items():
-            data[key] = np.concatenate(val, axis=0)
+        if handler.is_chunked_data_shape_uniform():
+            data = self.read_at_uniform(handler, step, pattern)
+        else:
+            data = self.read_at_general(handler, step, pattern)
 
         # convert array format
-        if handler.is_chunked_array_conversion_required():
+        if handler.is_chunked_data_conversion_required():
             data = convert_array_format(data, self.chunkmap)
 
         # store cache
@@ -147,25 +144,77 @@ class Run(object):
 
         return data
 
-    def read_at_single(self, jsonfile, pattern=None):
-        if pattern is None:
-            pattern = ".*"
+    def prepare_read(self, all_jsonfiles, pattern):
+        dims = dict()
+        dtype = dict()
+        names = []
 
-        with open(jsonfile, "r") as fp:
-            obj = json.load(fp)
-            byteorder, datafile, order = get_json_meta(obj)
-            dataset = obj["dataset"]
+        # preparation
+        dataset, meta = read_jsonfile(all_jsonfiles[0])
+        for key in dataset.keys():
+            if not re.match(pattern, key):
+                continue
+            names.append(key)
+            ndim = dataset[key]["ndim"]
+            dtype[key] = dataset[key]["datatype"]
+            dims[key] = np.zeros((len(all_jsonfiles), ndim), dtype=np.int32)
 
-        # read data
-        datafile = str(pathlib.Path(jsonfile).parent / datafile)
-        with open(datafile, "r") as fp:
-            data = {}
-            for dsname in dataset:
-                if not re.match(pattern, dsname):
-                    continue
-                offset, dtype, shape = get_dataset_info(dataset.get(dsname), byteorder)
-                if order == 0:
-                    shape == shape[::-1]
-                data[dsname] = get_dataset_data(fp, offset, dtype, shape)
+        return dims, dtype, names
+
+    def read_json_files(self, all_jsonfiles, dataset_names, dims):
+        json_contents = [0] * len(all_jsonfiles)
+        for i, jsonfile in enumerate(all_jsonfiles):
+            json_contents[i] = read_jsonfile(jsonfile)
+            dataset, meta = json_contents[i]
+            for key in dataset_names:
+                dims[key][i, :] = dataset[key]["shape"]
+
+        return json_contents
+
+    def allocate_data_memory(self, dataset_names, dims, dtype):
+        data = dict()
+        for key in dataset_names:
+            dshape = (np.sum(dims[key][:, 0]), *dims[key][0, 1:])
+            data[key] = np.zeros(dshape, dtype=dtype[key])
 
         return data
+
+    def read_at_uniform(self, handler, step, pattern):
+        all_jsonfiles = handler.find_json_at_step(step)
+        num_jsonfiles = len(all_jsonfiles)
+
+        dims, dtype, names = self.prepare_read(all_jsonfiles, pattern)
+        json_contents = self.read_json_files(all_jsonfiles, names, dims)
+        result = self.allocate_data_memory(names, dims, dtype)
+
+        # read data
+        for i in range(num_jsonfiles):
+            dataset, meta = json_contents[i]
+            chunk_data = read_datafile(dataset, meta, pattern)
+            for key in names:
+                chunk_id_range = meta["chunk_id_range"]
+                chunk_slice = slice(chunk_id_range[0], chunk_id_range[1] + 1)
+                result[key][chunk_slice, ...] = chunk_data[key]
+
+        return result
+
+    def read_at_general(self, handler, step, pattern):
+        all_jsonfiles = handler.find_json_at_step(step)
+        num_jsonfiles = len(all_jsonfiles)
+
+        dims, dtype, names = self.prepare_read(all_jsonfiles, pattern)
+        json_contents = self.read_json_files(all_jsonfiles, names, dims)
+        result = self.allocate_data_memory(names, dims, dtype)
+
+        # read data
+        addr = {key: 0 for key in names}
+        for i in range(num_jsonfiles):
+            dataset, meta = json_contents[i]
+            chunk_data = read_datafile(dataset, meta, pattern)
+            for key in names:
+                count = chunk_data[key].shape[0]
+                chunk_slice = slice(addr[key], addr[key] + count)
+                result[key][chunk_slice, ...] = chunk_data[key]
+                addr[key] += count
+
+        return result

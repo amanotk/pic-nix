@@ -34,7 +34,10 @@ class DiagHandler(object):
     def get_prefix(self):
         return self.prefix
 
-    def is_chunked_array_conversion_required(self):
+    def is_chunked_data_conversion_required(self):
+        return False
+
+    def is_chunked_data_shape_uniform(self):
         return False
 
     def setup(self, config):
@@ -153,12 +156,18 @@ class LoadDiagHandler(DiagHandler):
     def __init__(self, prefix, basedir, iomode):
         super().__init__("load", prefix, basedir, iomode)
 
+    def is_chunked_data_shape_uniform(self):
+        return True
+
 
 class FieldDiagHandler(DiagHandler):
     def __init__(self, prefix, basedir, iomode):
         super().__init__("field", prefix, basedir, iomode)
 
-    def is_chunked_array_conversion_required(self):
+    def is_chunked_data_conversion_required(self):
+        return True
+
+    def is_chunked_data_shape_uniform(self):
         return True
 
 
