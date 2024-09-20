@@ -6,6 +6,10 @@ import re
 import pathlib
 import json
 import msgpack
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import aiofiles
+import nest_asyncio
 
 from picnix import (
     DEFAULT_LOG_PREFIX,
@@ -19,9 +23,10 @@ from .diag import DiagHandler
 
 
 class Run(object):
-    def __init__(self, profile):
+    def __init__(self, profile, method=None):
         self.cache = dict()
         self.profile = profile
+        self.method = method
         self.read_profile(profile)
         self.set_coordinate()
 
@@ -74,7 +79,9 @@ class Run(object):
         self.diag_handlers = dict()
 
         for diagnostic in self.config["diagnostic"]:
-            handler = DiagHandler.create_handler(diagnostic, basedir, iomode)
+            handler = DiagHandler.create_handler(
+                diagnostic, basedir, iomode, self.method
+            )
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler
 
@@ -128,12 +135,21 @@ class Run(object):
 
         # otherwise, read data
         handler = self.diag_handlers[prefix]
-        data = dict()
 
-        if handler.is_chunked_data_shape_uniform():
-            data = self.read_at_uniform(handler, step, pattern)
+        if self.method == "async":
+            nest_asyncio.apply()  # for jupyter notebook
+
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            data = loop.run_until_complete(Run.async_do_read_at(handler, step, pattern))
+        elif self.method == "thread":
+            data = Run.thread_do_read_at(handler, step, pattern)
         else:
-            data = self.read_at_general(handler, step, pattern)
+            data = Run.do_read_at(handler, step, pattern)
 
         # convert array format
         if handler.is_chunked_data_conversion_required():
@@ -144,7 +160,8 @@ class Run(object):
 
         return data
 
-    def prepare_read(self, all_jsonfiles, pattern):
+    @staticmethod
+    def prepare_read(all_jsonfiles, pattern):
         dims = dict()
         dtype = dict()
         names = []
@@ -161,60 +178,169 @@ class Run(object):
 
         return dims, dtype, names
 
-    def read_json_files(self, all_jsonfiles, dataset_names, dims):
-        json_contents = [0] * len(all_jsonfiles)
-        for i, jsonfile in enumerate(all_jsonfiles):
-            json_contents[i] = read_jsonfile(jsonfile)
-            dataset, meta = json_contents[i]
-            for key in dataset_names:
-                dims[key][i, :] = dataset[key]["shape"]
-
-        return json_contents
-
-    def allocate_data_memory(self, dataset_names, dims, dtype):
+    @staticmethod
+    def allocate_memory(names, dims, dtype):
         data = dict()
-        for key in dataset_names:
+        addr = dict()
+        for key in names:
+            # storage
             dshape = (np.sum(dims[key][:, 0]), *dims[key][0, 1:])
             data[key] = np.zeros(dshape, dtype=dtype[key])
+            # address
+            addr[key] = np.zeros((dims[key].shape[0] + 1,), dtype=np.int32)
+            addr[key][1:] = np.cumsum(dims[key][:, 0])
 
-        return data
+        return data, addr
 
-    def read_at_uniform(self, handler, step, pattern):
-        all_jsonfiles = handler.find_json_at_step(step)
-        num_jsonfiles = len(all_jsonfiles)
-
-        dims, dtype, names = self.prepare_read(all_jsonfiles, pattern)
-        json_contents = self.read_json_files(all_jsonfiles, names, dims)
-        result = self.allocate_data_memory(names, dims, dtype)
-
-        # read data
-        for i in range(num_jsonfiles):
+    @staticmethod
+    def read_json_files(all_json, names, dims):
+        json_contents = [0] * len(all_json)
+        for i, jsonfile in enumerate(all_json):
+            json_contents[i] = read_jsonfile(jsonfile)
             dataset, meta = json_contents[i]
+            for key in names:
+                dims[key][i, :] = dataset[key]["shape"]
+        return json_contents, dims
+
+    @staticmethod
+    def read_data_files(result, address, json_contents, names, pattern):
+        for i, (dataset, meta) in enumerate(json_contents):
             chunk_data = read_datafile(dataset, meta, pattern)
             for key in names:
-                chunk_id_range = meta["chunk_id_range"]
-                chunk_slice = slice(chunk_id_range[0], chunk_id_range[1] + 1)
+                chunk_slice = slice(address[key][i], address[key][i + 1])
                 result[key][chunk_slice, ...] = chunk_data[key]
 
         return result
 
-    def read_at_general(self, handler, step, pattern):
-        all_jsonfiles = handler.find_json_at_step(step)
-        num_jsonfiles = len(all_jsonfiles)
+    @staticmethod
+    def do_read_at(handler, step, pattern):
+        all_json = handler.find_json_at_step(step)
+        dims, dtype, names = Run.prepare_read(all_json, pattern)
 
-        dims, dtype, names = self.prepare_read(all_jsonfiles, pattern)
-        json_contents = self.read_json_files(all_jsonfiles, names, dims)
-        result = self.allocate_data_memory(names, dims, dtype)
+        # read json
+        json_contents, dims = Run.read_json_files(all_json, names, dims)
+
+        # allocate memory
+        result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        addr = {key: 0 for key in names}
-        for i in range(num_jsonfiles):
-            dataset, meta = json_contents[i]
+        result = Run.read_data_files(result, address, json_contents, names, pattern)
+
+        return result
+
+    @staticmethod
+    def thread_read_json_files(all_json, names, dims):
+        json_contents = [0] * len(all_json)
+
+        # read json files via thread
+        with ThreadPoolExecutor() as executor:
+            future_to_index = {}
+            for i, jsonfile in enumerate(all_json):
+                future = executor.submit(read_jsonfile, jsonfile)
+                future_to_index[future] = i
+
+            for future in as_completed(future_to_index):
+                i = future_to_index[future]
+                try:
+                    json_contents[i] = future.result()
+                except Exception as exc:
+                    print(f"JSON file at index {i} generated an exception: {exc}")
+
+        # store dimensions
+        for i, (dataset, meta) in enumerate(json_contents):
+            for key in names:
+                dims[key][i, :] = dataset[key]["shape"]
+
+        return json_contents, dims
+
+    @staticmethod
+    def thread_read_data_files(result, address, json_contents, names, pattern):
+        # function for read and store data
+        def process_datafile(dataset, meta, i):
             chunk_data = read_datafile(dataset, meta, pattern)
             for key in names:
-                count = chunk_data[key].shape[0]
-                chunk_slice = slice(addr[key], addr[key] + count)
+                chunk_slice = slice(address[key][i], address[key][i + 1])
                 result[key][chunk_slice, ...] = chunk_data[key]
-                addr[key] += count
+
+        # read and store data via thread
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for i, (dataset, meta) in enumerate(json_contents):
+                futures.append(executor.submit(process_datafile, dataset, meta, i))
+
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as exc:
+                    print(f"An error occurred while processing a file: {exc}")
+
+        return result
+
+    @staticmethod
+    def thread_do_read_at(handler, step, pattern):
+        all_json = handler.find_json_at_step(step)
+        dims, dtype, names = Run.prepare_read(all_json, pattern)
+
+        # read json
+        json_contents, dims = Run.thread_read_json_files(all_json, names, dims)
+
+        # allocate memory
+        result, address = Run.allocate_memory(names, dims, dtype)
+
+        # read data
+        result = Run.thread_read_data_files(
+            result, address, json_contents, names, pattern
+        )
+
+        return result
+
+    @staticmethod
+    async def async_read_json_files(all_json, names, dims):
+        # read json files via asyncio
+        tasks = []
+        for jsonfile in all_json:
+            tasks.append(asyncio.create_task(async_read_jsonfile(jsonfile)))
+        json_contents = await asyncio.gather(*tasks)
+
+        # store dimensions
+        for i, (dataset, meta) in enumerate(json_contents):
+            for key in names:
+                dims[key][i, :] = dataset[key]["shape"]
+
+        return json_contents, dims
+
+    @staticmethod
+    async def async_read_data_files(result, address, json_contents, names, pattern):
+        # async function for read and store data
+        async def process_datafile(dataset, meta, i):
+            chunk_data = await async_read_datafile(dataset, meta, pattern)
+            for key in names:
+                chunk_slice = slice(address[key][i], address[key][i + 1])
+                result[key][chunk_slice, ...] = chunk_data[key]
+
+        # read and store data via asyncio
+        tasks = []
+        for i, (dataset, meta) in enumerate(json_contents):
+            tasks.append(asyncio.create_task(process_datafile(dataset, meta, i)))
+
+        await asyncio.gather(*tasks)
+
+        return result
+
+    @staticmethod
+    async def async_do_read_at(handler, step, pattern):
+        all_json = handler.find_json_at_step(step)
+        dims, dtype, names = Run.prepare_read(all_json, pattern)
+
+        # read json
+        json_contents, dims = await Run.async_read_json_files(all_json, names, dims)
+
+        # allocate memory
+        result, address = Run.allocate_memory(names, dims, dtype)
+
+        # read data
+        result = await Run.async_read_data_files(
+            result, address, json_contents, names, pattern
+        )
 
         return result

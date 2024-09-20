@@ -7,43 +7,10 @@ import pathlib
 import numpy as np
 import json
 import msgpack
+import asyncio
+import aiofiles
 
 from picnix import DEFAULT_LOG_PREFIX
-
-
-def read_jsonfile(filename):
-    with open(filename, "r") as fp:
-        obj = json.load(fp)
-        byteorder, datafile, layout, chunk_id_range = get_json_meta(obj)
-        meta = {
-            "byteorder": byteorder,
-            "datafile": datafile,
-            "layout": layout,
-            "chunk_id_range": chunk_id_range,
-            "dirname": str(pathlib.Path(filename).parent),
-        }
-        dataset = obj["dataset"]
-
-    return dataset, meta
-
-
-def read_datafile(dataset, meta, pattern):
-    byteorder = meta["byteorder"]
-    layout = meta["layout"]
-    dirname = meta["dirname"]
-    datafile = os.sep.join([dirname, meta["datafile"]])
-
-    with open(datafile, "r") as fp:
-        data = {}
-        for dsname in dataset:
-            if not re.match(pattern, dsname):
-                continue
-            offset, dtype, shape = get_dataset_info(dataset[dsname], byteorder)
-            if layout == 0:
-                shape = shape[::-1]
-            data[dsname] = get_dataset_data(fp, offset, dtype, shape)
-
-    return data
 
 
 def get_json_meta(obj):
@@ -66,6 +33,27 @@ def get_json_meta(obj):
     return byteorder, datafile, layout, chunk_id_range
 
 
+def process_json_content(content, filename):
+    obj = json.loads(content)
+    byteorder, datafile, layout, chunk_id_range = get_json_meta(obj)
+    meta = {
+        "byteorder": byteorder,
+        "datafile": datafile,
+        "layout": layout,
+        "chunk_id_range": chunk_id_range,
+        "dirname": str(pathlib.Path(filename).parent),
+    }
+    dataset = obj["dataset"]
+
+    return dataset, meta
+
+
+def read_jsonfile(filename):
+    with open(filename, "r") as fp:
+        content = fp.read()
+        return process_json_content(content, filename)
+
+
 def get_dataset_info(obj, byteorder):
     offset = obj["offset"]
     datatype = byteorder + obj["datatype"]
@@ -73,12 +61,69 @@ def get_dataset_info(obj, byteorder):
     return offset, datatype, shape
 
 
-def get_dataset_data(fp, offset, datatype, shape):
+def read_single_dataset(fp, offset, datatype, shape):
     fp.seek(offset)
     x = np.fromfile(fp, datatype, np.prod(shape)).reshape(shape)
     if len(shape) == 1 and shape[0] == 1:
         x = x[0]
     return x
+
+
+def read_datafile(dataset, meta, pattern):
+    byteorder = meta["byteorder"]
+    layout = meta["layout"]
+    dirname = meta["dirname"]
+    datafile = os.sep.join([dirname, meta["datafile"]])
+
+    with open(datafile, "r") as fp:
+        data = {}
+        for dsname in dataset:
+            if not re.match(pattern, dsname):
+                continue
+            offset, dtype, shape = get_dataset_info(dataset[dsname], byteorder)
+            if layout == 0:
+                shape = shape[::-1]
+            data[dsname] = read_single_dataset(fp, offset, dtype, shape)
+
+    return data
+
+
+async def async_read_jsonfile(filename):
+    try:
+        async with aiofiles.open(filename, mode="r") as fp:
+            content = await fp.read()
+        return process_json_content(content, filename)
+    except Exception as e:
+        print(f"Error reading file {filename}: {e}")
+        raise
+
+
+async def async_read_single_dataset(fp, offset, datatype, shape):
+    await fp.seek(offset)
+    buffer = await fp.read(np.prod(shape) * np.dtype(datatype).itemsize)
+    x = np.frombuffer(buffer, dtype=datatype).reshape(shape)
+    if len(shape) == 1 and shape[0] == 1:
+        x = x[0]
+    return x
+
+
+async def async_read_datafile(dataset, meta, pattern):
+    byteorder = meta["byteorder"]
+    layout = meta["layout"]
+    dirname = meta["dirname"]
+    datafile = os.path.join(dirname, meta["datafile"])
+
+    async with aiofiles.open(datafile, "rb") as fp:
+        data = {}
+        for dsname in dataset:
+            if not re.match(pattern, dsname):
+                continue
+            offset, dtype, shape = get_dataset_info(dataset[dsname], byteorder)
+            if layout == 0:
+                shape = shape[::-1]
+            data[dsname] = await async_read_single_dataset(fp, offset, dtype, shape)
+
+    return data
 
 
 def find_record_from_msgpack(filename, rank=None, step=None, name=None):

@@ -6,6 +6,9 @@ import os
 import re
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import aiofiles
+import nest_asyncio
 
 from picnix import (
     DEFAULT_LOG_PREFIX,
@@ -42,17 +45,26 @@ class DiagHandler(object):
 
     def setup(self, config):
         self.config = config
-        prefix = config.get("prefix", self.prefix)
-        self.file = self.get_file_array(prefix)
+        self.file = self.get_file_array(config.get("prefix", self.prefix))
         self.step = np.arange(self.file.shape[1], dtype=np.int32)
         self.time = np.arange(self.file.shape[1], dtype=np.float64)
 
         # read time and step
+        for i, file in enumerate(self.file[0, :]):
+            self.step[i], self.time[i] = DiagHandler.read_time_and_step(file)
+
+    def thread_setup(self, config):
+        self.config = config
+        self.file = self.get_file_array(config.get("prefix", self.prefix))
+        self.step = np.arange(self.file.shape[1], dtype=np.int32)
+        self.time = np.arange(self.file.shape[1], dtype=np.float64)
+
+        # read time and step via thread
         with ThreadPoolExecutor() as executor:
-            future_to_index = {
-                executor.submit(self.read_time_and_step, file): i
-                for i, file in enumerate(self.file[0, :])
-            }
+            future_to_index = {}
+            for i, file in enumerate(self.file[0, :]):
+                future = executor.submit(DiagHandler.read_time_and_step, file)
+                future_to_index[future] = i
 
             for future in as_completed(future_to_index):
                 i = future_to_index[future]
@@ -60,6 +72,23 @@ class DiagHandler(object):
                     self.step[i], self.time[i] = future.result()
                 except Exception as exc:
                     print(f"File at index {i} generated an exception: {exc}")
+
+    async def async_setup(self, config):
+        self.config = config
+        self.file = self.get_file_array(config.get("prefix", self.prefix))
+        self.step = np.arange(self.file.shape[1], dtype=np.int32)
+        self.time = np.arange(self.file.shape[1], dtype=np.float64)
+
+        # read time and step via asyncio
+        tasks = []
+        for i, file in enumerate(self.file[0, :]):
+            tasks.append(
+                asyncio.create_task(DiagHandler.async_read_time_and_step(file))
+            )
+        result = await asyncio.gather(*tasks)
+
+        for i in range(len(result)):
+            self.step[i], self.time[i] = result[i]
 
     def get_matching_jsons(self, dirname):
         files = []
@@ -89,13 +118,6 @@ class DiagHandler(object):
                 file[i] = self.get_matching_jsons(dirname)
             return np.array(file)
 
-    def read_time_and_step(self, filename):
-        with open(filename, "r") as fp:
-            obj = json.load(fp)
-            step = obj["meta"]["step"]
-            time = obj["meta"]["time"]
-        return step, time
-
     def find_index_at_step(self, step):
         index = np.searchsorted(self.step, step)
         if step == self.step[index]:
@@ -124,32 +146,60 @@ class DiagHandler(object):
             return None
 
     @staticmethod
-    def create_handler(config, basedir, iomode):
+    def read_time_and_step(filename):
+        with open(filename, "r") as fp:
+            obj = json.load(fp)
+            step = obj["meta"]["step"]
+            time = obj["meta"]["time"]
+        return step, time
+
+    @staticmethod
+    async def async_read_time_and_step(filename):
+        async with aiofiles.open(filename, mode="r") as fp:
+            content = await fp.read()
+            obj = json.loads(content)
+            step = obj["meta"]["step"]
+            time = obj["meta"]["time"]
+        return step, time
+
+    @staticmethod
+    def create_handler(config, basedir, iomode, method=None):
         if "name" not in config:
             return None
+
         # create handler
         if config["name"] == "load":
             prefix = config.get("prefix", DEFAULT_LOAD_PREFIX)
             handler = LoadDiagHandler(prefix, basedir, iomode)
-            handler.setup(config)
-            return handler
         elif config["name"] == "field":
             prefix = config.get("prefix", DEFAULT_FIELD_PREFIX)
             handler = FieldDiagHandler(prefix, basedir, iomode)
-            handler.setup(config)
-            return handler
         elif config["name"] == "particle":
             prefix = config.get("prefix", DEFAULT_PARTICLE_PREFIX)
             handler = ParticleDiagHandler(prefix, basedir, iomode)
-            handler.setup(config)
-            return handler
         elif config["name"] == "tracer":
             prefix = config.get("prefix", DEFAULT_TRACER_PREFIX)
             handler = TracerDiagHandler(prefix, basedir, iomode)
-            handler.setup(config)
-            return handler
         else:
             return None
+
+        # setup handler
+        if method == "async":
+            nest_asyncio.apply()  # for jupyter notebook
+
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            loop.run_until_complete(handler.async_setup(config))
+        elif method == "thread":
+            handler.thread_setup(config)
+        else:
+            handler.setup(config)
+
+        return handler
 
 
 class LoadDiagHandler(DiagHandler):
