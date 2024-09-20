@@ -4,6 +4,7 @@
 import os
 import numpy as np
 import h5py
+import tqdm
 
 
 def sort_and_split_particle_id(particle):
@@ -45,7 +46,7 @@ def convert_tracer_to_hdf5(run, species, hdffile):
     tracer_time = run.get_time("tracer")
     tracer_step = run.get_step("tracer")
 
-    for i, step in enumerate(tracer_step):
+    for i, step in enumerate(tqdm.tqdm(tracer_step)):
         # read data
         try:
             data = run.read_at("tracer", step)[group]
@@ -67,8 +68,6 @@ def convert_tracer_to_hdf5(run, species, hdffile):
                 # ignore
                 print("Skipping data at step: {:08d}".format(step))
                 continue
-            else:
-                print("Writing data at step: {:08d}".format(step))
 
             # expand size of step and time
             ds_step.resize((len(ds_step) + 1,))
@@ -98,7 +97,7 @@ def remove_tracer_file_after_confirmation(run, species, hdffile):
         group_xp = root["xp"]
         group_id = root["id"]
 
-        for i, step in enumerate(tracer_step):
+        for i, step in enumerate(tqdm.tqdm(tracer_step)):
             # read data
             try:
                 data = run.read_at("tracer", step)[group]
