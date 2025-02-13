@@ -217,11 +217,16 @@ class Histogram2D:
     def __init__(self, x, y, binx, biny, logx=False, logy=False):
         binx = self.handle_bin_arg(binx, logx)
         biny = self.handle_bin_arg(biny, logy)
-        weights = np.ones_like(x) / x.size
-        result = np.histogram2d(x, y, bins=(binx, biny), weights=weights)
-        self.density = result[0]
+        result = np.histogram2d(x, y, bins=(binx, biny))
+        # count for each bin
+        self.count = result[0]
         self.xedges = result[1]
         self.yedges = result[2]
+        # density (count per area)
+        deltax = np.diff(self.xedges)
+        deltay = np.diff(self.yedges)
+        self.area = deltax[:, np.newaxis] * deltay[np.newaxis, :]
+        self.density = self.count / self.area
 
     def handle_bin_arg(self, bin, logscale=False):
         if isinstance(bin, tuple) and logscale == False:
@@ -232,8 +237,9 @@ class Histogram2D:
             return bin
         raise ValueError("Invalid argument")
 
-    def pcolormesh_args(self):
+    def pcolormesh_args(self, density=True):
         x = 0.5 * (self.xedges[+1:] + self.xedges[:-1])
         y = 0.5 * (self.yedges[+1:] + self.yedges[:-1])
+        Z = self.density if density == True else self.count
         X, Y = np.broadcast_arrays(x[:, None], y[None, :])
-        return X, Y, self.density
+        return X, Y, Z
