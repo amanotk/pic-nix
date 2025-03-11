@@ -46,11 +46,11 @@ using ParticleType = nix::ParticlePtr::element_type;
 /// applications.
 ///
 template <int Order>
-class ExChunk3D : public nix::Chunk3D<(Order + 3) / 2, ParticleType>
+class ExChunk3D : public nix::Chunk3D<ParticleType>
 {
 public:
   using ThisType     = ExChunk3D<Order>;
-  using Chunk        = typename nix::Chunk3D<(Order + 3) / 2, ParticleType>;
+  using Chunk        = typename nix::Chunk3D<ParticleType>;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using MpiBufferPtr = typename Chunk::MpiBufferPtr;
   using Chunk::dims;
@@ -74,7 +74,7 @@ public:
   static constexpr int order = Order;
 
   // boundary margin
-  static constexpr int Nb = Chunk::boundary_margin;
+  static constexpr int Nb = (Order + 3) / 2;
 
   // mode for load
   enum LoadMode {
@@ -93,26 +93,32 @@ public:
   };
 
 protected:
-  int                     Ns;     ///< number of particle species
-  float64                 cc;     ///< speed of light
-  xt::xtensor<float64, 4> uf;     ///< electromagnetic field
-  xt::xtensor<float64, 4> uj;     ///< current density
-  xt::xtensor<float64, 5> um;     ///< particle moment
-  xt::xtensor<float64, 5> ff;     ///< electric field for Friedmann filter
-  ParticleVec             up;     ///< list of particles
+  int                     Ns; ///< number of particle species
+  float64                 cc; ///< speed of light
+  xt::xtensor<float64, 4> uf; ///< electromagnetic field
+  xt::xtensor<float64, 4> uj; ///< current density
+  xt::xtensor<float64, 5> um; ///< particle moment
+  xt::xtensor<float64, 5> ff; ///< electric field for Friedmann filter
+  ParticleVec             up; ///< list of particles
 
   ///
   /// @brief internal data struct
   ///
   struct InternalData {
-    int&                     Lbx;
-    int&                     Ubx;
-    int&                     Lby;
-    int&                     Uby;
-    int&                     Lbz;
-    int&                     Ubz;
-    int&                     Ns;
-    float64&                 cc;
+    int&     Lbx;
+    int&     Ubx;
+    int&     Lby;
+    int&     Uby;
+    int&     Lbz;
+    int&     Ubz;
+    int&     Ns;
+    float64& cc;
+    float64& delx;
+    float64& dely;
+    float64& delz;
+    float64 (&xlim)[3];
+    float64 (&ylim)[3];
+    float64 (&zlim)[3];
     std::vector<float64>&    load;
     xt::xtensor<float64, 4>& uf;
     xt::xtensor<float64, 4>& uj;
@@ -125,7 +131,8 @@ protected:
   ///
   InternalData get_internal_data()
   {
-    return {Lbx, Ubx, Lby, Uby, Lbz, Ubz, Ns, cc, load, uf, uj, um, up};
+    return {Lbx,  Ubx,  Lby,  Uby,  Lbz,  Ubz, Ns, cc, delx, dely,
+            delz, xlim, ylim, zlim, load, uf,  uj, um, up};
   }
 
   void push_position_impl_scalar(float64 delt);

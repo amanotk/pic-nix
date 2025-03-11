@@ -36,6 +36,8 @@ DEFINE_MEMBER(, ExChunk3D)
   // reset load
   this->load.resize(NumLoadMode);
   this->reset_load();
+
+  this->set_boundary_margin(Nb);
 }
 
 DEFINE_MEMBER(int64_t, get_size_byte)()
@@ -563,8 +565,8 @@ DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool
 
   // parameters for sort by cell
   int     stride_x = 1;
-  int     stride_y = stride_x * (dims[2] + 1);
-  int     stride_z = stride_y * (dims[1] + 1);
+  int     stride_y = stride_x * (Ubx - Lbx + 2);
+  int     stride_z = stride_y * (Uby - Lby + 2);
   float64 rdx      = 1 / delx;
   float64 rdy      = 1 / dely;
   float64 rdz      = 1 / delz;

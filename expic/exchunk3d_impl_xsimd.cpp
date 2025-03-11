@@ -68,8 +68,8 @@ DEFINE_MEMBER(template <int Interpolation> void, push_velocity)(const float64 de
   using namespace exchunk3d_impl;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
-  const int      stride_y = stride_x * (dims[2] + 1);
-  const int      stride_z = stride_y * (dims[1] + 1);
+  const int      stride_y = stride_x * (Ubx - Lbx + 2);
+  const int      stride_z = stride_y * (Uby - Lby + 2);
   const int      lbx      = Lbx;
   const int      lby      = Lby;
   const int      lbz      = Lbz;
@@ -182,8 +182,8 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   constexpr int  size     = Order + 3;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
-  const int      stride_y = stride_x * (dims[2] + 1);
-  const int      stride_z = stride_y * (dims[1] + 1);
+  const int      stride_y = stride_x * (Ubx - Lbx + 2);
+  const int      stride_z = stride_y * (Uby - Lby + 2);
   const int      lbx      = Lbx;
   const int      lby      = Lby;
   const int      lbz      = Lbz;
@@ -304,8 +304,8 @@ DEFINE_MEMBER(void, deposit_moment)()
   constexpr int  size     = Order + 1;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
-  const int      stride_y = stride_x * (dims[2] + 1);
-  const int      stride_z = stride_y * (dims[1] + 1);
+  const int      stride_y = stride_x * (Ubx - Lbx + 2);
+  const int      stride_z = stride_y * (Uby - Lby + 2);
   const int      lbx      = Lbx;
   const int      lby      = Lby;
   const int      lbz      = Lbz;
