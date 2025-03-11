@@ -1,6 +1,9 @@
 // -*- C++ -*-
 #include "nix/nix.hpp"
-#include "nix/particle_primitives.hpp"
+
+#include "nix/esirkepov.hpp"
+#include "nix/interp.hpp"
+#include "nix/primitives.hpp"
 
 namespace exchunk3d_impl
 {
@@ -48,8 +51,6 @@ template <int Order, typename T_float, int Interpolation = VelocityOption::Inter
 struct Velocity {
   static constexpr int size   = Order + 2;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
-  using simd_f64              = simd::simd_f64;
-  using simd_i64              = simd::simd_i64;
 
   int     lbx;
   int     lby;
@@ -131,9 +132,9 @@ struct Velocity {
     // weights
     if constexpr (Interpolation == VelocityOption::InterpMC) {
       // MC weights
-      shape<Order>(xu[0], xig, rdx, wix);
-      shape<Order>(xu[1], yig, rdy, wiy);
-      shape<Order>(xu[2], zig, rdz, wiz);
+      shape_mc<Order>(xu[0], xig, rdx, wix);
+      shape_mc<Order>(xu[1], yig, rdy, wiy);
+      shape_mc<Order>(xu[2], zig, rdz, wiz);
     } else if constexpr (Interpolation == VelocityOption::InterpWT) {
       // WT weights
       shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
@@ -142,9 +143,9 @@ struct Velocity {
     } else {
       static_assert([] { return false; }(), "Invalid interpolation type");
     }
-    shape<Order>(xu[0], xhg, rdx, whx);
-    shape<Order>(xu[1], yhg, rdy, why);
-    shape<Order>(xu[2], zhg, rdz, whz);
+    shape_mc<Order>(xu[0], xhg, rdx, whx);
+    shape_mc<Order>(xu[1], yhg, rdy, why);
+    shape_mc<Order>(xu[2], zhg, rdz, whz);
 
     return std::make_tuple(ix0, iy0, iz0, hx0, hy0, hz0);
   }
@@ -152,7 +153,9 @@ struct Velocity {
   template <typename T_array>
   void sorted(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
   {
-    constexpr int stencil = Order;
+    constexpr int Stencil = Order;
+    using nix::interp::shift_weights;
+    using nix::interp::interp3d;
 
     T_float wix[size] = {0};
     T_float wiy[size] = {0};
@@ -164,9 +167,9 @@ struct Velocity {
     auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights(xu, wix, wiy, wiz, whx, why, whz);
 
     // shift weights according to particle position
-    interpolate3d_shift_weights<Order>(hx0 - ix0, whx);
-    interpolate3d_shift_weights<Order>(hy0 - iy0, why);
-    interpolate3d_shift_weights<Order>(hz0 - iz0, whz);
+    shift_weights<Order>(hx0 - ix0, whx);
+    shift_weights<Order>(hy0 - iy0, why);
+    shift_weights<Order>(hz0 - iz0, whz);
 
     ix -= ((Order + 1) / 2);
     iy -= ((Order + 1) / 2);
@@ -174,12 +177,12 @@ struct Velocity {
 
     auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
     auto dt2 = dt1 * rc / gam;
-    auto ex  = interpolate3d<stencil>(uf, iz, iy, ix, 0, wiz, wiy, whx, dt1);
-    auto ey  = interpolate3d<stencil>(uf, iz, iy, ix, 1, wiz, why, wix, dt1);
-    auto ez  = interpolate3d<stencil>(uf, iz, iy, ix, 2, whz, wiy, wix, dt1);
-    auto bx  = interpolate3d<stencil>(uf, iz, iy, ix, 3, whz, why, wix, dt2);
-    auto by  = interpolate3d<stencil>(uf, iz, iy, ix, 4, whz, wiy, whx, dt2);
-    auto bz  = interpolate3d<stencil>(uf, iz, iy, ix, 5, wiz, why, whx, dt2);
+    auto ex  = interp3d<Stencil>(uf, iz, iy, ix, 0, wiz, wiy, whx, dt1);
+    auto ey  = interp3d<Stencil>(uf, iz, iy, ix, 1, wiz, why, wix, dt1);
+    auto ez  = interp3d<Stencil>(uf, iz, iy, ix, 2, whz, wiy, wix, dt1);
+    auto bx  = interp3d<Stencil>(uf, iz, iy, ix, 3, whz, why, wix, dt2);
+    auto by  = interp3d<Stencil>(uf, iz, iy, ix, 4, whz, wiy, whx, dt2);
+    auto bz  = interp3d<Stencil>(uf, iz, iy, ix, 5, wiz, why, whx, dt2);
 
     // push particle velocity
     push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
@@ -188,7 +191,8 @@ struct Velocity {
   template <typename T_array>
   void unsorted(T_array& uf, T_float xu[], T_float dt1)
   {
-    constexpr int stencil = Order - 1;
+    constexpr int Stencil = Order - 1;
+    using nix::interp::interp3d;
 
     T_float wix[size] = {0};
     T_float wiy[size] = {0};
@@ -208,12 +212,12 @@ struct Velocity {
 
     auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
     auto dt2 = dt1 * rc / gam;
-    auto ex  = interpolate3d<stencil>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
-    auto ey  = interpolate3d<stencil>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
-    auto ez  = interpolate3d<stencil>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
-    auto bx  = interpolate3d<stencil>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
-    auto by  = interpolate3d<stencil>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
-    auto bz  = interpolate3d<stencil>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
+    auto ex  = interp3d<Stencil>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
+    auto ey  = interp3d<Stencil>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
+    auto ez  = interp3d<Stencil>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
+    auto bx  = interp3d<Stencil>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
+    auto by  = interp3d<Stencil>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
+    auto bz  = interp3d<Stencil>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
 
     // push particle velocity
     push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
@@ -227,8 +231,6 @@ template <int Order, typename T_float>
 struct Current {
   static constexpr int size   = Order + 3;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
-  using simd_f64              = simd::simd_f64;
-  using simd_i64              = simd::simd_i64;
 
   int     lbx;
   int     lby;
@@ -269,6 +271,8 @@ struct Current {
   auto calc_local_current(T_float xv[], T_float xu[], T_float qs, T_float cur[size][size][size][4])
   {
     using T_int = xsimd::as_integer_t<T_float>;
+    using nix::esirkepov::shift_weights;
+    using nix::esirkepov::deposit3d;
 
     T_float ss[2][3][size] = {0};
 
@@ -284,9 +288,9 @@ struct Current {
     auto zg0 = zgrid + to_float(iz0) * dz;
 
     // weights
-    shape<Order>(xv[0], xg0, rdx, &ss[0][0][1]);
-    shape<Order>(xv[1], yg0, rdy, &ss[0][1][1]);
-    shape<Order>(xv[2], zg0, rdz, &ss[0][2][1]);
+    shape_mc<Order>(xv[0], xg0, rdx, &ss[0][0][1]);
+    shape_mc<Order>(xv[1], yg0, rdy, &ss[0][1][1]);
+    shape_mc<Order>(xv[2], zg0, rdz, &ss[0][2][1]);
 
     //
     // -*- weights after move -*-
@@ -300,18 +304,18 @@ struct Current {
     auto zg1 = zgrid + to_float(iz1) * dz;
 
     // weights
-    shape<Order>(xu[0], xg1, rdx, &ss[1][0][1]);
-    shape<Order>(xu[1], yg1, rdy, &ss[1][1][1]);
-    shape<Order>(xu[2], zg1, rdz, &ss[1][2][1]);
+    shape_mc<Order>(xu[0], xg1, rdx, &ss[1][0][1]);
+    shape_mc<Order>(xu[1], yg1, rdy, &ss[1][1][1]);
+    shape_mc<Order>(xu[2], zg1, rdz, &ss[1][2][1]);
 
     // shift weights according to particle movement
     T_int shift[3] = {ix1 - ix0, iy1 - iy0, iz1 - iz0};
-    esirkepov3d_shift_weights<Order>(shift, ss[1]);
+    shift_weights<3, Order>(shift, ss[1]);
 
     //
     // -*- accumulate current via density decomposition -*-
     //
-    esirkepov3d<Order>(dxdt, dydt, dzdt, qs, ss, cur);
+    deposit3d<Order>(dxdt, dydt, dzdt, qs, ss, cur);
 
     return std::make_tuple(ix0, iy0, iz0);
   }
@@ -363,8 +367,6 @@ struct Moment {
   static constexpr int index_zx = 13;
   static constexpr int size     = Order + 1;
   static constexpr int is_odd   = Order % 2 == 0 ? 0 : 1;
-  using simd_f64                = simd::simd_f64;
-  using simd_i64                = simd::simd_i64;
 
   int     lbx;
   int     lby;
@@ -401,40 +403,6 @@ struct Moment {
     zgrid = zlim[0] + 0.5 * delz;
   }
 
-  template <typename T_array, typename T_int>
-  static void append_moment3d(T_array& um, T_int iz0, T_int iy0, T_int ix0, int is,
-                              T_float moment[size][size][size][14])
-  {
-    constexpr bool is_scalar = std::is_integral_v<T_int> && std::is_floating_point_v<T_float>;
-    constexpr bool is_vector = std::is_integral_v<T_int> && std::is_same_v<T_float, simd_f64>;
-
-    if constexpr (is_scalar == true) {
-      // naive scalar implementation
-      for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
-        for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
-          for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
-            for (int k = 0; k < 14; k++) {
-              um(iz, iy, ix, is, k) += moment[jz][jy][jx][k];
-            }
-          }
-        }
-      }
-    } else if constexpr (is_vector == true) {
-      // all particle contributions are added to the same grid point
-      for (int jz = 0, iz = iz0; jz < size; jz++, iz++) {
-        for (int jy = 0, iy = iy0; jy < size; jy++, iy++) {
-          for (int jx = 0, ix = ix0; jx < size; jx++, ix++) {
-            for (int k = 0; k < 14; k++) {
-              um(iz, iy, ix, is, k) += xsimd::reduce_add(moment[jz][jy][jx][k]);
-            }
-          }
-        }
-      }
-    } else {
-      static_assert([] { return false; }(), "Invalid combination of types");
-    }
-  }
-
   auto calc_local_moment(T_float xu[], T_float ms, T_float mom[size][size][size][14])
   {
     using T_int = xsimd::as_integer_t<T_float>;
@@ -452,9 +420,9 @@ struct Moment {
     auto zg = zgrid + to_float(iz) * dz;
 
     // weights
-    shape<Order>(xu[0], xg, rdx, wx);
-    shape<Order>(xu[1], yg, rdy, wy);
-    shape<Order>(xu[2], zg, rdz, wz);
+    shape_mc<Order>(xu[0], xg, rdx, wx);
+    shape_mc<Order>(xu[1], yg, rdy, wy);
+    shape_mc<Order>(xu[2], zg, rdz, wz);
 
     for (int jz = 0; jz < size; jz++) {
       for (int jy = 0; jy < size; jy++) {
@@ -490,7 +458,7 @@ struct Moment {
     ix -= ((Order + 1) / 2) + 1;
     iy -= ((Order + 1) / 2) + 1;
     iz -= ((Order + 1) / 2) + 1;
-    append_moment3d(um, iz, iy, ix, is, mom);
+    append_moment3d<Order>(um, iz, iy, ix, is, mom);
   }
 
   template <typename T_array>
@@ -505,7 +473,7 @@ struct Moment {
     ix0 += lbx - (Order / 2) - 1;
     iy0 += lby - (Order / 2) - 1;
     iz0 += lbz - (Order / 2) - 1;
-    append_moment3d(um, iz0, iy0, ix0, is, mom);
+    append_moment3d<Order>(um, iz0, iy0, ix0, is, mom);
   }
 };
 } // namespace exchunk3d_impl

@@ -13,8 +13,6 @@
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
   using namespace exchunk3d_impl;
-  using simd::simd_f64;
-  using simd::simd_i64;
   const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
   Position<Order, simd_f64> LoopBodyV(cc);
@@ -68,8 +66,6 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 DEFINE_MEMBER(template <int Interpolation> void, push_velocity)(const float64 delt)
 {
   using namespace exchunk3d_impl;
-  using simd::simd_f64;
-  using simd::simd_i64;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
   const int      stride_y = stride_x * (dims[2] + 1);
@@ -137,8 +133,6 @@ DEFINE_MEMBER(template <int Interpolation> void, push_velocity)(const float64 de
 DEFINE_MEMBER(template <int Interpolation> void, push_velocity_unsorted)(const float64 delt)
 {
   using namespace exchunk3d_impl;
-  using simd::simd_f64;
-  using simd::simd_i64;
   const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
   Velocity<Order, simd_f64, Interpolation> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx,
@@ -185,8 +179,6 @@ DEFINE_MEMBER(template <int Interpolation> void, push_velocity_unsorted)(const f
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
   using namespace exchunk3d_impl;
-  using simd::simd_f64;
-  using simd::simd_i64;
   constexpr int  size     = Order + 3;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
@@ -264,8 +256,6 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 DEFINE_MEMBER(void, deposit_current_unsorted)(const float64 delt)
 {
   using namespace exchunk3d_impl;
-  using simd::simd_f64;
-  using simd::simd_i64;
   const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
   Current<Order, simd_f64> LoopBodyV(delt, delx, dely, delz, xlim, ylim, zlim, Lbx, Lby, Lbz, cc);
@@ -311,8 +301,6 @@ DEFINE_MEMBER(void, deposit_current_unsorted)(const float64 delt)
 DEFINE_MEMBER(void, deposit_moment)()
 {
   using namespace exchunk3d_impl;
-  using simd::simd_f64;
-  using simd::simd_i64;
   constexpr int  size     = Order + 1;
   constexpr int  is_odd   = Order % 2 == 0 ? 0 : 1;
   const int      stride_x = 1;
