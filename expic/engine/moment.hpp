@@ -1,0 +1,307 @@
+// -*- C++ -*-
+#ifndef _ENGINE_MOMENT_HPP_
+#define _ENGINE_MOMENT_HPP_
+
+#include "nix/nix.hpp"
+
+#include "nix/primitives.hpp"
+
+namespace engine
+{
+template <int Dim, int Order>
+class Moment
+{
+public:
+  static constexpr int index_t  = 0;
+  static constexpr int index_x  = 1;
+  static constexpr int index_y  = 2;
+  static constexpr int index_z  = 3;
+  static constexpr int index_tt = 4;
+  static constexpr int index_xx = 5;
+  static constexpr int index_yy = 6;
+  static constexpr int index_zz = 7;
+  static constexpr int index_tx = 8;
+  static constexpr int index_ty = 9;
+  static constexpr int index_tz = 10;
+  static constexpr int index_xy = 11;
+  static constexpr int index_yz = 12;
+  static constexpr int index_zx = 13;
+  static constexpr int size     = Order + 1;
+  static constexpr int is_odd   = Order % 2 == 0 ? 0 : 1;
+
+  int     ns;
+  int     lbx;
+  int     lby;
+  int     lbz;
+  int     ubx;
+  int     uby;
+  int     ubz;
+  int     stride_x;
+  int     stride_y;
+  int     stride_z;
+  float64 cc;
+  float64 dx;
+  float64 dy;
+  float64 dz;
+  float64 xmin;
+  float64 ymin;
+  float64 zmin;
+
+  template <typename T_data>
+  Moment(const T_data& data)
+  {
+    ns       = data.Ns;
+    lbx      = data.Lbx;
+    lby      = data.Lby;
+    lbz      = data.Lbz;
+    ubx      = data.Ubx + is_odd;
+    uby      = data.Uby + is_odd;
+    ubz      = data.Ubz + is_odd;
+    stride_x = 1;
+    stride_y = stride_x * (data.Ubx - data.Lbx + 2);
+    stride_z = stride_y * (data.Uby - data.Lby + 2);
+    cc       = data.cc;
+    dx       = data.delx;
+    dy       = data.dely;
+    dz       = data.delz;
+    xmin     = data.xlim[0];
+    ymin     = data.ylim[0];
+    zmin     = data.zlim[0];
+  }
+
+  template <typename T_particle, typename T_array>
+  void call_scalar_impl_3d(T_particle& up, T_array& um)
+  {
+    using namespace nix;
+    using namespace nix::primitives;
+
+    // clear moment
+    fill_all(um, 0);
+
+    for (int is = 0; is < ns; is++) {
+      for (int ip = 0; ip < up[is]->Np; ip++) {
+        float64 mom[size][size][size][14] = {0};
+
+        // local moment
+        auto xu              = &up[is]->xu(ip, 0);
+        auto [ix0, iy0, iz0] = local3d(xu, up[is]->m, mom);
+
+        // deposit to global array
+        ix0 += lbx - (Order / 2) - 1;
+        iy0 += lby - (Order / 2) - 1;
+        iz0 += lbz - (Order / 2) - 1;
+        append_moment3d<Order>(um, iz0, iy0, ix0, is, mom);
+      }
+    }
+  }
+
+  template <typename T_particle, typename T_array>
+  void call_vector_impl_3d(T_particle& up, T_array& um)
+  {
+    using namespace nix;
+    using namespace nix::primitives;
+    const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+
+    // clear moment
+    fill_all(um, 0);
+
+    for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
+      for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
+        for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
+          int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
+
+          // process particles in the cell
+          for (int is = 0; is < ns; is++) {
+            // local moment
+            float64  mom[size][size][size][14]      = {0}; // scalar
+            simd_f64 mom_simd[size][size][size][14] = {0}; // SIMD register
+
+            int ip_zero = up[is]->pindex(ii);
+            int np_cell = up[is]->pindex(ii + 1) - ip_zero;
+            int np_simd = (np_cell / simd_f64::size) * simd_f64::size;
+
+            //
+            // vectorized loop
+            //
+            for (int ip = ip_zero; ip < ip_zero + np_simd; ip += simd_f64::size) {
+              // local SIMD register
+              simd_f64 xu[6];
+              simd_f64 ms = up[is]->m;
+
+              // load particles to SIMD register
+              xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
+              xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
+              xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
+              xu[3] = simd_f64::gather(&up[is]->xu(ip, 3), index);
+              xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
+              xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
+
+              local3d(xu, ms, mom_simd);
+            }
+
+            //
+            // scalar loop for reminder
+            //
+            for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
+              float64* xu = &up[is]->xu(ip, 0);
+              float64  ms = up[is]->m;
+
+              local3d(xu, ms, mom);
+            }
+
+            // deposit to global array
+            global3d(um, iz, iy, ix, is, mom);
+            global3d(um, iz, iy, ix, is, mom_simd);
+          }
+        }
+      }
+    }
+  }
+
+  template <typename T_float>
+  auto local3d(T_float xu[], T_float ms, T_float mom[size][size][size][14])
+  {
+    using namespace nix;
+    using namespace nix::primitives;
+
+    T_float wx[size] = {0};
+    T_float wy[size] = {0};
+    T_float wz[size] = {0};
+    T_float rc       = 1 / cc;
+    T_float rdx      = 1 / dx;
+    T_float rdy      = 1 / dy;
+    T_float rdz      = 1 / dz;
+    T_float ximin    = xmin + 0.5 * dx * is_odd;
+    T_float yimin    = ymin + 0.5 * dy * is_odd;
+    T_float zimin    = zmin + 0.5 * dz * is_odd;
+    T_float xgrid    = xmin + 0.5 * dx;
+    T_float ygrid    = ymin + 0.5 * dy;
+    T_float zgrid    = zmin + 0.5 * dz;
+
+    // grid indices and positions
+    auto ix = digitize(xu[0], ximin, rdx);
+    auto iy = digitize(xu[1], yimin, rdy);
+    auto iz = digitize(xu[2], zimin, rdz);
+    auto xg = xgrid + to_float(ix) * dx;
+    auto yg = ygrid + to_float(iy) * dy;
+    auto zg = zgrid + to_float(iz) * dz;
+
+    // weights
+    shape_mc<Order>(xu[0], xg, rdx, wx);
+    shape_mc<Order>(xu[1], yg, rdy, wy);
+    shape_mc<Order>(xu[2], zg, rdz, wz);
+
+    for (int jz = 0; jz < size; jz++) {
+      for (int jy = 0; jy < size; jy++) {
+        for (int jx = 0; jx < size; jx++) {
+          T_float ww = ms * wx[jx] * wy[jy] * wz[jz];
+          T_float gm = lorentz_factor(xu[3], xu[4], xu[5], rc);
+
+          mom[jz][jy][jx][index_t] += ww;
+          mom[jz][jy][jx][index_x] += ww * xu[3] / gm;
+          mom[jz][jy][jx][index_y] += ww * xu[4] / gm;
+          mom[jz][jy][jx][index_z] += ww * xu[5] / gm;
+          mom[jz][jy][jx][index_tx] += ww * xu[3];
+          mom[jz][jy][jx][index_ty] += ww * xu[4];
+          mom[jz][jy][jx][index_tz] += ww * xu[5];
+          mom[jz][jy][jx][index_tt] += ww * gm * cc;
+          mom[jz][jy][jx][index_xx] += ww * xu[3] * xu[3] / gm;
+          mom[jz][jy][jx][index_yy] += ww * xu[4] * xu[4] / gm;
+          mom[jz][jy][jx][index_zz] += ww * xu[5] * xu[5] / gm;
+          mom[jz][jy][jx][index_xy] += ww * xu[3] * xu[4] / gm;
+          mom[jz][jy][jx][index_yz] += ww * xu[4] * xu[5] / gm;
+          mom[jz][jy][jx][index_zx] += ww * xu[5] * xu[3] / gm;
+        }
+      }
+    }
+
+    return std::make_tuple(ix, iy, iz);
+  }
+
+  template <typename T_array, typename T_float>
+  void global3d(T_array& um, int iz, int iy, int ix, int is, T_float mom[size][size][size][14])
+  {
+    ix -= ((Order + 1) / 2) + 1;
+    iy -= ((Order + 1) / 2) + 1;
+    iz -= ((Order + 1) / 2) + 1;
+    append_moment3d<Order>(um, iz, iy, ix, is, mom);
+  }
+};
+
+template <int Dim, int Order>
+class ScalarMoment : public Moment<Dim, Order>
+{
+public:
+  template <typename T_data>
+  ScalarMoment(const T_data& data) : Moment<Dim, Order>(data)
+  {
+  }
+
+  template <typename T_particle, typename T_array>
+  void operator()(T_particle& up, T_array& um)
+  {
+    if constexpr (Dim == 1) {
+      //
+      // 1D version
+      //
+      static_assert([] { return false; }(), "1D is not yet supported");
+    }
+
+    if constexpr (Dim == 2) {
+      //
+      // 2D version
+      //
+      static_assert([] { return false; }(), "2D is not yet supported");
+    }
+
+    if constexpr (Dim == 3) {
+      //
+      // 3D version
+      //
+      this->call_scalar_impl_3d(up, um);
+    }
+  }
+};
+
+template <int Dim, int Order>
+class VectorMoment : public Moment<Dim, Order>
+{
+public:
+  template <typename T_data>
+  VectorMoment(const T_data& data) : Moment<Dim, Order>(data)
+  {
+  }
+
+  template <typename T_particle, typename T_array>
+  void operator()(T_particle& up, T_array& um)
+  {
+    if constexpr (Dim == 1) {
+      //
+      // 1D version
+      //
+      static_assert([] { return false; }(), "1D is not yet supported");
+    }
+
+    if constexpr (Dim == 2) {
+      //
+      // 2D version
+      //
+      static_assert([] { return false; }(), "2D is not yet supported");
+    }
+
+    if constexpr (Dim == 3) {
+      //
+      // 3D version
+      //
+      this->call_vector_impl_3d(up, um);
+    }
+  }
+};
+
+} // namespace engine
+
+// Local Variables:
+// c-file-style   : "gnu"
+// c-file-offsets : ((innamespace . 0) (inline-open . 0))
+// End:
+#endif

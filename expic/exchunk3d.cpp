@@ -2,6 +2,8 @@
 #include "exchunk3d.hpp"
 #include "exchunk3d_impl.hpp"
 
+#include "engine.hpp"
+
 #define DEFINE_MEMBER(type, name)                                                                  \
   template <int Order>                                                                             \
   type ExChunk3D<Order>::name
@@ -96,7 +98,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
   up.resize(Ns);
   for (int is = 0; is < Ns; is++) {
     up[is] = std::make_shared<ParticleType>();
-    count = up[is]->unpack(buffer, count);
+    count  = up[is]->unpack(buffer, count);
   }
 
   return count;
@@ -608,11 +610,19 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   bool is_success = true;
 
   if (mode == "scalar") {
-    push_position_impl_scalar(delt);
+    engine::ScalarPosition position(get_internal_data());
+    position(up, delt);
   } else if (mode == "xsimd") {
-    push_position_impl_xsimd(delt);
+    engine::VectorPosition position(get_internal_data());
+    position(up, delt);
   } else {
     is_success = false;
+  }
+
+  // apply boundary condition and count particles
+  for (int is = 0; is < Ns; is++) {
+    set_boundary_particle(up[is], 0, up[is]->Np - 1, is);
+    count_particle(up[is], 0, up[is]->Np - 1, true);
   }
 
   if (is_success == false) {
@@ -637,11 +647,13 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     // MC interpolation
     //
     if (mode == "scalar") {
-      push_velocity_impl_scalar<MC>(delt);
+      engine::ScalarVelocity<3, Order, 0, 0> velocity(get_internal_data());
+      velocity(up, uf, delt);
     } else if (mode == "xsimd") {
-      push_velocity_impl_xsimd<MC>(delt);
+      engine::VectorVelocity<3, Order, 0, 0> velocity(get_internal_data());
+      velocity(up, uf, delt);
     } else if (mode == "xsimd-unsorted") {
-      push_velocity_unsorted_impl_xsimd<MC>(delt);
+      //push_velocity_unsorted_impl_xsimd<MC>(delt);
     } else {
       is_success = false;
     }
@@ -650,11 +662,13 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     // WT interpolation
     //
     if (mode == "scalar") {
-      push_velocity_impl_scalar<WT>(delt);
+      engine::ScalarVelocity<3, Order, 1, 0> velocity(get_internal_data());
+      velocity(up, uf, delt);
     } else if (mode == "xsimd") {
-      push_velocity_impl_xsimd<WT>(delt);
+      engine::VectorVelocity<3, Order, 1, 0> velocity(get_internal_data());
+      velocity(up, uf, delt);
     } else if (mode == "xsimd-unsorted") {
-      push_velocity_unsorted_impl_xsimd<WT>(delt);
+      //push_velocity_unsorted_impl_xsimd<WT>(delt);
     } else {
       is_success = false;
     }
@@ -676,11 +690,13 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   std::string mode       = option["vectorization"]["current"].get<std::string>();
 
   if (mode == "scalar") {
-    deposit_current_impl_scalar(delt);
+    engine::ScalarCurrent<3, Order> current(get_internal_data());
+    current(up, uj, delt);
   } else if (mode == "xsimd") {
-    deposit_current_impl_xsimd(delt);
+    engine::VectorCurrent<3, Order> current(get_internal_data());
+    current(up, uj, delt);
   } else if (mode == "xsimd-unsorted") {
-    deposit_current_unsorted_impl_xsimd(delt);
+    //deposit_current_unsorted_impl_xsimd(delt);
   } else {
     is_success = false;
   }
@@ -699,9 +715,11 @@ DEFINE_MEMBER(void, deposit_moment)()
   std::string mode       = option["vectorization"]["moment"].get<std::string>();
 
   if (mode == "scalar") {
-    deposit_moment_impl_scalar();
+    engine::ScalarMoment<3, Order> moment(get_internal_data());
+    moment(up, um);
   } else if (mode == "xsimd") {
-    deposit_moment_impl_xsimd();
+    engine::VectorMoment<3, Order> moment(get_internal_data());
+    moment(up, um);
   } else {
     is_success = false;
   }
