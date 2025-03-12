@@ -227,7 +227,6 @@ DEFINE_MEMBER(json, to_json)()
 {
   json state = BaseType::to_json();
 
-  state["order"]   = Chunk::order;
   state["Ns"]      = Ns;
   state["momstep"] = momstep;
 
@@ -237,10 +236,6 @@ DEFINE_MEMBER(json, to_json)()
 DEFINE_MEMBER(bool, from_json)(json& state)
 {
   if (BaseType::from_json(state) == false) {
-    return false;
-  }
-
-  if (state["order"] != Chunk::order) {
     return false;
   }
 

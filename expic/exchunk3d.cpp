@@ -3,13 +3,12 @@
 
 #include "engine.hpp"
 
-#define DEFINE_MEMBER(type, name)                                                                  \
-  template <int Order>                                                                             \
-  type ExChunk3D<Order>::name
+#define DEFINE_MEMBER(type, name) type ExChunk3D::name
 
 DEFINE_MEMBER(, ExChunk3D)
 (const int dims[3], int id) : Chunk(dims, id), Ns(1)
 {
+#if 0
   // check the minimum number of grids
   {
     bool is_valid = true;
@@ -27,7 +26,7 @@ DEFINE_MEMBER(, ExChunk3D)
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
   }
-
+#endif
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
   for (int i = 0; i < NumBoundaryMode; i++) {
@@ -37,8 +36,6 @@ DEFINE_MEMBER(, ExChunk3D)
   // reset load
   this->load.resize(NumLoadMode);
   this->reset_load();
-
-  this->set_boundary_margin(Nb);
 }
 
 DEFINE_MEMBER(int64_t, get_size_byte)()
@@ -66,6 +63,7 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
 
   count = Chunk::pack(buffer, count);
 
+  count += memcpy_count(buffer, &order, sizeof(int), count, 0);
   count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
   count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
   count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
@@ -87,6 +85,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
 
   count = Chunk::unpack(buffer, count);
 
+  count += memcpy_count(&order, buffer, sizeof(int), 0, count);
   count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
   count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
   allocate(); // allocate memory for unpacking
@@ -105,9 +104,9 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
 
 DEFINE_MEMBER(void, allocate)()
 {
-  size_t nz = dims[0] + 2 * Nb;
-  size_t ny = dims[1] + 2 * Nb;
-  size_t nx = dims[2] + 2 * Nb;
+  size_t nz = dims[0] + 2 * boundary_margin;
+  size_t ny = dims[1] + 2 * boundary_margin;
+  size_t nx = dims[2] + 2 * boundary_margin;
   size_t ns = Ns;
 
   // memory allocation
@@ -135,6 +134,12 @@ DEFINE_MEMBER(void, reset_load)()
 DEFINE_MEMBER(void, setup)(json& config)
 {
   auto opt = config["option"];
+
+  // order of shape function
+  {
+    order = opt.value("order", 2);
+    this->set_boundary_margin((order + 3) / 2);
+  }
 
   // vectorization mode
   {
@@ -230,6 +235,8 @@ DEFINE_MEMBER(void, setup)(json& config)
 
 DEFINE_MEMBER(void, setup_friedman_filter)()
 {
+  const int Nb = boundary_margin;
+
   // initialize electric field for Friedman filter
   for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
     for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
@@ -305,11 +312,11 @@ DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
 
 DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
-  json          option = this->option;
-  const float64 theta  = option["friedman"].get<float64>();
-  const float64 cflx   = cc * delt / delx;
-  const float64 cfly   = cc * delt / dely;
-  const float64 cflz   = cc * delt / delz;
+  const int     Nb    = boundary_margin;
+  const float64 theta = option["friedman"].get<float64>();
+  const float64 cflx  = cc * delt / delx;
+  const float64 cfly  = cc * delt / dely;
+  const float64 cflz  = cc * delt / delz;
 
   // update for Friedman filter first (boundary condition has already been set)
   for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
@@ -364,14 +371,14 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
 
 DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
-  json          option = this->option;
-  const float64 theta  = option["friedman"].get<float64>();
-  const float64 A      = 1 + 0.5 * theta;
-  const float64 B      = -theta * (1 - 0.5 * theta);
-  const float64 C      = 0.5 * theta * (1 - theta) * (1 - theta);
-  const float64 cflx   = cc * delt / delx;
-  const float64 cfly   = cc * delt / dely;
-  const float64 cflz   = cc * delt / delz;
+  const int     Nb    = boundary_margin;
+  const float64 theta = option["friedman"].get<float64>();
+  const float64 A     = 1 + 0.5 * theta;
+  const float64 B     = -theta * (1 - 0.5 * theta);
+  const float64 C     = 0.5 * theta * (1 - theta) * (1 - theta);
+  const float64 cflx  = cc * delt / delx;
+  const float64 cfly  = cc * delt / dely;
+  const float64 cflz  = cc * delt / delz;
 
   // update for Friedman filter first (boundary condition has already been set)
   for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
@@ -558,7 +565,7 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
 {
   // notice the half-grid offset of cell boundaries for odd-order shape functions
-  constexpr int is_odd        = (Order % 2 == 1) ? 1 : 0;
+  const int     is_odd        = (order % 2 == 1) ? 1 : 0;
   const int     out_of_bounds = particle->Ng;
   const float64 xmin          = xlim[0] - 0.5 * delx * is_odd;
   const float64 ymin          = ylim[0] - 0.5 * dely * is_odd;
@@ -603,8 +610,7 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
-  json        option = this->option;
-  std::string mode   = option["vectorization"]["position"].get<std::string>();
+  std::string mode = option["vectorization"]["position"].get<std::string>();
 
   bool is_success = true;
 
@@ -633,8 +639,9 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
+  constexpr int Order = 2;
+
   bool        is_success = true;
-  json        option     = this->option;
   std::string mode       = option["vectorization"]["velocity"].get<std::string>();
   std::string interp     = option["interpolation"].get<std::string>();
 
@@ -677,8 +684,9 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
+  constexpr int Order = 2;
+
   bool        is_success = true;
-  json        option     = this->option;
   std::string mode       = option["vectorization"]["current"].get<std::string>();
 
   if (mode == "scalar") {
@@ -700,8 +708,9 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 
 DEFINE_MEMBER(void, deposit_moment)()
 {
+  constexpr int Order = 2;
+
   bool        is_success = true;
-  json        option     = this->option;
   std::string mode       = option["vectorization"]["moment"].get<std::string>();
 
   if (mode == "scalar") {
@@ -722,11 +731,6 @@ DEFINE_MEMBER(void, deposit_moment)()
 }
 
 #undef DEFINE_MEMBER
-
-template class ExChunk3D<1>;
-template class ExChunk3D<2>;
-template class ExChunk3D<3>;
-template class ExChunk3D<4>;
 
 // Local Variables:
 // c-file-style   : "gnu"

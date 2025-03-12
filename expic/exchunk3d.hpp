@@ -45,11 +45,10 @@ using ParticleType = nix::ParticlePtr::element_type;
 /// In addition, custom diagnostics routines may also be implemented depending on the needs of
 /// applications.
 ///
-template <int Order>
 class ExChunk3D : public nix::Chunk3D<ParticleType>
 {
 public:
-  using ThisType     = ExChunk3D<Order>;
+  using ThisType     = ExChunk3D;
   using Chunk        = typename nix::Chunk3D<ParticleType>;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using MpiBufferPtr = typename Chunk::MpiBufferPtr;
@@ -71,10 +70,10 @@ public:
   using Chunk::load;
 
   // order of shape function
-  static constexpr int order = Order;
+  // static constexpr int order = Order;
 
   // boundary margin
-  static constexpr int Nb = (Order + 3) / 2;
+  // static constexpr int Nb = (Order + 3) / 2;
 
   // mode for load
   enum LoadMode {
@@ -93,13 +92,14 @@ public:
   };
 
 protected:
-  int                     Ns; ///< number of particle species
-  float64                 cc; ///< speed of light
-  xt::xtensor<float64, 4> uf; ///< electromagnetic field
-  xt::xtensor<float64, 4> uj; ///< current density
-  xt::xtensor<float64, 5> um; ///< particle moment
-  xt::xtensor<float64, 5> ff; ///< electric field for Friedmann filter
-  ParticleVec             up; ///< list of particles
+  int                     order; ///< order of shape function
+  int                     Ns;    ///< number of particle species
+  float64                 cc;    ///< speed of light
+  xt::xtensor<float64, 4> uf;    ///< electromagnetic field
+  xt::xtensor<float64, 4> uj;    ///< current density
+  xt::xtensor<float64, 5> um;    ///< particle moment
+  xt::xtensor<float64, 5> ff;    ///< electric field for Friedmann filter
+  ParticleVec             up;    ///< list of particles
 
   ///
   /// @brief internal data struct
