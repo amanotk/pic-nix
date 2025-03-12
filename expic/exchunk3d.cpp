@@ -8,25 +8,6 @@
 DEFINE_MEMBER(, ExChunk3D)
 (const int dims[3], int id) : Chunk(dims, id), Ns(1)
 {
-#if 0
-  // check the minimum number of grids
-  {
-    bool is_valid = true;
-
-    for (int dir = 0; dir < 3; dir++) {
-      is_valid &= (dims[dir] >= Nb);
-    }
-
-    if (is_valid == false) {
-      ERROR << tfm::format("Specified chunk dimensions are invalid.");
-      ERROR << tfm::format("* Number of grid in x direction : %4d", dims[2]);
-      ERROR << tfm::format("* Number of grid in y direction : %4d", dims[1]);
-      ERROR << tfm::format("* Number of grid in z direction : %4d", dims[0]);
-      ERROR << tfm::format("* Minimum number of grids       : %4d", Nb);
-      MPI_Abort(MPI_COMM_WORLD, -1);
-    }
-  }
-#endif
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
   for (int i = 0; i < NumBoundaryMode; i++) {
@@ -133,6 +114,7 @@ DEFINE_MEMBER(void, reset_load)()
 
 DEFINE_MEMBER(void, setup)(json& config)
 {
+  // TODO: consistency check for number of grid points and shape function order
   auto opt = config["option"];
 
   // order of shape function
@@ -684,50 +666,20 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
-  constexpr int Order = 2;
+  auto mode      = option["vectorization"]["current"].get<std::string>();
+  int  is_vector = "xsimd" == mode;
 
-  bool        is_success = true;
-  std::string mode       = option["vectorization"]["current"].get<std::string>();
-
-  if (mode == "scalar") {
-    engine::ScalarCurrent<3, Order> current(get_internal_data());
-    current(up, uj, delt);
-  } else if (mode == "xsimd") {
-    engine::VectorCurrent<3, Order> current(get_internal_data());
-    current(up, uj, delt);
-  } else {
-    is_success = false;
-  }
-
-  if (is_success == false) {
-    ERROR << tfm::format("Error detected in deposit_current (see below):");
-    std::cerr << std::setw(2) << option << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
-  }
+  engine::CurrentEngine<InternalData> current;
+  current(is_vector, 3, order, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, deposit_moment)()
 {
-  constexpr int Order = 2;
+  auto mode      = option["vectorization"]["moment"].get<std::string>();
+  int  is_vector = "xsimd" == mode;
 
-  bool        is_success = true;
-  std::string mode       = option["vectorization"]["moment"].get<std::string>();
-
-  if (mode == "scalar") {
-    engine::ScalarMoment<3, Order> moment(get_internal_data());
-    moment(up, um);
-  } else if (mode == "xsimd") {
-    engine::VectorMoment<3, Order> moment(get_internal_data());
-    moment(up, um);
-  } else {
-    is_success = false;
-  }
-
-  if (is_success == false) {
-    ERROR << tfm::format("Error detected in deposit_moment (see below):");
-    std::cerr << std::setw(2) << option << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
-  }
+  engine::MomentEngine<InternalData> moment;
+  moment(is_vector, 3, order, get_internal_data());
 }
 
 #undef DEFINE_MEMBER

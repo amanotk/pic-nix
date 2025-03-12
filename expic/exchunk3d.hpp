@@ -69,12 +69,6 @@ public:
   using Chunk::option;
   using Chunk::load;
 
-  // order of shape function
-  // static constexpr int order = Order;
-
-  // boundary margin
-  // static constexpr int Nb = (Order + 3) / 2;
-
   // mode for load
   enum LoadMode {
     LoadField    = 0,
