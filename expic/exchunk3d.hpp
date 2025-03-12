@@ -135,29 +135,6 @@ protected:
             delz, xlim, ylim, zlim, load, uf,  uj, um, up};
   }
 
-  void push_position_impl_scalar(float64 delt);
-
-  void push_position_impl_xsimd(float64 delt);
-
-  template <int Interpolation>
-  void push_velocity_impl_scalar(float64 delt);
-
-  template <int Interpolation>
-  void push_velocity_impl_xsimd(float64 delt);
-
-  template <int Interpolation>
-  void push_velocity_unsorted_impl_xsimd(float64 delt);
-
-  void deposit_current_impl_scalar(float64 delt);
-
-  void deposit_current_impl_xsimd(float64 delt);
-
-  void deposit_current_unsorted_impl_xsimd(float64 delt);
-
-  void deposit_moment_impl_scalar();
-
-  void deposit_moment_impl_xsimd();
-
 public:
   ExChunk3D(const int dims[3], int id = 0);
 

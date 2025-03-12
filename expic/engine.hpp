@@ -10,12 +10,22 @@
 
 #include "engine/current.hpp"
 #include "engine/moment.hpp"
-#include "engine/velocity.hpp"
 #include "engine/position.hpp"
+#include "engine/velocity.hpp"
 
 namespace engine
 {
-}
+// alias
+template <int Dim, int Order>
+using ScalarVelocityBorisMC = ScalarVelocity<Dim, Order, PusherBoris, ShapeMC>;
+template <int Dim, int Order>
+using ScalarVelocityBorisWT = ScalarVelocity<Dim, Order, PusherBoris, ShapeWT>;
+template <int Dim, int Order>
+using VectorVelocityBorisMC = VectorVelocity<Dim, Order, PusherBoris, ShapeMC>;
+template <int Dim, int Order>
+using VectorVelocityBorisWT = VectorVelocity<Dim, Order, PusherBoris, ShapeWT>;
+
+} // namespace engine
 
 // Local Variables:
 // c-file-style   : "gnu"

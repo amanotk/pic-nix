@@ -9,7 +9,18 @@
 
 namespace engine
 {
-template <int Dim, int Order, int Shape, int Pusher>
+enum PusherType {
+  PusherBoris   = 0,
+  PusherHK2017  = 1,
+  PusherVay2008 = 2,
+};
+
+enum ShapeType {
+  ShapeMC = 0,
+  ShapeWT = 1,
+};
+
+template <int Dim, int Order, int Pusher, int Shape>
 class Velocity
 {
 public:
@@ -61,7 +72,7 @@ public:
   void push_impl(T_float xu[], T_float ex, T_float ey, T_float ez, T_float bx, T_float by,
                  T_float bz)
   {
-    if constexpr (Pusher == 0) {
+    if constexpr (Pusher == PusherBoris) {
       push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz);
     }
   }
@@ -174,14 +185,14 @@ public:
     auto zhg = zhgrid + to_float(hz0) * dz;
 
     // MC weights
-    if constexpr (Shape == 0) {
+    if constexpr (Shape == ShapeMC) {
       shape_mc<Order>(xu[0], xig, rdx, wix);
       shape_mc<Order>(xu[1], yig, rdy, wiy);
       shape_mc<Order>(xu[2], zig, rdz, wiz);
     }
 
     // WT weights
-    if constexpr (Shape == 1) {
+    if constexpr (Shape == ShapeWT) {
       shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
       shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
       shape_wt<Order>(xu[2], zig, rdz, dtz, rdtz, wiz);
@@ -268,12 +279,12 @@ public:
   }
 };
 
-template <int Dim, int Order, int Shape, int Pusher>
-class ScalarVelocity : public Velocity<Dim, Order, Shape, Pusher>
+template <int Dim, int Order, int Pusher, int Shape>
+class ScalarVelocity : public Velocity<Dim, Order, Pusher, Shape>
 {
 public:
   template <typename T_data>
-  ScalarVelocity(const T_data& data) : Velocity<Dim, Order, Shape, Pusher>(data)
+  ScalarVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Shape>(data)
   {
   }
 
@@ -303,12 +314,12 @@ public:
   }
 };
 
-template <int Dim, int Order, int Shape, int Pusher>
-class VectorVelocity : public Velocity<Dim, Order, Shape, Pusher>
+template <int Dim, int Order, int Pusher, int Shape>
+class VectorVelocity : public Velocity<Dim, Order, Pusher, Shape>
 {
 public:
   template <typename T_data>
-  VectorVelocity(const T_data& data) : Velocity<Dim, Order, Shape, Pusher>(data)
+  VectorVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Shape>(data)
   {
   }
 

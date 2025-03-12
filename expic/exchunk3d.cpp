@@ -1,6 +1,5 @@
 // -*- C++ -*-
 #include "exchunk3d.hpp"
-#include "exchunk3d_impl.hpp"
 
 #include "engine.hpp"
 
@@ -634,9 +633,6 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  constexpr int MC = exchunk3d_impl::VelocityOption::InterpMC;
-  constexpr int WT = exchunk3d_impl::VelocityOption::InterpWT;
-
   bool        is_success = true;
   json        option     = this->option;
   std::string mode       = option["vectorization"]["velocity"].get<std::string>();
@@ -647,13 +643,11 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     // MC interpolation
     //
     if (mode == "scalar") {
-      engine::ScalarVelocity<3, Order, 0, 0> velocity(get_internal_data());
+      engine::ScalarVelocityBorisMC<3, Order> velocity(get_internal_data());
       velocity(up, uf, delt);
     } else if (mode == "xsimd") {
-      engine::VectorVelocity<3, Order, 0, 0> velocity(get_internal_data());
+      engine::VectorVelocityBorisMC<3, Order> velocity(get_internal_data());
       velocity(up, uf, delt);
-    } else if (mode == "xsimd-unsorted") {
-      //push_velocity_unsorted_impl_xsimd<MC>(delt);
     } else {
       is_success = false;
     }
@@ -662,13 +656,11 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
     // WT interpolation
     //
     if (mode == "scalar") {
-      engine::ScalarVelocity<3, Order, 1, 0> velocity(get_internal_data());
+      engine::ScalarVelocityBorisWT<3, Order> velocity(get_internal_data());
       velocity(up, uf, delt);
     } else if (mode == "xsimd") {
-      engine::VectorVelocity<3, Order, 1, 0> velocity(get_internal_data());
+      engine::VectorVelocityBorisWT<3, Order> velocity(get_internal_data());
       velocity(up, uf, delt);
-    } else if (mode == "xsimd-unsorted") {
-      //push_velocity_unsorted_impl_xsimd<WT>(delt);
     } else {
       is_success = false;
     }
@@ -695,8 +687,6 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   } else if (mode == "xsimd") {
     engine::VectorCurrent<3, Order> current(get_internal_data());
     current(up, uj, delt);
-  } else if (mode == "xsimd-unsorted") {
-    //deposit_current_unsorted_impl_xsimd(delt);
   } else {
     is_success = false;
   }
@@ -732,9 +722,6 @@ DEFINE_MEMBER(void, deposit_moment)()
 }
 
 #undef DEFINE_MEMBER
-
-#include "exchunk3d_impl_scalar.cpp" // scalar version
-#include "exchunk3d_impl_xsimd.cpp"  // vector version with xsimd
 
 template class ExChunk3D<1>;
 template class ExChunk3D<2>;
