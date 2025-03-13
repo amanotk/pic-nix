@@ -82,23 +82,65 @@ public:
   }
 
   template <typename T_particle, typename T_array>
-  void call_scalar_impl_3d(T_particle& up, T_array& uf, float64 delt)
+  void call_scalar_impl(T_particle& up, T_array& uf, float64 delt)
   {
+    auto push = [&](T_array& uf, float64 xu[], float64 dt) {
+      // 2D version
+      if constexpr (Dim == 2) {
+        push_scalar2d(uf, xu, dt);
+        return;
+      }
+
+      // 3D version
+      if constexpr (Dim == 3) {
+        push_scalar3d(uf, xu, dt);
+        return;
+      }
+    };
+
     for (int is = 0; is < ns; is++) {
       float64 qmdt = 0.5 * up[is]->q / up[is]->m * delt;
 
       for (int ip = 0; ip < up[is]->Np; ip++) {
-        push_scalar(uf, &up[is]->xu[ip], qmdt);
+        push(uf, &up[is]->xu[ip], qmdt);
       }
     }
   }
 
   template <typename T_particle, typename T_array>
-  void call_vector_impl_3d(T_particle& up, T_array& uf, float64 delt)
+  void call_vector_impl(T_particle& up, T_array& uf, float64 delt)
   {
     using namespace nix;
     using namespace nix::primitives;
     const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+
+    auto push1 = [&](T_array& uf, int iz, int iy, int ix, simd_f64 xu[], float64 dt) {
+      // 2D version
+      if constexpr (Dim == 2) {
+        push_vector2d(uf, iz, iy, ix, xu, simd_f64(dt));
+        return;
+      }
+
+      // 3D version
+      if constexpr (Dim == 3) {
+        push_vector3d(uf, iz, iy, ix, xu, simd_f64(dt));
+        return;
+      }
+    };
+
+    auto push2 = [&](T_array& uf, int iz, int iy, int ix, float64 xu[], float64 dt) {
+      // 2D version
+      if constexpr (Dim == 2) {
+        push_vector2d(uf, iz, iy, ix, xu, dt);
+        return;
+      }
+
+      // 3D version
+      if constexpr (Dim == 3) {
+        push_vector3d(uf, iz, iy, ix, xu, dt);
+        return;
+      }
+    };
 
     for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
       for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
@@ -127,7 +169,7 @@ public:
               xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
               xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
 
-              push_vector(uf, iz, iy, ix, xu, simd_f64(qmdt));
+              push1(uf, iz, iy, ix, xu, qmdt);
 
               // store particles to memory
               xu[3].scatter(&up[is]->xu(ip, 3), index);
@@ -140,7 +182,8 @@ public:
             //
             for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
               auto xu = &up[is]->xu(ip, 0);
-              push_vector(uf, iz, iy, ix, xu, qmdt);
+
+              push2(uf, iz, iy, ix, xu, qmdt);
             }
           }
         }
@@ -149,8 +192,55 @@ public:
   }
 
   template <typename T_float>
-  auto calc_weights(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
-                    T_float whx[size], T_float why[size], T_float whz[size])
+  auto weights2d(T_float xu[], T_float wix[size], T_float wiy[size], T_float whx[size],
+                 T_float why[size])
+  {
+    T_float ximin  = xmin + 0.5 * dx * is_odd;
+    T_float xhmin  = xmin + 0.5 * dx * is_odd - 0.5 * dx;
+    T_float yimin  = ymin + 0.5 * dy * is_odd;
+    T_float yhmin  = ymin + 0.5 * dy * is_odd - 0.5 * dy;
+    T_float xigrid = xmin + 0.5 * dx;
+    T_float xhgrid = xmin;
+    T_float yigrid = ymin + 0.5 * dy;
+    T_float yhgrid = ymin;
+    T_float rdx    = 1 / dx;
+    T_float rdy    = 1 / dy;
+    T_float dtx    = cc * dt / dx;
+    T_float dty    = cc * dt / dy;
+    T_float rdtx   = 1 / dtx;
+    T_float rdty   = 1 / dty;
+
+    // grid indices and positions
+    auto ix0 = digitize(xu[0], ximin, rdx);
+    auto iy0 = digitize(xu[1], yimin, rdy);
+    auto hx0 = digitize(xu[0], xhmin, rdx);
+    auto hy0 = digitize(xu[1], yhmin, rdy);
+    auto xig = xigrid + to_float(ix0) * dx;
+    auto yig = yigrid + to_float(iy0) * dy;
+    auto xhg = xhgrid + to_float(hx0) * dx;
+    auto yhg = yhgrid + to_float(hy0) * dy;
+
+    // MC weights
+    if constexpr (Shape == ShapeMC) {
+      shape_mc<Order>(xu[0], xig, rdx, wix);
+      shape_mc<Order>(xu[1], yig, rdy, wiy);
+    }
+
+    // WT weights
+    if constexpr (Shape == ShapeWT) {
+      shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
+      shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
+    }
+
+    shape_mc<Order>(xu[0], xhg, rdx, whx);
+    shape_mc<Order>(xu[1], yhg, rdy, why);
+
+    return std::make_tuple(ix0, iy0, hx0, hy0);
+  }
+
+  template <typename T_float>
+  auto weights3d(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
+                 T_float whx[size], T_float why[size], T_float whz[size])
   {
     T_float ximin  = xmin + 0.5 * dx * is_odd;
     T_float xhmin  = xmin + 0.5 * dx * is_odd - 0.5 * dx;
@@ -209,8 +299,111 @@ public:
     return std::make_tuple(ix0, iy0, iz0, hx0, hy0, hz0);
   }
 
+  template <typename T_array>
+  void push_scalar2d(T_array& uf, float64 xu[], float64 dt1)
+  {
+    constexpr int Stencil = Order - 1;
+    using nix::interp::interp2d;
+
+    // 2D version
+    const int iz0 = lbz;
+
+    float64 rc        = 1 / cc;
+    float64 wix[size] = {0};
+    float64 wiy[size] = {0};
+    float64 whx[size] = {0};
+    float64 why[size] = {0};
+
+    auto [ix0, iy0, hx0, hy0] = weights2d(xu, wix, wiy, whx, why);
+
+    ix0 += lbx - (Order / 2);
+    iy0 += lby - (Order / 2);
+    hx0 += lbx - (Order / 2);
+    hy0 += lby - (Order / 2);
+
+    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
+    auto dt2 = dt1 * rc / gam;
+    auto ex  = interp2d<Stencil>(uf, iz0, iy0, hx0, 0, wiy, whx, dt1);
+    auto ey  = interp2d<Stencil>(uf, iz0, hy0, ix0, 1, why, wix, dt1);
+    auto ez  = interp2d<Stencil>(uf, iz0, iy0, ix0, 2, wiy, wix, dt1);
+    auto bx  = interp2d<Stencil>(uf, iz0, hy0, ix0, 3, why, wix, dt2);
+    auto by  = interp2d<Stencil>(uf, iz0, iy0, hx0, 4, wiy, whx, dt2);
+    auto bz  = interp2d<Stencil>(uf, iz0, hy0, hx0, 5, why, whx, dt2);
+
+    push_impl(xu, ex, ey, ez, bx, by, bz);
+  }
+
+  template <typename T_array>
+  void push_scalar3d(T_array& uf, float64 xu[], float64 dt1)
+  {
+    constexpr int Stencil = Order - 1;
+    using nix::interp::interp3d;
+
+    float64 rc        = 1 / cc;
+    float64 wix[size] = {0};
+    float64 wiy[size] = {0};
+    float64 wiz[size] = {0};
+    float64 whx[size] = {0};
+    float64 why[size] = {0};
+    float64 whz[size] = {0};
+
+    auto [ix0, iy0, iz0, hx0, hy0, hz0] = weights3d(xu, wix, wiy, wiz, whx, why, whz);
+
+    ix0 += lbx - (Order / 2);
+    iy0 += lby - (Order / 2);
+    iz0 += lbz - (Order / 2);
+    hx0 += lbx - (Order / 2);
+    hy0 += lby - (Order / 2);
+    hz0 += lbz - (Order / 2);
+
+    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
+    auto dt2 = dt1 * rc / gam;
+    auto ex  = interp3d<Stencil>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
+    auto ey  = interp3d<Stencil>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
+    auto ez  = interp3d<Stencil>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
+    auto bx  = interp3d<Stencil>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
+    auto by  = interp3d<Stencil>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
+    auto bz  = interp3d<Stencil>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
+
+    push_impl(xu, ex, ey, ez, bx, by, bz);
+  }
+
   template <typename T_array, typename T_float>
-  void push_vector(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
+  void push_vector2d(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
+  {
+    constexpr int Stencil = Order;
+    using nix::interp::shift_weights;
+    using nix::interp::interp2d;
+
+    T_float rc        = 1 / cc;
+    T_float wix[size] = {0};
+    T_float wiy[size] = {0};
+    T_float whx[size] = {0};
+    T_float why[size] = {0};
+
+    auto [ix0, iy0, hx0, hy0] = weights2d(xu, wix, wiy, whx, why);
+
+    // shift weights according to particle position
+    shift_weights<Order>(hx0 - ix0, whx);
+    shift_weights<Order>(hy0 - iy0, why);
+
+    ix -= ((Order + 1) / 2);
+    iy -= ((Order + 1) / 2);
+
+    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
+    auto dt2 = dt1 * rc / gam;
+    auto ex  = interp2d<Stencil>(uf, iz, iy, ix, 0, wiy, whx, dt1);
+    auto ey  = interp2d<Stencil>(uf, iz, iy, ix, 1, why, wix, dt1);
+    auto ez  = interp2d<Stencil>(uf, iz, iy, ix, 2, wiy, wix, dt1);
+    auto bx  = interp2d<Stencil>(uf, iz, iy, ix, 3, why, wix, dt2);
+    auto by  = interp2d<Stencil>(uf, iz, iy, ix, 4, wiy, whx, dt2);
+    auto bz  = interp2d<Stencil>(uf, iz, iy, ix, 5, why, whx, dt2);
+
+    push_impl(xu, ex, ey, ez, bx, by, bz);
+  }
+
+  template <typename T_array, typename T_float>
+  void push_vector3d(T_array& uf, int iz, int iy, int ix, T_float xu[], T_float dt1)
   {
     constexpr int Stencil = Order;
     using nix::interp::shift_weights;
@@ -224,7 +417,7 @@ public:
     T_float why[size] = {0};
     T_float whz[size] = {0};
 
-    auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights(xu, wix, wiy, wiz, whx, why, whz);
+    auto [ix0, iy0, iz0, hx0, hy0, hz0] = weights3d(xu, wix, wiy, wiz, whx, why, whz);
 
     // shift weights according to particle position
     shift_weights<Order>(hx0 - ix0, whx);
@@ -246,41 +439,6 @@ public:
 
     push_impl(xu, ex, ey, ez, bx, by, bz);
   }
-
-  template <typename T_array>
-  void push_scalar(T_array& uf, float64 xu[], float64 dt1)
-  {
-    constexpr int Stencil = Order - 1;
-    using nix::interp::interp3d;
-
-    float64 rc        = 1 / cc;
-    float64 wix[size] = {0};
-    float64 wiy[size] = {0};
-    float64 wiz[size] = {0};
-    float64 whx[size] = {0};
-    float64 why[size] = {0};
-    float64 whz[size] = {0};
-
-    auto [ix0, iy0, iz0, hx0, hy0, hz0] = calc_weights(xu, wix, wiy, wiz, whx, why, whz);
-
-    ix0 += lbx - (Order / 2);
-    iy0 += lby - (Order / 2);
-    iz0 += lbz - (Order / 2);
-    hx0 += lbx - (Order / 2);
-    hy0 += lby - (Order / 2);
-    hz0 += lbz - (Order / 2);
-
-    auto gam = lorentz_factor(xu[3], xu[4], xu[5], rc);
-    auto dt2 = dt1 * rc / gam;
-    auto ex  = interp3d<Stencil>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt1);
-    auto ey  = interp3d<Stencil>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt1);
-    auto ez  = interp3d<Stencil>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt1);
-    auto bx  = interp3d<Stencil>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt2);
-    auto by  = interp3d<Stencil>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt2);
-    auto bz  = interp3d<Stencil>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt2);
-
-    push_impl(xu, ex, ey, ez, bx, by, bz);
-  }
 };
 
 template <int Dim, int Order, int Pusher, int Shape>
@@ -295,26 +453,7 @@ public:
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uf, float64 delt)
   {
-    if constexpr (Dim == 1) {
-      //
-      // 1D version
-      //
-      static_assert([] { return false; }(), "1D is not yet supported");
-    }
-
-    if constexpr (Dim == 2) {
-      //
-      // 2D version
-      //
-      static_assert([] { return false; }(), "2D is not yet supported");
-    }
-
-    if constexpr (Dim == 3) {
-      //
-      // 3D version
-      //
-      this->call_scalar_impl_3d(up, uf, delt);
-    }
+    this->call_scalar_impl(up, uf, delt);
   }
 };
 
@@ -330,26 +469,7 @@ public:
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uf, float64 delt)
   {
-    if constexpr (Dim == 1) {
-      //
-      // 1D version
-      //
-      static_assert([] { return false; }(), "1D is not yet supported");
-    }
-
-    if constexpr (Dim == 2) {
-      //
-      // 2D version
-      //
-      static_assert([] { return false; }(), "2D is not yet supported");
-    }
-
-    if constexpr (Dim == 3) {
-      //
-      // 3D version
-      //
-      this->call_vector_impl_3d(up, uf, delt);
-    }
+    this->call_vector_impl(up, uf, delt);
   }
 };
 

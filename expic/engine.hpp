@@ -47,6 +47,16 @@ private:
   {
     func_table_t table = {};
 
+    // scalar and 2D
+    table[encode(0, 2, 1)] = &call_entry<0, 2, 1>;
+    table[encode(0, 2, 2)] = &call_entry<0, 2, 2>;
+    table[encode(0, 2, 3)] = &call_entry<0, 2, 3>;
+    table[encode(0, 2, 4)] = &call_entry<0, 2, 4>;
+    // vector and 2D
+    table[encode(1, 2, 1)] = &call_entry<1, 2, 1>;
+    table[encode(1, 2, 2)] = &call_entry<1, 2, 2>;
+    table[encode(1, 2, 3)] = &call_entry<1, 2, 3>;
+    table[encode(1, 2, 4)] = &call_entry<1, 2, 4>;
     // scalar and 3D
     table[encode(0, 3, 1)] = &call_entry<0, 3, 1>;
     table[encode(0, 3, 2)] = &call_entry<0, 3, 2>;
@@ -102,6 +112,16 @@ private:
   {
     func_table_t table = {};
 
+    // scalar and 2D
+    table[encode(0, 2, 1)] = &call_entry<0, 2, 1>;
+    table[encode(0, 2, 2)] = &call_entry<0, 2, 2>;
+    table[encode(0, 2, 3)] = &call_entry<0, 2, 3>;
+    table[encode(0, 2, 4)] = &call_entry<0, 2, 4>;
+    // vector and 2D
+    table[encode(1, 2, 1)] = &call_entry<1, 2, 1>;
+    table[encode(1, 2, 2)] = &call_entry<1, 2, 2>;
+    table[encode(1, 2, 3)] = &call_entry<1, 2, 3>;
+    table[encode(1, 2, 4)] = &call_entry<1, 2, 4>;
     // scalar and 3D
     table[encode(0, 3, 1)] = &call_entry<0, 3, 1>;
     table[encode(0, 3, 2)] = &call_entry<0, 3, 2>;
@@ -204,6 +224,16 @@ private:
     {
       static constexpr int P = PusherBoris;
       static constexpr int S = ShapeMC;
+      // scalar and 2D
+      table[encode(0, 2, 1, P, S)] = &call_entry<0, 2, 1, P, S>;
+      table[encode(0, 2, 2, P, S)] = &call_entry<0, 2, 2, P, S>;
+      table[encode(0, 2, 3, P, S)] = &call_entry<0, 2, 3, P, S>;
+      table[encode(0, 2, 4, P, S)] = &call_entry<0, 2, 4, P, S>;
+      // vector and 2D
+      table[encode(1, 2, 1, P, S)] = &call_entry<1, 2, 1, P, S>;
+      table[encode(1, 2, 2, P, S)] = &call_entry<1, 2, 2, P, S>;
+      table[encode(1, 2, 3, P, S)] = &call_entry<1, 2, 3, P, S>;
+      table[encode(1, 2, 4, P, S)] = &call_entry<1, 2, 4, P, S>;
       // scalar and 3D
       table[encode(0, 3, 1, P, S)] = &call_entry<0, 3, 1, P, S>;
       table[encode(0, 3, 2, P, S)] = &call_entry<0, 3, 2, P, S>;
@@ -220,6 +250,16 @@ private:
     {
       static constexpr int P = PusherBoris;
       static constexpr int S = ShapeWT;
+      // scalar and 2D
+      table[encode(0, 2, 1, P, S)] = &call_entry<0, 2, 1, P, S>;
+      table[encode(0, 2, 2, P, S)] = &call_entry<0, 2, 2, P, S>;
+      table[encode(0, 2, 3, P, S)] = &call_entry<0, 2, 3, P, S>;
+      table[encode(0, 2, 4, P, S)] = &call_entry<0, 2, 4, P, S>;
+      // vector and 2D
+      table[encode(1, 2, 1, P, S)] = &call_entry<1, 2, 1, P, S>;
+      table[encode(1, 2, 2, P, S)] = &call_entry<1, 2, 2, P, S>;
+      table[encode(1, 2, 3, P, S)] = &call_entry<1, 2, 3, P, S>;
+      table[encode(1, 2, 4, P, S)] = &call_entry<1, 2, 4, P, S>;
       // scalar and 3D
       table[encode(0, 3, 1, P, S)] = &call_entry<0, 3, 1, P, S>;
       table[encode(0, 3, 2, P, S)] = &call_entry<0, 3, 2, P, S>;
