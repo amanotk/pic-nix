@@ -13,11 +13,15 @@ enum PusherType {
   PusherBoris   = 0,
   PusherHK2017  = 1,
   PusherVay2008 = 2,
+  // number of pushers
+  PusherSize = 4,
 };
 
 enum ShapeType {
   ShapeMC = 0,
   ShapeWT = 1,
+  // number of shapes
+  ShapeSize = 2,
 };
 
 template <int Dim, int Order, int Pusher, int Shape>

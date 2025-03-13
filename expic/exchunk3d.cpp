@@ -592,76 +592,30 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
-  std::string mode = option["vectorization"]["position"].get<std::string>();
+  auto mode      = option["vectorization"]["position"].get<std::string>();
+  int  is_vector = "xsimd" == mode;
 
-  bool is_success = true;
-
-  if (mode == "scalar") {
-    engine::ScalarPosition position(get_internal_data());
-    position(up, delt);
-  } else if (mode == "xsimd") {
-    engine::VectorPosition position(get_internal_data());
-    position(up, delt);
-  } else {
-    is_success = false;
-  }
+  engine::PositionEngine<InternalData> position;
+  position(is_vector, get_internal_data(), delt);
 
   // apply boundary condition and count particles
   for (int is = 0; is < Ns; is++) {
     set_boundary_particle(up[is], 0, up[is]->Np - 1, is);
     count_particle(up[is], 0, up[is]->Np - 1, true);
   }
-
-  if (is_success == false) {
-    ERROR << tfm::format("Error detected in push_position (see below):");
-    std::cerr << std::setw(2) << option << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
-  }
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  constexpr int Order = 2;
+  auto mode   = option["vectorization"]["velocity"].get<std::string>();
+  auto interp = option["interpolation"].get<std::string>();
 
-  bool        is_success = true;
-  std::string mode       = option["vectorization"]["velocity"].get<std::string>();
-  std::string interp     = option["interpolation"].get<std::string>();
+  int is_vector = "xsimd" == mode;
+  int pusher    = engine::PusherBoris;
+  int shape     = interp == "mc" ? engine::ShapeMC : engine::ShapeWT;
 
-  if (interp == "mc") {
-    //
-    // MC interpolation
-    //
-    if (mode == "scalar") {
-      engine::ScalarVelocityBorisMC<3, Order> velocity(get_internal_data());
-      velocity(up, uf, delt);
-    } else if (mode == "xsimd") {
-      engine::VectorVelocityBorisMC<3, Order> velocity(get_internal_data());
-      velocity(up, uf, delt);
-    } else {
-      is_success = false;
-    }
-  } else if (interp == "wt") {
-    //
-    // WT interpolation
-    //
-    if (mode == "scalar") {
-      engine::ScalarVelocityBorisWT<3, Order> velocity(get_internal_data());
-      velocity(up, uf, delt);
-    } else if (mode == "xsimd") {
-      engine::VectorVelocityBorisWT<3, Order> velocity(get_internal_data());
-      velocity(up, uf, delt);
-    } else {
-      is_success = false;
-    }
-  } else {
-    is_success = false;
-  }
-
-  if (is_success == false) {
-    ERROR << tfm::format("Error detected in push_velocity (see below):");
-    std::cerr << std::setw(2) << option << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
-  }
+  engine::VelocityEngine<InternalData> velocity;
+  velocity(is_vector, 3, order, pusher, shape, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)

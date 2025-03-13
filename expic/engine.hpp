@@ -15,33 +15,19 @@
 
 namespace engine
 {
-// alias
-template <int Dim, int Order>
-using ScalarVelocityBorisMC = ScalarVelocity<Dim, Order, PusherBoris, ShapeMC>;
-template <int Dim, int Order>
-using ScalarVelocityBorisWT = ScalarVelocity<Dim, Order, PusherBoris, ShapeWT>;
-template <int Dim, int Order>
-using VectorVelocityBorisMC = VectorVelocity<Dim, Order, PusherBoris, ShapeMC>;
-template <int Dim, int Order>
-using VectorVelocityBorisWT = VectorVelocity<Dim, Order, PusherBoris, ShapeWT>;
 
-class BaseEngine
+template <typename T_data>
+class CurrentEngine
 {
 public:
   static constexpr int size_table = 64;
+  using func_ptr_t                = void (*)(const T_data&, double);
+  using func_table_t              = std::array<func_ptr_t, size_table>;
 
   static constexpr int encode(int is_vector, int dimension, int order)
   {
     return is_vector * 32 + (dimension - 1) * 8 + (order - 1);
   }
-};
-
-template <typename T_data>
-class CurrentEngine : public BaseEngine
-{
-public:
-  using func_ptr_t   = void (*)(const T_data&, double);
-  using func_table_t = std::array<func_ptr_t, size_table>;
 
 private:
   template <int isVector, int Dim, int Order>
@@ -87,11 +73,17 @@ public:
 };
 
 template <typename T_data>
-class MomentEngine : public BaseEngine
+class MomentEngine
 {
 public:
-  using func_ptr_t   = void (*)(const T_data&);
-  using func_table_t = std::array<func_ptr_t, size_table>;
+  static constexpr int size_table = 64;
+  using func_ptr_t                = void (*)(const T_data&);
+  using func_table_t              = std::array<func_ptr_t, size_table>;
+
+  static constexpr int encode(int is_vector, int dimension, int order)
+  {
+    return is_vector * 32 + (dimension - 1) * 8 + (order - 1);
+  }
 
 private:
   template <int isVector, int Dim, int Order>
@@ -133,6 +125,128 @@ public:
   void operator()(int is_vector, int dimension, int order, const T_data& data) const
   {
     table[encode(is_vector, dimension, order)](data);
+  }
+};
+
+template <typename T_data>
+class PositionEngine
+{
+public:
+  static constexpr int size_table = 2;
+  using func_ptr_t                = void (*)(const T_data&, double);
+  using func_table_t              = std::array<func_ptr_t, size_table>;
+
+private:
+  template <int isVector>
+  static void call_entry(const T_data& data, double delt)
+  {
+    if constexpr (isVector == 0) {
+      ScalarPosition position(data);
+      position(data.up, delt);
+    }
+
+    if constexpr (isVector == 1) {
+      VectorPosition position(data);
+      position(data.up, delt);
+    }
+  }
+
+  static func_table_t create_table_impl()
+  {
+    func_table_t table = {};
+
+    table[0] = &call_entry<0>;
+    table[1] = &call_entry<1>;
+
+    return table;
+  }
+
+  /// initialize the function table
+  inline static const func_table_t table = create_table_impl();
+
+public:
+  void operator()(int is_vector, const T_data& data, double delt) const
+  {
+    table[is_vector](data, delt);
+  }
+};
+
+template <typename T_data>
+class VelocityEngine
+{
+public:
+  static constexpr int size_table = 1024;
+  using func_ptr_t                = void (*)(const T_data&, double);
+  using func_table_t              = std::array<func_ptr_t, size_table>;
+
+private:
+  static constexpr int encode(int is_vector, int dimension, int order, int pusher, int shape)
+  {
+    return is_vector * 512 + (dimension - 1) * 128 + (order - 1) * 16 + (pusher - 1) * 4 +
+           (shape - 1);
+  }
+
+  template <int isVector, int Dim, int Order, int Pusher, int Shape>
+  static void call_entry(const T_data& data, double delt)
+  {
+    if constexpr (isVector == 0) {
+      ScalarVelocity<Dim, Order, Pusher, Shape> velocity(data);
+      velocity(data.up, data.uf, delt);
+    }
+
+    if constexpr (isVector == 1) {
+      VectorVelocity<Dim, Order, Pusher, Shape> velocity(data);
+      velocity(data.up, data.uf, delt);
+    }
+  }
+
+  static func_table_t create_table_impl()
+  {
+    func_table_t table = {};
+
+    // Boris pusher and MC shape
+    {
+      static constexpr int P = PusherBoris;
+      static constexpr int S = ShapeMC;
+      // scalar and 3D
+      table[encode(0, 3, 1, P, S)] = &call_entry<0, 3, 1, P, S>;
+      table[encode(0, 3, 2, P, S)] = &call_entry<0, 3, 2, P, S>;
+      table[encode(0, 3, 3, P, S)] = &call_entry<0, 3, 3, P, S>;
+      table[encode(0, 3, 4, P, S)] = &call_entry<0, 3, 4, P, S>;
+      // vector and 3D
+      table[encode(1, 3, 1, P, S)] = &call_entry<1, 3, 1, P, S>;
+      table[encode(1, 3, 2, P, S)] = &call_entry<1, 3, 2, P, S>;
+      table[encode(1, 3, 3, P, S)] = &call_entry<1, 3, 3, P, S>;
+      table[encode(1, 3, 4, P, S)] = &call_entry<1, 3, 4, P, S>;
+    }
+
+    // Boris pusher and WT shape
+    {
+      static constexpr int P = PusherBoris;
+      static constexpr int S = ShapeWT;
+      // scalar and 3D
+      table[encode(0, 3, 1, P, S)] = &call_entry<0, 3, 1, P, S>;
+      table[encode(0, 3, 2, P, S)] = &call_entry<0, 3, 2, P, S>;
+      table[encode(0, 3, 3, P, S)] = &call_entry<0, 3, 3, P, S>;
+      table[encode(0, 3, 4, P, S)] = &call_entry<0, 3, 4, P, S>;
+      // vector and 3D
+      table[encode(1, 3, 1, P, S)] = &call_entry<1, 3, 1, P, S>;
+      table[encode(1, 3, 2, P, S)] = &call_entry<1, 3, 2, P, S>;
+      table[encode(1, 3, 3, P, S)] = &call_entry<1, 3, 3, P, S>;
+      table[encode(1, 3, 4, P, S)] = &call_entry<1, 3, 4, P, S>;
+    }
+
+    return table;
+  }
+
+  /// initialize the function table
+  inline static const func_table_t table = create_table_impl();
+
+public:
+  void operator()(int is_vector, int dimension, int order, int pusher, int shape,
+                  const T_data& data, float64 delt) const
+  {
+    table[encode(is_vector, dimension, order, pusher, shape)](data, delt);
   }
 };
 
