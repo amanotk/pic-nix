@@ -146,16 +146,16 @@ public:
   }
 };
 
-template <typename T_data>
+template <typename T_data, typename T_chunk>
 class PositionEngine
 {
 private:
   static constexpr int size_table = 2;
-  using func_ptr_t                = void (*)(const T_data&, double);
+  using func_ptr_t                = void (*)(const T_data&, T_chunk*, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   template <int isVector>
-  static void call_entry(const T_data& data, double delt)
+  static void call_entry(const T_data& data, T_chunk* chunk, double delt)
   {
     if constexpr (isVector == 0) {
       ScalarPosition position(data);
@@ -165,6 +165,12 @@ private:
     if constexpr (isVector == 1) {
       VectorPosition position(data);
       position(data.up, delt);
+    }
+
+    // apply boundary condition and count particles
+    for (int is = 0; is < data.Ns; is++) {
+      chunk->set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
+      chunk->count_particle(data.up[is], 0, data.up[is]->Np - 1, true);
     }
   }
 
@@ -182,9 +188,9 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, const T_data& data, double delt) const
+  void operator()(int is_vector, const T_data& data, T_chunk* chunk, double delt) const
   {
-    table[is_vector](data, delt);
+    table[is_vector](data, chunk, delt);
   }
 };
 

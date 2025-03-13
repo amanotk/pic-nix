@@ -622,14 +622,8 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   auto      mode = option["vectorization"]["position"].get<std::string>();
   const int V    = "vector" == mode;
 
-  engine::PositionEngine<InternalData> position;
-  position(V, get_internal_data(), delt);
-
-  // apply boundary condition and count particles
-  for (int is = 0; is < Ns; is++) {
-    set_boundary_particle(up[is], 0, up[is]->Np - 1, is);
-    count_particle(up[is], 0, up[is]->Np - 1, true);
-  }
+  engine::PositionEngine<InternalData, ThisType> position;
+  position(V, get_internal_data(), this, delt);
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
