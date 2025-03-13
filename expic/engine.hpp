@@ -19,7 +19,7 @@ namespace engine
 template <typename T_data>
 class CurrentEngine
 {
-public:
+private:
   static constexpr int size_table = 64;
   using func_ptr_t                = void (*)(const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
@@ -29,7 +29,6 @@ public:
     return is_vector * 32 + (dimension - 1) * 8 + (order - 1);
   }
 
-private:
   template <int isVector, int Dim, int Order>
   static void call_entry(const T_data& data, double delt)
   {
@@ -75,7 +74,7 @@ public:
 template <typename T_data>
 class MomentEngine
 {
-public:
+private:
   static constexpr int size_table = 64;
   using func_ptr_t                = void (*)(const T_data&);
   using func_table_t              = std::array<func_ptr_t, size_table>;
@@ -85,7 +84,6 @@ public:
     return is_vector * 32 + (dimension - 1) * 8 + (order - 1);
   }
 
-private:
   template <int isVector, int Dim, int Order>
   static void call_entry(const T_data& data)
   {
@@ -131,12 +129,11 @@ public:
 template <typename T_data>
 class PositionEngine
 {
-public:
+private:
   static constexpr int size_table = 2;
   using func_ptr_t                = void (*)(const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
-private:
   template <int isVector>
   static void call_entry(const T_data& data, double delt)
   {
@@ -174,12 +171,11 @@ public:
 template <typename T_data>
 class VelocityEngine
 {
-public:
+private:
   static constexpr int size_table = 1024;
   using func_ptr_t                = void (*)(const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
-private:
   static constexpr int encode(int is_vector, int dimension, int order, int pusher, int shape)
   {
     return is_vector * 512 + (dimension - 1) * 128 + (order - 1) * 16 + (pusher - 1) * 4 +
