@@ -86,14 +86,16 @@ public:
   };
 
 protected:
-  int                     order; ///< order of shape function
-  int                     Ns;    ///< number of particle species
-  float64                 cc;    ///< speed of light
-  xt::xtensor<float64, 4> uf;    ///< electromagnetic field
-  xt::xtensor<float64, 4> uj;    ///< current density
-  xt::xtensor<float64, 5> um;    ///< particle moment
-  xt::xtensor<float64, 5> ff;    ///< electric field for Friedmann filter
-  ParticleVec             up;    ///< list of particles
+  int order;     ///< order of shape function
+  int dimension; ///< dimension of the simulation
+
+  int                     Ns; ///< number of particle species
+  float64                 cc; ///< speed of light
+  xt::xtensor<float64, 4> uf; ///< electromagnetic field
+  xt::xtensor<float64, 4> uj; ///< current density
+  xt::xtensor<float64, 5> um; ///< particle moment
+  xt::xtensor<float64, 5> ff; ///< electric field for Friedmann filter
+  ParticleVec             up; ///< list of particles
 
   ///
   /// @brief internal data struct

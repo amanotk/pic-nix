@@ -17,14 +17,17 @@ enum PusherType {
   PusherSize = 4,
 };
 
-enum ShapeType {
-  ShapeMC = 0,
-  ShapeWT = 1,
+enum InterpType {
+  InterpMC = 0,
+  InterpWT = 1,
   // number of shapes
-  ShapeSize = 2,
+  InterpSize = 2,
 };
 
-template <int Dim, int Order, int Pusher, int Shape>
+static const char* PusherName[PusherSize] = {"Boris", "HK2017", "Vay2008"};
+static const char* InterpName[InterpSize] = {"MC", "WT"};
+
+template <int Dim, int Order, int Pusher, int Interp>
 class Velocity
 {
 public:
@@ -221,13 +224,13 @@ public:
     auto yhg = yhgrid + to_float(hy0) * dy;
 
     // MC weights
-    if constexpr (Shape == ShapeMC) {
+    if constexpr (Interp == InterpMC) {
       shape_mc<Order>(xu[0], xig, rdx, wix);
       shape_mc<Order>(xu[1], yig, rdy, wiy);
     }
 
     // WT weights
-    if constexpr (Shape == ShapeWT) {
+    if constexpr (Interp == InterpWT) {
       shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
       shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
     }
@@ -279,14 +282,14 @@ public:
     auto zhg = zhgrid + to_float(hz0) * dz;
 
     // MC weights
-    if constexpr (Shape == ShapeMC) {
+    if constexpr (Interp == InterpMC) {
       shape_mc<Order>(xu[0], xig, rdx, wix);
       shape_mc<Order>(xu[1], yig, rdy, wiy);
       shape_mc<Order>(xu[2], zig, rdz, wiz);
     }
 
     // WT weights
-    if constexpr (Shape == ShapeWT) {
+    if constexpr (Interp == InterpWT) {
       shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
       shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
       shape_wt<Order>(xu[2], zig, rdz, dtz, rdtz, wiz);
@@ -441,12 +444,12 @@ public:
   }
 };
 
-template <int Dim, int Order, int Pusher, int Shape>
-class ScalarVelocity : public Velocity<Dim, Order, Pusher, Shape>
+template <int Dim, int Order, int Pusher, int Interp>
+class ScalarVelocity : public Velocity<Dim, Order, Pusher, Interp>
 {
 public:
   template <typename T_data>
-  ScalarVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Shape>(data)
+  ScalarVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Interp>(data)
   {
   }
 
@@ -457,12 +460,12 @@ public:
   }
 };
 
-template <int Dim, int Order, int Pusher, int Shape>
-class VectorVelocity : public Velocity<Dim, Order, Pusher, Shape>
+template <int Dim, int Order, int Pusher, int Interp>
+class VectorVelocity : public Velocity<Dim, Order, Pusher, Interp>
 {
 public:
   template <typename T_data>
-  VectorVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Shape>(data)
+  VectorVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Interp>(data)
   {
   }
 

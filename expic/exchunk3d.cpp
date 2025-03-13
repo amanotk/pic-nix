@@ -8,6 +8,24 @@
 DEFINE_MEMBER(, ExChunk3D)
 (const int dims[3], int id) : Chunk(dims, id), Ns(1)
 {
+  // check dimension
+  {
+    bool is_3d = dims[0] >= 2 && dims[1] >= 2 && dims[2] >= 2;
+    bool is_2d = dims[0] == 1 && dims[1] >= 2 && dims[2] >= 2;
+    bool is_1d = dims[0] == 1 && dims[1] == 1 && dims[2] >= 2;
+
+    if (is_1d != true && is_2d != true && is_3d != true) {
+      ERROR << tfm::format("Invalid dimension: %d %d %d", dims[0], dims[1], dims[2]);
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    } else if (is_1d == true) {
+      dimension = 1;
+    } else if (is_2d == true) {
+      dimension = 2;
+    } else if (is_3d == true) {
+      dimension = 3;
+    }
+  }
+
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
   for (int i = 0; i < NumBoundaryMode; i++) {
@@ -114,21 +132,14 @@ DEFINE_MEMBER(void, reset_load)()
 
 DEFINE_MEMBER(void, setup)(json& config)
 {
-  // TODO: consistency check for number of grid points and shape function order
   auto opt = config["option"];
-
-  // order of shape function
-  {
-    order = opt.value("order", 2);
-    this->set_boundary_margin((order + 3) / 2);
-  }
 
   // vectorization mode
   {
-    std::vector<std::string> valid_mode    = {"scalar", "xsimd", "xsimd-unsorted"};
-    auto                     vectorization = opt["vectorization"];
+    std::vector<std::string> valid_mode = {"scalar", "vector"};
 
-    bool is_success = true;
+    auto vectorization = opt["vectorization"];
+    bool is_success    = true;
 
     // default
     if (vectorization.is_null() == true) {
@@ -145,9 +156,9 @@ DEFINE_MEMBER(void, setup)(json& config)
                                    {"moment", "scalar"}};
       } else if (vector_or_scalar == "vector") {
         option["vectorization"] = {{"position", "scalar"},
-                                   {"velocity", "xsimd"},
-                                   {"current", "xsimd"},
-                                   {"moment", "xsimd"}};
+                                   {"velocity", "vector"},
+                                   {"current", "vector"},
+                                   {"moment", "vector"}};
       } else {
         is_success = false;
       }
@@ -175,11 +186,45 @@ DEFINE_MEMBER(void, setup)(json& config)
     }
   }
 
+  // order of shape function
+  {
+    order = opt.value("order", 2);
+
+    int  nb    = (order + 3) / 2; // required boundary margin
+    bool is_1d = dimension == 1 && dims[2] >= nb;
+    bool is_2d = dimension == 2 && dims[1] >= nb && dims[2] >= nb;
+    bool is_3d = dimension == 3 && dims[0] >= nb && dims[1] >= nb && dims[2] >= nb;
+
+    if (is_1d == false && is_2d == false && is_3d == false) {
+      ERROR << tfm::format("Number of grid points smaller than the minimum (%2d) "
+                           "for the chosen shape order (%2d) of shape function ",
+                           nb, order);
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    option["order"] = order;
+    this->set_boundary_margin(nb);
+  }
+
+  // interpolation
+  {
+    auto interpolation = opt.value("interpolation", "MC");
+
+    if (interpolation == engine::InterpName[engine::InterpMC]) {
+      option["interpolation"] = engine::InterpMC;
+    } else if (interpolation == engine::InterpName[engine::InterpWT]) {
+      option["interpolation"] = engine::InterpWT;
+    } else {
+      ERROR << tfm::format("Invalid interpolation: %s", interpolation);
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+  }
+
   // seed for random number generator
   {
-    auto seed_type = opt["seed_type"];
+    auto seed_type = opt.value("seed_type", "random");
 
-    if (seed_type.is_string() == false || seed_type == "random") {
+    if (seed_type == "random") {
       option["random_seed"] = std::random_device()();
     } else if (seed_type == "fixed") {
       option["random_seed"] = this->myid; // chunk ID
@@ -189,27 +234,9 @@ DEFINE_MEMBER(void, setup)(json& config)
     }
   }
 
-  // interpolation method
-  {
-    auto interp = opt["interpolation"];
-
-    if (interp.is_string() == false || interp == "mc") {
-      option["interpolation"] = "mc";
-    } else if (interp == "wt") {
-      option["interpolation"] = "wt";
-    } else {
-      ERROR << tfm::format("Invalid interpolation method: %s", interp);
-      MPI_Abort(MPI_COMM_WORLD, -1);
-    }
-  }
-
-  // Friedman filter
-  {
-    option["friedman"] = opt.value("friedman", 0.0);
-  }
-
   // misc
   {
+    option["friedman"]     = opt.value("friedman", 0.0);
     option["cell_load"]    = opt.value("cell_load", 1.0);
     option["buffer_ratio"] = opt.value("buffer_ratio", 0.2);
   }
@@ -592,11 +619,11 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
-  auto mode      = option["vectorization"]["position"].get<std::string>();
-  int  is_vector = "xsimd" == mode;
+  auto      mode = option["vectorization"]["position"].get<std::string>();
+  const int V    = "vector" == mode;
 
   engine::PositionEngine<InternalData> position;
-  position(is_vector, get_internal_data(), delt);
+  position(V, get_internal_data(), delt);
 
   // apply boundary condition and count particles
   for (int is = 0; is < Ns; is++) {
@@ -607,33 +634,37 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
 {
-  auto mode   = option["vectorization"]["velocity"].get<std::string>();
-  auto interp = option["interpolation"].get<std::string>();
-
-  int is_vector = "xsimd" == mode;
-  int pusher    = engine::PusherBoris;
-  int shape     = interp == "mc" ? engine::ShapeMC : engine::ShapeWT;
+  auto      mode = option["vectorization"]["velocity"].get<std::string>();
+  const int V    = "vector" == mode;
+  const int D    = dimension;
+  const int O    = order;
+  const int P    = engine::PusherBoris;
+  const int I    = option["interpolation"].get<int>();
 
   engine::VelocityEngine<InternalData> velocity;
-  velocity(is_vector, 3, order, pusher, shape, get_internal_data(), delt);
+  velocity(V, D, O, P, I, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
 {
-  auto mode      = option["vectorization"]["current"].get<std::string>();
-  int  is_vector = "xsimd" == mode;
+  auto      mode = option["vectorization"]["current"].get<std::string>();
+  const int V    = "vector" == mode;
+  const int D    = dimension;
+  const int O    = order;
 
   engine::CurrentEngine<InternalData> current;
-  current(is_vector, 3, order, get_internal_data(), delt);
+  current(V, D, O, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, deposit_moment)()
 {
-  auto mode      = option["vectorization"]["moment"].get<std::string>();
-  int  is_vector = "xsimd" == mode;
+  auto      mode = option["vectorization"]["moment"].get<std::string>();
+  const int V    = "vector" == mode;
+  const int D    = dimension;
+  const int O    = order;
 
   engine::MomentEngine<InternalData> moment;
-  moment(is_vector, 3, order, get_internal_data());
+  moment(V, D, O, get_internal_data());
 }
 
 #undef DEFINE_MEMBER
