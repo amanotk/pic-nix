@@ -13,7 +13,9 @@ template <int Dim, int Order>
 class Current
 {
 public:
-  static constexpr int size   = Order + 3;
+  static constexpr int Sx     = Order + 3;
+  static constexpr int Sy     = Dim > 1 ? Order + 3 : 1;
+  static constexpr int Sz     = Dim > 2 ? Order + 3 : 1;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
 
   int     ns;
@@ -55,230 +57,92 @@ public:
   }
 
   template <typename T_particle, typename T_array>
-  void call_scalar_impl_1d(T_particle& up, T_array& uj, float64 delt)
+  void call_scalar_impl(T_particle& up, T_array& uj, float64 delt)
   {
     using namespace nix;
     using namespace nix::primitives;
 
-    // 2D version
-    const int iz0 = lbz;
-    const int iy0 = lby;
+    auto deposit_current = [&](T_particle& up, T_array& uj, int is, int ip) {
+      float64 qs                 = up[is]->q;
+      float64 cur[Sz][Sy][Sx][4] = {0};
+      auto    xv                 = &up[is]->xv(ip, 0);
+      auto    xu                 = &up[is]->xu(ip, 0);
 
-    // clear charge/current density
-    fill_all(uj, 0);
-
-    for (int is = 0; is < ns; is++) {
-      float64 qs = up[is]->q;
-
-      for (int ip = 0; ip < up[is]->Np; ip++) {
-        float64 cur[size][4] = {0};
-
-        // local current
-        auto xv    = &up[is]->xv(ip, 0);
-        auto xu    = &up[is]->xu(ip, 0);
-        auto [ix0] = local1d(xv, xu, qs, delt, cur);
-
-        // deposit to global array
-        ix0 += lbx - (Order / 2) - 1;
-        append_current1d<Order>(uj, iz0, iy0, ix0, cur);
+      // 1D version
+      if constexpr (Dim == 1) {
+        auto [ix0, iy0, iz0] = local1d(xv, xu, qs, delt, cur);
+        append_current1d<Order>(uj, iz0, iy0, ix0, cur[0][0]);
       }
-    }
-  }
 
-  template <typename T_particle, typename T_array>
-  void call_scalar_impl_2d(T_particle& up, T_array& uj, float64 delt)
-  {
-    using namespace nix;
-    using namespace nix::primitives;
-
-    // 2D version
-    const int iz0 = lbz;
-
-    // clear charge/current density
-    fill_all(uj, 0);
-
-    for (int is = 0; is < ns; is++) {
-      float64 qs = up[is]->q;
-
-      for (int ip = 0; ip < up[is]->Np; ip++) {
-        float64 cur[size][size][4] = {0};
-
-        // local current
-        auto xv         = &up[is]->xv(ip, 0);
-        auto xu         = &up[is]->xu(ip, 0);
-        auto [ix0, iy0] = local2d(xv, xu, qs, delt, cur);
-
-        // deposit to global array
-        ix0 += lbx - (Order / 2) - 1;
-        iy0 += lby - (Order / 2) - 1;
-        append_current2d<Order>(uj, iz0, iy0, ix0, cur);
+      // 2D version
+      if constexpr (Dim == 2) {
+        auto [ix0, iy0, iz0] = local2d(xv, xu, qs, delt, cur);
+        append_current2d<Order>(uj, iz0, iy0, ix0, cur[0]);
       }
-    }
-  }
 
-  template <typename T_particle, typename T_array>
-  void call_scalar_impl_3d(T_particle& up, T_array& uj, float64 delt)
-  {
-    using namespace nix;
-    using namespace nix::primitives;
-
-    // clear charge/current density
-    fill_all(uj, 0);
-
-    for (int is = 0; is < ns; is++) {
-      float64 qs = up[is]->q;
-
-      for (int ip = 0; ip < up[is]->Np; ip++) {
-        float64 cur[size][size][size][4] = {0};
-
-        // local current
-        auto xv              = &up[is]->xv(ip, 0);
-        auto xu              = &up[is]->xu(ip, 0);
+      // 3D version
+      if constexpr (Dim == 3) {
         auto [ix0, iy0, iz0] = local3d(xv, xu, qs, delt, cur);
-
-        // deposit to global array
-        ix0 += lbx - (Order / 2) - 1;
-        iy0 += lby - (Order / 2) - 1;
-        iz0 += lbz - (Order / 2) - 1;
         append_current3d<Order>(uj, iz0, iy0, ix0, cur);
       }
-    }
-  }
-
-  template <typename T_particle, typename T_array>
-  void call_vector_impl_2d(T_particle& up, T_array& uj, float64 delt)
-  {
-    using namespace nix;
-    using namespace nix::primitives;
-    const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+    };
 
     // clear charge/current density
     fill_all(uj, 0);
 
-    for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
-      for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
-        for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
-          int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
-
-          // local current
-          float64  cur[size][size][4]      = {0}; // scalar
-          simd_f64 cur_simd[size][size][4] = {0}; // SIMD register
-
-          // process particles in the cell
-          for (int is = 0; is < ns; is++) {
-            int  ip_zero = up[is]->pindex(ii);
-            int  np_cell = up[is]->pindex(ii + 1) - ip_zero;
-            int  np_simd = (np_cell / simd_f64::size) * simd_f64::size;
-            auto qs      = up[is]->q;
-
-            //
-            // vectorized loop
-            //
-            for (int ip = ip_zero; ip < ip_zero + np_simd; ip += simd_f64::size) {
-              // local SIMD register
-              simd_f64 xv[3];
-              simd_f64 xu[3];
-
-              // load particles to SIMD register
-              xv[0] = simd_f64::gather(&up[is]->xv(ip, 0), index);
-              xv[1] = simd_f64::gather(&up[is]->xv(ip, 1), index);
-              xv[2] = simd_f64::gather(&up[is]->xv(ip, 2), index);
-              xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
-              xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
-              xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
-
-              local2d(xv, xu, qs, delt, cur_simd);
-            }
-
-            //
-            // scalar loop for reminder
-            //
-            for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
-              auto xv = &up[is]->xv(ip, 0);
-              auto xu = &up[is]->xu(ip, 0);
-
-              local2d(xv, xu, qs, delt, cur);
-            }
-          }
-
-          // deposit to global array
-          global2d(uj, iz, iy, ix, cur);
-          global2d(uj, iz, iy, ix, cur_simd);
-        }
+    for (int is = 0; is < ns; is++) {
+      for (int ip = 0; ip < up[is]->Np; ip++) {
+        deposit_current(up, uj, is, ip);
       }
     }
   }
 
   template <typename T_particle, typename T_array>
-  void call_vector_impl_1d(T_particle& up, T_array& uj, float64 delt)
+  void call_vector_impl(T_particle& up, T_array& uj, float64 delt)
   {
     using namespace nix;
     using namespace nix::primitives;
     const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-    // clear charge/current density
-    fill_all(uj, 0);
-
-    for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
-      for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
-        for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
-          int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
-
-          // local current
-          float64  cur[size][4]      = {0}; // scalar
-          simd_f64 cur_simd[size][4] = {0}; // SIMD register
-
-          // process particles in the cell
-          for (int is = 0; is < ns; is++) {
-            int  ip_zero = up[is]->pindex(ii);
-            int  np_cell = up[is]->pindex(ii + 1) - ip_zero;
-            int  np_simd = (np_cell / simd_f64::size) * simd_f64::size;
-            auto qs      = up[is]->q;
-
-            //
-            // vectorized loop
-            //
-            for (int ip = ip_zero; ip < ip_zero + np_simd; ip += simd_f64::size) {
-              // local SIMD register
-              simd_f64 xv[3];
-              simd_f64 xu[3];
-
-              // load particles to SIMD register
-              xv[0] = simd_f64::gather(&up[is]->xv(ip, 0), index);
-              xv[1] = simd_f64::gather(&up[is]->xv(ip, 1), index);
-              xv[2] = simd_f64::gather(&up[is]->xv(ip, 2), index);
-              xu[0] = simd_f64::gather(&up[is]->xu(ip, 0), index);
-              xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
-              xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
-
-              local1d(xv, xu, qs, delt, cur_simd);
-            }
-
-            //
-            // scalar loop for reminder
-            //
-            for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
-              auto xv = &up[is]->xv(ip, 0);
-              auto xu = &up[is]->xu(ip, 0);
-
-              local1d(xv, xu, qs, delt, cur);
-            }
-          }
-
-          // deposit to global array
-          global1d(uj, iz, iy, ix, cur);
-          global1d(uj, iz, iy, ix, cur_simd);
-        }
+    auto local = [&](auto xv[], auto xu[], float64 qs, float64 delt, auto cur[Sz][Sy][Sx][4]) {
+      // 1D version
+      if constexpr (Dim == 1) {
+        local1d(xv, xu, qs, delt, cur);
+        return;
       }
-    }
-  }
 
-  template <typename T_particle, typename T_array>
-  void call_vector_impl_3d(T_particle& up, T_array& uj, float64 delt)
-  {
-    using namespace nix;
-    using namespace nix::primitives;
-    const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+      // 2D version
+      if constexpr (Dim == 2) {
+        local2d(xv, xu, qs, delt, cur);
+        return;
+      }
+
+      // 3D version
+      if constexpr (Dim == 3) {
+        local3d(xv, xu, qs, delt, cur);
+        return;
+      }
+    };
+
+    auto global = [&](T_array& uj, int iz, int iy, int ix, auto cur[Sz][Sy][Sx][4]) {
+      // 1D version
+      if constexpr (Dim == 1) {
+        global1d(uj, iz, iy, ix, cur);
+        return;
+      }
+
+      // 2D version
+      if constexpr (Dim == 2) {
+        global2d(uj, iz, iy, ix, cur);
+        return;
+      }
+
+      // 3D version
+      if constexpr (Dim == 3) {
+        global3d(uj, iz, iy, ix, cur);
+        return;
+      }
+    };
 
     // clear charge/current density
     fill_all(uj, 0);
@@ -289,8 +153,8 @@ public:
           int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
 
           // local current
-          float64  cur[size][size][size][4]      = {0}; // scalar
-          simd_f64 cur_simd[size][size][size][4] = {0}; // SIMD register
+          float64  cur[Sz][Sy][Sx][4]      = {0}; // scalar
+          simd_f64 cur_simd[Sz][Sy][Sx][4] = {0}; // SIMD register
 
           // process particles in the cell
           for (int is = 0; is < ns; is++) {
@@ -315,7 +179,7 @@ public:
               xu[1] = simd_f64::gather(&up[is]->xu(ip, 1), index);
               xu[2] = simd_f64::gather(&up[is]->xu(ip, 2), index);
 
-              local3d(xv, xu, qs, delt, cur_simd);
+              local(xv, xu, qs, delt, cur_simd);
             }
 
             //
@@ -325,34 +189,37 @@ public:
               auto xv = &up[is]->xv(ip, 0);
               auto xu = &up[is]->xu(ip, 0);
 
-              local3d(xv, xu, qs, delt, cur);
+              local(xv, xu, qs, delt, cur);
             }
           }
 
           // deposit to global array
-          global3d(uj, iz, iy, ix, cur);
-          global3d(uj, iz, iy, ix, cur_simd);
+          global(uj, iz, iy, ix, cur);
+          global(uj, iz, iy, ix, cur_simd);
         }
       }
     }
   }
 
   template <typename T_float>
-  auto local1d(T_float xv[], T_float xu[], float64 qs, float64 delt, T_float cur[size][4])
+  auto local1d(T_float xv[], T_float xu[], float64 qs, float64 delt, T_float cur[Sz][Sy][Sx][4])
   {
     using nix::esirkepov::shift_weights;
     using nix::esirkepov::deposit1d;
     using T_int = xsimd::as_integer_t<T_float>;
 
-    T_float ss[2][1][size] = {0};
+    // 1D version
+    T_int iy0 = lby;
+    T_int iz0 = lbz;
 
-    T_float q     = qs;
-    T_float vy    = (xu[1] - xv[1]) / delt;
-    T_float vz    = (xu[2] - xv[2]) / delt;
-    T_float rdx   = 1 / dx;
-    T_float ximin = xmin + 0.5 * dx * is_odd;
-    T_float xgrid = xmin + 0.5 * dx;
-    float64 dxdt  = dx / delt;
+    T_float ss[2][1][Sx] = {0};
+    T_float q            = qs;
+    T_float vy           = (xu[1] - xv[1]) / delt;
+    T_float vz           = (xu[2] - xv[2]) / delt;
+    T_float rdx          = 1 / dx;
+    T_float ximin        = xmin + 0.5 * dx * is_odd;
+    T_float xgrid        = xmin + 0.5 * dx;
+    float64 dxdt         = dx / delt;
 
     //
     // -*- weights before move -*-
@@ -381,30 +248,35 @@ public:
     //
     // -*- accumulate current via density decomposition -*-
     //
-    deposit1d<Order>(dxdt, vy, vz, q, ss, cur);
+    deposit1d<Order>(dxdt, vy, vz, q, ss, cur[0][0]);
 
-    return std::make_tuple(ix0);
+    // shift indices
+    ix0 += lbx - (Order / 2) - 1;
+
+    return std::make_tuple(ix0, iy0, iz0);
   }
 
   template <typename T_float>
-  auto local2d(T_float xv[], T_float xu[], float64 qs, float64 delt, T_float cur[size][size][4])
+  auto local2d(T_float xv[], T_float xu[], float64 qs, float64 delt, T_float cur[Sz][Sy][Sx][4])
   {
     using nix::esirkepov::shift_weights;
     using nix::esirkepov::deposit2d;
     using T_int = xsimd::as_integer_t<T_float>;
 
-    T_float ss[2][2][size] = {0};
+    // 2D version
+    T_int iz0 = lbz;
 
-    T_float q     = qs;
-    T_float vz    = (xu[2] - xv[2]) / delt;
-    T_float rdx   = 1 / dx;
-    T_float rdy   = 1 / dy;
-    T_float ximin = xmin + 0.5 * dx * is_odd;
-    T_float yimin = ymin + 0.5 * dy * is_odd;
-    T_float xgrid = xmin + 0.5 * dx;
-    T_float ygrid = ymin + 0.5 * dy;
-    float64 dxdt  = dx / delt;
-    float64 dydt  = dy / delt;
+    T_float ss[2][2][Sx] = {0};
+    T_float q            = qs;
+    T_float vz           = (xu[2] - xv[2]) / delt;
+    T_float rdx          = 1 / dx;
+    T_float rdy          = 1 / dy;
+    T_float ximin        = xmin + 0.5 * dx * is_odd;
+    T_float yimin        = ymin + 0.5 * dy * is_odd;
+    T_float xgrid        = xmin + 0.5 * dx;
+    T_float ygrid        = ymin + 0.5 * dy;
+    float64 dxdt         = dx / delt;
+    float64 dydt         = dy / delt;
 
     //
     // -*- weights before move -*-
@@ -439,34 +311,36 @@ public:
     //
     // -*- accumulate current via density decomposition -*-
     //
-    deposit2d<Order>(dxdt, dydt, vz, q, ss, cur);
+    deposit2d<Order>(dxdt, dydt, vz, q, ss, cur[0]);
 
-    return std::make_tuple(ix0, iy0);
+    // shift indices
+    ix0 += lbx - (Order / 2) - 1;
+    iy0 += lby - (Order / 2) - 1;
+
+    return std::make_tuple(ix0, iy0, iz0);
   }
 
   template <typename T_float>
-  auto local3d(T_float xv[], T_float xu[], float64 qs, float64 delt,
-               T_float cur[size][size][size][4])
+  auto local3d(T_float xv[], T_float xu[], float64 qs, float64 delt, T_float cur[Sz][Sy][Sx][4])
   {
     using nix::esirkepov::shift_weights;
     using nix::esirkepov::deposit3d;
     using T_int = xsimd::as_integer_t<T_float>;
 
-    T_float ss[2][3][size] = {0};
-
-    T_float q     = qs;
-    T_float rdx   = 1 / dx;
-    T_float rdy   = 1 / dy;
-    T_float rdz   = 1 / dz;
-    T_float ximin = xmin + 0.5 * dx * is_odd;
-    T_float yimin = ymin + 0.5 * dy * is_odd;
-    T_float zimin = zmin + 0.5 * dz * is_odd;
-    T_float xgrid = xmin + 0.5 * dx;
-    T_float ygrid = ymin + 0.5 * dy;
-    T_float zgrid = zmin + 0.5 * dz;
-    float64 dxdt  = dx / delt;
-    float64 dydt  = dy / delt;
-    float64 dzdt  = dz / delt;
+    T_float ss[2][3][Sx] = {0};
+    T_float q            = qs;
+    T_float rdx          = 1 / dx;
+    T_float rdy          = 1 / dy;
+    T_float rdz          = 1 / dz;
+    T_float ximin        = xmin + 0.5 * dx * is_odd;
+    T_float yimin        = ymin + 0.5 * dy * is_odd;
+    T_float zimin        = zmin + 0.5 * dz * is_odd;
+    T_float xgrid        = xmin + 0.5 * dx;
+    T_float ygrid        = ymin + 0.5 * dy;
+    T_float zgrid        = zmin + 0.5 * dz;
+    float64 dxdt         = dx / delt;
+    float64 dydt         = dy / delt;
+    float64 dzdt         = dz / delt;
 
     //
     // -*- weights before move -*-
@@ -509,29 +383,31 @@ public:
     //
     deposit3d<Order>(dxdt, dydt, dzdt, q, ss, cur);
 
+    // shift indices
+    ix0 += lbx - (Order / 2) - 1;
+    iy0 += lby - (Order / 2) - 1;
+    iz0 += lbz - (Order / 2) - 1;
+
     return std::make_tuple(ix0, iy0, iz0);
   }
 
   template <typename T_array, typename T_float>
-  void global1d(T_array& uj, int iz, int iy, int ix, T_float cur[size][4])
+  void global1d(T_array& uj, int iz, int iy, int ix, T_float cur[Sz][Sy][Sx][4])
   {
     ix -= ((Order + 1) / 2) + 1;
-    iy -= ((Order + 1) / 2) + 1;
-    iz -= ((Order + 1) / 2) + 1;
-    append_current1d<Order>(uj, iz, iy, ix, cur);
+    append_current1d<Order>(uj, iz, iy, ix, cur[0][0]);
   }
 
   template <typename T_array, typename T_float>
-  void global2d(T_array& uj, int iz, int iy, int ix, T_float cur[size][size][4])
+  void global2d(T_array& uj, int iz, int iy, int ix, T_float cur[Sz][Sy][Sx][4])
   {
     ix -= ((Order + 1) / 2) + 1;
     iy -= ((Order + 1) / 2) + 1;
-    iz -= ((Order + 1) / 2) + 1;
-    append_current2d<Order>(uj, iz, iy, ix, cur);
+    append_current2d<Order>(uj, iz, iy, ix, cur[0]);
   }
 
   template <typename T_array, typename T_float>
-  void global3d(T_array& uj, int iz, int iy, int ix, T_float cur[size][size][size][4])
+  void global3d(T_array& uj, int iz, int iy, int ix, T_float cur[Sz][Sy][Sx][4])
   {
     ix -= ((Order + 1) / 2) + 1;
     iy -= ((Order + 1) / 2) + 1;
@@ -552,26 +428,7 @@ public:
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uj, float64 delt)
   {
-    if constexpr (Dim == 1) {
-      //
-      // 1D version
-      //
-      this->call_scalar_impl_1d(up, uj, delt);
-    }
-
-    if constexpr (Dim == 2) {
-      //
-      // 2D version
-      //
-      this->call_scalar_impl_2d(up, uj, delt);
-    }
-
-    if constexpr (Dim == 3) {
-      //
-      // 3D version
-      //
-      this->call_scalar_impl_3d(up, uj, delt);
-    }
+    this->call_scalar_impl(up, uj, delt);
   }
 };
 
@@ -587,26 +444,7 @@ public:
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uj, float64 delt)
   {
-    if constexpr (Dim == 1) {
-      //
-      // 1D version
-      //
-      this->call_vector_impl_1d(up, uj, delt);
-    }
-
-    if constexpr (Dim == 2) {
-      //
-      // 2D version
-      //
-      this->call_vector_impl_2d(up, uj, delt);
-    }
-
-    if constexpr (Dim == 3) {
-      //
-      // 3D version
-      //
-      this->call_vector_impl_3d(up, uj, delt);
-    }
+    this->call_vector_impl(up, uj, delt);
   }
 };
 

@@ -31,7 +31,9 @@ template <int Dim, int Order, int Pusher, int Interp>
 class Velocity
 {
 public:
-  static constexpr int size   = Order + 2;
+  static constexpr int Sx     = Order + 2;
+  static constexpr int Sy     = Dim > 1 ? Order + 2 : 1;
+  static constexpr int Sz     = Dim > 2 ? Order + 2 : 1;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
 
   int     ns;
@@ -123,27 +125,7 @@ public:
     using namespace nix::primitives;
     const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
 
-    auto push1 = [&](T_array& uf, int iz, int iy, int ix, simd_f64 xu[], float64 dt) {
-      // 1D version
-      if constexpr (Dim == 1) {
-        push_vector1d(uf, iz, iy, ix, xu, simd_f64(dt));
-        return;
-      }
-
-      // 2D version
-      if constexpr (Dim == 2) {
-        push_vector2d(uf, iz, iy, ix, xu, simd_f64(dt));
-        return;
-      }
-
-      // 3D version
-      if constexpr (Dim == 3) {
-        push_vector3d(uf, iz, iy, ix, xu, simd_f64(dt));
-        return;
-      }
-    };
-
-    auto push2 = [&](T_array& uf, int iz, int iy, int ix, float64 xu[], float64 dt) {
+    auto push = [&](T_array& uf, int iz, int iy, int ix, auto xu[], auto dt) {
       // 1D version
       if constexpr (Dim == 1) {
         push_vector1d(uf, iz, iy, ix, xu, dt);
@@ -190,7 +172,7 @@ public:
               xu[4] = simd_f64::gather(&up[is]->xu(ip, 4), index);
               xu[5] = simd_f64::gather(&up[is]->xu(ip, 5), index);
 
-              push1(uf, iz, iy, ix, xu, qmdt);
+              push(uf, iz, iy, ix, xu, simd_f64(qmdt));
 
               // store particles to memory
               xu[3].scatter(&up[is]->xu(ip, 3), index);
@@ -204,7 +186,7 @@ public:
             for (int ip = ip_zero + np_simd; ip < ip_zero + np_cell; ip++) {
               auto xu = &up[is]->xu(ip, 0);
 
-              push2(uf, iz, iy, ix, xu, qmdt);
+              push(uf, iz, iy, ix, xu, qmdt);
             }
           }
         }
@@ -213,7 +195,7 @@ public:
   }
 
   template <typename T_float>
-  auto weights1d(T_float xu[], T_float wix[size], T_float whx[size])
+  auto weights1d(T_float xu[], T_float wix[Sx], T_float whx[Sx])
   {
     T_float ximin  = xmin + 0.5 * dx * is_odd;
     T_float xhmin  = xmin + 0.5 * dx * is_odd - 0.5 * dx;
@@ -245,8 +227,7 @@ public:
   }
 
   template <typename T_float>
-  auto weights2d(T_float xu[], T_float wix[size], T_float wiy[size], T_float whx[size],
-                 T_float why[size])
+  auto weights2d(T_float xu[], T_float wix[Sx], T_float wiy[Sy], T_float whx[Sx], T_float why[Sy])
   {
     T_float ximin  = xmin + 0.5 * dx * is_odd;
     T_float xhmin  = xmin + 0.5 * dx * is_odd - 0.5 * dx;
@@ -292,8 +273,8 @@ public:
   }
 
   template <typename T_float>
-  auto weights3d(T_float xu[], T_float wix[size], T_float wiy[size], T_float wiz[size],
-                 T_float whx[size], T_float why[size], T_float whz[size])
+  auto weights3d(T_float xu[], T_float wix[Sx], T_float wiy[Sy], T_float wiz[Sz], T_float whx[Sx],
+                 T_float why[Sy], T_float whz[Sz])
   {
     T_float ximin  = xmin + 0.5 * dx * is_odd;
     T_float xhmin  = xmin + 0.5 * dx * is_odd - 0.5 * dx;
@@ -362,9 +343,9 @@ public:
     const int iz0 = lbz;
     const int iy0 = lby;
 
-    float64 rc        = 1 / cc;
-    float64 wix[size] = {0};
-    float64 whx[size] = {0};
+    float64 rc      = 1 / cc;
+    float64 wix[Sx] = {0};
+    float64 whx[Sx] = {0};
 
     auto [ix0, hx0] = weights1d(xu, wix, whx);
 
@@ -392,11 +373,11 @@ public:
     // 2D version
     const int iz0 = lbz;
 
-    float64 rc        = 1 / cc;
-    float64 wix[size] = {0};
-    float64 wiy[size] = {0};
-    float64 whx[size] = {0};
-    float64 why[size] = {0};
+    float64 rc      = 1 / cc;
+    float64 wix[Sx] = {0};
+    float64 wiy[Sy] = {0};
+    float64 whx[Sx] = {0};
+    float64 why[Sy] = {0};
 
     auto [ix0, iy0, hx0, hy0] = weights2d(xu, wix, wiy, whx, why);
 
@@ -423,13 +404,13 @@ public:
     constexpr int Stencil = Order - 1;
     using nix::interp::interp3d;
 
-    float64 rc        = 1 / cc;
-    float64 wix[size] = {0};
-    float64 wiy[size] = {0};
-    float64 wiz[size] = {0};
-    float64 whx[size] = {0};
-    float64 why[size] = {0};
-    float64 whz[size] = {0};
+    float64 rc      = 1 / cc;
+    float64 wix[Sx] = {0};
+    float64 wiy[Sy] = {0};
+    float64 wiz[Sz] = {0};
+    float64 whx[Sx] = {0};
+    float64 why[Sy] = {0};
+    float64 whz[Sz] = {0};
 
     auto [ix0, iy0, iz0, hx0, hy0, hz0] = weights3d(xu, wix, wiy, wiz, whx, why, whz);
 
@@ -459,9 +440,9 @@ public:
     using nix::interp::shift_weights;
     using nix::interp::interp1d;
 
-    T_float rc        = 1 / cc;
-    T_float wix[size] = {0};
-    T_float whx[size] = {0};
+    T_float rc      = 1 / cc;
+    T_float wix[Sx] = {0};
+    T_float whx[Sx] = {0};
 
     auto [ix0, hx0] = weights1d(xu, wix, whx);
 
@@ -489,11 +470,11 @@ public:
     using nix::interp::shift_weights;
     using nix::interp::interp2d;
 
-    T_float rc        = 1 / cc;
-    T_float wix[size] = {0};
-    T_float wiy[size] = {0};
-    T_float whx[size] = {0};
-    T_float why[size] = {0};
+    T_float rc      = 1 / cc;
+    T_float wix[Sx] = {0};
+    T_float wiy[Sy] = {0};
+    T_float whx[Sx] = {0};
+    T_float why[Sy] = {0};
 
     auto [ix0, iy0, hx0, hy0] = weights2d(xu, wix, wiy, whx, why);
 
@@ -523,13 +504,13 @@ public:
     using nix::interp::shift_weights;
     using nix::interp::interp3d;
 
-    T_float rc        = 1 / cc;
-    T_float wix[size] = {0};
-    T_float wiy[size] = {0};
-    T_float wiz[size] = {0};
-    T_float whx[size] = {0};
-    T_float why[size] = {0};
-    T_float whz[size] = {0};
+    T_float rc      = 1 / cc;
+    T_float wix[Sx] = {0};
+    T_float wiy[Sy] = {0};
+    T_float wiz[Sz] = {0};
+    T_float whx[Sx] = {0};
+    T_float why[Sy] = {0};
+    T_float whz[Sz] = {0};
 
     auto [ix0, iy0, iz0, hx0, hy0, hz0] = weights3d(xu, wix, wiy, wiz, whx, why, whz);
 
