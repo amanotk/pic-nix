@@ -573,46 +573,19 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 
 DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
 {
-  // notice the half-grid offset of cell boundaries for odd-order shape functions
-  const int     is_odd        = (order % 2 == 1) ? 1 : 0;
-  const int     out_of_bounds = particle->Ng;
-  const float64 xmin          = xlim[0] - 0.5 * delx * is_odd;
-  const float64 ymin          = ylim[0] - 0.5 * dely * is_odd;
-  const float64 zmin          = zlim[0] - 0.5 * delz * is_odd;
+  const int O = order;
 
-  // parameters for sort by cell
-  int     stride_x = 1;
-  int     stride_y = stride_x * (Ubx - Lbx + 2);
-  int     stride_z = stride_y * (Uby - Lby + 2);
-  float64 rdx      = 1 / delx;
-  float64 rdy      = 1 / dely;
-  float64 rdz      = 1 / delz;
-
-  // reset count
-  if (reset) {
-    particle->reset_count();
-  }
-
-  auto& xu = particle->xu;
-  for (int ip = Lbp; ip <= Ubp; ip++) {
-    int ix = digitize(xu(ip, 0), xmin, rdx);
-    int iy = digitize(xu(ip, 1), ymin, rdy);
-    int iz = digitize(xu(ip, 2), zmin, rdz);
-    int ii = iz * stride_z + iy * stride_y + ix * stride_x;
-
-    // take care out-of-bounds particles
-    ii = (xu(ip, 0) < xlim[0] || xu(ip, 0) >= xlim[1]) ? out_of_bounds : ii;
-    ii = (xu(ip, 1) < ylim[0] || xu(ip, 1) >= ylim[1]) ? out_of_bounds : ii;
-    ii = (xu(ip, 2) < zlim[0] || xu(ip, 2) >= zlim[1]) ? out_of_bounds : ii;
-
-    particle->increment(ip, ii);
-  }
+  engine::Position position(get_internal_data());
+  position.count(particle, Lbp, Ubp, reset, O);
 }
 
 DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 {
+  const int O = order;
+
+  engine::Position position(get_internal_data());
   for (int is = 0; is < particle.size(); is++) {
-    count_particle(particle[is], 0, particle[is]->Np - 1, true);
+    position.count(particle[is], 0, particle[is]->Np - 1, true, O);
     particle[is]->sort();
   }
 }
@@ -621,9 +594,10 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
 {
   auto      mode = option["vectorization"]["position"].get<std::string>();
   const int V    = "vector" == mode;
+  const int O    = order;
 
-  engine::PositionEngine<InternalData, ThisType> position;
-  position(V, get_internal_data(), this, delt);
+  engine::PositionEngine<InternalData> position;
+  position(V, O, get_internal_data(), this, delt);
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)

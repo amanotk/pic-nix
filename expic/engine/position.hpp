@@ -11,13 +11,74 @@ class Position
 {
 public:
   int     ns;
+  int     stride_x;
+  int     stride_y;
+  int     stride_z;
   float64 cc;
+  float64 dx;
+  float64 dy;
+  float64 dz;
+  float64 xmin;
+  float64 ymin;
+  float64 zmin;
+  float64 xmax;
+  float64 ymax;
+  float64 zmax;
 
   template <typename T_data>
   Position(const T_data& data)
   {
-    ns = data.Ns;
-    cc = data.cc;
+    ns       = data.Ns;
+    cc       = data.cc;
+    ns       = data.Ns;
+    stride_x = 1;
+    stride_y = stride_x * (data.Ubx - data.Lbx + 2);
+    stride_z = stride_y * (data.Uby - data.Lby + 2);
+    cc       = data.cc;
+    dx       = data.delx;
+    dy       = data.dely;
+    dz       = data.delz;
+    xmin     = data.xlim[0];
+    ymin     = data.ylim[0];
+    zmin     = data.zlim[0];
+    xmax     = data.xlim[1];
+    ymax     = data.ylim[1];
+    zmax     = data.zlim[1];
+  }
+
+  template <typename T_particle>
+  void count(T_particle particle, int Lbp, int Ubp, bool reset, int order)
+  {
+    // notice the half-grid offset of cell boundaries for odd-order shape functions
+    const int is_odd        = (order % 2 == 1) ? 1 : 0;
+    const int out_of_bounds = particle->Ng;
+
+    const float64 ximin = xmin - 0.5 * dx * is_odd;
+    const float64 yimin = ymin - 0.5 * dy * is_odd;
+    const float64 zimin = zmin - 0.5 * dz * is_odd;
+    const float64 rdx   = 1 / dx;
+    const float64 rdy   = 1 / dy;
+    const float64 rdz   = 1 / dz;
+
+    // reset count
+    if (reset) {
+      particle->reset_count();
+    }
+
+    auto& xu = particle->xu;
+    for (int ip = Lbp; ip <= Ubp; ip++) {
+      int ix = digitize(xu(ip, 0), ximin, rdx);
+      int iy = digitize(xu(ip, 1), yimin, rdy);
+      int iz = digitize(xu(ip, 2), zimin, rdz);
+      int ii = iz * stride_z + iy * stride_y + ix * stride_x;
+
+      // take care out-of-bounds particles
+      ii = (xu(ip, 0) < xmin || xu(ip, 0) >= xmax) ? out_of_bounds : ii;
+      ii = (xu(ip, 1) < ymin || xu(ip, 1) >= ymax) ? out_of_bounds : ii;
+      ii = (xu(ip, 2) < zmin || xu(ip, 2) >= zmax) ? out_of_bounds : ii;
+
+      particle->increment(ip, ii);
+    }
   }
 
   template <typename T_particle>

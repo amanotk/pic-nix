@@ -146,16 +146,16 @@ public:
   }
 };
 
-template <typename T_data, typename T_chunk>
+template <typename T_data>
 class PositionEngine
 {
 private:
   static constexpr int size_table = 2;
-  using func_ptr_t                = void (*)(const T_data&, T_chunk*, double);
+  using func_ptr_t                = void (*)(const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   template <int isVector>
-  static void call_entry(const T_data& data, T_chunk* chunk, double delt)
+  static void call_entry(const T_data& data, double delt)
   {
     if constexpr (isVector == 0) {
       ScalarPosition position(data);
@@ -166,19 +166,15 @@ private:
       VectorPosition position(data);
       position(data.up, delt);
     }
-
-    // apply boundary condition and count particles
-    for (int is = 0; is < data.Ns; is++) {
-      chunk->set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
-      chunk->count_particle(data.up[is], 0, data.up[is]->Np - 1, true);
-    }
   }
 
   static func_table_t create_table_impl()
   {
     func_table_t table = {};
 
+    // scalar
     table[0] = &call_entry<0>;
+    // vector
     table[1] = &call_entry<1>;
 
     return table;
@@ -188,9 +184,24 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, const T_data& data, T_chunk* chunk, double delt) const
+  template <typename T_chunk>
+  void operator()(int is_vector, int order, const T_data& data, T_chunk* chunk, double delt) const
   {
-    table[is_vector](data, chunk, delt);
+    table[is_vector](data, delt);
+
+    // apply boundary condition and count particles
+    Position position(data);
+    for (int is = 0; is < data.Ns; is++) {
+      chunk->set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
+      position.count(data.up[is], 0, data.up[is]->Np - 1, true, order);
+    }
+  }
+
+  template <typename T_particle>
+  void count(const T_data& data, T_particle particle, int Lbp, int Ubp, bool reset, int order) const
+  {
+    Position position(data);
+    position.count(particle, Lbp, Ubp, reset, order);
   }
 };
 
