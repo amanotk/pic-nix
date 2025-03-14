@@ -47,6 +47,16 @@ private:
   {
     func_table_t table = {};
 
+    // scalar and 1D
+    table[encode(0, 1, 1)] = &call_entry<0, 1, 1>;
+    table[encode(0, 1, 2)] = &call_entry<0, 1, 2>;
+    table[encode(0, 1, 3)] = &call_entry<0, 1, 3>;
+    table[encode(0, 1, 4)] = &call_entry<0, 1, 4>;
+    // vector and 1D
+    table[encode(1, 1, 1)] = &call_entry<1, 1, 1>;
+    table[encode(1, 1, 2)] = &call_entry<1, 1, 2>;
+    table[encode(1, 1, 3)] = &call_entry<1, 1, 3>;
+    table[encode(1, 1, 4)] = &call_entry<1, 1, 4>;
     // scalar and 2D
     table[encode(0, 2, 1)] = &call_entry<0, 2, 1>;
     table[encode(0, 2, 2)] = &call_entry<0, 2, 2>;
@@ -112,6 +122,16 @@ private:
   {
     func_table_t table = {};
 
+    // scalar and 1D
+    table[encode(0, 1, 1)] = &call_entry<0, 1, 1>;
+    table[encode(0, 1, 2)] = &call_entry<0, 1, 2>;
+    table[encode(0, 1, 3)] = &call_entry<0, 1, 3>;
+    table[encode(0, 1, 4)] = &call_entry<0, 1, 4>;
+    // vector and 1D
+    table[encode(1, 1, 1)] = &call_entry<1, 1, 1>;
+    table[encode(1, 1, 2)] = &call_entry<1, 1, 2>;
+    table[encode(1, 1, 3)] = &call_entry<1, 1, 3>;
+    table[encode(1, 1, 4)] = &call_entry<1, 1, 4>;
     // scalar and 2D
     table[encode(0, 2, 1)] = &call_entry<0, 2, 1>;
     table[encode(0, 2, 2)] = &call_entry<0, 2, 2>;
@@ -241,6 +261,16 @@ private:
     {
       static constexpr int P = PusherBoris;
       static constexpr int I = InterpMC;
+      // scalar and 1D
+      table[encode(0, 1, 1, P, I)] = &call_entry<0, 1, 1, P, I>;
+      table[encode(0, 1, 2, P, I)] = &call_entry<0, 1, 2, P, I>;
+      table[encode(0, 1, 3, P, I)] = &call_entry<0, 1, 3, P, I>;
+      table[encode(0, 1, 4, P, I)] = &call_entry<0, 1, 4, P, I>;
+      // vector and 1D
+      table[encode(1, 1, 1, P, I)] = &call_entry<1, 1, 1, P, I>;
+      table[encode(1, 1, 2, P, I)] = &call_entry<1, 1, 2, P, I>;
+      table[encode(1, 1, 3, P, I)] = &call_entry<1, 1, 3, P, I>;
+      table[encode(1, 1, 4, P, I)] = &call_entry<1, 1, 4, P, I>;
       // scalar and 2D
       table[encode(0, 2, 1, P, I)] = &call_entry<0, 2, 1, P, I>;
       table[encode(0, 2, 2, P, I)] = &call_entry<0, 2, 2, P, I>;
@@ -267,6 +297,16 @@ private:
     {
       static constexpr int P = PusherBoris;
       static constexpr int I = InterpWT;
+      // scalar and 1D
+      table[encode(0, 1, 1, P, I)] = &call_entry<0, 1, 1, P, I>;
+      table[encode(0, 1, 2, P, I)] = &call_entry<0, 1, 2, P, I>;
+      table[encode(0, 1, 3, P, I)] = &call_entry<0, 1, 3, P, I>;
+      table[encode(0, 1, 4, P, I)] = &call_entry<0, 1, 4, P, I>;
+      // vector and 1D
+      table[encode(1, 1, 1, P, I)] = &call_entry<1, 1, 1, P, I>;
+      table[encode(1, 1, 2, P, I)] = &call_entry<1, 1, 2, P, I>;
+      table[encode(1, 1, 3, P, I)] = &call_entry<1, 1, 3, P, I>;
+      table[encode(1, 1, 4, P, I)] = &call_entry<1, 1, 4, P, I>;
       // scalar and 2D
       table[encode(0, 2, 1, P, I)] = &call_entry<0, 2, 1, P, I>;
       table[encode(0, 2, 2, P, I)] = &call_entry<0, 2, 2, P, I>;
