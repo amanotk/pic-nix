@@ -98,7 +98,7 @@ public:
         int iy = lby;
         for (int ix = lbx - Nb; ix <= ubx + Nb - 1; ix++) {
           uf(iz, iy, ix, 2) +=
-              (+cflx) * (uf(iz, iy, ix + 1, 4) - uf(iz, iy, ix, 4)) + -delt * uj(iz, iy, ix, 3);
+              (+cflx) * (uf(iz, iy, ix + 1, 4) - uf(iz, iy, ix, 4)) - delt * uj(iz, iy, ix, 3);
         }
       }
     }

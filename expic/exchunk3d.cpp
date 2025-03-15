@@ -303,17 +303,48 @@ DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
   efd = 0;
   bfd = 0;
 
-  for (int iz = Lbz; iz <= Ubz; iz++) {
-    for (int iy = Lby; iy <= Uby; iy++) {
-      for (int ix = Lbx; ix <= Ubx; ix++) {
-        // div(E) - rho
-        efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-               (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
-               (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
-        // div(B)
-        bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-               (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
-               (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+  if (dimension == 1) {
+    {
+      int iz = Lbz;
+      {
+        int iy = Lby;
+        for (int ix = Lbx; ix <= Ubx; ix++) {
+          // div(E) - rho
+          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
+          // div(B)
+          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
+        }
+      }
+    }
+  }
+  if (dimension == 2) {
+    {
+      int iz = Lbz;
+      for (int iy = Lby; iy <= Uby; iy++) {
+        for (int ix = Lbx; ix <= Ubx; ix++) {
+          // div(E) - rho
+          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
+          // div(B)
+          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
+        }
+      }
+    }
+  }
+  if (dimension == 3) {
+    for (int iz = Lbz; iz <= Ubz; iz++) {
+      for (int iy = Lby; iy <= Uby; iy++) {
+        for (int ix = Lbx; ix <= Ubx; ix++) {
+          // div(E) - rho
+          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
+                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          // div(B)
+          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
+                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+        }
       }
     }
   }
