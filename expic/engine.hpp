@@ -9,12 +9,30 @@
 #include "nix/primitives.hpp"
 
 #include "engine/current.hpp"
+#include "engine/maxwell.hpp"
 #include "engine/moment.hpp"
 #include "engine/position.hpp"
 #include "engine/velocity.hpp"
 
 namespace engine
 {
+
+template <typename T_data>
+class MaxwellEngine
+{
+public:
+  void push_efd(int dimension, const T_data& data, float64 delt) const
+  {
+    Maxwell maxwell(data);
+    maxwell.push_efd(data.uf, data.uj, data.ff, delt);
+  }
+
+  void push_bfd(int dimension, const T_data& data, float64 delt) const
+  {
+    Maxwell maxwell(data);
+    maxwell.push_bfd(data.uf, data.uj, data.ff, delt);
+  }
+};
 
 template <typename T_data>
 class CurrentEngine

@@ -53,6 +53,7 @@ public:
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using MpiBufferPtr = typename Chunk::MpiBufferPtr;
   using Chunk::dims;
+  using Chunk::boundary_margin;
   using Chunk::Lbx;
   using Chunk::Lby;
   using Chunk::Lbz;
@@ -101,6 +102,7 @@ protected:
   /// @brief internal data struct
   ///
   struct InternalData {
+    int&     boundary_margin;
     int&     Lbx;
     int&     Ubx;
     int&     Lby;
@@ -119,7 +121,9 @@ protected:
     xt::xtensor<float64, 4>& uf;
     xt::xtensor<float64, 4>& uj;
     xt::xtensor<float64, 5>& um;
+    xt::xtensor<float64, 5>& ff;
     ParticleVec&             up;
+    json&                    option;
   };
 
   ///
@@ -127,8 +131,30 @@ protected:
   ///
   InternalData get_internal_data()
   {
-    return {Lbx,  Ubx,  Lby,  Uby,  Lbz,  Ubz, Ns, cc, delx, dely,
-            delz, xlim, ylim, zlim, load, uf,  uj, um, up};
+    // clang-format off
+    return {boundary_margin,
+            Lbx,
+            Ubx,
+            Lby,
+            Uby,
+            Lbz,
+            Ubz,
+            Ns,
+            cc,
+            delx,
+            dely,
+            delz,
+            xlim,
+            ylim,
+            zlim,
+            load,
+            uf,
+            uj,
+            um,
+            ff,
+            up,
+            option};
+    // clang-format on
   }
 
 public:
