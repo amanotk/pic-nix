@@ -178,10 +178,6 @@ public:
 
   virtual void get_diverror(float64& efd, float64& bfd);
 
-  virtual void push_efd(float64 delt);
-
-  virtual void push_bfd(float64 delt);
-
   virtual bool set_boundary_probe(int mode = 0, bool wait = true) override;
 
   virtual void set_boundary_pack(int mode = 0) override;
@@ -192,9 +188,9 @@ public:
 
   virtual void set_boundary_end(int mode = 0) override;
 
-  virtual void count_particle(ParticlePtr particle, int Lbp, int Ubp, bool reset = true) override;
-
   virtual void sort_particle(ParticleVec& particle) override;
+
+  virtual void count_particle(ParticlePtr particle, int Lbp, int Ubp, bool reset = true) override;
 
   virtual void push_position(float64 delt);
 
@@ -203,6 +199,10 @@ public:
   virtual void deposit_current(float64 delt);
 
   virtual void deposit_moment();
+
+  virtual void push_efd(float64 delt);
+
+  virtual void push_bfd(float64 delt);
 
   template <typename DataPacker>
   size_t pack_diagnostic(DataPacker packer, uint8_t* buffer, int address)

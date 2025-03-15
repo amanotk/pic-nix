@@ -319,22 +319,6 @@ DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
   }
 }
 
-DEFINE_MEMBER(void, push_efd)(float64 delt)
-{
-  const int D = dimension;
-
-  engine::MaxwellEngine<InternalData> maxwell;
-  maxwell.push_efd(D, get_internal_data(), delt);
-}
-
-DEFINE_MEMBER(void, push_bfd)(float64 delt)
-{
-  const int D = dimension;
-
-  engine::MaxwellEngine<InternalData> maxwell;
-  maxwell.push_bfd(D, get_internal_data(), delt);
-}
-
 DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
 {
   if (mode == BoundaryParticle) {
@@ -472,14 +456,6 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
   }
 }
 
-DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
-{
-  const int O = order;
-
-  engine::Position position(get_internal_data());
-  position.count(particle, Lbp, Ubp, reset, O);
-}
-
 DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 {
   const int O = order;
@@ -489,6 +465,14 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
     position.count(particle[is], 0, particle[is]->Np - 1, true, O);
     particle[is]->sort();
   }
+}
+
+DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
+{
+  const int O = order;
+
+  engine::Position position(get_internal_data());
+  position.count(particle, Lbp, Ubp, reset, O);
 }
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
@@ -534,6 +518,22 @@ DEFINE_MEMBER(void, deposit_moment)()
 
   engine::MomentEngine<InternalData> moment;
   moment(V, D, O, get_internal_data());
+}
+
+DEFINE_MEMBER(void, push_efd)(float64 delt)
+{
+  const int D = dimension;
+
+  engine::MaxwellEngine<InternalData> maxwell;
+  maxwell.push_efd(D, get_internal_data(), delt);
+}
+
+DEFINE_MEMBER(void, push_bfd)(float64 delt)
+{
+  const int D = dimension;
+
+  engine::MaxwellEngine<InternalData> maxwell;
+  maxwell.push_bfd(D, get_internal_data(), delt);
 }
 
 #undef DEFINE_MEMBER
