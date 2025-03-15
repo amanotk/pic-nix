@@ -11,6 +11,12 @@ class Position
 {
 public:
   int     ns;
+  int     lbx;
+  int     lby;
+  int     lbz;
+  int     ubx;
+  int     uby;
+  int     ubz;
   int     stride_x;
   int     stride_y;
   int     stride_z;
@@ -31,6 +37,12 @@ public:
     ns       = data.Ns;
     cc       = data.cc;
     ns       = data.Ns;
+    lbx      = data.Lbx;
+    lby      = data.Lby;
+    lbz      = data.Lbz;
+    ubx      = data.Ubx;
+    uby      = data.Uby;
+    ubz      = data.Ubz;
     stride_x = 1;
     stride_y = stride_x * (data.Ubx - data.Lbx + 2);
     stride_z = stride_y * (data.Uby - data.Lby + 2);
@@ -47,11 +59,14 @@ public:
   }
 
   template <typename T_particle>
-  void count(T_particle particle, int Lbp, int Ubp, bool reset, int order)
+  void count(T_particle particle, int Lbp, int Ubp, bool reset, int order, int dimension)
   {
     // notice the half-grid offset of cell boundaries for odd-order shape functions
-    const int is_odd        = (order % 2 == 1) ? 1 : 0;
-    const int out_of_bounds = particle->Ng;
+    const bool has_xdim      = dimension >= 1;
+    const bool has_ydim      = dimension >= 2;
+    const bool has_zdim      = dimension == 3;
+    const int  is_odd        = (order % 2 == 1) ? 1 : 0;
+    const int  out_of_bounds = particle->Ng;
 
     const float64 ximin = xmin - 0.5 * dx * is_odd;
     const float64 yimin = ymin - 0.5 * dy * is_odd;
@@ -67,9 +82,9 @@ public:
 
     auto& xu = particle->xu;
     for (int ip = Lbp; ip <= Ubp; ip++) {
-      int ix = digitize(xu(ip, 0), ximin, rdx);
-      int iy = digitize(xu(ip, 1), yimin, rdy);
-      int iz = digitize(xu(ip, 2), zimin, rdz);
+      int ix = has_xdim ? digitize(xu(ip, 0), ximin, rdx) : lbx;
+      int iy = has_ydim ? digitize(xu(ip, 1), yimin, rdy) : lby;
+      int iz = has_zdim ? digitize(xu(ip, 2), zimin, rdz) : lbz;
       int ii = iz * stride_z + iy * stride_y + ix * stride_x;
 
       // take care out-of-bounds particles

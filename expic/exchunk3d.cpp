@@ -459,10 +459,11 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 {
   const int O = order;
+  const int D = dimension;
 
   engine::Position position(get_internal_data());
   for (int is = 0; is < particle.size(); is++) {
-    position.count(particle[is], 0, particle[is]->Np - 1, true, O);
+    position.count(particle[is], 0, particle[is]->Np - 1, true, O, D);
     particle[is]->sort();
   }
 }
@@ -470,9 +471,10 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
 {
   const int O = order;
+  const int D = dimension;
 
   engine::Position position(get_internal_data());
-  position.count(particle, Lbp, Ubp, reset, O);
+  position.count(particle, Lbp, Ubp, reset, O, D);
 }
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
@@ -480,9 +482,10 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   auto      mode = option["vectorization"]["position"].get<std::string>();
   const int V    = "vector" == mode;
   const int O    = order;
+  const int D    = dimension;
 
   engine::PositionEngine<InternalData> position;
-  position(V, O, get_internal_data(), this, delt);
+  position(V, O, D, get_internal_data(), this, delt);
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)

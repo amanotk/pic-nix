@@ -24,13 +24,35 @@ public:
   void push_efd(int dimension, const T_data& data, float64 delt) const
   {
     Maxwell maxwell(data);
-    maxwell.push_efd(data.uf, data.uj, data.ff, delt);
+
+    if (dimension == 1) {
+      maxwell.push_efd_1d(data.uf, data.uj, data.ff, delt);
+    }
+
+    if (dimension == 2) {
+      maxwell.push_efd_2d(data.uf, data.uj, data.ff, delt);
+    }
+
+    if (dimension == 3) {
+      maxwell.push_efd_3d(data.uf, data.uj, data.ff, delt);
+    }
   }
 
   void push_bfd(int dimension, const T_data& data, float64 delt) const
   {
     Maxwell maxwell(data);
-    maxwell.push_bfd(data.uf, data.uj, data.ff, delt);
+
+    if (dimension == 1) {
+      maxwell.push_bfd_1d(data.uf, data.uj, data.ff, delt);
+    }
+
+    if (dimension == 2) {
+      maxwell.push_bfd_2d(data.uf, data.uj, data.ff, delt);
+    }
+
+    if (dimension == 3) {
+      maxwell.push_bfd_3d(data.uf, data.uj, data.ff, delt);
+    }
   }
 };
 
@@ -223,7 +245,8 @@ private:
 
 public:
   template <typename T_chunk>
-  void operator()(int is_vector, int order, const T_data& data, T_chunk* chunk, double delt) const
+  void operator()(int is_vector, int order, int dimension, const T_data& data, T_chunk* chunk,
+                  double delt) const
   {
     table[is_vector](data, delt);
 
@@ -231,15 +254,16 @@ public:
     Position position(data);
     for (int is = 0; is < data.Ns; is++) {
       chunk->set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
-      position.count(data.up[is], 0, data.up[is]->Np - 1, true, order);
+      position.count(data.up[is], 0, data.up[is]->Np - 1, true, order, dimension);
     }
   }
 
   template <typename T_particle>
-  void count(const T_data& data, T_particle particle, int Lbp, int Ubp, bool reset, int order) const
+  void count(const T_data& data, T_particle particle, int Lbp, int Ubp, bool reset, int order,
+             int dimension) const
   {
     Position position(data);
-    position.count(particle, Lbp, Ubp, reset, order);
+    position.count(particle, Lbp, Ubp, reset, order, dimension);
   }
 };
 
