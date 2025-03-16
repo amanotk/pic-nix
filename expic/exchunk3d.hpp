@@ -176,10 +176,6 @@ public:
 
   virtual void init_friedman();
 
-  virtual void get_energy(float64& efd, float64& bfd, float64 particle[]);
-
-  virtual void get_diverror(float64& efd, float64& bfd);
-
   virtual bool set_boundary_probe(int mode = 0, bool wait = true) override;
 
   virtual void set_boundary_pack(int mode = 0) override;
@@ -189,6 +185,10 @@ public:
   virtual void set_boundary_begin(int mode = 0) override;
 
   virtual void set_boundary_end(int mode = 0) override;
+
+  virtual void get_energy(float64& efd, float64& bfd, float64 particle[]);
+
+  virtual void get_diverror(float64& efd, float64& bfd);
 
   virtual void sort_particle(ParticleVec& particle) override;
 

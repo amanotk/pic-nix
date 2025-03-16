@@ -249,46 +249,6 @@ DEFINE_MEMBER(void, init_friedman)()
   maxwell.init_friedman(*this, get_internal_data());
 }
 
-DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
-{
-  // clear
-  efd = 0.0;
-  bfd = 0.0;
-  std::fill(particle, particle + Ns, 0.0);
-
-  // electromagnetic energy
-  for (int iz = Lbz; iz <= Ubz; iz++) {
-    for (int iy = Lby; iy <= Uby; iy++) {
-      for (int ix = Lbx; ix <= Ubx; ix++) {
-        efd +=
-            0.5 * (uf(iz, iy, ix, 0) * uf(iz, iy, ix, 0) + uf(iz, iy, ix, 1) * uf(iz, iy, ix, 1) +
-                   uf(iz, iy, ix, 2) * uf(iz, iy, ix, 2));
-        bfd +=
-            0.5 * (uf(iz, iy, ix, 3) * uf(iz, iy, ix, 3) + uf(iz, iy, ix, 4) * uf(iz, iy, ix, 4) +
-                   uf(iz, iy, ix, 5) * uf(iz, iy, ix, 5));
-      }
-    }
-  }
-
-  // particle energy for each species
-  for (int iz = Lbz; iz <= Ubz; iz++) {
-    for (int iy = Lby; iy <= Uby; iy++) {
-      for (int ix = Lbx; ix <= Ubx; ix++) {
-        for (int is = 0; is < Ns; is++) {
-          // rest mass energy is subtracted
-          particle[is] += um(iz, iy, ix, is, 4) * cc - um(iz, iy, ix, is, 0) * cc * cc;
-        }
-      }
-    }
-  }
-}
-
-DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
-{
-  engine::MaxwellEngine<this_type> maxwell;
-  std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
-}
-
 DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
 {
   if (mode == BoundaryParticle) {
@@ -424,6 +384,46 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
     ERROR << tfm::format("No such boundary mode exists!");
     break;
   }
+}
+
+DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
+{
+  // clear
+  efd = 0.0;
+  bfd = 0.0;
+  std::fill(particle, particle + Ns, 0.0);
+
+  // electromagnetic energy
+  for (int iz = Lbz; iz <= Ubz; iz++) {
+    for (int iy = Lby; iy <= Uby; iy++) {
+      for (int ix = Lbx; ix <= Ubx; ix++) {
+        efd +=
+            0.5 * (uf(iz, iy, ix, 0) * uf(iz, iy, ix, 0) + uf(iz, iy, ix, 1) * uf(iz, iy, ix, 1) +
+                   uf(iz, iy, ix, 2) * uf(iz, iy, ix, 2));
+        bfd +=
+            0.5 * (uf(iz, iy, ix, 3) * uf(iz, iy, ix, 3) + uf(iz, iy, ix, 4) * uf(iz, iy, ix, 4) +
+                   uf(iz, iy, ix, 5) * uf(iz, iy, ix, 5));
+      }
+    }
+  }
+
+  // particle energy for each species
+  for (int iz = Lbz; iz <= Ubz; iz++) {
+    for (int iy = Lby; iy <= Uby; iy++) {
+      for (int ix = Lbx; ix <= Ubx; ix++) {
+        for (int is = 0; is < Ns; is++) {
+          // rest mass energy is subtracted
+          particle[is] += um(iz, iy, ix, is, 4) * cc - um(iz, iy, ix, is, 0) * cc * cc;
+        }
+      }
+    }
+  }
+}
+
+DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
+{
+  engine::MaxwellEngine<this_type> maxwell;
+  std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
 DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
