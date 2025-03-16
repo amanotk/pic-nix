@@ -371,22 +371,22 @@ DEFINE_MEMBER(void, set_boundary_pack)(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
     this->pack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
     this->pack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
     this->pack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
     this->inject_particle(up);
     this->pack_bc_exchange(mpibufvec[mode], halo);
     break;
@@ -401,22 +401,22 @@ DEFINE_MEMBER(void, set_boundary_unpack)(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
     this->unpack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
     this->unpack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
     this->unpack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
     this->unpack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
@@ -433,22 +433,22 @@ DEFINE_MEMBER(void, set_boundary_begin)(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
@@ -462,22 +462,22 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
-    auto halo = nix::XtensorHaloField3D<ThisType>(uf, *this);
+    auto halo = nix::XtensorHaloField3D<this_type>(uf, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryCur: {
-    auto halo = nix::XtensorHaloCurrent3D<ThisType>(uj, *this);
+    auto halo = nix::XtensorHaloCurrent3D<this_type>(uj, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryMom: {
-    auto halo = nix::XtensorHaloMoment3D<ThisType>(um, *this);
+    auto halo = nix::XtensorHaloMoment3D<this_type>(um, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
   case BoundaryParticle: {
-    auto halo = nix::XtensorHaloParticle3D<ThisType>(up, *this);
+    auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
@@ -515,8 +515,8 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   const int O    = order;
   const int D    = dimension;
 
-  engine::PositionEngine<InternalData> position;
-  position(V, O, D, get_internal_data(), this, delt);
+  engine::PositionEngine<this_type> position;
+  position(V, O, D, *this, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)
@@ -528,8 +528,8 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const int P    = engine::PusherBoris;
   const int I    = option["interpolation"].get<int>();
 
-  engine::VelocityEngine<InternalData> velocity;
-  velocity(V, D, O, P, I, get_internal_data(), delt);
+  engine::VelocityEngine<this_type> velocity;
+  velocity(V, D, O, P, I, *this, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, deposit_current)(const float64 delt)
@@ -539,8 +539,8 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   const int D    = dimension;
   const int O    = order;
 
-  engine::CurrentEngine<InternalData> current;
-  current(V, D, O, get_internal_data(), delt);
+  engine::CurrentEngine<this_type> current;
+  current(V, D, O, *this, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, deposit_moment)()
@@ -550,24 +550,24 @@ DEFINE_MEMBER(void, deposit_moment)()
   const int D    = dimension;
   const int O    = order;
 
-  engine::MomentEngine<InternalData> moment;
-  moment(V, D, O, get_internal_data());
+  engine::MomentEngine<this_type> moment;
+  moment(V, D, O, *this, get_internal_data());
 }
 
 DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
   const int D = dimension;
 
-  engine::MaxwellEngine<InternalData> maxwell;
-  maxwell.push_efd(D, get_internal_data(), delt);
+  engine::MaxwellEngine<this_type> maxwell;
+  maxwell.push_efd(D, *this, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
   const int D = dimension;
 
-  engine::MaxwellEngine<InternalData> maxwell;
-  maxwell.push_bfd(D, get_internal_data(), delt);
+  engine::MaxwellEngine<this_type> maxwell;
+  maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
 
 #undef DEFINE_MEMBER

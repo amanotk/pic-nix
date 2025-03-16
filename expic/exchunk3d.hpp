@@ -48,7 +48,7 @@ using ParticleType = nix::ParticlePtr::element_type;
 class ExChunk3D : public nix::Chunk3D<ParticleType>
 {
 public:
-  using ThisType     = ExChunk3D;
+  using this_type    = ExChunk3D;
   using Chunk        = typename nix::Chunk3D<ParticleType>;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using MpiBufferPtr = typename Chunk::MpiBufferPtr;
@@ -158,6 +158,8 @@ protected:
   }
 
 public:
+  using data_type = InternalData;
+
   ExChunk3D(const int dims[3], const bool has_dim[3], int id = 0);
 
   virtual int64_t get_size_byte() override;

@@ -17,11 +17,13 @@
 namespace engine
 {
 
-template <typename T_data>
+template <typename T_chunk>
 class MaxwellEngine
 {
 public:
-  void push_efd(int dimension, const T_data& data, float64 delt) const
+  using T_data = typename T_chunk::data_type;
+
+  void push_efd(int dimension, T_chunk& chunk, const T_data& data, float64 delt) const
   {
     Maxwell maxwell(data);
 
@@ -38,7 +40,7 @@ public:
     }
   }
 
-  void push_bfd(int dimension, const T_data& data, float64 delt) const
+  void push_bfd(int dimension, T_chunk& chunk, const T_data& data, float64 delt) const
   {
     Maxwell maxwell(data);
 
@@ -56,12 +58,13 @@ public:
   }
 };
 
-template <typename T_data>
+template <typename T_chunk>
 class CurrentEngine
 {
 private:
   static constexpr int size_table = 64;
-  using func_ptr_t                = void (*)(const T_data&, double);
+  using T_data                    = typename T_chunk::data_type;
+  using func_ptr_t                = void (*)(T_chunk&, const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   static constexpr int encode(int is_vector, int dimension, int order)
@@ -70,7 +73,7 @@ private:
   }
 
   template <int isVector, int Dim, int Order>
-  static void call_entry(const T_data& data, double delt)
+  static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
     if constexpr (isVector == 0) {
       ScalarCurrent<Dim, Order> current(data);
@@ -125,18 +128,20 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, int dimension, int order, const T_data& data, float64 delt) const
+  void operator()(int is_vector, int dimension, int order, T_chunk& chunk, const T_data& data,
+                  float64 delt) const
   {
-    table[encode(is_vector, dimension, order)](data, delt);
+    table[encode(is_vector, dimension, order)](chunk, data, delt);
   }
 };
 
-template <typename T_data>
+template <typename T_chunk>
 class MomentEngine
 {
 private:
   static constexpr int size_table = 64;
-  using func_ptr_t                = void (*)(const T_data&);
+  using T_data                    = typename T_chunk::data_type;
+  using func_ptr_t                = void (*)(T_chunk&, const T_data&);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   static constexpr int encode(int is_vector, int dimension, int order)
@@ -145,7 +150,7 @@ private:
   }
 
   template <int isVector, int Dim, int Order>
-  static void call_entry(const T_data& data)
+  static void call_entry(T_chunk& chunk, const T_data& data)
   {
     if constexpr (isVector == 0) {
       ScalarMoment<Dim, Order> moment(data);
@@ -200,22 +205,23 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, int dimension, int order, const T_data& data) const
+  void operator()(int is_vector, int dimension, int order, T_chunk& chunk, const T_data& data) const
   {
-    table[encode(is_vector, dimension, order)](data);
+    table[encode(is_vector, dimension, order)](chunk, data);
   }
 };
 
-template <typename T_data>
+template <typename T_chunk>
 class PositionEngine
 {
 private:
   static constexpr int size_table = 2;
-  using func_ptr_t                = void (*)(const T_data&, double);
+  using T_data                    = typename T_chunk::data_type;
+  using func_ptr_t                = void (*)(T_chunk&, const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   template <int isVector>
-  static void call_entry(const T_data& data, double delt)
+  static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
     if constexpr (isVector == 0) {
       ScalarPosition position(data);
@@ -244,16 +250,15 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  template <typename T_chunk>
-  void operator()(int is_vector, int order, int dimension, const T_data& data, T_chunk* chunk,
+  void operator()(int is_vector, int order, int dimension, T_chunk& chunk, const T_data& data,
                   double delt) const
   {
-    table[is_vector](data, delt);
+    table[is_vector](chunk, data, delt);
 
     // apply boundary condition and count particles
     Position position(data);
     for (int is = 0; is < data.Ns; is++) {
-      chunk->set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
+      chunk.set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
       position.count(data.up[is], 0, data.up[is]->Np - 1, true, order, dimension);
     }
   }
@@ -267,12 +272,13 @@ public:
   }
 };
 
-template <typename T_data>
+template <typename T_chunk>
 class VelocityEngine
 {
 private:
   static constexpr int size_table = 1024;
-  using func_ptr_t                = void (*)(const T_data&, double);
+  using T_data                    = typename T_chunk::data_type;
+  using func_ptr_t                = void (*)(T_chunk&, const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   static constexpr int encode(int is_vector, int dimension, int order, int pusher, int shape)
@@ -282,7 +288,7 @@ private:
   }
 
   template <int isVector, int Dim, int Order, int Pusher, int Shape>
-  static void call_entry(const T_data& data, double delt)
+  static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
     if constexpr (isVector == 0) {
       ScalarVelocity<Dim, Order, Pusher, Shape> velocity(data);
@@ -378,10 +384,10 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, int dimension, int order, int pusher, int shape,
+  void operator()(int is_vector, int dimension, int order, int pusher, int shape, T_chunk& chunk,
                   const T_data& data, float64 delt) const
   {
-    table[encode(is_vector, dimension, order, pusher, shape)](data, delt);
+    table[encode(is_vector, dimension, order, pusher, shape)](chunk, data, delt);
   }
 };
 

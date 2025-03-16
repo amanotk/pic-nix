@@ -93,7 +93,7 @@ public:
       // data
       auto   packer = LoadPacker();
       size_t disp0  = disp;
-      size_t size   = App::ChunkType::NumLoadMode * sizeof(float64);
+      size_t size   = App::chunk_type::NumLoadMode * sizeof(float64);
       size_t nbyte  = this->queue(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
@@ -101,7 +101,7 @@ public:
       const char name[]  = "load";
       const char desc[]  = "computational work load";
       int        ndim    = 2;
-      int        dims[2] = {nc, App::ChunkType::NumLoadMode};
+      int        dims[2] = {nc, App::chunk_type::NumLoadMode};
       nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 

@@ -30,26 +30,26 @@ template <typename Chunk>
 class ExPIC3D : public nix::Application<Chunk, nix::ChunkMap<3>>
 {
 public:
-  using ThisType      = ExPIC3D<Chunk>;
-  using BaseType      = nix::Application<Chunk, nix::ChunkMap<3>>;
-  using ChunkType     = Chunk;
-  using DiagnoserType = Diagnoser<ThisType, typename BaseType::InternalData>;
+  using this_type     = ExPIC3D<Chunk>;
+  using base_type     = nix::Application<Chunk, nix::ChunkMap<3>>;
+  using chunk_type    = Chunk;
+  using DiagnoserType = Diagnoser<this_type, typename base_type::InternalData>;
   using PtrDiagnoser  = std::unique_ptr<DiagnoserType>;
   using MpiCommVec    = xt::xtensor_fixed<MPI_Comm, xt::xshape<Chunk::NumBoundaryMode, 3, 3, 3>>;
 
 protected:
-  using BaseType::cfgparser;
-  using BaseType::argparser;
-  using BaseType::balancer;
-  using BaseType::logger;
-  using BaseType::chunkvec;
-  using BaseType::chunkmap;
-  using BaseType::ndims;
-  using BaseType::cdims;
-  using BaseType::curstep;
-  using BaseType::curtime;
-  using BaseType::nprocess;
-  using BaseType::thisrank;
+  using base_type::cfgparser;
+  using base_type::argparser;
+  using base_type::balancer;
+  using base_type::logger;
+  using base_type::chunkvec;
+  using base_type::chunkmap;
+  using base_type::ndims;
+  using base_type::cdims;
+  using base_type::curstep;
+  using base_type::curtime;
+  using base_type::nprocess;
+  using base_type::thisrank;
 
   int          Ns;         ///< number of species
   int          momstep;    ///< step at which moment quantities are cached
@@ -157,13 +157,13 @@ public:
   type ExPIC3D<Chunk>::name
 
 DEFINE_MEMBER(, ExPIC3D)
-(int argc, char** argv) : BaseType(argc, argv), Ns(1), momstep(-1)
+(int argc, char** argv) : base_type(argc, argv), Ns(1), momstep(-1)
 {
 }
 
 DEFINE_MEMBER(void, initialize)(int argc, char** argv)
 {
-  BaseType::initialize(argc, argv);
+  base_type::initialize(argc, argv);
 
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
@@ -204,7 +204,7 @@ DEFINE_MEMBER(void, set_chunk_communicator)()
 
 DEFINE_MEMBER(void, setup_chunks)()
 {
-  BaseType::setup_chunks();
+  base_type::setup_chunks();
   set_chunk_communicator();
 
   // apply boundary condition just in case
@@ -226,7 +226,7 @@ DEFINE_MEMBER(void, setup_chunks)()
 
 DEFINE_MEMBER(json, to_json)()
 {
-  json state = BaseType::to_json();
+  json state = base_type::to_json();
 
   state["Ns"]      = Ns;
   state["momstep"] = momstep;
@@ -236,7 +236,7 @@ DEFINE_MEMBER(json, to_json)()
 
 DEFINE_MEMBER(bool, from_json)(json& state)
 {
-  if (BaseType::from_json(state) == false) {
+  if (base_type::from_json(state) == false) {
     return false;
   }
 
@@ -248,7 +248,7 @@ DEFINE_MEMBER(bool, from_json)(json& state)
 
 DEFINE_MEMBER(bool, rebalance)()
 {
-  if (BaseType::rebalance()) {
+  if (base_type::rebalance()) {
     set_chunk_communicator();
     return true;
   }
@@ -273,7 +273,7 @@ DEFINE_MEMBER(void, finalize)()
   diagnoser.reset();
 
   // finalize
-  BaseType::finalize();
+  base_type::finalize();
 }
 
 DEFINE_MEMBER(void, diagnostic)()
