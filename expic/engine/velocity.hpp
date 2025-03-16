@@ -36,6 +36,9 @@ public:
   static constexpr int Sz     = Dim > 2 ? Order + 2 : 1;
   static constexpr int is_odd = Order % 2 == 0 ? 0 : 1;
 
+  bool    has_xdim;
+  bool    has_ydim;
+  bool    has_zdim;
   int     ns;
   int     lbx;
   int     lby;
@@ -56,15 +59,18 @@ public:
   float64 zmin;
 
   template <typename T_data>
-  Velocity(const T_data& data)
+  Velocity(const T_data& data, bool has_dim[3])
   {
+    has_xdim = has_dim[2];
+    has_ydim = has_dim[1];
+    has_zdim = has_dim[0];
     ns       = data.Ns;
     lbx      = data.Lbx;
     lby      = data.Lby;
     lbz      = data.Lbz;
-    ubx      = data.Ubx + is_odd;
-    uby      = data.Uby + is_odd;
-    ubz      = data.Ubz + is_odd;
+    ubx      = data.Ubx;
+    uby      = data.Uby;
+    ubz      = data.Ubz;
     stride_x = 1;
     stride_y = stride_x * (data.Ubx - data.Lbx + 2);
     stride_z = stride_y * (data.Uby - data.Lby + 2);
@@ -124,6 +130,10 @@ public:
     using namespace nix;
     using namespace nix::primitives;
     const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+
+    const int ubx = has_xdim ? this->ubx + is_odd : this->ubx;
+    const int uby = has_ydim ? this->uby + is_odd : this->uby;
+    const int ubz = has_zdim ? this->ubz + is_odd : this->ubz;
 
     auto push = [&](T_array& uf, int iz, int iy, int ix, auto xu[], auto dt) {
       // 1D version
@@ -540,10 +550,7 @@ template <int Dim, int Order, int Pusher, int Interp>
 class ScalarVelocity : public Velocity<Dim, Order, Pusher, Interp>
 {
 public:
-  template <typename T_data>
-  ScalarVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Interp>(data)
-  {
-  }
+  using Velocity<Dim, Order, Pusher, Interp>::Velocity; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uf, float64 delt)
@@ -556,10 +563,7 @@ template <int Dim, int Order, int Pusher, int Interp>
 class VectorVelocity : public Velocity<Dim, Order, Pusher, Interp>
 {
 public:
-  template <typename T_data>
-  VectorVelocity(const T_data& data) : Velocity<Dim, Order, Pusher, Interp>(data)
-  {
-  }
+  using Velocity<Dim, Order, Pusher, Interp>::Velocity; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uf, float64 delt)

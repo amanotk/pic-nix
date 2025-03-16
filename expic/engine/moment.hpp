@@ -31,6 +31,9 @@ public:
   static constexpr int index_yz = 12;
   static constexpr int index_zx = 13;
 
+  bool    has_xdim;
+  bool    has_ydim;
+  bool    has_zdim;
   int     ns;
   int     lbx;
   int     lby;
@@ -50,15 +53,18 @@ public:
   float64 zmin;
 
   template <typename T_data>
-  Moment(const T_data& data)
+  Moment(const T_data& data, bool has_dim[3])
   {
+    has_xdim = has_dim[2];
+    has_ydim = has_dim[1];
+    has_zdim = has_dim[0];
     ns       = data.Ns;
     lbx      = data.Lbx;
     lby      = data.Lby;
     lbz      = data.Lbz;
-    ubx      = data.Ubx + is_odd;
-    uby      = data.Uby + is_odd;
-    ubz      = data.Ubz + is_odd;
+    ubx      = data.Ubx;
+    uby      = data.Uby;
+    ubz      = data.Ubz;
     stride_x = 1;
     stride_y = stride_x * (data.Ubx - data.Lbx + 2);
     stride_z = stride_y * (data.Uby - data.Lby + 2);
@@ -116,6 +122,10 @@ public:
     using namespace nix;
     using namespace nix::primitives;
     const simd_i64 index = xsimd::detail::make_sequence_as_batch<simd_i64>() * 7;
+
+    const int ubx = has_xdim ? this->ubx + is_odd : this->ubx;
+    const int uby = has_ydim ? this->uby + is_odd : this->uby;
+    const int ubz = has_zdim ? this->ubz + is_odd : this->ubz;
 
     auto local = [&](auto xu[], auto ms, auto mom[Sz][Sy][Sx][14]) {
       // 1D version
@@ -419,10 +429,7 @@ template <int Dim, int Order>
 class ScalarMoment : public Moment<Dim, Order>
 {
 public:
-  template <typename T_data>
-  ScalarMoment(const T_data& data) : Moment<Dim, Order>(data)
-  {
-  }
+  using Moment<Dim, Order>::Moment; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& um)
@@ -435,10 +442,7 @@ template <int Dim, int Order>
 class VectorMoment : public Moment<Dim, Order>
 {
 public:
-  template <typename T_data>
-  VectorMoment(const T_data& data) : Moment<Dim, Order>(data)
-  {
-  }
+  using Moment<Dim, Order>::Moment; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& um)

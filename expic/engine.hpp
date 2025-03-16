@@ -102,13 +102,15 @@ private:
   template <int isVector, int Dim, int Order>
   static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
+    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+
     if constexpr (isVector == 0) {
-      ScalarCurrent<Dim, Order> current(data);
+      ScalarCurrent<Dim, Order> current(data, has_dim);
       current(data.up, data.uj, delt);
     }
 
     if constexpr (isVector == 1) {
-      VectorCurrent<Dim, Order> current(data);
+      VectorCurrent<Dim, Order> current(data, has_dim);
       current(data.up, data.uj, delt);
     }
   }
@@ -179,13 +181,15 @@ private:
   template <int isVector, int Dim, int Order>
   static void call_entry(T_chunk& chunk, const T_data& data)
   {
+    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+
     if constexpr (isVector == 0) {
-      ScalarMoment<Dim, Order> moment(data);
+      ScalarMoment<Dim, Order> moment(data, has_dim);
       moment(data.up, data.um);
     }
 
     if constexpr (isVector == 1) {
-      VectorMoment<Dim, Order> moment(data);
+      VectorMoment<Dim, Order> moment(data, has_dim);
       moment(data.up, data.um);
     }
   }
@@ -268,6 +272,7 @@ private:
                            double delt)
   {
     bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+
     for (int is = 0; is < data.Ns; is++) {
       chunk.set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
       position.count(data.up[is], 0, data.up[is]->Np - 1, true, order, has_dim);
@@ -323,13 +328,15 @@ private:
   template <int isVector, int Dim, int Order, int Pusher, int Shape>
   static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
+    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+
     if constexpr (isVector == 0) {
-      ScalarVelocity<Dim, Order, Pusher, Shape> velocity(data);
+      ScalarVelocity<Dim, Order, Pusher, Shape> velocity(data, has_dim);
       velocity(data.up, data.uf, delt);
     }
 
     if constexpr (isVector == 1) {
-      VectorVelocity<Dim, Order, Pusher, Shape> velocity(data);
+      VectorVelocity<Dim, Order, Pusher, Shape> velocity(data, has_dim);
       velocity(data.up, data.uf, delt);
     }
   }
