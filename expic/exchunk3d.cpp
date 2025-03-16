@@ -10,9 +10,9 @@ DEFINE_MEMBER(, ExChunk3D)
 {
   // check dimension
   {
-    bool is_3d = dims[0] >= 2 && dims[1] >= 2 && dims[2] >= 2;
-    bool is_2d = dims[0] == 1 && dims[1] >= 2 && dims[2] >= 2;
-    bool is_1d = dims[0] == 1 && dims[1] == 1 && dims[2] >= 2;
+    bool is_3d = has_dim[0] == true && has_dim[1] == true && has_dim[2] == true;
+    bool is_2d = has_dim[0] == false && has_dim[1] == true && has_dim[2] == true;
+    bool is_1d = has_dim[0] == false && has_dim[1] == false && has_dim[2] == true;
 
     if (is_1d != true && is_2d != true && is_3d != true) {
       ERROR << tfm::format("Invalid dimension: %d %d %d", dims[0], dims[1], dims[2]);
@@ -190,12 +190,13 @@ DEFINE_MEMBER(void, setup)(json& config)
   {
     order = opt.value("order", 2);
 
-    int  nb    = (order + 3) / 2; // required boundary margin
-    bool is_1d = dimension == 1 && dims[2] >= nb;
-    bool is_2d = dimension == 2 && dims[1] >= nb && dims[2] >= nb;
-    bool is_3d = dimension == 3 && dims[0] >= nb && dims[1] >= nb && dims[2] >= nb;
+    int nb = (order + 3) / 2; // required boundary margin
 
-    if (is_1d == false && is_2d == false && is_3d == false) {
+    bool is_x_valid = has_dim[2] == false || dims[2] >= nb;
+    bool is_y_valid = has_dim[1] == false || dims[1] >= nb;
+    bool is_z_valid = has_dim[0] == false || dims[0] >= nb;
+
+    if (is_x_valid == false || is_y_valid == false || is_z_valid == false) {
       ERROR << tfm::format("Number of grid points smaller than the minimum (%2d) "
                            "for the chosen shape order (%2d) of shape function ",
                            nb, order);
