@@ -2,10 +2,6 @@
 #ifndef _EXCHUNK3D_HPP_
 #define _EXCHUNK3D_HPP_
 
-#ifndef PICNIX_SHAPE_ORDER
-#define PICNIX_SHAPE_ORDER 2
-#endif
-
 #include "nix/buffer.hpp"
 #include "nix/chunk3d.hpp"
 #include "nix/debug.hpp"

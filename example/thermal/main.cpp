@@ -3,19 +3,17 @@
 #include "expic3d.hpp"
 #include "nix/random.hpp"
 
-constexpr int order = PICNIX_SHAPE_ORDER;
-
 class MainChunk;
 class MainApplication;
 
-class MainChunk : public ExChunk3D<order>
+class MainChunk : public ExChunk3D
 {
 public:
-  using ExChunk3D<order>::ExChunk3D; // inherit constructors
+  using ExChunk3D::ExChunk3D; // inherit constructors
 
   virtual void setup(json& config) override
   {
-    ExChunk3D<order>::setup(config);
+    ExChunk3D::setup(config);
 
     float64 delt;
     float64 delh;
@@ -61,7 +59,7 @@ public:
       this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
 
       // setup for Friedman filter
-      this->setup_friedman_filter();
+      this->init_friedman();
     }
 
     //
@@ -79,9 +77,9 @@ public:
 
       up.resize(Ns);
       for (int is = 0; is < Ns; is++) {
-        int     nz = dims[0] + 2 * Nb;
-        int     ny = dims[1] + 2 * Nb;
-        int     nx = dims[2] + 2 * Nb;
+        int     nz = dims[0] + 2 * boundary_margin;
+        int     ny = dims[1] + 2 * boundary_margin;
+        int     nx = dims[2] + 2 * boundary_margin;
         int     np = particle[is]["np"].get<int>();
         int     mp = np * dims[0] * dims[1] * dims[2];
         int64   id = mp;
@@ -122,9 +120,9 @@ class MainApplication : public ExPIC3D<MainChunk>
 public:
   using ExPIC3D<MainChunk>::ExPIC3D; // inherit constructors
 
-  std::unique_ptr<MainChunk> create_chunk(const int dims[], int id) override
+  std::unique_ptr<MainChunk> create_chunk(const int dims[], const bool has_dim[], int id) override
   {
-    return std::make_unique<MainChunk>(dims, id);
+    return std::make_unique<MainChunk>(dims, has_dim, id);
   }
 };
 

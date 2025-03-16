@@ -35,16 +35,50 @@ public:
     float64 efderr = 0.0;
     float64 bfderr = 0.0;
 
+    int xbuffer[2] = {0, 0};
+    int ybuffer[2] = {0, 0};
+    int zbuffer[2] = {0, 0};
+
+    //
+    // avoid error calculation around physical boundary
+    //
+    if (chunk.get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
+      xbuffer[0] = data.boundary_margin;
+    }
+
+    if (chunk.get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
+      xbuffer[1] = data.boundary_margin;
+    }
+
+    if (chunk.get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
+      ybuffer[0] = data.boundary_margin;
+    }
+
+    if (chunk.get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
+      ybuffer[1] = data.boundary_margin;
+    }
+
+    if (chunk.get_nb_rank(-1, 0, 0) == MPI_PROC_NULL) {
+      zbuffer[0] = data.boundary_margin;
+    }
+
+    if (chunk.get_nb_rank(+1, 0, 0) == MPI_PROC_NULL) {
+      zbuffer[1] = data.boundary_margin;
+    }
+
+    //
+    // calculate divergence error
+    //
     if (dimension == 1) {
-      maxwell.get_diverror_1d(data.uf, data.uj, efderr, bfderr);
+      maxwell.get_diverror_1d(data.uf, data.uj, efderr, bfderr, xbuffer);
     }
 
     if (dimension == 2) {
-      maxwell.get_diverror_2d(data.uf, data.uj, efderr, bfderr);
+      maxwell.get_diverror_2d(data.uf, data.uj, efderr, bfderr, xbuffer, ybuffer);
     }
 
     if (dimension == 3) {
-      maxwell.get_diverror_3d(data.uf, data.uj, efderr, bfderr);
+      maxwell.get_diverror_3d(data.uf, data.uj, efderr, bfderr, xbuffer, ybuffer, zbuffer);
     }
 
     return std::make_pair(efderr, bfderr);

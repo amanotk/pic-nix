@@ -3,18 +3,16 @@
 #include "expic3d.hpp"
 #include "nix/random.hpp"
 
-constexpr int order = PICNIX_SHAPE_ORDER;
-
 class MainApplication;
 
-class MainChunk : public ExChunk3D<order>
+class MainChunk : public ExChunk3D
 {
 public:
-  using ExChunk3D<order>::ExChunk3D; // inherit constructors
+  using ExChunk3D::ExChunk3D; // inherit constructors
 
   virtual void setup(json& config) override
   {
-    ExChunk3D<order>::setup(config);
+    ExChunk3D::setup(config);
 
     cc = 1.0;
     Ns = 2;
@@ -50,6 +48,7 @@ public:
     // initialize field
     //
     {
+      const int Nb = boundary_margin;
 
       // memory allocation
       allocate();
@@ -82,7 +81,7 @@ public:
       this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
 
       // setup for Friedman filter
-      this->setup_friedman_filter();
+      this->init_friedman();
     }
 
     //
@@ -98,9 +97,9 @@ public:
 
       {
         int     numcell = dims[0] * dims[1] * dims[2];
-        int     nz      = dims[0] + 2 * Nb;
-        int     ny      = dims[1] + 2 * Nb;
-        int     nx      = dims[2] + 2 * Nb;
+        int     nz      = dims[0] + 2 * boundary_margin;
+        int     ny      = dims[1] + 2 * boundary_margin;
+        int     nx      = dims[2] + 2 * boundary_margin;
         float64 ymin    = (ylim[0] - ycs) / lcs;
         float64 ymax    = (ylim[1] - ycs) / lcs;
         float64 rbg     = numcell * nbg;
@@ -173,50 +172,11 @@ public:
     }
   }
 
-  void get_diverror(float64& efd, float64& bfd) override
-  {
-    const float64 rdx = 1 / delx;
-    const float64 rdy = 1 / dely;
-    const float64 rdz = 1 / delz;
-
-    int lbz = Lbz;
-    int ubz = Ubz;
-    int lby = Lby;
-    int uby = Uby;
-    int lbx = Lbx;
-    int ubx = Ubx;
-
-    efd = 0;
-    bfd = 0;
-
-    if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
-      lby += Nb;
-    }
-
-    if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
-      uby -= Nb;
-    }
-
-    for (int iz = lbz; iz <= ubz; iz++) {
-      for (int iy = lby; iy <= uby; iy++) {
-        for (int ix = lbx; ix <= ubx; ix++) {
-          // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
-                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
-          // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
-                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
-        }
-      }
-    }
-  }
-
   void set_boundary_emf()
   {
     const float64 delyx = dely / delx;
     const float64 delyz = dely / delz;
+    const int     Nb    = boundary_margin;
 
     //
     // lower boundary in y
@@ -326,6 +286,8 @@ public:
 
   void set_boundary_mom()
   {
+    const int Nb = boundary_margin;
+
     //
     // lower boundary in y
     //
@@ -420,9 +382,9 @@ public:
     return ptr;
   }
 
-  std::unique_ptr<MainChunk> create_chunk(const int dims[], int id) override
+  std::unique_ptr<MainChunk> create_chunk(const int dims[], const bool has_dim[], int id) override
   {
-    return std::make_unique<MainChunk>(dims, id);
+    return std::make_unique<MainChunk>(dims, has_dim, id);
   }
 
   void initialize_workload() override

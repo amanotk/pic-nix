@@ -61,13 +61,15 @@ public:
   }
 
   template <typename T_field, typename T_current>
-  void get_diverror_1d(T_field& uf, T_current& uj, float64& efd, float64& bfd)
+  void get_diverror_1d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int xbuffer[2])
   {
+    const int     iz  = this->lbz;
+    const int     iy  = this->lby;
+    const int     lbx = this->lbx + xbuffer[0];
+    const int     ubx = this->ubx - xbuffer[1];
     const float64 rdx = 1 / dx;
     const float64 rdy = 1 / dy;
     const float64 rdz = 1 / dz;
-    const int     iz  = lbz;
-    const int     iy  = lby;
 
     efd = 0;
     bfd = 0;
@@ -199,9 +201,14 @@ public:
   }
 
   template <typename T_field, typename T_current>
-  void get_diverror_2d(T_field& uf, T_current& uj, float64& efd, float64& bfd)
+  void get_diverror_2d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int xbuffer[2],
+                       int ybuffer[2])
   {
-    const int     iz  = lbz;
+    const int     iz  = this->lbz;
+    const int     lbx = this->lbx + xbuffer[0];
+    const int     ubx = this->ubx - xbuffer[1];
+    const int     lby = this->lby + ybuffer[0];
+    const int     uby = this->uby - ybuffer[1];
     const float64 rdx = 1 / dx;
     const float64 rdy = 1 / dy;
     const float64 rdz = 1 / dz;
@@ -341,8 +348,15 @@ public:
   }
 
   template <typename T_field, typename T_current>
-  void get_diverror_3d(T_field& uf, T_current& uj, float64& efd, float64& bfd)
+  void get_diverror_3d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int xbuffer[2],
+                       int ybuffer[2], int zbuffer[2])
   {
+    const int     lbx = this->lbx + xbuffer[0];
+    const int     ubx = this->ubx - xbuffer[1];
+    const int     lby = this->lby + ybuffer[0];
+    const int     uby = this->uby - ybuffer[1];
+    const int     lbz = this->lbz + zbuffer[0];
+    const int     ubz = this->ubz - zbuffer[1];
     const float64 rdx = 1 / dx;
     const float64 rdy = 1 / dy;
     const float64 rdz = 1 / dz;

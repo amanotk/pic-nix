@@ -3,11 +3,9 @@
 #include "expic3d.hpp"
 #include "nix/random.hpp"
 
-constexpr int order = PICNIX_SHAPE_ORDER;
-
 class MainApplication;
 
-class MainChunk : public ExChunk3D<order>
+class MainChunk : public ExChunk3D
 {
 private:
   using MJ = nix::MaxwellJuttner;
@@ -16,7 +14,7 @@ private:
   nix::rand_uniform uniform;
 
 public:
-  using ExChunk3D<order>::ExChunk3D; // inherit constructors
+  using ExChunk3D::ExChunk3D; // inherit constructors
 
   void reset_random_number()
   {
@@ -51,13 +49,13 @@ public:
 
   float64 initial_flow_profile(const float64 x, const float64 L)
   {
-    float64 xmin = gxlim[0] + Nb * delx;
+    float64 xmin = gxlim[0] + boundary_margin * delx;
     return -(x - xmin < L ? sin(0.5 * nix::math::pi * (x - xmin) / L) : 1.0);
   }
 
   virtual void setup(json& config) override
   {
-    ExChunk3D<order>::setup(config);
+    ExChunk3D::setup(config);
 
     cc = 1.0;
     Ns = 2;
@@ -101,7 +99,8 @@ public:
     // initialize field
     //
     {
-      float64 x0 = this->get_xmin();
+      const int     Nb = boundary_margin;
+      const float64 x0 = this->get_xmin();
 
       // memory allocation
       allocate();
@@ -135,7 +134,7 @@ public:
       this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
 
       // setup for Friedman filter
-      this->setup_friedman_filter();
+      this->init_friedman();
     }
 
     //
@@ -151,9 +150,9 @@ public:
       std::vector<MJ> mj = {MJ(vte * vte, 0.0), MJ(vti * vti, 0.0)};
 
       {
-        int nz = dims[0] + 2 * Nb;
-        int ny = dims[1] + 2 * Nb;
-        int nx = dims[2] + 2 * Nb;
+        int nz = dims[0] + 2 * boundary_margin;
+        int ny = dims[1] + 2 * boundary_margin;
+        int nx = dims[2] + 2 * boundary_margin;
         int mp = nppc * dims[0] * dims[1] * dims[2];
 
         // determine particle ID offset
@@ -233,50 +232,11 @@ public:
                           {"lastid", lastid}};
   }
 
-  void get_diverror(float64& efd, float64& bfd) override
-  {
-    const float64 rdx = 1 / delx;
-    const float64 rdy = 1 / dely;
-    const float64 rdz = 1 / delz;
-
-    int lbz = Lbz;
-    int ubz = Ubz;
-    int lby = Lby;
-    int uby = Uby;
-    int lbx = Lbx;
-    int ubx = Ubx;
-
-    efd = 0;
-    bfd = 0;
-
-    if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-      lbx += Nb;
-    }
-
-    if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      ubx -= Nb;
-    }
-
-    for (int iz = lbz; iz <= ubz; iz++) {
-      for (int iy = lby; iy <= uby; iy++) {
-        for (int ix = lbx; ix <= ubx; ix++) {
-          // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
-                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
-          // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
-                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
-        }
-      }
-    }
-  }
-
   void set_boundary_emf()
   {
     const float64 delxy = delx / dely;
     const float64 delxz = delx / delz;
+    const int     Nb    = boundary_margin;
 
     //
     // lower boundary in x
@@ -384,6 +344,8 @@ public:
 
   void set_boundary_mom()
   {
+    const int Nb = boundary_margin;
+
     //
     // lower boundary in x
     //
@@ -505,8 +467,8 @@ public:
       float64 flux   = nppc * std::abs(u0) / sqrt(1 + u0 * u0 * rc * rc) * delt / delx;
 
       // number of injection particles
-      size_t              nz           = dims[0] + 2 * Nb;
-      size_t              ny           = dims[1] + 2 * Nb;
+      size_t              nz           = dims[0] + 2 * boundary_margin;
+      size_t              ny           = dims[1] + 2 * boundary_margin;
       int                 np_inj_total = 0;
       xt::xtensor<int, 2> np_inj({nz, ny});
       std::vector<int64>  id64(Ns, lastid);
@@ -583,9 +545,9 @@ public:
     return ptr;
   }
 
-  std::unique_ptr<MainChunk> create_chunk(const int dims[], int id) override
+  std::unique_ptr<MainChunk> create_chunk(const int dims[], const bool has_dim[], int id) override
   {
-    return std::make_unique<MainChunk>(dims, id);
+    return std::make_unique<MainChunk>(dims, has_dim, id);
   }
 };
 
