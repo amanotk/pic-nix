@@ -41,6 +41,45 @@ public:
     theta           = data.option.value("friedman", 0.0);
   }
 
+  template <typename T_field, typename T_friedman>
+  void init_friedman(T_field& uf, T_friedman& ff)
+  {
+    const int Nb = boundary_margin;
+
+    // initialize electric field for Friedman filter
+    for (int iz = lbz - Nb; iz <= ubz + Nb; iz++) {
+      for (int iy = lby - Nb; iy <= uby + Nb; iy++) {
+        for (int ix = lbx - Nb; ix <= ubx + Nb; ix++) {
+          for (int dir = 0; dir < 3; dir++) {
+            ff(iz, iy, ix, 0, dir) = uf(iz, iy, ix, dir);
+            ff(iz, iy, ix, 1, dir) = uf(iz, iy, ix, dir);
+            ff(iz, iy, ix, 2, dir) = uf(iz, iy, ix, dir);
+          }
+        }
+      }
+    }
+  }
+
+  template <typename T_field, typename T_current>
+  void get_diverror_1d(T_field& uf, T_current& uj, float64& efd, float64& bfd)
+  {
+    const float64 rdx = 1 / dx;
+    const float64 rdy = 1 / dy;
+    const float64 rdz = 1 / dz;
+    const int     iz  = lbz;
+    const int     iy  = lby;
+
+    efd = 0;
+    bfd = 0;
+
+    for (int ix = lbx; ix <= ubx; ix++) {
+      // div(E) - rho
+      efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
+      // div(B)
+      bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
+    }
+  }
+
   template <typename T_field, typename T_current, typename T_friedman>
   void push_efd_1d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
   {
@@ -159,6 +198,29 @@ public:
     }
   }
 
+  template <typename T_field, typename T_current>
+  void get_diverror_2d(T_field& uf, T_current& uj, float64& efd, float64& bfd)
+  {
+    const int     iz  = lbz;
+    const float64 rdx = 1 / dx;
+    const float64 rdy = 1 / dy;
+    const float64 rdz = 1 / dz;
+
+    efd = 0;
+    bfd = 0;
+
+    for (int iy = lby; iy <= uby; iy++) {
+      for (int ix = lbx; ix <= ubx; ix++) {
+        // div(E) - rho
+        efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+               (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
+        // div(B)
+        bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+               (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
+      }
+    }
+  }
+
   template <typename T_field, typename T_current, typename T_friedman>
   void push_efd_2d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
   {
@@ -273,6 +335,32 @@ public:
         for (int ix = lbx - Nb + 1; ix <= ubx + Nb; ix++) {
           uf(iz, iy, ix, 5) += (-cflx) * (ff(iz, iy, ix, 0, 1) - ff(iz, iy, ix - 1, 0, 1)) +
                                (+cfly) * (ff(iz, iy, ix, 0, 0) - ff(iz, iy - 1, ix, 0, 0));
+        }
+      }
+    }
+  }
+
+  template <typename T_field, typename T_current>
+  void get_diverror_3d(T_field& uf, T_current& uj, float64& efd, float64& bfd)
+  {
+    const float64 rdx = 1 / dx;
+    const float64 rdy = 1 / dy;
+    const float64 rdz = 1 / dz;
+
+    efd = 0;
+    bfd = 0;
+
+    for (int iz = lbz; iz <= ubz; iz++) {
+      for (int iy = lby; iy <= uby; iy++) {
+        for (int ix = lbx; ix <= ubx; ix++) {
+          // div(E) - rho
+          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
+                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          // div(B)
+          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
+                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
         }
       }
     }

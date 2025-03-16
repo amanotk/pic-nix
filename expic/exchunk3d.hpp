@@ -174,7 +174,7 @@ public:
 
   virtual void setup(json& config) override;
 
-  virtual void setup_friedman_filter();
+  virtual void init_friedman();
 
   virtual void get_energy(float64& efd, float64& bfd, float64 particle[]);
 

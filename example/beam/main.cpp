@@ -60,7 +60,7 @@ public:
       this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
 
       // setup for Friedman filter
-      this->setup_friedman_filter();
+      this->init_friedman();
     }
 
     //

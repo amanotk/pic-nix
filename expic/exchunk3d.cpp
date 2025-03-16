@@ -242,22 +242,10 @@ DEFINE_MEMBER(void, setup)(json& config)
   }
 }
 
-DEFINE_MEMBER(void, setup_friedman_filter)()
+DEFINE_MEMBER(void, init_friedman)()
 {
-  const int Nb = boundary_margin;
-
-  // initialize electric field for Friedman filter
-  for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
-    for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
-      for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-        for (int dir = 0; dir < 3; dir++) {
-          ff(iz, iy, ix, 0, dir) = uf(iz, iy, ix, dir);
-          ff(iz, iy, ix, 1, dir) = uf(iz, iy, ix, dir);
-          ff(iz, iy, ix, 2, dir) = uf(iz, iy, ix, dir);
-        }
-      }
-    }
-  }
+  engine::MaxwellEngine<this_type> maxwell;
+  maxwell.init_friedman(*this, get_internal_data());
 }
 
 DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
@@ -296,58 +284,8 @@ DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
 
 DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
 {
-  const float64 rdx = 1 / delx;
-  const float64 rdy = 1 / dely;
-  const float64 rdz = 1 / delz;
-
-  efd = 0;
-  bfd = 0;
-
-  if (dimension == 1) {
-    {
-      int iz = Lbz;
-      {
-        int iy = Lby;
-        for (int ix = Lbx; ix <= Ubx; ix++) {
-          // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
-          // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
-        }
-      }
-    }
-  }
-  if (dimension == 2) {
-    {
-      int iz = Lbz;
-      for (int iy = Lby; iy <= Uby; iy++) {
-        for (int ix = Lbx; ix <= Ubx; ix++) {
-          // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
-          // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
-        }
-      }
-    }
-  }
-  if (dimension == 3) {
-    for (int iz = Lbz; iz <= Ubz; iz++) {
-      for (int iy = Lby; iy <= Uby; iy++) {
-        for (int ix = Lbx; ix <= Ubx; ix++) {
-          // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
-                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
-          // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
-                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
-        }
-      }
-    }
-  }
+  engine::MaxwellEngine<this_type> maxwell;
+  std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
 DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
@@ -489,12 +427,8 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
 
 DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 {
-  const int O = order;
-  const int D = dimension;
-
-  engine::Position position(get_internal_data());
   for (int is = 0; is < particle.size(); is++) {
-    position.count(particle[is], 0, particle[is]->Np - 1, true, O, D);
+    count_particle(particle[is], 0, particle[is]->Np - 1, true);
     particle[is]->sort();
   }
 }
@@ -502,10 +436,9 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
 DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
 {
   const int O = order;
-  const int D = dimension;
 
-  engine::Position position(get_internal_data());
-  position.count(particle, Lbp, Ubp, reset, O, D);
+  engine::PositionEngine<this_type> position;
+  position.count(O, *this, get_internal_data(), particle, Lbp, Ubp, reset);
 }
 
 DEFINE_MEMBER(void, push_position)(const float64 delt)
@@ -513,10 +446,9 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   auto      mode = option["vectorization"]["position"].get<std::string>();
   const int V    = "vector" == mode;
   const int O    = order;
-  const int D    = dimension;
 
   engine::PositionEngine<this_type> position;
-  position(V, O, D, *this, get_internal_data(), delt);
+  position(V, O, *this, get_internal_data(), delt);
 }
 
 DEFINE_MEMBER(void, push_velocity)(const float64 delt)

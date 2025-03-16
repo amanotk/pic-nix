@@ -23,6 +23,33 @@ class MaxwellEngine
 public:
   using T_data = typename T_chunk::data_type;
 
+  void init_friedman(T_chunk& chunk, const T_data& data) const
+  {
+    Maxwell maxwell(data);
+    maxwell.init_friedman(data.uf, data.ff);
+  }
+
+  auto get_diverror(int dimension, T_chunk& chunk, const T_data& data) const
+  {
+    Maxwell maxwell(data);
+    float64 efderr = 0.0;
+    float64 bfderr = 0.0;
+
+    if (dimension == 1) {
+      maxwell.get_diverror_1d(data.uf, data.uj, efderr, bfderr);
+    }
+
+    if (dimension == 2) {
+      maxwell.get_diverror_2d(data.uf, data.uj, efderr, bfderr);
+    }
+
+    if (dimension == 3) {
+      maxwell.get_diverror_3d(data.uf, data.uj, efderr, bfderr);
+    }
+
+    return std::make_pair(efderr, bfderr);
+  }
+
   void push_efd(int dimension, T_chunk& chunk, const T_data& data, float64 delt) const
   {
     Maxwell maxwell(data);
@@ -217,20 +244,33 @@ class PositionEngine
 private:
   static constexpr int size_table = 2;
   using T_data                    = typename T_chunk::data_type;
-  using func_ptr_t                = void (*)(T_chunk&, const T_data&, double);
+  using func_ptr_t                = void (*)(T_chunk&, const T_data&, int, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   template <int isVector>
-  static void call_entry(T_chunk& chunk, const T_data& data, double delt)
+  static void call_entry(T_chunk& chunk, const T_data& data, int order, double delt)
   {
     if constexpr (isVector == 0) {
       ScalarPosition position(data);
       position(data.up, delt);
+      set_boundary(position, chunk, data, order, delt);
     }
 
     if constexpr (isVector == 1) {
       VectorPosition position(data);
       position(data.up, delt);
+      set_boundary(position, chunk, data, order, delt);
+    }
+  }
+
+  template <typename T_position>
+  static void set_boundary(T_position& position, T_chunk& chunk, const T_data& data, int order,
+                           double delt)
+  {
+    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+    for (int is = 0; is < data.Ns; is++) {
+      chunk.set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
+      position.count(data.up[is], 0, data.up[is]->Np - 1, true, order, has_dim);
     }
   }
 
@@ -250,25 +290,18 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, int order, int dimension, T_chunk& chunk, const T_data& data,
-                  double delt) const
+  void operator()(int is_vector, int order, T_chunk& chunk, const T_data& data, double delt) const
   {
-    table[is_vector](chunk, data, delt);
-
-    // apply boundary condition and count particles
-    Position position(data);
-    for (int is = 0; is < data.Ns; is++) {
-      chunk.set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
-      position.count(data.up[is], 0, data.up[is]->Np - 1, true, order, dimension);
-    }
+    table[is_vector](chunk, data, order, delt);
   }
 
   template <typename T_particle>
-  void count(const T_data& data, T_particle particle, int Lbp, int Ubp, bool reset, int order,
-             int dimension) const
+  void count(int order, T_chunk& chunk, const T_data& data, T_particle particle, int Lbp, int Ubp,
+             bool reset) const
   {
+    bool     has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
     Position position(data);
-    position.count(particle, Lbp, Ubp, reset, order, dimension);
+    position.count(particle, Lbp, Ubp, reset, order, has_dim);
   }
 };
 

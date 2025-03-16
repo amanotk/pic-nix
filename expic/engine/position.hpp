@@ -59,12 +59,12 @@ public:
   }
 
   template <typename T_particle>
-  void count(T_particle particle, int Lbp, int Ubp, bool reset, int order, int dimension)
+  void count(T_particle particle, int Lbp, int Ubp, bool reset, int order, bool has_dim[3])
   {
     // notice the half-grid offset of cell boundaries for odd-order shape functions
-    const bool has_xdim      = true;
-    const bool has_ydim      = dimension > 1;
-    const bool has_zdim      = dimension > 2;
+    const bool has_xdim      = has_dim[2];
+    const bool has_ydim      = has_dim[1];
+    const bool has_zdim      = has_dim[0];
     const int  is_odd        = (order % 2 == 1) ? 1 : 0;
     const int  out_of_bounds = particle->Ng;
 
