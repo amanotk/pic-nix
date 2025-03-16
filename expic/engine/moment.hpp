@@ -260,7 +260,7 @@ public:
     }
 
     // shift indices
-    ix += lbx - (Order / 2) - 1;
+    ix += lbx - (Order / 2);
 
     return std::make_tuple(ix, iy, iz);
   }
@@ -319,8 +319,8 @@ public:
     }
 
     // shift indices
-    ix += lbx - (Order / 2) - 1;
-    iy += lby - (Order / 2) - 1;
+    ix += lbx - (Order / 2);
+    iy += lby - (Order / 2);
 
     return std::make_tuple(ix, iy, iz);
   }
@@ -383,9 +383,9 @@ public:
     }
 
     // shift indices
-    ix += lbx - (Order / 2) - 1;
-    iy += lby - (Order / 2) - 1;
-    iz += lbz - (Order / 2) - 1;
+    ix += lbx - (Order / 2);
+    iy += lby - (Order / 2);
+    iz += lbz - (Order / 2);
 
     return std::make_tuple(ix, iy, iz);
   }
@@ -393,24 +393,24 @@ public:
   template <typename T_array, typename T_float>
   void global1d(T_array& um, int iz, int iy, int ix, int is, T_float mom[Sz][Sy][Sx][14])
   {
-    ix -= ((Order + 1) / 2) + 1;
+    ix -= ((Order + 1) / 2);
     append_moment1d<Order>(um, iz, iy, ix, is, mom[0][0]);
   }
 
   template <typename T_array, typename T_float>
   void global2d(T_array& um, int iz, int iy, int ix, int is, T_float mom[Sz][Sy][Sx][14])
   {
-    ix -= ((Order + 1) / 2) + 1;
-    iy -= ((Order + 1) / 2) + 1;
+    ix -= ((Order + 1) / 2);
+    iy -= ((Order + 1) / 2);
     append_moment2d<Order>(um, iz, iy, ix, is, mom[0]);
   }
 
   template <typename T_array, typename T_float>
   void global3d(T_array& um, int iz, int iy, int ix, int is, T_float mom[Sz][Sy][Sx][14])
   {
-    ix -= ((Order + 1) / 2) + 1;
-    iy -= ((Order + 1) / 2) + 1;
-    iz -= ((Order + 1) / 2) + 1;
+    ix -= ((Order + 1) / 2);
+    iy -= ((Order + 1) / 2);
+    iz -= ((Order + 1) / 2);
     append_moment3d<Order>(um, iz, iy, ix, is, mom);
   }
 };
