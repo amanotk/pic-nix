@@ -66,7 +66,8 @@ protected:
 
   virtual void finalize() override;
 
-  virtual std::unique_ptr<Chunk> create_chunk(const int dims[], int id) override = 0;
+  virtual std::unique_ptr<Chunk> create_chunk(const int dims[], const bool has_dim[],
+                                              int id) override = 0;
 
   virtual std::unique_ptr<DiagnoserType> create_diagnoser()
   {

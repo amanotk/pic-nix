@@ -158,7 +158,7 @@ protected:
   }
 
 public:
-  ExChunk3D(const int dims[3], int id = 0);
+  ExChunk3D(const int dims[3], const bool has_dim[3], int id = 0);
 
   virtual int64_t get_size_byte() override;
 

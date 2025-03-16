@@ -6,7 +6,7 @@
 #define DEFINE_MEMBER(type, name) type ExChunk3D::name
 
 DEFINE_MEMBER(, ExChunk3D)
-(const int dims[3], int id) : Chunk(dims, id), Ns(1)
+(const int dims[3], const bool has_dim[3], int id) : Chunk(dims, has_dim, id), Ns(1)
 {
   // check dimension
   {
