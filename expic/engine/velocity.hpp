@@ -119,7 +119,7 @@ public:
       float64 qmdt = 0.5 * up[is]->q / up[is]->m * delt;
 
       for (int ip = 0; ip < up[is]->Np; ip++) {
-        push(uf, &up[is]->xu[ip], qmdt);
+        push(uf, &up[is]->xu(ip, 0), qmdt);
       }
     }
   }
