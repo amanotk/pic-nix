@@ -174,8 +174,8 @@ public:
 
   void set_boundary_emf()
   {
-    const float64 delyx = dely / delx;
-    const float64 delyz = dely / delz;
+    const float64 delyx = dely / delx * has_dim[2];
+    const float64 delyz = dely / delz * has_dim[0];
     const int     Nb    = boundary_margin;
 
     //
