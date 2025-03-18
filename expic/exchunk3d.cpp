@@ -207,6 +207,22 @@ DEFINE_MEMBER(void, setup)(json& config)
     this->set_boundary_margin(nb);
   }
 
+  // pusher
+  {
+    auto pusher = opt.value("pusher", "Boris");
+
+    if (pusher == "Boris") {
+      option["pusher"] = engine::PusherBoris;
+    } else if (pusher == "Vay") {
+      option["pusher"] = engine::PusherVay;
+    } else if (pusher == "HigueraCary") {
+      option["pusher"] = engine::PusherHigueraCary;
+    } else {
+      ERROR << tfm::format("Invalid pusher: %s", pusher);
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+  }
+
   // interpolation
   {
     auto interpolation = opt.value("interpolation", "MC");
@@ -458,7 +474,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const int V    = "vector" == mode;
   const int D    = dimension;
   const int O    = order;
-  const int P    = engine::PusherBoris;
+  const int P    = option["pusher"].get<int>();
   const int I    = option["interpolation"].get<int>();
 
   engine::VelocityEngine<this_type> velocity;

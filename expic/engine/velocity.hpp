@@ -10,21 +10,21 @@
 namespace engine
 {
 enum PusherType {
-  PusherBoris   = 0,
-  PusherHK2017  = 1,
-  PusherVay2008 = 2,
+  PusherBoris       = 0,
+  PusherVay         = 1,
+  PusherHigueraCary = 2,
   // number of pushers
-  PusherSize = 4,
+  PusherSize,
 };
 
 enum InterpType {
   InterpMC = 0,
   InterpWT = 1,
   // number of shapes
-  InterpSize = 2,
+  InterpSize,
 };
 
-static const char* PusherName[PusherSize] = {"Boris", "HK2017", "Vay2008"};
+static const char* PusherName[PusherSize] = {"Boris", "Vay", "HigueraCary"};
 static const char* InterpName[InterpSize] = {"MC", "WT"};
 
 template <int Dim, int Order, int Pusher, int Interp>
@@ -85,10 +85,20 @@ public:
 
   template <typename T_float>
   void push_impl(T_float xu[], T_float ex, T_float ey, T_float ez, T_float bx, T_float by,
-                 T_float bz, T_float rc)
+                 T_float bz)
   {
+    T_float cc = this->cc;
+
     if constexpr (Pusher == PusherBoris) {
-      push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz, rc);
+      push_boris(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz, cc);
+    }
+
+    if constexpr (Pusher == PusherVay) {
+      push_vay(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz, cc);
+    }
+
+    if constexpr (Pusher == PusherHigueraCary) {
+      push_higuera_cary(xu[3], xu[4], xu[5], ex, ey, ez, bx, by, bz, cc);
     }
   }
 
@@ -354,7 +364,6 @@ public:
     const int iz0 = lbz;
     const int iy0 = lby;
 
-    float64 rc      = 1 / cc;
     float64 wix[Sx] = {0};
     float64 whx[Sx] = {0};
 
@@ -363,14 +372,14 @@ public:
     ix0 += lbx - (Order / 2);
     hx0 += lbx - (Order / 2);
 
-    auto ex  = interp1d<Stencil>(uf, iz0, iy0, hx0, 0, whx, dt);
-    auto ey  = interp1d<Stencil>(uf, iz0, iy0, ix0, 1, wix, dt);
-    auto ez  = interp1d<Stencil>(uf, iz0, iy0, ix0, 2, wix, dt);
-    auto bx  = interp1d<Stencil>(uf, iz0, iy0, ix0, 3, wix, dt);
-    auto by  = interp1d<Stencil>(uf, iz0, iy0, hx0, 4, whx, dt);
-    auto bz  = interp1d<Stencil>(uf, iz0, iy0, hx0, 5, whx, dt);
+    auto ex = interp1d<Stencil>(uf, iz0, iy0, hx0, 0, whx, dt);
+    auto ey = interp1d<Stencil>(uf, iz0, iy0, ix0, 1, wix, dt);
+    auto ez = interp1d<Stencil>(uf, iz0, iy0, ix0, 2, wix, dt);
+    auto bx = interp1d<Stencil>(uf, iz0, iy0, ix0, 3, wix, dt);
+    auto by = interp1d<Stencil>(uf, iz0, iy0, hx0, 4, whx, dt);
+    auto bz = interp1d<Stencil>(uf, iz0, iy0, hx0, 5, whx, dt);
 
-    push_impl(xu, ex, ey, ez, bx, by, bz, rc);
+    push_impl(xu, ex, ey, ez, bx, by, bz);
   }
 
   template <typename T_array>
@@ -382,7 +391,6 @@ public:
     // 2D version
     const int iz0 = lbz;
 
-    float64 rc      = 1 / cc;
     float64 wix[Sx] = {0};
     float64 wiy[Sy] = {0};
     float64 whx[Sx] = {0};
@@ -395,14 +403,14 @@ public:
     hx0 += lbx - (Order / 2);
     hy0 += lby - (Order / 2);
 
-    auto ex  = interp2d<Stencil>(uf, iz0, iy0, hx0, 0, wiy, whx, dt);
-    auto ey  = interp2d<Stencil>(uf, iz0, hy0, ix0, 1, why, wix, dt);
-    auto ez  = interp2d<Stencil>(uf, iz0, iy0, ix0, 2, wiy, wix, dt);
-    auto bx  = interp2d<Stencil>(uf, iz0, hy0, ix0, 3, why, wix, dt);
-    auto by  = interp2d<Stencil>(uf, iz0, iy0, hx0, 4, wiy, whx, dt);
-    auto bz  = interp2d<Stencil>(uf, iz0, hy0, hx0, 5, why, whx, dt);
+    auto ex = interp2d<Stencil>(uf, iz0, iy0, hx0, 0, wiy, whx, dt);
+    auto ey = interp2d<Stencil>(uf, iz0, hy0, ix0, 1, why, wix, dt);
+    auto ez = interp2d<Stencil>(uf, iz0, iy0, ix0, 2, wiy, wix, dt);
+    auto bx = interp2d<Stencil>(uf, iz0, hy0, ix0, 3, why, wix, dt);
+    auto by = interp2d<Stencil>(uf, iz0, iy0, hx0, 4, wiy, whx, dt);
+    auto bz = interp2d<Stencil>(uf, iz0, hy0, hx0, 5, why, whx, dt);
 
-    push_impl(xu, ex, ey, ez, bx, by, bz, rc);
+    push_impl(xu, ex, ey, ez, bx, by, bz);
   }
 
   template <typename T_array>
@@ -411,7 +419,6 @@ public:
     constexpr int Stencil = Order - 1;
     using nix::interp::interp3d;
 
-    float64 rc      = 1 / cc;
     float64 wix[Sx] = {0};
     float64 wiy[Sy] = {0};
     float64 wiz[Sz] = {0};
@@ -428,14 +435,14 @@ public:
     hy0 += lby - (Order / 2);
     hz0 += lbz - (Order / 2);
 
-    auto ex  = interp3d<Stencil>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt);
-    auto ey  = interp3d<Stencil>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt);
-    auto ez  = interp3d<Stencil>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt);
-    auto bx  = interp3d<Stencil>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt);
-    auto by  = interp3d<Stencil>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt);
-    auto bz  = interp3d<Stencil>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt);
+    auto ex = interp3d<Stencil>(uf, iz0, iy0, hx0, 0, wiz, wiy, whx, dt);
+    auto ey = interp3d<Stencil>(uf, iz0, hy0, ix0, 1, wiz, why, wix, dt);
+    auto ez = interp3d<Stencil>(uf, hz0, iy0, ix0, 2, whz, wiy, wix, dt);
+    auto bx = interp3d<Stencil>(uf, hz0, hy0, ix0, 3, whz, why, wix, dt);
+    auto by = interp3d<Stencil>(uf, hz0, iy0, hx0, 4, whz, wiy, whx, dt);
+    auto bz = interp3d<Stencil>(uf, iz0, hy0, hx0, 5, wiz, why, whx, dt);
 
-    push_impl(xu, ex, ey, ez, bx, by, bz, rc);
+    push_impl(xu, ex, ey, ez, bx, by, bz);
   }
 
   template <typename T_array, typename T_float>
@@ -445,7 +452,6 @@ public:
     using nix::interp::shift_weights;
     using nix::interp::interp1d;
 
-    T_float rc      = 1 / cc;
     T_float wix[Sx] = {0};
     T_float whx[Sx] = {0};
 
@@ -456,14 +462,14 @@ public:
 
     ix -= ((Order + 1) / 2);
 
-    auto ex  = interp1d<Stencil>(uf, iz, iy, ix, 0, whx, dt);
-    auto ey  = interp1d<Stencil>(uf, iz, iy, ix, 1, wix, dt);
-    auto ez  = interp1d<Stencil>(uf, iz, iy, ix, 2, wix, dt);
-    auto bx  = interp1d<Stencil>(uf, iz, iy, ix, 3, wix, dt);
-    auto by  = interp1d<Stencil>(uf, iz, iy, ix, 4, whx, dt);
-    auto bz  = interp1d<Stencil>(uf, iz, iy, ix, 5, whx, dt);
+    auto ex = interp1d<Stencil>(uf, iz, iy, ix, 0, whx, dt);
+    auto ey = interp1d<Stencil>(uf, iz, iy, ix, 1, wix, dt);
+    auto ez = interp1d<Stencil>(uf, iz, iy, ix, 2, wix, dt);
+    auto bx = interp1d<Stencil>(uf, iz, iy, ix, 3, wix, dt);
+    auto by = interp1d<Stencil>(uf, iz, iy, ix, 4, whx, dt);
+    auto bz = interp1d<Stencil>(uf, iz, iy, ix, 5, whx, dt);
 
-    push_impl(xu, ex, ey, ez, bx, by, bz, rc);
+    push_impl(xu, ex, ey, ez, bx, by, bz);
   }
 
   template <typename T_array, typename T_float>
@@ -473,7 +479,6 @@ public:
     using nix::interp::shift_weights;
     using nix::interp::interp2d;
 
-    T_float rc      = 1 / cc;
     T_float wix[Sx] = {0};
     T_float wiy[Sy] = {0};
     T_float whx[Sx] = {0};
@@ -488,14 +493,14 @@ public:
     ix -= ((Order + 1) / 2);
     iy -= ((Order + 1) / 2);
 
-    auto ex  = interp2d<Stencil>(uf, iz, iy, ix, 0, wiy, whx, dt);
-    auto ey  = interp2d<Stencil>(uf, iz, iy, ix, 1, why, wix, dt);
-    auto ez  = interp2d<Stencil>(uf, iz, iy, ix, 2, wiy, wix, dt);
-    auto bx  = interp2d<Stencil>(uf, iz, iy, ix, 3, why, wix, dt);
-    auto by  = interp2d<Stencil>(uf, iz, iy, ix, 4, wiy, whx, dt);
-    auto bz  = interp2d<Stencil>(uf, iz, iy, ix, 5, why, whx, dt);
+    auto ex = interp2d<Stencil>(uf, iz, iy, ix, 0, wiy, whx, dt);
+    auto ey = interp2d<Stencil>(uf, iz, iy, ix, 1, why, wix, dt);
+    auto ez = interp2d<Stencil>(uf, iz, iy, ix, 2, wiy, wix, dt);
+    auto bx = interp2d<Stencil>(uf, iz, iy, ix, 3, why, wix, dt);
+    auto by = interp2d<Stencil>(uf, iz, iy, ix, 4, wiy, whx, dt);
+    auto bz = interp2d<Stencil>(uf, iz, iy, ix, 5, why, whx, dt);
 
-    push_impl(xu, ex, ey, ez, bx, by, bz, rc);
+    push_impl(xu, ex, ey, ez, bx, by, bz);
   }
 
   template <typename T_array, typename T_float>
@@ -505,7 +510,6 @@ public:
     using nix::interp::shift_weights;
     using nix::interp::interp3d;
 
-    T_float rc      = 1 / cc;
     T_float wix[Sx] = {0};
     T_float wiy[Sy] = {0};
     T_float wiz[Sz] = {0};
@@ -524,14 +528,14 @@ public:
     iy -= ((Order + 1) / 2);
     iz -= ((Order + 1) / 2);
 
-    auto ex  = interp3d<Stencil>(uf, iz, iy, ix, 0, wiz, wiy, whx, dt);
-    auto ey  = interp3d<Stencil>(uf, iz, iy, ix, 1, wiz, why, wix, dt);
-    auto ez  = interp3d<Stencil>(uf, iz, iy, ix, 2, whz, wiy, wix, dt);
-    auto bx  = interp3d<Stencil>(uf, iz, iy, ix, 3, whz, why, wix, dt);
-    auto by  = interp3d<Stencil>(uf, iz, iy, ix, 4, whz, wiy, whx, dt);
-    auto bz  = interp3d<Stencil>(uf, iz, iy, ix, 5, wiz, why, whx, dt);
+    auto ex = interp3d<Stencil>(uf, iz, iy, ix, 0, wiz, wiy, whx, dt);
+    auto ey = interp3d<Stencil>(uf, iz, iy, ix, 1, wiz, why, wix, dt);
+    auto ez = interp3d<Stencil>(uf, iz, iy, ix, 2, whz, wiy, wix, dt);
+    auto bx = interp3d<Stencil>(uf, iz, iy, ix, 3, whz, why, wix, dt);
+    auto by = interp3d<Stencil>(uf, iz, iy, ix, 4, whz, wiy, whx, dt);
+    auto bz = interp3d<Stencil>(uf, iz, iy, ix, 5, wiz, why, whx, dt);
 
-    push_impl(xu, ex, ey, ez, bx, by, bz, rc);
+    push_impl(xu, ex, ey, ez, bx, by, bz);
   }
 };
 

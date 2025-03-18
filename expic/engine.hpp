@@ -17,6 +17,10 @@
 namespace engine
 {
 
+constexpr int  DimensionSize    = 3;
+constexpr int  OrderSize        = 4;
+constexpr auto supported_orders = std::integer_sequence<int, 1, 2, 3, 4>{};
+
 template <typename T_chunk>
 class MaxwellEngine
 {
@@ -123,14 +127,18 @@ template <typename T_chunk>
 class CurrentEngine
 {
 private:
-  static constexpr int size_table = 64;
+  static constexpr int size_table = 2 * DimensionSize * OrderSize;
   using T_data                    = typename T_chunk::data_type;
   using func_ptr_t                = void (*)(T_chunk&, const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   static constexpr int encode(int is_vector, int dimension, int order)
   {
-    return is_vector * 32 + (dimension - 1) * 8 + (order - 1);
+    constexpr auto stride0 = DimensionSize * OrderSize;
+    constexpr auto stride1 = OrderSize;
+    constexpr auto stride2 = 1;
+
+    return is_vector * stride0 + (dimension - 1) * stride1 + (order - 1) * stride2;
   }
 
   template <int isVector, int Dim, int Order>
@@ -149,40 +157,28 @@ private:
     }
   }
 
+  template <int... Orders>
+  static void fill_table_entries(func_table_t& table, std::integer_sequence<int, Orders...> orders)
+  {
+    // scalar and 1D
+    ((table[encode(0, 1, Orders)] = &call_entry<0, 1, Orders>), ...);
+    // scalar and 2D
+    ((table[encode(0, 2, Orders)] = &call_entry<0, 2, Orders>), ...);
+    // scalar and 3D
+    ((table[encode(0, 3, Orders)] = &call_entry<0, 3, Orders>), ...);
+    // vector and 1D
+    ((table[encode(1, 1, Orders)] = &call_entry<1, 1, Orders>), ...);
+    // vector and 2D
+    ((table[encode(1, 2, Orders)] = &call_entry<1, 2, Orders>), ...);
+    // vector and 3D
+    ((table[encode(1, 3, Orders)] = &call_entry<1, 3, Orders>), ...);
+  }
+
   static func_table_t create_table_impl()
   {
     func_table_t table = {};
 
-    // scalar and 1D
-    table[encode(0, 1, 1)] = &call_entry<0, 1, 1>;
-    table[encode(0, 1, 2)] = &call_entry<0, 1, 2>;
-    table[encode(0, 1, 3)] = &call_entry<0, 1, 3>;
-    table[encode(0, 1, 4)] = &call_entry<0, 1, 4>;
-    // vector and 1D
-    table[encode(1, 1, 1)] = &call_entry<1, 1, 1>;
-    table[encode(1, 1, 2)] = &call_entry<1, 1, 2>;
-    table[encode(1, 1, 3)] = &call_entry<1, 1, 3>;
-    table[encode(1, 1, 4)] = &call_entry<1, 1, 4>;
-    // scalar and 2D
-    table[encode(0, 2, 1)] = &call_entry<0, 2, 1>;
-    table[encode(0, 2, 2)] = &call_entry<0, 2, 2>;
-    table[encode(0, 2, 3)] = &call_entry<0, 2, 3>;
-    table[encode(0, 2, 4)] = &call_entry<0, 2, 4>;
-    // vector and 2D
-    table[encode(1, 2, 1)] = &call_entry<1, 2, 1>;
-    table[encode(1, 2, 2)] = &call_entry<1, 2, 2>;
-    table[encode(1, 2, 3)] = &call_entry<1, 2, 3>;
-    table[encode(1, 2, 4)] = &call_entry<1, 2, 4>;
-    // scalar and 3D
-    table[encode(0, 3, 1)] = &call_entry<0, 3, 1>;
-    table[encode(0, 3, 2)] = &call_entry<0, 3, 2>;
-    table[encode(0, 3, 3)] = &call_entry<0, 3, 3>;
-    table[encode(0, 3, 4)] = &call_entry<0, 3, 4>;
-    // vector and 3D
-    table[encode(1, 3, 1)] = &call_entry<1, 3, 1>;
-    table[encode(1, 3, 2)] = &call_entry<1, 3, 2>;
-    table[encode(1, 3, 3)] = &call_entry<1, 3, 3>;
-    table[encode(1, 3, 4)] = &call_entry<1, 3, 4>;
+    fill_table_entries(table, supported_orders);
 
     return table;
   }
@@ -202,14 +198,18 @@ template <typename T_chunk>
 class MomentEngine
 {
 private:
-  static constexpr int size_table = 64;
+  static constexpr int size_table = 2 * DimensionSize * OrderSize;
   using T_data                    = typename T_chunk::data_type;
   using func_ptr_t                = void (*)(T_chunk&, const T_data&);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
   static constexpr int encode(int is_vector, int dimension, int order)
   {
-    return is_vector * 32 + (dimension - 1) * 8 + (order - 1);
+    constexpr auto stride0 = DimensionSize * OrderSize;
+    constexpr auto stride1 = OrderSize;
+    constexpr auto stride2 = 1;
+
+    return is_vector * stride0 + (dimension - 1) * stride1 + (order - 1) * stride2;
   }
 
   template <int isVector, int Dim, int Order>
@@ -228,40 +228,28 @@ private:
     }
   }
 
+  template <int... Orders>
+  static void fill_table_entries(func_table_t& table, std::integer_sequence<int, Orders...> orders)
+  {
+    // scalar and 1D
+    ((table[encode(0, 1, Orders)] = &call_entry<0, 1, Orders>), ...);
+    // scalar and 2D
+    ((table[encode(0, 2, Orders)] = &call_entry<0, 2, Orders>), ...);
+    // scalar and 3D
+    ((table[encode(0, 3, Orders)] = &call_entry<0, 3, Orders>), ...);
+    // vector and 1D
+    ((table[encode(1, 1, Orders)] = &call_entry<1, 1, Orders>), ...);
+    // vector and 2D
+    ((table[encode(1, 2, Orders)] = &call_entry<1, 2, Orders>), ...);
+    // vector and 3D
+    ((table[encode(1, 3, Orders)] = &call_entry<1, 3, Orders>), ...);
+  }
+
   static func_table_t create_table_impl()
   {
     func_table_t table = {};
 
-    // scalar and 1D
-    table[encode(0, 1, 1)] = &call_entry<0, 1, 1>;
-    table[encode(0, 1, 2)] = &call_entry<0, 1, 2>;
-    table[encode(0, 1, 3)] = &call_entry<0, 1, 3>;
-    table[encode(0, 1, 4)] = &call_entry<0, 1, 4>;
-    // vector and 1D
-    table[encode(1, 1, 1)] = &call_entry<1, 1, 1>;
-    table[encode(1, 1, 2)] = &call_entry<1, 1, 2>;
-    table[encode(1, 1, 3)] = &call_entry<1, 1, 3>;
-    table[encode(1, 1, 4)] = &call_entry<1, 1, 4>;
-    // scalar and 2D
-    table[encode(0, 2, 1)] = &call_entry<0, 2, 1>;
-    table[encode(0, 2, 2)] = &call_entry<0, 2, 2>;
-    table[encode(0, 2, 3)] = &call_entry<0, 2, 3>;
-    table[encode(0, 2, 4)] = &call_entry<0, 2, 4>;
-    // vector and 2D
-    table[encode(1, 2, 1)] = &call_entry<1, 2, 1>;
-    table[encode(1, 2, 2)] = &call_entry<1, 2, 2>;
-    table[encode(1, 2, 3)] = &call_entry<1, 2, 3>;
-    table[encode(1, 2, 4)] = &call_entry<1, 2, 4>;
-    // scalar and 3D
-    table[encode(0, 3, 1)] = &call_entry<0, 3, 1>;
-    table[encode(0, 3, 2)] = &call_entry<0, 3, 2>;
-    table[encode(0, 3, 3)] = &call_entry<0, 3, 3>;
-    table[encode(0, 3, 4)] = &call_entry<0, 3, 4>;
-    // vector and 3D
-    table[encode(1, 3, 1)] = &call_entry<1, 3, 1>;
-    table[encode(1, 3, 2)] = &call_entry<1, 3, 2>;
-    table[encode(1, 3, 3)] = &call_entry<1, 3, 3>;
-    table[encode(1, 3, 4)] = &call_entry<1, 3, 4>;
+    fill_table_entries(table, supported_orders);
 
     return table;
   }
@@ -348,108 +336,76 @@ template <typename T_chunk>
 class VelocityEngine
 {
 private:
-  static constexpr int size_table = 1024;
+  static constexpr int size_table = 2 * DimensionSize * OrderSize * PusherSize * InterpSize;
   using T_data                    = typename T_chunk::data_type;
   using func_ptr_t                = void (*)(T_chunk&, const T_data&, double);
   using func_table_t              = std::array<func_ptr_t, size_table>;
 
-  static constexpr int encode(int is_vector, int dimension, int order, int pusher, int shape)
+  static constexpr int encode(int is_vector, int dimension, int order, int pusher, int interp)
   {
-    return is_vector * 512 + (dimension - 1) * 128 + (order - 1) * 16 + (pusher - 1) * 4 +
-           (shape - 1);
+    constexpr auto stride0 = DimensionSize * OrderSize * PusherSize * InterpSize;
+    constexpr auto stride1 = OrderSize * PusherSize * InterpSize;
+    constexpr auto stride2 = PusherSize * InterpSize;
+    constexpr auto stride3 = InterpSize;
+    constexpr auto stride4 = 1;
+
+    return is_vector * stride0 + (dimension - 1) * stride1 + (order - 1) * stride2 +
+           pusher * stride3 + interp * stride4;
   }
 
-  template <int isVector, int Dim, int Order, int Pusher, int Shape>
+  template <int isVector, int Dim, int Order, int Pusher, int Interp>
   static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
     bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
 
     if constexpr (isVector == 0) {
-      ScalarVelocity<Dim, Order, Pusher, Shape> velocity(data, has_dim);
+      ScalarVelocity<Dim, Order, Pusher, Interp> velocity(data, has_dim);
       velocity(data.up, data.uf, delt);
     }
 
     if constexpr (isVector == 1) {
-      VectorVelocity<Dim, Order, Pusher, Shape> velocity(data, has_dim);
+      VectorVelocity<Dim, Order, Pusher, Interp> velocity(data, has_dim);
       velocity(data.up, data.uf, delt);
     }
   }
 
+  template <int Pusher, int Interp, int... Orders>
+  static void fill_table_entries(func_table_t& table, std::integer_sequence<int, Orders...> orders)
+  {
+    // scalar and 1D
+    ((table[encode(0, 1, Orders, Pusher, Interp)] = &call_entry<0, 1, Orders, Pusher, Interp>),
+     ...);
+    // scalar and 2D
+    ((table[encode(0, 2, Orders, Pusher, Interp)] = &call_entry<0, 2, Orders, Pusher, Interp>),
+     ...);
+    // scalar and 3D
+    ((table[encode(0, 3, Orders, Pusher, Interp)] = &call_entry<0, 3, Orders, Pusher, Interp>),
+     ...);
+    // vector and 1D
+    ((table[encode(1, 1, Orders, Pusher, Interp)] = &call_entry<1, 1, Orders, Pusher, Interp>),
+     ...);
+    // vector and 2D
+    ((table[encode(1, 2, Orders, Pusher, Interp)] = &call_entry<1, 2, Orders, Pusher, Interp>),
+     ...);
+    // vector and 3D
+    ((table[encode(1, 3, Orders, Pusher, Interp)] = &call_entry<1, 3, Orders, Pusher, Interp>),
+     ...);
+  }
+
   static func_table_t create_table_impl()
   {
-    func_table_t table = {};
+    constexpr auto orders = std::integer_sequence<int, 1, 2, 3, 4>{};
+    func_table_t   table  = {};
 
-    // Boris pusher and MC shape
-    {
-      static constexpr int P = PusherBoris;
-      static constexpr int I = InterpMC;
-      // scalar and 1D
-      table[encode(0, 1, 1, P, I)] = &call_entry<0, 1, 1, P, I>;
-      table[encode(0, 1, 2, P, I)] = &call_entry<0, 1, 2, P, I>;
-      table[encode(0, 1, 3, P, I)] = &call_entry<0, 1, 3, P, I>;
-      table[encode(0, 1, 4, P, I)] = &call_entry<0, 1, 4, P, I>;
-      // vector and 1D
-      table[encode(1, 1, 1, P, I)] = &call_entry<1, 1, 1, P, I>;
-      table[encode(1, 1, 2, P, I)] = &call_entry<1, 1, 2, P, I>;
-      table[encode(1, 1, 3, P, I)] = &call_entry<1, 1, 3, P, I>;
-      table[encode(1, 1, 4, P, I)] = &call_entry<1, 1, 4, P, I>;
-      // scalar and 2D
-      table[encode(0, 2, 1, P, I)] = &call_entry<0, 2, 1, P, I>;
-      table[encode(0, 2, 2, P, I)] = &call_entry<0, 2, 2, P, I>;
-      table[encode(0, 2, 3, P, I)] = &call_entry<0, 2, 3, P, I>;
-      table[encode(0, 2, 4, P, I)] = &call_entry<0, 2, 4, P, I>;
-      // vector and 2D
-      table[encode(1, 2, 1, P, I)] = &call_entry<1, 2, 1, P, I>;
-      table[encode(1, 2, 2, P, I)] = &call_entry<1, 2, 2, P, I>;
-      table[encode(1, 2, 3, P, I)] = &call_entry<1, 2, 3, P, I>;
-      table[encode(1, 2, 4, P, I)] = &call_entry<1, 2, 4, P, I>;
-      // scalar and 3D
-      table[encode(0, 3, 1, P, I)] = &call_entry<0, 3, 1, P, I>;
-      table[encode(0, 3, 2, P, I)] = &call_entry<0, 3, 2, P, I>;
-      table[encode(0, 3, 3, P, I)] = &call_entry<0, 3, 3, P, I>;
-      table[encode(0, 3, 4, P, I)] = &call_entry<0, 3, 4, P, I>;
-      // vector and 3D
-      table[encode(1, 3, 1, P, I)] = &call_entry<1, 3, 1, P, I>;
-      table[encode(1, 3, 2, P, I)] = &call_entry<1, 3, 2, P, I>;
-      table[encode(1, 3, 3, P, I)] = &call_entry<1, 3, 3, P, I>;
-      table[encode(1, 3, 4, P, I)] = &call_entry<1, 3, 4, P, I>;
-    }
-
-    // Boris pusher and WT shape
-    {
-      static constexpr int P = PusherBoris;
-      static constexpr int I = InterpWT;
-      // scalar and 1D
-      table[encode(0, 1, 1, P, I)] = &call_entry<0, 1, 1, P, I>;
-      table[encode(0, 1, 2, P, I)] = &call_entry<0, 1, 2, P, I>;
-      table[encode(0, 1, 3, P, I)] = &call_entry<0, 1, 3, P, I>;
-      table[encode(0, 1, 4, P, I)] = &call_entry<0, 1, 4, P, I>;
-      // vector and 1D
-      table[encode(1, 1, 1, P, I)] = &call_entry<1, 1, 1, P, I>;
-      table[encode(1, 1, 2, P, I)] = &call_entry<1, 1, 2, P, I>;
-      table[encode(1, 1, 3, P, I)] = &call_entry<1, 1, 3, P, I>;
-      table[encode(1, 1, 4, P, I)] = &call_entry<1, 1, 4, P, I>;
-      // scalar and 2D
-      table[encode(0, 2, 1, P, I)] = &call_entry<0, 2, 1, P, I>;
-      table[encode(0, 2, 2, P, I)] = &call_entry<0, 2, 2, P, I>;
-      table[encode(0, 2, 3, P, I)] = &call_entry<0, 2, 3, P, I>;
-      table[encode(0, 2, 4, P, I)] = &call_entry<0, 2, 4, P, I>;
-      // vector and 2D
-      table[encode(1, 2, 1, P, I)] = &call_entry<1, 2, 1, P, I>;
-      table[encode(1, 2, 2, P, I)] = &call_entry<1, 2, 2, P, I>;
-      table[encode(1, 2, 3, P, I)] = &call_entry<1, 2, 3, P, I>;
-      table[encode(1, 2, 4, P, I)] = &call_entry<1, 2, 4, P, I>;
-      // scalar and 3D
-      table[encode(0, 3, 1, P, I)] = &call_entry<0, 3, 1, P, I>;
-      table[encode(0, 3, 2, P, I)] = &call_entry<0, 3, 2, P, I>;
-      table[encode(0, 3, 3, P, I)] = &call_entry<0, 3, 3, P, I>;
-      table[encode(0, 3, 4, P, I)] = &call_entry<0, 3, 4, P, I>;
-      // vector and 3D
-      table[encode(1, 3, 1, P, I)] = &call_entry<1, 3, 1, P, I>;
-      table[encode(1, 3, 2, P, I)] = &call_entry<1, 3, 2, P, I>;
-      table[encode(1, 3, 3, P, I)] = &call_entry<1, 3, 3, P, I>;
-      table[encode(1, 3, 4, P, I)] = &call_entry<1, 3, 4, P, I>;
-    }
+    // Boris
+    fill_table_entries<PusherBoris, InterpMC>(table, orders);
+    fill_table_entries<PusherBoris, InterpWT>(table, orders);
+    // Vay
+    fill_table_entries<PusherVay, InterpMC>(table, orders);
+    fill_table_entries<PusherVay, InterpWT>(table, orders);
+    // Higuera-Cary
+    fill_table_entries<PusherHigueraCary, InterpMC>(table, orders);
+    fill_table_entries<PusherHigueraCary, InterpWT>(table, orders);
 
     return table;
   }
@@ -458,10 +414,10 @@ private:
   inline static const func_table_t table = create_table_impl();
 
 public:
-  void operator()(int is_vector, int dimension, int order, int pusher, int shape, T_chunk& chunk,
+  void operator()(int is_vector, int dimension, int order, int pusher, int interp, T_chunk& chunk,
                   const T_data& data, float64 delt) const
   {
-    table[encode(is_vector, dimension, order, pusher, shape)](chunk, data, delt);
+    table[encode(is_vector, dimension, order, pusher, interp)](chunk, data, delt);
   }
 };
 
