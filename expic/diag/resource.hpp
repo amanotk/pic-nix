@@ -216,6 +216,7 @@ public:
       std::ofstream             ofs(filename, nix::binary_append);
       std::vector<std::uint8_t> buffer = json::to_msgpack(record);
       ofs.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+      ofs.flush();
       ofs.close();
     }
   }

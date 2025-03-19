@@ -148,6 +148,7 @@ public:
     assert(is_completed() == true);
 
     if (file.is_open() == true) {
+      file.flush();
       file.close();
     }
   }

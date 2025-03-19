@@ -132,6 +132,7 @@ public:
 
       std::ofstream ofs(dirname + fn_json);
       ofs << std::setw(2) << root;
+      ofs.flush();
       ofs.close();
     }
 
