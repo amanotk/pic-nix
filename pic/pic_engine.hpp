@@ -14,7 +14,7 @@
 #include "engine/position.hpp"
 #include "engine/velocity.hpp"
 
-namespace engine
+namespace pic_engine
 {
 
 constexpr int  DimensionSize    = 3;

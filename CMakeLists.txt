@@ -40,7 +40,7 @@ set(CMAKE_MODULE_PATH ${nix_SOURCE_DIR})
 find_package(Filesystem REQUIRED)
 
 # explicit PIC library
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/expic ${CMAKE_CURRENT_BINARY_DIR}/expic)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/pic ${CMAKE_CURRENT_BINARY_DIR}/pic)
 
 # build all executables in example directory
 option(PICNIX_BUILD_EXAMPLE "Build example" ON)

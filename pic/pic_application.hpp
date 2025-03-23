@@ -2,10 +2,11 @@
 #ifndef _PIC_APPLICATION_HPP_
 #define _PIC_APPLICATION_HPP_
 
-#include "diagnoser.hpp"
-#include "exchunk3d.hpp"
 #include "nix/application.hpp"
 #include "nix/chunkmap.hpp"
+
+#include "diagnoser.hpp"
+#include "pic_chunk.hpp"
 
 #include <taskflow/taskflow.hpp>
 

@@ -4,7 +4,7 @@
 
 #include "nix/nix.hpp"
 
-namespace engine
+namespace pic_engine
 {
 
 class BaseMaxwell

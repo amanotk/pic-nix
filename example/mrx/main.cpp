@@ -1,7 +1,7 @@
 // -*- C++ -*-
 
-#include "expic3d.hpp"
 #include "nix/random.hpp"
+#include "pic_application.hpp"
 
 class MainApplication;
 

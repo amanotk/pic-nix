@@ -5,7 +5,7 @@
 #include "nix/nix.hpp"
 #include "nix/particle.hpp"
 
-namespace engine
+namespace pic_engine
 {
 class BasePosition
 {

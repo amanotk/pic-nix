@@ -7,7 +7,7 @@
 #include "nix/esirkepov.hpp"
 #include "nix/primitives.hpp"
 
-namespace engine
+namespace pic_engine
 {
 template <int Dim, int Order>
 class BaseCurrent

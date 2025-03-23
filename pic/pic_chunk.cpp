@@ -1,7 +1,7 @@
 // -*- C++ -*-
-#include "exchunk3d.hpp"
+#include "pic_chunk.hpp"
 
-#include "engine.hpp"
+#include "pic_engine.hpp"
 
 #define DEFINE_MEMBER(type, name) type PicChunk::name
 
@@ -212,11 +212,11 @@ DEFINE_MEMBER(void, setup)(json& config)
     auto pusher = opt.value("pusher", "Boris");
 
     if (pusher == "Boris") {
-      option["pusher"] = engine::PusherBoris;
+      option["pusher"] = pic_engine::PusherBoris;
     } else if (pusher == "Vay") {
-      option["pusher"] = engine::PusherVay;
+      option["pusher"] = pic_engine::PusherVay;
     } else if (pusher == "HigueraCary") {
-      option["pusher"] = engine::PusherHigueraCary;
+      option["pusher"] = pic_engine::PusherHigueraCary;
     } else {
       ERROR << tfm::format("Invalid pusher: %s", pusher);
       MPI_Abort(MPI_COMM_WORLD, -1);
@@ -227,10 +227,10 @@ DEFINE_MEMBER(void, setup)(json& config)
   {
     auto interpolation = opt.value("interpolation", "MC");
 
-    if (interpolation == engine::InterpName[engine::InterpMC]) {
-      option["interpolation"] = engine::InterpMC;
-    } else if (interpolation == engine::InterpName[engine::InterpWT]) {
-      option["interpolation"] = engine::InterpWT;
+    if (interpolation == pic_engine::InterpName[pic_engine::InterpMC]) {
+      option["interpolation"] = pic_engine::InterpMC;
+    } else if (interpolation == pic_engine::InterpName[pic_engine::InterpWT]) {
+      option["interpolation"] = pic_engine::InterpWT;
     } else {
       ERROR << tfm::format("Invalid interpolation: %s", interpolation);
       MPI_Abort(MPI_COMM_WORLD, -1);
@@ -261,7 +261,7 @@ DEFINE_MEMBER(void, setup)(json& config)
 
 DEFINE_MEMBER(void, init_friedman)()
 {
-  engine::Maxwell<this_type> maxwell;
+  pic_engine::Maxwell<this_type> maxwell;
   maxwell.init_friedman(*this, get_internal_data());
 }
 
@@ -438,7 +438,7 @@ DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
 
 DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
 {
-  engine::Maxwell<this_type> maxwell;
+  pic_engine::Maxwell<this_type> maxwell;
   std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
@@ -454,7 +454,7 @@ DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool
 {
   const int O = order;
 
-  engine::Position<this_type> position;
+  pic_engine::Position<this_type> position;
   position.count(O, *this, get_internal_data(), particle, Lbp, Ubp, reset);
 }
 
@@ -464,7 +464,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   const int V    = "vector" == mode;
   const int O    = order;
 
-  engine::Position<this_type> position;
+  pic_engine::Position<this_type> position;
   position(V, O, *this, get_internal_data(), delt);
 }
 
@@ -477,7 +477,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const int P    = option["pusher"].get<int>();
   const int I    = option["interpolation"].get<int>();
 
-  engine::Velocity<this_type> velocity;
+  pic_engine::Velocity<this_type> velocity;
   velocity(V, D, O, P, I, *this, get_internal_data(), delt);
 }
 
@@ -488,7 +488,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   const int D    = dimension;
   const int O    = order;
 
-  engine::Current<this_type> current;
+  pic_engine::Current<this_type> current;
   current(V, D, O, *this, get_internal_data(), delt);
 }
 
@@ -499,7 +499,7 @@ DEFINE_MEMBER(void, deposit_moment)()
   const int D    = dimension;
   const int O    = order;
 
-  engine::Moment<this_type> moment;
+  pic_engine::Moment<this_type> moment;
   moment(V, D, O, *this, get_internal_data());
 }
 
@@ -507,7 +507,7 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
   const int D = dimension;
 
-  engine::Maxwell<this_type> maxwell;
+  pic_engine::Maxwell<this_type> maxwell;
   maxwell.push_efd(D, *this, get_internal_data(), delt);
 }
 
@@ -515,7 +515,7 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
   const int D = dimension;
 
-  engine::Maxwell<this_type> maxwell;
+  pic_engine::Maxwell<this_type> maxwell;
   maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
 

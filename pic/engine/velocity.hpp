@@ -7,7 +7,7 @@
 #include "nix/interp.hpp"
 #include "nix/primitives.hpp"
 
-namespace engine
+namespace pic_engine
 {
 enum PusherType {
   PusherBoris       = 0,
