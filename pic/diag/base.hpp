@@ -9,7 +9,7 @@
 #include "nix/random.hpp"
 #include "nix/xtensor_packer3d.hpp"
 
-#include "mpi.h"
+#include "pic.hpp"
 
 using namespace nix::typedefs;
 using nix::json;

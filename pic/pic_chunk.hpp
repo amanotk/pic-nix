@@ -2,21 +2,9 @@
 #ifndef _PIC_CHUNK_HPP_
 #define _PIC_CHUNK_HPP_
 
-#include "nix/buffer.hpp"
+#include "pic.hpp"
+
 #include "nix/chunk3d.hpp"
-#include "nix/debug.hpp"
-#include "nix/nix.hpp"
-#include "nix/xtensorall.hpp"
-
-#include "nix/xtensor_halo3d.hpp"
-#include "nix/xtensor_particle.hpp"
-
-using namespace nix::typedefs;
-using namespace nix::primitives;
-using nix::json;
-using nix::ParticlePtr;
-using nix::ParticleVec;
-using ParticleType = nix::ParticlePtr::element_type;
 
 ///
 /// @brief Chunk for 3D Explicit PIC Simulations
@@ -43,44 +31,15 @@ using ParticleType = nix::ParticlePtr::element_type;
 ///
 class PicChunk : public nix::Chunk3D<ParticleType>
 {
+protected:
+  struct InternalData; // forward declaration
+
 public:
   using this_type    = PicChunk;
-  using Chunk        = typename nix::Chunk3D<ParticleType>;
-  using MpiBuffer    = typename Chunk::MpiBuffer;
-  using MpiBufferPtr = typename Chunk::MpiBufferPtr;
-  using Chunk::dims;
-  using Chunk::boundary_margin;
-  using Chunk::Lbx;
-  using Chunk::Lby;
-  using Chunk::Lbz;
-  using Chunk::Ubx;
-  using Chunk::Uby;
-  using Chunk::Ubz;
-  using Chunk::delx;
-  using Chunk::dely;
-  using Chunk::delz;
-  using Chunk::xlim;
-  using Chunk::ylim;
-  using Chunk::zlim;
-  using Chunk::mpibufvec;
-  using Chunk::option;
-  using Chunk::load;
-
-  // mode for load
-  enum LoadMode {
-    LoadField    = 0,
-    LoadParticle = 1,
-    NumLoadMode  = 2, // number of mode
-  };
-
-  // mode for boundary exchange
-  enum BoundaryMode {
-    BoundaryEmf      = 0,
-    BoundaryCur      = 1,
-    BoundaryMom      = 2,
-    BoundaryParticle = 3,
-    NumBoundaryMode  = 4, // number of mode
-  };
+  using base_type    = typename nix::Chunk3D<ParticleType>;
+  using data_type    = InternalData;
+  using MpiBuffer    = typename base_type::MpiBuffer;
+  using MpiBufferPtr = typename base_type::MpiBufferPtr;
 
 protected:
   int order;     ///< order of shape function
@@ -154,8 +113,6 @@ protected:
   }
 
 public:
-  using data_type = InternalData;
-
   PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
 
   virtual int64_t get_size_byte() override;

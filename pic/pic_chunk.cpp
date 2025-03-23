@@ -1,12 +1,9 @@
 // -*- C++ -*-
 #include "pic_chunk.hpp"
-
 #include "pic_engine.hpp"
 
-#define DEFINE_MEMBER(type, name) type PicChunk::name
-
-DEFINE_MEMBER(, PicChunk)
-(const int dims[3], const bool has_dim[3], int id) : Chunk(dims, has_dim, id), Ns(1)
+PicChunk::PicChunk(const int dims[3], const bool has_dim[3], int id)
+    : base_type(dims, has_dim, id), Ns(1)
 {
   // check dimension
   {
@@ -37,7 +34,7 @@ DEFINE_MEMBER(, PicChunk)
   this->reset_load();
 }
 
-DEFINE_MEMBER(int64_t, get_size_byte)()
+int64_t PicChunk::get_size_byte()
 {
   int64_t size = 0;
   size += uf.size() * sizeof(float64);
@@ -54,13 +51,13 @@ DEFINE_MEMBER(int64_t, get_size_byte)()
   return size;
 }
 
-DEFINE_MEMBER(int, pack)(void* buffer, int address)
+int PicChunk::pack(void* buffer, int address)
 {
   using nix::memcpy_count;
 
   int count = address;
 
-  count = Chunk::pack(buffer, count);
+  count = base_type::pack(buffer, count);
 
   count += memcpy_count(buffer, &order, sizeof(int), count, 0);
   count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
@@ -76,13 +73,13 @@ DEFINE_MEMBER(int, pack)(void* buffer, int address)
   return count;
 }
 
-DEFINE_MEMBER(int, unpack)(void* buffer, int address)
+int PicChunk::unpack(void* buffer, int address)
 {
   using nix::memcpy_count;
 
   int count = address;
 
-  count = Chunk::unpack(buffer, count);
+  count = base_type::unpack(buffer, count);
 
   count += memcpy_count(&order, buffer, sizeof(int), 0, count);
   count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
@@ -101,7 +98,7 @@ DEFINE_MEMBER(int, unpack)(void* buffer, int address)
   return count;
 }
 
-DEFINE_MEMBER(void, allocate)()
+void PicChunk::allocate()
 {
   size_t nz = dims[0] + 2 * boundary_margin;
   size_t ny = dims[1] + 2 * boundary_margin;
@@ -119,7 +116,7 @@ DEFINE_MEMBER(void, allocate)()
   ff.fill(0);
 }
 
-DEFINE_MEMBER(void, reset_load)()
+void PicChunk::reset_load()
 {
   const int Ng = dims[0] * dims[1] * dims[2];
 
@@ -130,7 +127,7 @@ DEFINE_MEMBER(void, reset_load)()
   }
 }
 
-DEFINE_MEMBER(void, setup)(json& config)
+void PicChunk::setup(json& config)
 {
   auto opt = config["option"];
 
@@ -259,13 +256,13 @@ DEFINE_MEMBER(void, setup)(json& config)
   }
 }
 
-DEFINE_MEMBER(void, init_friedman)()
+void PicChunk::init_friedman()
 {
   pic_engine::Maxwell<this_type> maxwell;
   maxwell.init_friedman(*this, get_internal_data());
 }
 
-DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
+bool PicChunk::set_boundary_probe(int mode, bool wait)
 {
   if (mode == BoundaryParticle) {
     if (wait == true) {
@@ -282,7 +279,7 @@ DEFINE_MEMBER(bool, set_boundary_probe)(int mode, bool wait)
   return true;
 }
 
-DEFINE_MEMBER(void, set_boundary_pack)(int mode)
+void PicChunk::set_boundary_pack(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
@@ -312,7 +309,7 @@ DEFINE_MEMBER(void, set_boundary_pack)(int mode)
   }
 }
 
-DEFINE_MEMBER(void, set_boundary_unpack)(int mode)
+void PicChunk::set_boundary_unpack(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
@@ -344,7 +341,7 @@ DEFINE_MEMBER(void, set_boundary_unpack)(int mode)
   this->set_boundary_field(mode);
 }
 
-DEFINE_MEMBER(void, set_boundary_begin)(int mode)
+void PicChunk::set_boundary_begin(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
@@ -373,7 +370,7 @@ DEFINE_MEMBER(void, set_boundary_begin)(int mode)
   }
 }
 
-DEFINE_MEMBER(void, set_boundary_end)(int mode)
+void PicChunk::set_boundary_end(int mode)
 {
   switch (mode) {
   case BoundaryEmf: {
@@ -402,7 +399,7 @@ DEFINE_MEMBER(void, set_boundary_end)(int mode)
   }
 }
 
-DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
+void PicChunk::get_energy(float64& efd, float64& bfd, float64 particle[])
 {
   // clear
   efd = 0.0;
@@ -436,13 +433,13 @@ DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
   }
 }
 
-DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
+void PicChunk::get_diverror(float64& efd, float64& bfd)
 {
   pic_engine::Maxwell<this_type> maxwell;
   std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
-DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
+void PicChunk::sort_particle(ParticleVec& particle)
 {
   for (int is = 0; is < particle.size(); is++) {
     count_particle(particle[is], 0, particle[is]->Np - 1, true);
@@ -450,7 +447,7 @@ DEFINE_MEMBER(void, sort_particle)(ParticleVec& particle)
   }
 }
 
-DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool reset)
+void PicChunk::count_particle(ParticlePtr particle, int Lbp, int Ubp, bool reset)
 {
   const int O = order;
 
@@ -458,7 +455,7 @@ DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool
   position.count(O, *this, get_internal_data(), particle, Lbp, Ubp, reset);
 }
 
-DEFINE_MEMBER(void, push_position)(const float64 delt)
+void PicChunk::push_position(const float64 delt)
 {
   auto      mode = option["vectorization"]["position"].get<std::string>();
   const int V    = "vector" == mode;
@@ -468,7 +465,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   position(V, O, *this, get_internal_data(), delt);
 }
 
-DEFINE_MEMBER(void, push_velocity)(const float64 delt)
+void PicChunk::push_velocity(const float64 delt)
 {
   auto      mode = option["vectorization"]["velocity"].get<std::string>();
   const int V    = "vector" == mode;
@@ -481,7 +478,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   velocity(V, D, O, P, I, *this, get_internal_data(), delt);
 }
 
-DEFINE_MEMBER(void, deposit_current)(const float64 delt)
+void PicChunk::deposit_current(const float64 delt)
 {
   auto      mode = option["vectorization"]["current"].get<std::string>();
   const int V    = "vector" == mode;
@@ -492,7 +489,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   current(V, D, O, *this, get_internal_data(), delt);
 }
 
-DEFINE_MEMBER(void, deposit_moment)()
+void PicChunk::deposit_moment()
 {
   auto      mode = option["vectorization"]["moment"].get<std::string>();
   const int V    = "vector" == mode;
@@ -503,7 +500,7 @@ DEFINE_MEMBER(void, deposit_moment)()
   moment(V, D, O, *this, get_internal_data());
 }
 
-DEFINE_MEMBER(void, push_efd)(float64 delt)
+void PicChunk::push_efd(float64 delt)
 {
   const int D = dimension;
 
@@ -511,15 +508,13 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
   maxwell.push_efd(D, *this, get_internal_data(), delt);
 }
 
-DEFINE_MEMBER(void, push_bfd)(float64 delt)
+void PicChunk::push_bfd(float64 delt)
 {
   const int D = dimension;
 
   pic_engine::Maxwell<this_type> maxwell;
   maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
-
-#undef DEFINE_MEMBER
 
 // Local Variables:
 // c-file-style   : "gnu"

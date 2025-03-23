@@ -2,7 +2,7 @@
 project(pic CXX)
 
 # build static library
-add_library(pic STATIC pic_chunk.cpp)
+add_library(pic STATIC pic_chunk.cpp pic_application.cpp)
 
 # include directory
 target_include_directories(pic PRIVATE ${PICNIX_DIR})

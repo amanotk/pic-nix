@@ -2,6 +2,7 @@
 
 #include "nix/random.hpp"
 #include "pic_application.hpp"
+#include "pic_chunk.hpp"
 
 class MainApplication;
 
@@ -533,19 +534,19 @@ public:
   }
 };
 
-class MainApplication : public PicApplication<MainChunk>
+class MainApplication : public PicApplication
 {
 public:
-  using PicApplication<MainChunk>::PicApplication; // inherit constructors
+  using PicApplication::PicApplication; // inherit constructors
 
   PtrChunkMap create_chunkmap() override
   {
-    auto ptr = PicApplication<MainChunk>::create_chunkmap();
+    auto ptr = PicApplication::create_chunkmap();
     ptr->set_periodicity(1, 1, 0); // set non-periodic in x
     return ptr;
   }
 
-  std::unique_ptr<MainChunk> create_chunk(const int dims[], const bool has_dim[], int id) override
+  std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[], int id) override
   {
     return std::make_unique<MainChunk>(dims, has_dim, id);
   }
