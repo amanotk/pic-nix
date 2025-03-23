@@ -10,7 +10,7 @@
 namespace engine
 {
 template <int Dim, int Order>
-class Current
+class BaseCurrent
 {
 public:
   static constexpr int Sx     = Order + 3;
@@ -39,7 +39,7 @@ public:
   float64 zmin;
 
   template <typename T_data>
-  Current(const T_data& data, bool has_dim[3])
+  BaseCurrent(const T_data& data, bool has_dim[3])
   {
     has_xdim = has_dim[2];
     has_ydim = has_dim[1];
@@ -427,10 +427,10 @@ public:
 };
 
 template <int Dim, int Order>
-class ScalarCurrent : public Current<Dim, Order>
+class ScalarCurrent : public BaseCurrent<Dim, Order>
 {
 public:
-  using Current<Dim, Order>::Current; // inherit constructor
+  using BaseCurrent<Dim, Order>::BaseCurrent; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uj, float64 delt)
@@ -440,10 +440,10 @@ public:
 };
 
 template <int Dim, int Order>
-class VectorCurrent : public Current<Dim, Order>
+class VectorCurrent : public BaseCurrent<Dim, Order>
 {
 public:
-  using Current<Dim, Order>::Current; // inherit constructor
+  using BaseCurrent<Dim, Order>::BaseCurrent; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uj, float64 delt)

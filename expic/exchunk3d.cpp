@@ -3,9 +3,9 @@
 
 #include "engine.hpp"
 
-#define DEFINE_MEMBER(type, name) type ExChunk3D::name
+#define DEFINE_MEMBER(type, name) type PicChunk::name
 
-DEFINE_MEMBER(, ExChunk3D)
+DEFINE_MEMBER(, PicChunk)
 (const int dims[3], const bool has_dim[3], int id) : Chunk(dims, has_dim, id), Ns(1)
 {
   // check dimension
@@ -261,7 +261,7 @@ DEFINE_MEMBER(void, setup)(json& config)
 
 DEFINE_MEMBER(void, init_friedman)()
 {
-  engine::MaxwellEngine<this_type> maxwell;
+  engine::Maxwell<this_type> maxwell;
   maxwell.init_friedman(*this, get_internal_data());
 }
 
@@ -438,7 +438,7 @@ DEFINE_MEMBER(void, get_energy)(float64& efd, float64& bfd, float64 particle[])
 
 DEFINE_MEMBER(void, get_diverror)(float64& efd, float64& bfd)
 {
-  engine::MaxwellEngine<this_type> maxwell;
+  engine::Maxwell<this_type> maxwell;
   std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
@@ -454,7 +454,7 @@ DEFINE_MEMBER(void, count_particle)(ParticlePtr particle, int Lbp, int Ubp, bool
 {
   const int O = order;
 
-  engine::PositionEngine<this_type> position;
+  engine::Position<this_type> position;
   position.count(O, *this, get_internal_data(), particle, Lbp, Ubp, reset);
 }
 
@@ -464,7 +464,7 @@ DEFINE_MEMBER(void, push_position)(const float64 delt)
   const int V    = "vector" == mode;
   const int O    = order;
 
-  engine::PositionEngine<this_type> position;
+  engine::Position<this_type> position;
   position(V, O, *this, get_internal_data(), delt);
 }
 
@@ -477,7 +477,7 @@ DEFINE_MEMBER(void, push_velocity)(const float64 delt)
   const int P    = option["pusher"].get<int>();
   const int I    = option["interpolation"].get<int>();
 
-  engine::VelocityEngine<this_type> velocity;
+  engine::Velocity<this_type> velocity;
   velocity(V, D, O, P, I, *this, get_internal_data(), delt);
 }
 
@@ -488,7 +488,7 @@ DEFINE_MEMBER(void, deposit_current)(const float64 delt)
   const int D    = dimension;
   const int O    = order;
 
-  engine::CurrentEngine<this_type> current;
+  engine::Current<this_type> current;
   current(V, D, O, *this, get_internal_data(), delt);
 }
 
@@ -499,7 +499,7 @@ DEFINE_MEMBER(void, deposit_moment)()
   const int D    = dimension;
   const int O    = order;
 
-  engine::MomentEngine<this_type> moment;
+  engine::Moment<this_type> moment;
   moment(V, D, O, *this, get_internal_data());
 }
 
@@ -507,7 +507,7 @@ DEFINE_MEMBER(void, push_efd)(float64 delt)
 {
   const int D = dimension;
 
-  engine::MaxwellEngine<this_type> maxwell;
+  engine::Maxwell<this_type> maxwell;
   maxwell.push_efd(D, *this, get_internal_data(), delt);
 }
 
@@ -515,7 +515,7 @@ DEFINE_MEMBER(void, push_bfd)(float64 delt)
 {
   const int D = dimension;
 
-  engine::MaxwellEngine<this_type> maxwell;
+  engine::Maxwell<this_type> maxwell;
   maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
 

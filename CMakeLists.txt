@@ -17,14 +17,6 @@ if(MPI_THREAD_MULTIPLE)
     add_compile_definitions(HAS_MPI_THREAD_MULTIPLE)
 endif()
 
-# order of particle shape function
-set(PICNIX_SHAPE_ORDER 2 CACHE STRING "Order of particle shape function")
-add_compile_definitions(PICNIX_SHAPE_ORDER=${PICNIX_SHAPE_ORDER})
-
-if(NOT(PICNIX_SHAPE_ORDER GREATER_EQUAL 1 AND PICNIX_SHAPE_ORDER LESS_EQUAL 4))
-  message(FATAL_ERROR "PICNIX_SHAPE_ORDER must be between 1 and 4.")
-endif()
-
 # nix as an external project
 include(FetchContent)
 

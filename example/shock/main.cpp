@@ -5,7 +5,7 @@
 
 class MainApplication;
 
-class MainChunk : public ExChunk3D
+class MainChunk : public PicChunk
 {
 private:
   using MJ = nix::MaxwellJuttner;
@@ -14,7 +14,7 @@ private:
   nix::rand_uniform uniform;
 
 public:
-  using ExChunk3D::ExChunk3D; // inherit constructors
+  using PicChunk::PicChunk; // inherit constructors
 
   void reset_random_number()
   {
@@ -55,7 +55,7 @@ public:
 
   virtual void setup(json& config) override
   {
-    ExChunk3D::setup(config);
+    PicChunk::setup(config);
 
     cc = 1.0;
     Ns = 2;
@@ -533,14 +533,14 @@ public:
   }
 };
 
-class MainApplication : public ExPIC3D<MainChunk>
+class MainApplication : public PicApplication<MainChunk>
 {
 public:
-  using ExPIC3D<MainChunk>::ExPIC3D; // inherit constructors
+  using PicApplication<MainChunk>::PicApplication; // inherit constructors
 
   PtrChunkMap create_chunkmap() override
   {
-    auto ptr = ExPIC3D<MainChunk>::create_chunkmap();
+    auto ptr = PicApplication<MainChunk>::create_chunkmap();
     ptr->set_periodicity(1, 1, 0); // set non-periodic in x
     return ptr;
   }

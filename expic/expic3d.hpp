@@ -1,6 +1,6 @@
 // -*- C++ -*-
-#ifndef _EXPIC3D_HPP_
-#define _EXPIC3D_HPP_
+#ifndef _PIC_APPLICATION_HPP_
+#define _PIC_APPLICATION_HPP_
 
 #include "diagnoser.hpp"
 #include "exchunk3d.hpp"
@@ -27,10 +27,10 @@ using nix::Logger;
 /// virtual method diagnostic().
 ///
 template <typename Chunk>
-class ExPIC3D : public nix::Application<Chunk, nix::ChunkMap<3>>
+class PicApplication : public nix::Application<Chunk, nix::ChunkMap<3>>
 {
 public:
-  using this_type     = ExPIC3D<Chunk>;
+  using this_type     = PicApplication<Chunk>;
   using base_type     = nix::Application<Chunk, nix::ChunkMap<3>>;
   using chunk_type    = Chunk;
   using DiagnoserType = Diagnoser<this_type, typename base_type::InternalData>;
@@ -92,7 +92,7 @@ protected:
   }
 
 public:
-  ExPIC3D(int argc, char** argv);
+  PicApplication(int argc, char** argv);
 
   virtual json to_json() override;
 
@@ -154,9 +154,9 @@ public:
 
 #define DEFINE_MEMBER(type, name)                                                                  \
   template <typename Chunk>                                                                        \
-  type ExPIC3D<Chunk>::name
+  type PicApplication<Chunk>::name
 
-DEFINE_MEMBER(, ExPIC3D)
+DEFINE_MEMBER(, PicApplication)
 (int argc, char** argv) : base_type(argc, argv), Ns(1), momstep(-1)
 {
 }

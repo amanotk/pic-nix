@@ -9,7 +9,7 @@
 namespace engine
 {
 template <int Dim, int Order>
-class Moment
+class BaseMoment
 {
 public:
   static constexpr int Sx       = Order + 1;
@@ -53,7 +53,7 @@ public:
   float64 zmin;
 
   template <typename T_data>
-  Moment(const T_data& data, bool has_dim[3])
+  BaseMoment(const T_data& data, bool has_dim[3])
   {
     has_xdim = has_dim[2];
     has_ydim = has_dim[1];
@@ -426,10 +426,10 @@ public:
 };
 
 template <int Dim, int Order>
-class ScalarMoment : public Moment<Dim, Order>
+class ScalarMoment : public BaseMoment<Dim, Order>
 {
 public:
-  using Moment<Dim, Order>::Moment; // inherit constructor
+  using BaseMoment<Dim, Order>::BaseMoment; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& um)
@@ -439,10 +439,10 @@ public:
 };
 
 template <int Dim, int Order>
-class VectorMoment : public Moment<Dim, Order>
+class VectorMoment : public BaseMoment<Dim, Order>
 {
 public:
-  using Moment<Dim, Order>::Moment; // inherit constructor
+  using BaseMoment<Dim, Order>::BaseMoment; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& um)

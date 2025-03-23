@@ -28,7 +28,7 @@ static const char* PusherName[PusherSize] = {"Boris", "Vay", "HigueraCary"};
 static const char* InterpName[InterpSize] = {"MC", "WT"};
 
 template <int Dim, int Order, int Pusher, int Interp>
-class Velocity
+class BaseVelocity
 {
 public:
   static constexpr int Sx     = Order + 2;
@@ -59,7 +59,7 @@ public:
   float64 zmin;
 
   template <typename T_data>
-  Velocity(const T_data& data, bool has_dim[3])
+  BaseVelocity(const T_data& data, bool has_dim[3])
   {
     has_xdim = has_dim[2];
     has_ydim = has_dim[1];
@@ -540,10 +540,10 @@ public:
 };
 
 template <int Dim, int Order, int Pusher, int Interp>
-class ScalarVelocity : public Velocity<Dim, Order, Pusher, Interp>
+class ScalarVelocity : public BaseVelocity<Dim, Order, Pusher, Interp>
 {
 public:
-  using Velocity<Dim, Order, Pusher, Interp>::Velocity; // inherit constructor
+  using BaseVelocity<Dim, Order, Pusher, Interp>::BaseVelocity; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uf, float64 delt)
@@ -553,10 +553,10 @@ public:
 };
 
 template <int Dim, int Order, int Pusher, int Interp>
-class VectorVelocity : public Velocity<Dim, Order, Pusher, Interp>
+class VectorVelocity : public BaseVelocity<Dim, Order, Pusher, Interp>
 {
 public:
-  using Velocity<Dim, Order, Pusher, Interp>::Velocity; // inherit constructor
+  using BaseVelocity<Dim, Order, Pusher, Interp>::BaseVelocity; // inherit constructor
 
   template <typename T_particle, typename T_array>
   void operator()(T_particle& up, T_array& uf, float64 delt)

@@ -22,22 +22,22 @@ constexpr int  OrderSize        = 4;
 constexpr auto supported_orders = std::integer_sequence<int, 1, 2, 3, 4>{};
 
 template <typename T_chunk>
-class MaxwellEngine
+class Maxwell
 {
 public:
   using T_data = typename T_chunk::data_type;
 
   void init_friedman(T_chunk& chunk, const T_data& data) const
   {
-    Maxwell maxwell(data);
+    BaseMaxwell maxwell(data);
     maxwell.init_friedman(data.uf, data.ff);
   }
 
   auto get_diverror(int dimension, T_chunk& chunk, const T_data& data) const
   {
-    Maxwell maxwell(data);
-    float64 efderr = 0.0;
-    float64 bfderr = 0.0;
+    BaseMaxwell maxwell(data);
+    float64     efderr = 0.0;
+    float64     bfderr = 0.0;
 
     int xbuffer[2] = {0, 0};
     int ybuffer[2] = {0, 0};
@@ -90,7 +90,7 @@ public:
 
   void push_efd(int dimension, T_chunk& chunk, const T_data& data, float64 delt) const
   {
-    Maxwell maxwell(data);
+    BaseMaxwell maxwell(data);
 
     if (dimension == 1) {
       maxwell.push_efd_1d(data.uf, data.uj, data.ff, delt);
@@ -107,7 +107,7 @@ public:
 
   void push_bfd(int dimension, T_chunk& chunk, const T_data& data, float64 delt) const
   {
-    Maxwell maxwell(data);
+    BaseMaxwell maxwell(data);
 
     if (dimension == 1) {
       maxwell.push_bfd_1d(data.uf, data.uj, data.ff, delt);
@@ -124,7 +124,7 @@ public:
 };
 
 template <typename T_chunk>
-class CurrentEngine
+class Current
 {
 private:
   static constexpr int size_table = 2 * DimensionSize * OrderSize;
@@ -195,7 +195,7 @@ public:
 };
 
 template <typename T_chunk>
-class MomentEngine
+class Moment
 {
 private:
   static constexpr int size_table = 2 * DimensionSize * OrderSize;
@@ -265,7 +265,7 @@ public:
 };
 
 template <typename T_chunk>
-class PositionEngine
+class Position
 {
 private:
   static constexpr int size_table = 2;
@@ -326,14 +326,15 @@ public:
   void count(int order, T_chunk& chunk, const T_data& data, T_particle particle, int Lbp, int Ubp,
              bool reset) const
   {
-    bool     has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
-    Position position(data);
+    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+
+    BasePosition position(data);
     position.count(particle, Lbp, Ubp, reset, order, has_dim);
   }
 };
 
 template <typename T_chunk>
-class VelocityEngine
+class Velocity
 {
 private:
   static constexpr int size_table = 2 * DimensionSize * OrderSize * PusherSize * InterpSize;

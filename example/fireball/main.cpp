@@ -36,14 +36,14 @@ static int count_cell_within_fireball(Range zrange, Range yrange, Range xrange, 
   return count;
 }
 
-class MainChunk : public ExChunk3D
+class MainChunk : public PicChunk
 {
 public:
-  using ExChunk3D::ExChunk3D; // inherit constructors
+  using PicChunk::PicChunk; // inherit constructors
 
   virtual void setup(json& config) override
   {
-    ExChunk3D::setup(config);
+    PicChunk::setup(config);
 
     // check validity of assumptions
     {
@@ -224,10 +224,10 @@ public:
   }
 };
 
-class MainApplication : public ExPIC3D<MainChunk>
+class MainApplication : public PicApplication<MainChunk>
 {
 public:
-  using ExPIC3D<MainChunk>::ExPIC3D; // inherit constructors
+  using PicApplication<MainChunk>::PicApplication; // inherit constructors
 
   std::unique_ptr<MainChunk> create_chunk(const int dims[], const bool has_dim[], int id) override
   {

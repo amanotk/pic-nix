@@ -7,7 +7,7 @@
 namespace engine
 {
 
-class Maxwell
+class BaseMaxwell
 {
 public:
   int     boundary_margin;
@@ -25,7 +25,7 @@ public:
   float64 theta;
 
   template <typename T_data>
-  Maxwell(const T_data& data)
+  BaseMaxwell(const T_data& data)
   {
     boundary_margin = data.boundary_margin;
     lbx             = data.Lbx;

@@ -7,7 +7,7 @@
 
 namespace engine
 {
-class Position
+class BasePosition
 {
 public:
   int     ns;
@@ -32,7 +32,7 @@ public:
   float64 zmax;
 
   template <typename T_data>
-  Position(const T_data& data)
+  BasePosition(const T_data& data)
   {
     ns       = data.Ns;
     cc       = data.cc;
@@ -180,13 +180,10 @@ public:
   }
 };
 
-class ScalarPosition : public Position
+class ScalarPosition : public BasePosition
 {
 public:
-  template <typename T_data>
-  ScalarPosition(const T_data& data) : Position(data)
-  {
-  }
+  using BasePosition::BasePosition; // inherit constructor
 
   template <typename T_particle>
   void operator()(const T_particle& up, const float64 delt)
@@ -195,13 +192,10 @@ public:
   }
 };
 
-class VectorPosition : public Position
+class VectorPosition : public BasePosition
 {
 public:
-  template <typename T_data>
-  VectorPosition(const T_data& data) : Position(data)
-  {
-  }
+  using BasePosition::BasePosition; // inherit constructor
 
   template <typename T_particle>
   void operator()(const T_particle& up, const float64 delt)

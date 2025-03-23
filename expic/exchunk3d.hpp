@@ -1,6 +1,6 @@
 // -*- C++ -*-
-#ifndef _EXCHUNK3D_HPP_
-#define _EXCHUNK3D_HPP_
+#ifndef _PIC_CHUNK_HPP_
+#define _PIC_CHUNK_HPP_
 
 #include "nix/buffer.hpp"
 #include "nix/chunk3d.hpp"
@@ -41,10 +41,10 @@ using ParticleType = nix::ParticlePtr::element_type;
 /// In addition, custom diagnostics routines may also be implemented depending on the needs of
 /// applications.
 ///
-class ExChunk3D : public nix::Chunk3D<ParticleType>
+class PicChunk : public nix::Chunk3D<ParticleType>
 {
 public:
-  using this_type    = ExChunk3D;
+  using this_type    = PicChunk;
   using Chunk        = typename nix::Chunk3D<ParticleType>;
   using MpiBuffer    = typename Chunk::MpiBuffer;
   using MpiBufferPtr = typename Chunk::MpiBufferPtr;
@@ -156,7 +156,7 @@ protected:
 public:
   using data_type = InternalData;
 
-  ExChunk3D(const int dims[3], const bool has_dim[3], int id = 0);
+  PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
 
   virtual int64_t get_size_byte() override;
 
