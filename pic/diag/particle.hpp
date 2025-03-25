@@ -12,12 +12,12 @@ using ParticleType = nix::ParticlePtr::element_type;
 ///
 /// @brief Diagnostic for particle
 ///
-template <typename App, typename Data>
-class ParticleDiag : public ParallelDiag<App, Data>
+class ParticleDiag : public ParallelDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
+public:
+  static constexpr const char* diag_name = "particle";
 
+protected:
   // data packer for particle
   template <typename BasePacker>
   class ParticlePacker : public BasePacker
@@ -64,17 +64,19 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("particle", info)
+  ParticleDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : ParallelDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+    auto Ns   = application.get_num_species();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
-
-    const int Ns = this->get_num_species();
 
     size_t      disp    = 0;
     json        dataset = {};

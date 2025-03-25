@@ -12,7 +12,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR})
 
 # link library
 target_link_libraries(${PROJECT_NAME} std::filesystem)
-target_link_libraries(${PROJECT_NAME} nix pic)
+target_link_libraries(${PROJECT_NAME} pic nix)
 
 # copy
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/config.toml DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

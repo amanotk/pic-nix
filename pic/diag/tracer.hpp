@@ -2,22 +2,25 @@
 #ifndef _TRACER_DIAG_HPP_
 #define _TRACER_DIAG_HPP_
 
+#include "nix/random.hpp"
+#include "nix/xtensor_packer3d.hpp"
 #include "nix/xtensor_particle.hpp"
 #include "parallel.hpp"
 
 using nix::ParticlePtr;
 using nix::ParticleVec;
 using ParticleType = nix::ParticlePtr::element_type;
+using nix::XtensorPacker3D;
 
 ///
 /// @brief Diagnostic for picking up tracer
 ///
-template <typename App, typename Data>
-class PickupTracerDiag : public BaseDiag<App, Data>
+class PickupTracerDiag : public PicDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
+public:
+  static constexpr const char* diag_name = "pickup_tracer";
 
+protected:
   // dummy data packer for pickup tracer
   template <typename BasePacker>
   class PickupTracerPacker : public BasePacker
@@ -80,13 +83,16 @@ protected:
 
 public:
   // constructor
-  PickupTracerDiag(std::shared_ptr<DiagInfo> info) : BaseDiag<App, Data>("pickup_tracer", info)
+  PickupTracerDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : PicDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
@@ -101,12 +107,12 @@ public:
 ///
 /// @brief Diagnostic for tracer
 ///
-template <typename App, typename Data>
-class TracerDiag : public ParallelDiag<App, Data>
+class TracerDiag : public ParallelDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
+public:
+  static constexpr const char* diag_name = "tracer";
 
+protected:
   // data packer for particle
   template <typename BasePacker>
   class TracerPacker : public BasePacker
@@ -131,13 +137,16 @@ protected:
 
 public:
   // constructor
-  TracerDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("tracer", info)
+  TracerDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : ParallelDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 

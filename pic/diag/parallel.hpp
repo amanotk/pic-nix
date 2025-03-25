@@ -2,7 +2,10 @@
 #ifndef _PARALLEL_DIAG_HPP_
 #define _PARALLEL_DIAG_HPP_
 
-#include "base.hpp"
+#include "pic.hpp"
+#include "pic_diag.hpp"
+
+using nix::Buffer;
 
 class ParallelHandler
 {
@@ -210,17 +213,16 @@ public:
   }
 };
 
-template <typename App, typename Data>
-class ParallelDiag : public BaseDiag<App, Data>
+class ParallelDiag : public PicDiag
 {
 protected:
   std::unique_ptr<ParallelHandler> handler;
-  std::vector<Buffer>           buffer;
+  std::vector<Buffer>              buffer;
 
   // check if the diagnostic is required
   bool require_diagnostic(int curstep, json& config)
   {
-    bool status    = BaseDiag<App, Data>::require_diagnostic(curstep, config);
+    bool status    = PicDiag::require_diagnostic(curstep, config);
     bool completed = handler->is_completed();
 
     if (status == true) {
@@ -240,8 +242,9 @@ protected:
 
 public:
   // constructor
-  ParallelDiag(std::string name, std::shared_ptr<DiagInfo> info, int size = 0)
-      : BaseDiag<App, Data>(name, info)
+  ParallelDiag(std::string name, app_type& application, std::shared_ptr<DiagInfo> info,
+               int size = 0)
+      : PicDiag(name, application, info)
   {
     // create handler
     if (info->iomode == "mpiio") {
@@ -288,7 +291,7 @@ public:
     return handler->test_all();
   }
 
-  std::vector<int> get_chunk_id_range(Data& data)
+  std::vector<int> get_chunk_id_range(data_type& data)
   {
     int id_min = std::numeric_limits<int>::max();
     int id_max = std::numeric_limits<int>::min();
@@ -305,7 +308,7 @@ public:
 
   // queue write request
   template <typename DataPacker>
-  size_t queue(DataPacker packer, Data& data, size_t& disp)
+  size_t queue(DataPacker packer, data_type& data, size_t& disp)
   {
     size_t bufsize = 0;
 

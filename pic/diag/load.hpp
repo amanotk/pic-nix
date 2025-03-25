@@ -7,12 +7,12 @@
 ///
 /// @brief Diagnostic for computational work load
 ///
-template <typename App, typename Data>
-class LoadDiag : public ParallelDiag<App, Data>
+class LoadDiag : public ParallelDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
+public:
+  static constexpr const char* diag_name = "load";
 
+protected:
   // data packer for load
   class LoadPacker
   {
@@ -66,13 +66,16 @@ protected:
 
 public:
   /// constructor
-  LoadDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("load", info)
+  LoadDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : ParallelDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 

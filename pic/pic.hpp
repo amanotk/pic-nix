@@ -6,10 +6,11 @@
 
 #include "nix/buffer.hpp"
 #include "nix/debug.hpp"
+#include "nix/diag.hpp"
 
-#include "nix/xtensorall.hpp"
 #include "nix/xtensor_halo3d.hpp"
 #include "nix/xtensor_particle.hpp"
+#include "nix/xtensorall.hpp"
 
 using namespace nix::typedefs;
 using namespace nix::primitives;
@@ -18,8 +19,10 @@ using nix::ParticlePtr;
 using nix::ParticleVec;
 using ParticleType = nix::ParticlePtr::element_type;
 
-class PicChunk;       // forward declaration of Chunk type
-class PicApplication; // forward declaration of Application type
+class PicChunk;                 // forward declaration of Chunk type
+class PicApplication;           // forward declaration of Application type
+class PicDiag;                  // forward declaration of Diag type
+using DiagInfo = nix::DiagInfo; // alias for DiagInfo type
 
 // mode for load
 enum LoadMode {

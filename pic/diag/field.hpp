@@ -2,17 +2,21 @@
 #ifndef _FIELD_DIAG_HPP_
 #define _FIELD_DIAG_HPP_
 
+#include "nix/xtensor_packer3d.hpp"
+
 #include "parallel.hpp"
+
+using nix::XtensorPacker3D;
 
 ///
 /// @brief Diagnostic for field
 ///
-template <typename App, typename Data>
-class FieldDiag : public ParallelDiag<App, Data>
+class FieldDiag : public ParallelDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
+public:
+  static constexpr const char* diag_name = "field";
 
+protected:
   // data packer for electromagnetic field
   template <typename BasePacker>
   class FieldPacker : public BasePacker
@@ -43,20 +47,23 @@ protected:
 
 public:
   // constructor
-  FieldDiag(std::shared_ptr<DiagInfo> info) : ParallelDiag<App, Data>("field", info)
+  FieldDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : ParallelDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+    auto Ns   = application.get_num_species();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
     const int nz = data.ndims[0] / data.cdims[0];
     const int ny = data.ndims[1] / data.cdims[1];
     const int nx = data.ndims[2] / data.cdims[2];
-    const int Ns = this->get_num_species();
 
     size_t      disp    = 0;
     json        dataset = {};
@@ -90,7 +97,7 @@ public:
     //
     // moment
     //
-    app.calculate_moment();
+    application.calculate_moment();
     {
       // data
       auto   packer = MomentPacker<XtensorPacker3D>();

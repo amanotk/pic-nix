@@ -2,11 +2,9 @@
 #ifndef _PIC_APPLICATION_HPP_
 #define _PIC_APPLICATION_HPP_
 
-#include "pic.hpp"
-
 #include "nix/application.hpp"
 
-#include "diagnoser.hpp"
+#include "pic.hpp"
 
 ///
 /// @brief Application for 3D Explicit PIC Simulations
@@ -20,17 +18,17 @@
 /// chunk instance. In addition, custom diagnostics routines may also be implemented through the
 /// virtual method diagnostic().
 ///
-class PicApplication : public nix::Application<PicChunk>
+class PicApplication : public nix::Application<PicChunk, PicDiag>
 {
 public:
   using this_type     = PicApplication;
   using chunk_type    = PicChunk;
-  using base_type     = nix::Application<PicChunk>;
-  using DiagnoserType = Diagnoser<this_type, typename base_type::InternalData>;
-  using PtrDiagnoser  = std::unique_ptr<DiagnoserType>;
+  using base_type     = nix::Application<PicChunk, PicDiag>;
   using MpiCommVec    = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
   PicApplication(int argc, char** argv);
+
+  virtual int get_num_species() const;
 
   virtual void calculate_moment();
 
@@ -38,19 +36,14 @@ protected:
   int          Ns;         ///< number of species
   int          momstep;    ///< step at which moment quantities are cached
   MpiCommVec   mpicommvec; ///< MPI Communicators
-  PtrDiagnoser diagnoser;  ///< diagnostic handler
-
-  // template dependent factory method for creating diagnoser
-  virtual std::unique_ptr<DiagnoserType> create_diagnoser()
-  {
-    return std::make_unique<DiagnoserType>(this->get_basedir(), this->get_iomode(), this->Ns);
-  }
 
   // factory method for creating a chunk
   virtual std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[],
                                                    int id) override = 0;
 
   virtual void initialize(int argc, char** argv) override;
+
+  virtual void initialize_diagnostic() override;
 
   virtual void set_chunk_communicator();
 
@@ -67,8 +60,6 @@ protected:
   virtual json to_json() override;
 
   virtual bool from_json(json& state) override;
-
-  virtual void diagnostic() override;
 
   virtual void push() override;
 

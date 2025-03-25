@@ -3,6 +3,7 @@
 #include "nix/random.hpp"
 #include "pic_application.hpp"
 #include "pic_chunk.hpp"
+#include "pic_diag.hpp"
 
 class MainApplication;
 

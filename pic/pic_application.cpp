@@ -1,11 +1,24 @@
 // -*- C++ -*-
 #include "pic_application.hpp"
 #include "pic_chunk.hpp"
+#include "pic_diag.hpp"
+
+#include "diag/field.hpp"
+#include "diag/history.hpp"
+#include "diag/load.hpp"
+#include "diag/particle.hpp"
+#include "diag/resource.hpp"
+#include "diag/tracer.hpp"
 
 #include <taskflow/taskflow.hpp>
 
 PicApplication::PicApplication(int argc, char** argv) : base_type(argc, argv), Ns(1), momstep(-1)
 {
+}
+
+int PicApplication::get_num_species() const
+{
+  return Ns;
 }
 
 void PicApplication::calculate_moment()
@@ -32,13 +45,6 @@ void PicApplication::initialize(int argc, char** argv)
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
 
-  // diagnostics
-  diagnoser = create_diagnoser();
-
-  if (cfgparser->get_diagnostic().is_array() == false) {
-    ERROR << tfm::format("Invalid diagnostic");
-  }
-
   // initialize communicators
   for (int mode = 0; mode < NumBoundaryMode; mode++) {
     for (int iz = 0; iz < 3; iz++) {
@@ -49,6 +55,23 @@ void PicApplication::initialize(int argc, char** argv)
       }
     }
   }
+}
+
+void PicApplication::initialize_diagnostic()
+{
+  if (cfgparser->get_diagnostic().is_array() == false) {
+    ERROR << tfm::format("Invalid diagnostic");
+  }
+
+  auto info = std::make_shared<DiagInfo>(get_basedir(), get_iomode());
+
+  diagvec.push_back(std::make_unique<HistoryDiag>(*this, info));
+  diagvec.push_back(std::make_unique<ResourceDiag>(*this, info));
+  diagvec.push_back(std::make_unique<LoadDiag>(*this, info));
+  diagvec.push_back(std::make_unique<FieldDiag>(*this, info));
+  diagvec.push_back(std::make_unique<ParticleDiag>(*this, info));
+  diagvec.push_back(std::make_unique<PickupTracerDiag>(*this, info));
+  diagvec.push_back(std::make_unique<TracerDiag>(*this, info));
 }
 
 void PicApplication::set_chunk_communicator()
@@ -111,9 +134,6 @@ void PicApplication::finalize()
     }
   }
 
-  // free diagnoser (internal MPI communicator)
-  diagnoser.reset();
-
   // finalize
   base_type::finalize();
 }
@@ -155,27 +175,6 @@ bool PicApplication::from_json(json& state)
   momstep = state["momstep"];
 
   return true;
-}
-
-void PicApplication::diagnostic()
-{
-  DEBUG2 << "diagnostic() start";
-  float64 wclock1 = nix::wall_clock();
-
-  json config = cfgparser->get_diagnostic();
-  auto data   = this->get_internal_data();
-
-  for (json::iterator it = config.begin(); it != config.end(); ++it) {
-    diagnoser->diagnose(*it, *this, data);
-  }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  DEBUG2 << "diagnostic() end";
-  float64 wclock2 = nix::wall_clock();
-
-  json log = {{"elapsed", wclock2 - wclock1}};
-  logger->append(curstep, "diagnostic", log);
 }
 
 void PicApplication::push()

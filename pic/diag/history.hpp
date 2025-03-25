@@ -2,36 +2,38 @@
 #ifndef _HISTORY_DIAG_HPP_
 #define _HISTORY_DIAG_HPP_
 
-#include "base.hpp"
+#include "pic_diag.hpp"
 
 ///
 /// @brief Diagnostic for time history
 ///
-template <typename App, typename Data>
-class HistoryDiag : public BaseDiag<App, Data>
+class HistoryDiag : public PicDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
-
 public:
+  static constexpr const char* diag_name = "history";
+  using PicDiag::app_type;
+
   // constructor
-  HistoryDiag(std::shared_ptr<DiagInfo> info) : BaseDiag<App, Data>("history", info)
+  HistoryDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : PicDiag(diag_name, application, info)
   {
   }
 
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+    auto Ns   = application.get_num_species();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
-    const int            Ns = this->get_num_species();
     std::vector<float64> history(Ns + 4);
 
     // clear
     std::fill(history.begin(), history.end(), 0.0);
 
     // calculate moment if not cached
-    app.calculate_moment();
+    application.calculate_moment();
 
     // calculate divergence error and energy
     for (int i = 0; i < data.chunkvec.size(); i++) {

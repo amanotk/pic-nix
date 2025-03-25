@@ -2,17 +2,17 @@
 #ifndef _RESOURCE_DIAG_HPP_
 #define _RESOURCE_DIAG_HPP_
 
-#include "base.hpp"
+#include "pic_diag.hpp"
 
 ///
 /// @brief Diagnostic for resource usage
 ///
-template <typename App, typename Data>
-class ResourceDiag : public BaseDiag<App, Data>
+class ResourceDiag : public PicDiag
 {
-protected:
-  using BaseDiag<App, Data>::info;
+public:
+  static constexpr const char* diag_name = "resource";
 
+protected:
   // calculate statistics
   template <typename T>
   auto statistics(T& data)
@@ -34,12 +34,15 @@ protected:
 
 public:
   // constructor
-  ResourceDiag(std::shared_ptr<DiagInfo> info) : BaseDiag<App, Data>("resource", info)
+  ResourceDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+      : PicDiag(diag_name, application, info)
   {
   }
 
-  void operator()(json& config, App& app, Data& data) override
+  void operator()(json& config) override
   {
+    auto data = application.get_internal_data();
+
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
