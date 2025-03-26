@@ -14,11 +14,10 @@ public:
 
 protected:
   // data packer for load
-  class LoadPacker
+  class LoadPacker : public PicPacker
   {
   public:
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       auto& load = data.load;
 
@@ -37,7 +36,7 @@ protected:
   };
 
   // data packer for rank
-  class RankPacker
+  class RankPacker : public PicPacker
   {
   private:
     int thisrank;
@@ -47,8 +46,7 @@ protected:
     {
     }
 
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       size_t count = sizeof(int) + address;
 
@@ -66,7 +64,7 @@ protected:
 
 public:
   /// constructor
-  LoadDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  LoadDiag(app_type& application, std::shared_ptr<info_type> info)
       : ParallelDiag(diag_name, application, info)
   {
   }

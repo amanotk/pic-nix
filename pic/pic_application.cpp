@@ -63,7 +63,7 @@ void PicApplication::initialize_diagnostic()
     ERROR << tfm::format("Invalid diagnostic");
   }
 
-  auto info = std::make_shared<DiagInfo>(get_basedir(), get_iomode());
+  auto info = std::make_shared<nix::DiagInfo>(get_basedir(), get_iomode());
 
   diagvec.push_back(std::make_unique<HistoryDiag>(*this, info));
   diagvec.push_back(std::make_unique<ResourceDiag>(*this, info));

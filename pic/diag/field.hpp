@@ -2,11 +2,7 @@
 #ifndef _FIELD_DIAG_HPP_
 #define _FIELD_DIAG_HPP_
 
-#include "nix/xtensor_packer3d.hpp"
-
 #include "parallel.hpp"
-
-using nix::XtensorPacker3D;
 
 ///
 /// @brief Diagnostic for field
@@ -18,28 +14,20 @@ public:
 
 protected:
   // data packer for electromagnetic field
-  template <typename BasePacker>
-  class FieldPacker : public BasePacker
+  class FieldPacker : public PicPacker
   {
   public:
-    using BasePacker::pack_field;
-
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       return pack_field(data.uf, data, buffer, address);
     }
   };
 
   // data packer for moment
-  template <typename BasePacker>
-  class MomentPacker : public BasePacker
+  class MomentPacker : public PicPacker
   {
   public:
-    using BasePacker::pack_field;
-
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       return pack_field(data.um, data, buffer, address);
     }
@@ -47,7 +35,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  FieldDiag(app_type& application, std::shared_ptr<info_type> info)
       : ParallelDiag(diag_name, application, info)
   {
   }
@@ -80,7 +68,7 @@ public:
     //
     {
       // data
-      auto   packer = FieldPacker<XtensorPacker3D>();
+      auto   packer = FieldPacker();
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * 6 * sizeof(float64);
       size_t nbyte  = this->queue(packer, data, disp);
@@ -100,7 +88,7 @@ public:
     application.calculate_moment();
     {
       // data
-      auto   packer = MomentPacker<XtensorPacker3D>();
+      auto   packer = MomentPacker();
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * Ns * 14 * sizeof(float64);
       size_t nbyte  = this->queue(packer, data, disp);

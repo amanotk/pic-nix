@@ -12,29 +12,9 @@ class ResourceDiag : public PicDiag
 public:
   static constexpr const char* diag_name = "resource";
 
-protected:
-  // calculate statistics
-  template <typename T>
-  auto statistics(T& data)
-  {
-    // sort
-    std::sort(data.begin(), data.end());
-
-    json stat      = {};
-    stat["min"]    = data.front();
-    stat["max"]    = data.back();
-    stat["mean"]   = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
-    stat["quant1"] = this->percentile(data, 0.25, true);
-    stat["quant2"] = this->percentile(data, 0.50, true);
-    stat["quant3"] = this->percentile(data, 0.75, true);
-    stat["size"]   = data.size();
-
-    return stat;
-  }
-
 public:
   // constructor
-  ResourceDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  ResourceDiag(app_type& application, std::shared_ptr<info_type> info)
       : PicDiag(diag_name, application, info)
   {
   }

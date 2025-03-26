@@ -4,16 +4,15 @@
 
 #include "pic.hpp"
 #include "pic_diag.hpp"
-
-using nix::Buffer;
+#include "pic_packer.hpp"
 
 class ParallelHandler
 {
 protected:
-  std::shared_ptr<DiagInfo> info;
+  std::shared_ptr<nix::DiagInfo> info;
 
 public:
-  ParallelHandler(std::shared_ptr<DiagInfo> info) : info(info)
+  ParallelHandler(std::shared_ptr<nix::DiagInfo> info) : info(info)
   {
   }
 
@@ -35,7 +34,7 @@ public:
 
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) = 0;
 
-  virtual size_t queue(int index, Buffer& buffer, size_t& disp) = 0;
+  virtual size_t queue(int index, nix::Buffer& buffer, size_t& disp) = 0;
 };
 
 class MpiioHandler : public ParallelHandler
@@ -46,7 +45,7 @@ protected:
   std::vector<MPI_Request> request;
 
 public:
-  MpiioHandler(std::shared_ptr<DiagInfo> info) : ParallelHandler(info), is_opened(false)
+  MpiioHandler(std::shared_ptr<nix::DiagInfo> info) : ParallelHandler(info), is_opened(false)
   {
   }
 
@@ -106,7 +105,7 @@ public:
     return std::vector<int>({global_id_min, global_id_max});
   }
 
-  virtual size_t queue(int index, Buffer& buffer, size_t& disp) override
+  virtual size_t queue(int index, nix::Buffer& buffer, size_t& disp) override
   {
     if (request.size() <= index) {
       request.resize(index + 1, MPI_REQUEST_NULL);
@@ -124,7 +123,7 @@ protected:
   std::ofstream file;
 
 public:
-  PosixHandler(std::shared_ptr<DiagInfo> info) : ParallelHandler(info)
+  PosixHandler(std::shared_ptr<nix::DiagInfo> info) : ParallelHandler(info)
   {
   }
 
@@ -185,9 +184,9 @@ public:
     return std::vector<int>({node_id_min, node_id_max});
   }
 
-  virtual size_t queue(int index, Buffer& buffer, size_t& disp) override
+  virtual size_t queue(int index, nix::Buffer& buffer, size_t& disp) override
   {
-    Buffer           totbuf;
+    nix::Buffer      totbuf;
     int              totcnt  = 0;
     int              sendcnt = static_cast<int>(buffer.size);
     std::vector<int> recvcnt(info->intra_size + 1, 0);
@@ -217,10 +216,10 @@ class ParallelDiag : public PicDiag
 {
 protected:
   std::unique_ptr<ParallelHandler> handler;
-  std::vector<Buffer>              buffer;
+  std::vector<nix::Buffer>         buffer;
 
   // check if the diagnostic is required
-  bool require_diagnostic(int curstep, json& config)
+  virtual bool require_diagnostic(int curstep, json& config) override
   {
     bool status    = PicDiag::require_diagnostic(curstep, config);
     bool completed = handler->is_completed();
@@ -242,7 +241,7 @@ protected:
 
 public:
   // constructor
-  ParallelDiag(std::string name, app_type& application, std::shared_ptr<DiagInfo> info,
+  ParallelDiag(std::string name, app_type& application, std::shared_ptr<info_type> info,
                int size = 0)
       : PicDiag(name, application, info)
   {
@@ -307,14 +306,14 @@ public:
   }
 
   // queue write request
-  template <typename DataPacker>
-  size_t queue(DataPacker packer, data_type& data, size_t& disp)
+  size_t queue(PicPacker& packer, data_type& data, size_t& disp)
   {
     size_t bufsize = 0;
 
     // calculate buffer size
     for (int i = 0; i < data.chunkvec.size(); i++) {
-      bufsize += data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
+      auto chunk_data = data.chunkvec[i]->get_internal_data();
+      bufsize += packer(chunk_data, nullptr, 0);
     }
 
     // pack data
@@ -323,7 +322,8 @@ public:
     auto bufptr = buffer[index].get();
 
     for (int i = 0, address = 0; i < data.chunkvec.size(); i++) {
-      address = data.chunkvec[i]->pack_diagnostic(packer, bufptr, address);
+      auto chunk_data = data.chunkvec[i]->get_internal_data();
+      address         = packer(chunk_data, bufptr, address);
     }
 
     // write to the disk

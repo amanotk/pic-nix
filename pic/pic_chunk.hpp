@@ -31,27 +31,13 @@
 ///
 class PicChunk : public nix::Chunk3D<ParticleType>
 {
-protected:
-  struct InternalData; // forward declaration
-
 public:
+  struct InternalData; // forward declaration
   using this_type    = PicChunk;
   using base_type    = typename nix::Chunk3D<ParticleType>;
   using data_type    = InternalData;
   using MpiBuffer    = typename base_type::MpiBuffer;
   using MpiBufferPtr = typename base_type::MpiBufferPtr;
-
-protected:
-  int order;     ///< order of shape function
-  int dimension; ///< dimension of the simulation
-
-  int                     Ns; ///< number of particle species
-  float64                 cc; ///< speed of light
-  xt::xtensor<float64, 4> uf; ///< electromagnetic field
-  xt::xtensor<float64, 4> uj; ///< current density
-  xt::xtensor<float64, 5> um; ///< particle moment
-  xt::xtensor<float64, 5> ff; ///< electric field for Friedmann filter
-  ParticleVec             up; ///< list of particles
 
   ///
   /// @brief internal data struct
@@ -112,6 +98,18 @@ protected:
     // clang-format on
   }
 
+protected:
+  int order;     ///< order of shape function
+  int dimension; ///< dimension of the simulation
+
+  int                     Ns; ///< number of particle species
+  float64                 cc; ///< speed of light
+  xt::xtensor<float64, 4> uf; ///< electromagnetic field
+  xt::xtensor<float64, 4> uj; ///< current density
+  xt::xtensor<float64, 5> um; ///< particle moment
+  xt::xtensor<float64, 5> ff; ///< electric field for Friedmann filter
+  ParticleVec             up; ///< list of particles
+
 public:
   PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
 
@@ -158,12 +156,6 @@ public:
   virtual void push_efd(float64 delt);
 
   virtual void push_bfd(float64 delt);
-
-  template <typename DataPacker>
-  size_t pack_diagnostic(DataPacker packer, uint8_t* buffer, int address)
-  {
-    return packer(get_internal_data(), buffer, address);
-  }
 };
 
 // Local Variables:

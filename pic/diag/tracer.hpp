@@ -3,14 +3,8 @@
 #define _TRACER_DIAG_HPP_
 
 #include "nix/random.hpp"
-#include "nix/xtensor_packer3d.hpp"
-#include "nix/xtensor_particle.hpp"
-#include "parallel.hpp"
 
-using nix::ParticlePtr;
-using nix::ParticleVec;
-using ParticleType = nix::ParticlePtr::element_type;
-using nix::XtensorPacker3D;
+#include "parallel.hpp"
 
 ///
 /// @brief Diagnostic for picking up tracer
@@ -22,8 +16,7 @@ public:
 
 protected:
   // dummy data packer for pickup tracer
-  template <typename BasePacker>
-  class PickupTracerPacker : public BasePacker
+  class PickupTracerPacker : public PicPacker
   {
   private:
     int     species;
@@ -36,8 +29,6 @@ protected:
     float64 fraction;
 
   public:
-    using BasePacker::pack_tracer;
-
     PickupTracerPacker(json& config)
     {
       const float64 minval = -std::numeric_limits<float64>::max();
@@ -53,8 +44,7 @@ protected:
       fraction = config.value("fraction", 0.0);
     }
 
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       std::random_device rd;
       std::mt19937_64    mt(rd());
@@ -83,23 +73,24 @@ protected:
 
 public:
   // constructor
-  PickupTracerDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  PickupTracerDiag(app_type& application, std::shared_ptr<info_type> info)
       : PicDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config) override
+  virtual void operator()(json& config) override
   {
     auto data = application.get_internal_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
-    auto packer = PickupTracerPacker<XtensorPacker3D>(config);
+    auto packer = PickupTracerPacker(config);
 
     for (int i = 0; i < data.chunkvec.size(); i++) {
-      data.chunkvec[i]->pack_diagnostic(packer, nullptr, 0);
+      auto chunk_data = data.chunkvec[i]->get_internal_data();
+      packer(chunk_data, nullptr, 0);
     }
   }
 };
@@ -114,22 +105,18 @@ public:
 
 protected:
   // data packer for particle
-  template <typename BasePacker>
-  class TracerPacker : public BasePacker
+  class TracerPacker : public PicPacker
   {
   private:
     int species;
     int seed;
 
   public:
-    using BasePacker::pack_tracer;
-
     TracerPacker(int species, int seed = 0) : species(species), seed(seed)
     {
     }
 
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       return pack_tracer(data.up[species], buffer, address);
     }
@@ -137,13 +124,13 @@ protected:
 
 public:
   // constructor
-  TracerDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  TracerDiag(app_type& application, std::shared_ptr<info_type> info)
       : ParallelDiag(diag_name, application, info)
   {
   }
 
   // data packing functor
-  void operator()(json& config) override
+  virtual void operator()(json& config) override
   {
     auto data = application.get_internal_data();
 
@@ -164,7 +151,7 @@ public:
       // write particles
       int    species = config.value("species", 0);
       int    seed    = data.thisrank;
-      auto   packer  = TracerPacker<XtensorPacker3D>(species, seed);
+      auto   packer  = TracerPacker(species, seed);
       size_t disp0   = disp;
       size_t nbyte   = this->queue(packer, data, disp);
 

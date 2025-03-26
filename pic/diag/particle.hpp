@@ -2,12 +2,7 @@
 #ifndef _PARTICLE_DIAG_HPP_
 #define _PARTICLE_DIAG_HPP_
 
-#include "nix/xtensor_particle.hpp"
 #include "parallel.hpp"
-
-using nix::ParticlePtr;
-using nix::ParticleVec;
-using ParticleType = nix::ParticlePtr::element_type;
 
 ///
 /// @brief Diagnostic for particle
@@ -19,8 +14,7 @@ public:
 
 protected:
   // data packer for particle
-  template <typename BasePacker>
-  class ParticlePacker : public BasePacker
+  class ParticlePacker : public PicPacker
   {
   private:
     int     species;
@@ -28,8 +22,6 @@ protected:
     float64 fraction;
 
   public:
-    using BasePacker::pack_particle;
-
     ParticlePacker(int species, int seed = 0, float64 fraction = 1.0)
         : species(species), seed(seed), fraction(fraction)
     {
@@ -52,8 +44,7 @@ protected:
       return index;
     }
 
-    template <typename ChunkData>
-    size_t operator()(ChunkData data, uint8_t* buffer, int address)
+    virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       const int N     = data.up[species]->Np;
       const int M     = std::min(static_cast<int>(N * fraction), N);
@@ -64,7 +55,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  ParticleDiag(app_type& application, std::shared_ptr<info_type> info)
       : ParallelDiag(diag_name, application, info)
   {
   }
@@ -95,7 +86,7 @@ public:
       // write particles
       int     seed     = data.thisrank;
       float64 fraction = config.value("fraction", 0.01);
-      auto    packer   = ParticlePacker<XtensorPacker3D>(is, seed, fraction);
+      auto    packer   = ParticlePacker(is, seed, fraction);
       size_t  disp0    = disp;
       size_t  nbyte    = this->queue(packer, data, disp);
 

@@ -14,7 +14,7 @@ public:
   using PicDiag::app_type;
 
   // constructor
-  HistoryDiag(app_type& application, std::shared_ptr<DiagInfo> info)
+  HistoryDiag(app_type& application, std::shared_ptr<info_type> info)
       : PicDiag(diag_name, application, info)
   {
   }
