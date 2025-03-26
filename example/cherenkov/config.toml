@@ -29,7 +29,7 @@
   Ns = 2
   Nx = 128
   Ny = 128
-  Nz = 2
+  Nz = 1
   cc = 1.0
   delh = 0.1
   delt = 0.05

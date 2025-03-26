@@ -30,7 +30,7 @@
 [parameter]
   Nx = 256
   Ny = 256
-  Nz = 2
+  Nz = 1
   Cx = 32
   Cy = 32
   Cz = 1

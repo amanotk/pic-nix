@@ -26,8 +26,8 @@
 
 [parameter]
   Nx = 512
-  Ny = 2
-  Nz = 2
+  Ny = 1
+  Nz = 1
   Cx = 64
   Cy = 1
   Cz = 1
