@@ -26,11 +26,11 @@ class Run(picnix.Run):
 
     def summary(self, step):
         data = self.read_at("field", step)
+        qm = [particle["qm"] for particle in self.config["parameter"]["particle"]]
         xc = self.xc
         yc = self.yc
         uf = data["uf"]
         um = data["um"]
-        uj = data["uj"]
         tt = self.get_time_at("field", step)
         xlim = (0, self.Nx * self.delh)
         ylim = (0, self.Ny * self.delh)
@@ -75,7 +75,9 @@ class Run(picnix.Run):
 
         ## current density
         plt.sca(axs[2])
-        jz = uj[..., 3].mean(axis=(0))
+        jz = np.zeros((self.Ny, self.Nx))
+        for i in range(len(qm)):
+            jz[...] += qm[i] * um[..., i, 3].mean(axis=(0))
         plt.pcolormesh(X, Y, jz, shading="nearest")
         plt.colorbar(cax=cxs[2], orientation="horizontal")
         cxs[2].xaxis.set_ticks_position("top")
