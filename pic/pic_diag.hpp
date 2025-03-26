@@ -48,45 +48,6 @@ public:
   {
     return config.value("prefix", prefix);
   }
-
-  // calculate percentile assuming pre-sorted data
-  template <typename T>
-  auto percentile(T& data, float64 p, bool is_sorted)
-  {
-    int     size  = data.size();
-    int     index = p * (size - 1);
-    float64 frac  = p * (size - 1) - index;
-
-    if (is_sorted == false) {
-      std::sort(data.begin(), data.end());
-    }
-
-    if (index >= 0 && index < size - 1) {
-      // linear interpolation
-      return data[index] * (1 - frac) + data[index + 1] * frac;
-    } else {
-      // error
-      return -1.0;
-    }
-  }
-
-  template <typename T>
-  auto statistics(T& data)
-  {
-    // sort
-    std::sort(data.begin(), data.end());
-
-    json stat      = {};
-    stat["min"]    = data.front();
-    stat["max"]    = data.back();
-    stat["mean"]   = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
-    stat["quant1"] = percentile(data, 0.25, true);
-    stat["quant2"] = percentile(data, 0.50, true);
-    stat["quant3"] = percentile(data, 0.75, true);
-    stat["size"]   = data.size();
-
-    return stat;
-  }
 };
 
 // Local Variables:

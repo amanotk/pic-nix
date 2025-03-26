@@ -12,3 +12,4 @@ compiler.mk
 nix
 build
 __pycache__
+.vscode
