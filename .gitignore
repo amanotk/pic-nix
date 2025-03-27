@@ -1,0 +1,17 @@
+compiler.mk
+a.out
+*.o
+*.d
+*.dat
+*.h5
+*.a
+*.pyc
+test_application
+test_sendrecv
+test_chunk
+test_chunkmap
+test_jsonio1
+test_jsonio2
+test_sfc
+test_particle
+build
