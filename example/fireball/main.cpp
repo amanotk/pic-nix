@@ -130,10 +130,6 @@ public:
       nix::rand_normal  normal(0.0, 1.0);
 
       {
-        int nz = dims[0] + 2 * boundary_margin;
-        int ny = dims[1] + 2 * boundary_margin;
-        int nx = dims[2] + 2 * boundary_margin;
-
         std::array<int, 2> zr = {offset[0], offset[0] + dims[0]};
         std::array<int, 2> yr = {offset[1], offset[1] + dims[1]};
         std::array<int, 2> xr = {offset[2], offset[2] + dims[2]};
@@ -148,13 +144,13 @@ public:
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp * target, *this);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp * target, *this);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;

@@ -144,7 +144,7 @@ private:
   template <int isVector, int Dim, int Order>
   static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
-    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+    bool has_dim[3] = {chunk.has_zdim(), chunk.has_ydim(), chunk.has_xdim()};
 
     if constexpr (isVector == 0) {
       ScalarCurrent<Dim, Order> current(data, has_dim);
@@ -215,7 +215,7 @@ private:
   template <int isVector, int Dim, int Order>
   static void call_entry(T_chunk& chunk, const T_data& data)
   {
-    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+    bool has_dim[3] = {chunk.has_zdim(), chunk.has_ydim(), chunk.has_xdim()};
 
     if constexpr (isVector == 0) {
       ScalarMoment<Dim, Order> moment(data, has_dim);
@@ -293,11 +293,12 @@ private:
   static void set_boundary(T_position& position, T_chunk& chunk, const T_data& data, int order,
                            double delt)
   {
-    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+    bool has_dim[3] = {chunk.has_zdim(), chunk.has_ydim(), chunk.has_xdim()};
+
+    chunk.set_boundary_particle(data.up);
 
     for (int is = 0; is < data.Ns; is++) {
-      chunk.set_boundary_particle(data.up[is], 0, data.up[is]->Np - 1, is);
-      position.count(data.up[is], 0, data.up[is]->Np - 1, true, order, has_dim);
+      data.up[is]->count(0, data.up[is]->Np - 1, true, order);
     }
   }
 
@@ -320,16 +321,6 @@ public:
   void operator()(int is_vector, int order, T_chunk& chunk, const T_data& data, double delt) const
   {
     table[is_vector](chunk, data, order, delt);
-  }
-
-  template <typename T_particle>
-  void count(int order, T_chunk& chunk, const T_data& data, T_particle particle, int Lbp, int Ubp,
-             bool reset) const
-  {
-    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
-
-    BasePosition position(data);
-    position.count(particle, Lbp, Ubp, reset, order, has_dim);
   }
 };
 
@@ -357,7 +348,7 @@ private:
   template <int isVector, int Dim, int Order, int Pusher, int Interp>
   static void call_entry(T_chunk& chunk, const T_data& data, double delt)
   {
-    bool has_dim[3] = {chunk.has_z_dim(), chunk.has_y_dim(), chunk.has_x_dim()};
+    bool has_dim[3] = {chunk.has_zdim(), chunk.has_ydim(), chunk.has_xdim()};
 
     if constexpr (isVector == 0) {
       ScalarVelocity<Dim, Order, Pusher, Interp> velocity(data, has_dim);
@@ -422,7 +413,7 @@ public:
   }
 };
 
-} // namespace engine
+} // namespace pic_engine
 
 // Local Variables:
 // c-file-style   : "gnu"

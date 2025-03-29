@@ -29,12 +29,12 @@
 /// In addition, custom diagnostics routines may also be implemented depending on the needs of
 /// applications.
 ///
-class PicChunk : public nix::Chunk3D<ParticleType>
+class PicChunk : public nix::Chunk3D
 {
 public:
   struct InternalData; // forward declaration
   using this_type    = PicChunk;
-  using base_type    = typename nix::Chunk3D<ParticleType>;
+  using base_type    = typename nix::Chunk3D;
   using data_type    = InternalData;
   using MpiBuffer    = typename base_type::MpiBuffer;
   using MpiBufferPtr = typename base_type::MpiBufferPtr;
@@ -115,6 +115,8 @@ public:
 
   virtual int64_t get_size_byte() override;
 
+  virtual int get_order() const;
+
   virtual int pack(void* buffer, int address) override;
 
   virtual int unpack(void* buffer, int address) override;
@@ -141,9 +143,11 @@ public:
 
   virtual void get_diverror(float64& efd, float64& bfd);
 
-  virtual void sort_particle(ParticleVec& particle) override;
+  virtual void sort_particle(ParticleVec& particle);
 
-  virtual void count_particle(ParticlePtr particle, int Lbp, int Ubp, bool reset = true) override;
+  virtual void set_boundary_particle(ParticleVec& particle);
+
+  virtual void inject_particle(ParticleVec& particle);
 
   virtual void push_position(float64 delt);
 

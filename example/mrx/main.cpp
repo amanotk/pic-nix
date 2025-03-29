@@ -99,9 +99,6 @@ public:
 
       {
         int     numcell = dims[0] * dims[1] * dims[2];
-        int     nz      = dims[0] + 2 * boundary_margin;
-        int     ny      = dims[1] + 2 * boundary_margin;
-        int     nx      = dims[2] + 2 * boundary_margin;
         float64 ymin    = (ylim[0] - ycs) / lcs;
         float64 ymax    = (ylim[1] - ycs) / lcs;
         float64 rbg     = numcell * nbg;
@@ -111,13 +108,13 @@ public:
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp * target, *this);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp * target, *this);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;
@@ -342,17 +339,19 @@ public:
     }
   }
 
-  void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
+  void set_boundary_particle(ParticleVec& particle) override
   {
     //
     // lower boundary in x
     //
     if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-      auto& xu = particle->xu;
-      for (int ip = Lbp; ip <= Ubp; ip++) {
-        if (xu(ip, 1) < gylim[0]) {
-          xu(ip, 1) = -xu(ip, 1) + 2 * gylim[0];
-          xu(ip, 4) = -xu(ip, 4);
+      for (int is = 0; is < Ns; is++) {
+        auto& xu = particle[is]->xu;
+        for (int ip = 0; ip < particle[is]->Np; ip++) {
+          if (xu(ip, 1) < gylim[0]) {
+            xu(ip, 1) = -xu(ip, 1) + 2 * gylim[0];
+            xu(ip, 4) = -xu(ip, 4);
+          }
         }
       }
     }
@@ -361,11 +360,13 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      auto& xu = particle->xu;
-      for (int ip = Lbp; ip <= Ubp; ip++) {
-        if (xu(ip, 1) >= gylim[1]) {
-          xu(ip, 1) = -xu(ip, 1) + 2 * gylim[1];
-          xu(ip, 4) = -xu(ip, 4);
+      for (int is = 0; is < Ns; is++) {
+        auto& xu = particle[is]->xu;
+        for (int ip = 0; ip < particle[is]->Np; ip++) {
+          if (xu(ip, 1) >= gylim[1]) {
+            xu(ip, 1) = -xu(ip, 1) + 2 * gylim[1];
+            xu(ip, 4) = -xu(ip, 4);
+          }
         }
       }
     }

@@ -51,6 +51,11 @@ int64_t PicChunk::get_size_byte()
   return size;
 }
 
+int PicChunk::get_order() const
+{
+  return order;
+}
+
 int PicChunk::pack(void* buffer, int address)
 {
   using nix::memcpy_count;
@@ -442,17 +447,17 @@ void PicChunk::get_diverror(float64& efd, float64& bfd)
 void PicChunk::sort_particle(ParticleVec& particle)
 {
   for (int is = 0; is < particle.size(); is++) {
-    count_particle(particle[is], 0, particle[is]->Np - 1, true);
+    particle[is]->count(0, particle[is]->Np - 1, true);
     particle[is]->sort();
   }
 }
 
-void PicChunk::count_particle(ParticlePtr particle, int Lbp, int Ubp, bool reset)
+void PicChunk::set_boundary_particle(ParticleVec& particle)
 {
-  const int O = order;
+}
 
-  pic_engine::Position<this_type> position;
-  position.count(O, *this, get_internal_data(), particle, Lbp, Ubp, reset);
+void PicChunk::inject_particle(ParticleVec& particle)
+{
 }
 
 void PicChunk::push_position(const float64 delt)

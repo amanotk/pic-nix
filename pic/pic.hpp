@@ -16,9 +16,11 @@
 using namespace nix::typedefs;
 using namespace nix::primitives;
 using nix::json;
-using nix::ParticlePtr;
-using nix::ParticleVec;
-using ParticleType = nix::ParticlePtr::element_type;
+
+// particle type
+using ParticlePtr  = std::shared_ptr<nix::XtensorParticle>;
+using ParticleVec  = std::vector<ParticlePtr>;
+using ParticleType = ParticlePtr::element_type;
 
 class PicApplication; // forward declaration of Application type
 class PicChunk;       // forward declaration of Chunk type

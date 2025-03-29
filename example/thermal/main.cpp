@@ -79,9 +79,6 @@ public:
 
       up.resize(Ns);
       for (int is = 0; is < Ns; is++) {
-        int     nz = dims[0] + 2 * boundary_margin;
-        int     ny = dims[1] + 2 * boundary_margin;
-        int     nx = dims[2] + 2 * boundary_margin;
         int     np = particle[is]["np"].get<int>();
         int     mp = np * dims[0] * dims[1] * dims[2];
         int64   id = mp;
@@ -91,7 +88,7 @@ public:
 
         id *= this->myid;
 
-        up[is]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[is]     = std::make_shared<ParticleType>(mp * target, *this);
         up[is]->m  = ro / np;
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;

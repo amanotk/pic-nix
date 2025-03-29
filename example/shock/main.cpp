@@ -101,8 +101,8 @@ public:
     // initialize field
     //
     {
-      const int     Nb = boundary_margin;
-      const float64 x0 = this->get_xmin();
+      const int Nb      = boundary_margin;
+      auto [xmin, xmax] = this->get_xrange();
 
       // memory allocation
       allocate();
@@ -110,7 +110,7 @@ public:
       for (int iz = Lbz - Nb; iz <= Ubz + Nb; iz++) {
         for (int iy = Lby - Nb; iy <= Uby + Nb; iy++) {
           for (int ix = Lbx - Nb; ix <= Ubx + Nb; ix++) {
-            float64 xi = (ix + 0.5) * delx + x0;
+            float64 xi = (ix + 0.5) * delx + xmin;
             float64 Ux = u0 * initial_flow_profile(xi, taper);
             float64 gm = sqrt(1 + Ux * Ux / (cc * cc));
             float64 bx = Bx0;
@@ -152,9 +152,6 @@ public:
       std::vector<MJ> mj = {MJ(vte * vte, 0.0), MJ(vti * vti, 0.0)};
 
       {
-        int nz = dims[0] + 2 * boundary_margin;
-        int ny = dims[1] + 2 * boundary_margin;
-        int nx = dims[2] + 2 * boundary_margin;
         int mp = nppc * dims[0] * dims[1] * dims[2];
 
         // determine particle ID offset
@@ -170,13 +167,13 @@ public:
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[0]     = std::make_shared<ParticleType>(mp * target, *this);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp * target, nz * ny * nx);
+        up[1]     = std::make_shared<ParticleType>(mp * target, *this);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;
@@ -400,19 +397,21 @@ public:
     }
   }
 
-  void set_boundary_particle(ParticlePtr particle, int Lbp, int Ubp, int species) override
+  void set_boundary_particle(ParticleVec& particle) override
   {
     //
     // lower boundary in x
     //
     if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-      auto& xu = particle->xu;
-      for (int ip = Lbp; ip <= Ubp; ip++) {
-        if (xu(ip, 0) < gxlim[0]) {
-          xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
-          xu(ip, 3) = -xu(ip, 3);
-          xu(ip, 4) = -xu(ip, 4);
-          xu(ip, 5) = -xu(ip, 5);
+      for (int is = 0; is < Ns; is++) {
+        auto& xu = particle[is]->xu;
+        for (int ip = 0; ip < particle[is]->Np; ip++) {
+          if (xu(ip, 0) < gxlim[0]) {
+            xu(ip, 0) = -xu(ip, 0) + 2 * gxlim[0];
+            xu(ip, 3) = -xu(ip, 3);
+            xu(ip, 4) = -xu(ip, 4);
+            xu(ip, 5) = -xu(ip, 5);
+          }
         }
       }
     }
@@ -429,25 +428,27 @@ public:
       // reset random number generator
       reset_random_number();
 
-      int             efflux = 0;
-      std::vector<MJ> mj     = {MJ(vte * vte, -u0), MJ(vti * vti, -u0)};
+      std::vector<MJ> mj = {MJ(vte * vte, -u0), MJ(vti * vti, -u0)};
 
       // apply boundary condition
-      auto& xu = particle->xu;
-      for (int ip = Lbp; ip <= Ubp; ip++) {
-        if (xu(ip, 0) >= gxlim[1]) {
-          auto [x, ux, uy, uz] = generate_injection_particle(mj[species], delt);
+      for (int is = 0; is < Ns; is++) {
+        int   efflux = 0;
+        auto& xu     = particle[is]->xu;
+        for (int ip = 0; ip < particle[is]->Np; ip++) {
+          if (xu(ip, 0) >= gxlim[1]) {
+            auto [x, ux, uy, uz] = generate_injection_particle(mj[is], delt);
 
-          xu(ip, 0) = x;
-          xu(ip, 3) = ux;
-          xu(ip, 4) = uy;
-          xu(ip, 5) = uz;
+            xu(ip, 0) = x;
+            xu(ip, 3) = ux;
+            xu(ip, 4) = uy;
+            xu(ip, 5) = uz;
 
-          efflux += 1;
+            efflux += 1;
+          }
         }
-      }
 
-      option["boundary"]["efflux"][species] = efflux;
+        option["boundary"]["efflux"][is] = efflux;
+      }
     }
   }
 
@@ -521,7 +522,8 @@ public:
               id64[is]++;
             }
 
-            this->count_particle(particle[is], np_prev, np_next - 1, false);
+            // this->count_particle(particle[is], np_prev, np_next - 1, false);
+            particle[is]->count(np_prev, np_next - 1, false, order);
             particle[is]->Np = np_next;
           }
         }

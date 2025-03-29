@@ -59,50 +59,6 @@ public:
   }
 
   template <typename T_particle>
-  void count(T_particle particle, int Lbp, int Ubp, bool reset, int order, bool has_dim[3])
-  {
-    // notice the half-grid offset of cell boundaries for odd-order shape functions
-    const bool has_xdim      = has_dim[2];
-    const bool has_ydim      = has_dim[1];
-    const bool has_zdim      = has_dim[0];
-    const int  is_odd        = (order % 2 == 1) ? 1 : 0;
-    const int  out_of_bounds = particle->Ng;
-
-    const float64 xminimum = has_xdim ? xmin : -std::numeric_limits<float64>::max();
-    const float64 xmaximum = has_xdim ? xmax : +std::numeric_limits<float64>::max();
-    const float64 yminimum = has_ydim ? ymin : -std::numeric_limits<float64>::max();
-    const float64 ymaximum = has_ydim ? ymax : +std::numeric_limits<float64>::max();
-    const float64 zminimum = has_zdim ? zmin : -std::numeric_limits<float64>::max();
-    const float64 zmaximum = has_zdim ? zmax : +std::numeric_limits<float64>::max();
-    const float64 ximin    = xmin - 0.5 * dx * is_odd;
-    const float64 yimin    = ymin - 0.5 * dy * is_odd;
-    const float64 zimin    = zmin - 0.5 * dz * is_odd;
-    const float64 rdx      = 1 / dx;
-    const float64 rdy      = 1 / dy;
-    const float64 rdz      = 1 / dz;
-
-    // reset count
-    if (reset) {
-      particle->reset_count();
-    }
-
-    auto& xu = particle->xu;
-    for (int ip = Lbp; ip <= Ubp; ip++) {
-      int ix = has_xdim ? digitize(xu(ip, 0), ximin, rdx) : 0;
-      int iy = has_ydim ? digitize(xu(ip, 1), yimin, rdy) : 0;
-      int iz = has_zdim ? digitize(xu(ip, 2), zimin, rdz) : 0;
-      int ii = iz * stride_z + iy * stride_y + ix * stride_x;
-
-      // take care out-of-bounds particles
-      ii = (xu(ip, 0) < xminimum || xu(ip, 0) >= xmaximum) ? out_of_bounds : ii;
-      ii = (xu(ip, 1) < yminimum || xu(ip, 1) >= ymaximum) ? out_of_bounds : ii;
-      ii = (xu(ip, 2) < zminimum || xu(ip, 2) >= zmaximum) ? out_of_bounds : ii;
-
-      particle->increment(ip, ii);
-    }
-  }
-
-  template <typename T_particle>
   void call_scalar_impl(const T_particle& up, const float64 delt)
   {
     float64 rc = 1 / cc;
