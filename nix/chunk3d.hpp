@@ -3,7 +3,6 @@
 #define _CHUNK3D_HPP_
 
 #include "buffer.hpp"
-#include "chunk.hpp"
 #include "debug.hpp"
 #include "nix.hpp"
 #include "xtensorall.hpp"
@@ -13,13 +12,18 @@ NIX_NAMESPACE_BEGIN
 ///
 /// @brief Base class for 3D Chunk
 ///
-class Chunk3D : public Chunk<3>
+class Chunk3D
 {
 public:
-  using IntArray = xt::xtensor_fixed<int, xt::xshape<3, 3, 3>>;
-  using Comm     = xt::xtensor_fixed<MPI_Comm, xt::xshape<3, 3, 3>>;
-  using Request  = xt::xtensor_fixed<MPI_Request, xt::xshape<3, 3, 3>>;
-  using Datatype = xt::xtensor_fixed<MPI_Datatype, xt::xshape<3, 3, 3>>;
+  static constexpr int nbsize = 27;
+
+  struct MpiBuffer; ///< forward declaration
+  using IntArray     = xt::xtensor_fixed<int, xt::xshape<3, 3, 3>>;
+  using Comm         = xt::xtensor_fixed<MPI_Comm, xt::xshape<3, 3, 3>>;
+  using Request      = xt::xtensor_fixed<MPI_Request, xt::xshape<3, 3, 3>>;
+  using Datatype     = xt::xtensor_fixed<MPI_Datatype, xt::xshape<3, 3, 3>>;
+  using MpiBufferPtr = std::shared_ptr<MpiBuffer>;
+  using MpiBufferVec = std::vector<MpiBufferPtr>;
 
   ///
   /// @brief MPI buffer
@@ -37,143 +41,69 @@ public:
     Datatype sendtype;
     Datatype recvtype;
 
-    ///
     /// constructor
-    ///
     MpiBuffer() : sendwait(false), recvwait(false)
     {
     }
 
-    ///
-    /// @brief get size of buffer in bytes
-    /// @return size in bytes
-    ///
-    int64_t get_size_byte() const
-    {
-      int64_t size = 0;
-      size += sizeof(sendwait);
-      size += sizeof(recvwait);
-      size += sendbuf.size;
-      size += recvbuf.size;
-      size += bufsize.size() * sizeof(int);
-      size += bufaddr.size() * sizeof(int);
-      size += comm.size() * sizeof(MPI_Comm);
-      size += sendreq.size() * sizeof(MPI_Request);
-      size += recvreq.size() * sizeof(MPI_Request);
-      size += sendtype.size() * sizeof(MPI_Datatype);
-      size += recvtype.size() * sizeof(MPI_Datatype);
-      return size;
-    }
-
-    ///
     /// @brief return send buffer for given direction
-    /// @param iz z direction index
-    /// @param iy y direction index
-    /// @param ix x direction index
-    /// @return buffer pointer
-    ///
     void* get_send_buffer(int iz, int iy, int ix)
     {
       return sendbuf.get(bufaddr(iz, iy, ix));
     }
 
-    ///
     /// @brief return recv buffer for given direction
-    /// @param iz z direction index
-    /// @param iy y direction index
-    /// @param ix x direction index
-    /// @return buffer pointer
-    ///
     void* get_recv_buffer(int iz, int iy, int ix)
     {
       return recvbuf.get(bufaddr(iz, iy, ix));
     }
 
-    ///
+    /// @brief get size of buffer in bytes
+    int64_t get_size_byte() const;
+
     /// @brief pack the content into given `buffer`
-    /// @param buffer pointer to buffer to pack
-    /// @param address first address of buffer to which the data will be packed
-    /// @return `address` + (number of bytes packed as a result)
-    ///
-    int pack(void* buffer, int address)
-    {
-      int count = address;
-      int ssize = sendbuf.size;
-      int rsize = recvbuf.size;
-      int asize = bufsize.size() * sizeof(int);
+    int pack(void* buffer, int address);
 
-      count += memcpy_count(buffer, &sendwait, sizeof(bool), count, 0);
-      count += memcpy_count(buffer, &recvwait, sizeof(bool), count, 0);
-      count += memcpy_count(buffer, &ssize, sizeof(int), count, 0);
-      count += memcpy_count(buffer, &rsize, sizeof(int), count, 0);
-      count += memcpy_count(buffer, bufsize.data(), asize, count, 0);
-      count += memcpy_count(buffer, bufaddr.data(), asize, count, 0);
-
-      return count;
-    }
-
-    ///
     /// @brief unpack the content from given `buffer`
-    /// @param buffer pointer to buffer from unpack
-    /// @param address first address of buffer to which the data will be packed
-    /// @return `address` + (number of bytes packed as a result)
-    ///
-    int unpack(void* buffer, int address)
-    {
-      int count = address;
-      int ssize = 0;
-      int rsize = 0;
-      int asize = bufsize.size() * sizeof(int);
-
-      count += memcpy_count(&sendwait, buffer, sizeof(bool), 0, count);
-      count += memcpy_count(&recvwait, buffer, sizeof(bool), 0, count);
-      count += memcpy_count(&ssize, buffer, sizeof(int), 0, count);
-      count += memcpy_count(&rsize, buffer, sizeof(int), 0, count);
-      count += memcpy_count(bufsize.data(), buffer, asize, 0, count);
-      count += memcpy_count(bufaddr.data(), buffer, asize, 0, count);
-
-      // memory allocation
-      sendbuf.resize(ssize);
-      recvbuf.resize(rsize);
-
-      return count;
-    }
+    int unpack(void* buffer, int address);
   };
-  using MpiBufferPtr = std::shared_ptr<MpiBuffer>;
-  using MpiBufferVec = std::vector<MpiBufferPtr>;
 
 protected:
-  bool has_dim[3]; ///< flag to indicate if the dimension is ignorable
+  int  myid;            ///< chunk ID
+  int  nbid[nbsize];    ///< neighboring chunk ID
+  int  nbrank[nbsize];  ///< neighboring chunk MPI rank
+  int  boundary_margin; ///< boundary margin
+  int  dims[3];         ///< number of grids
+  bool has_dim[3];      ///< flag to indicate if the dimension is ignorable
+  int  gdims[3];        ///< global number of grids
+  int  offset[3];       ///< global index offset
+  int  Lbx;             ///< lower bound in x
+  int  Ubx;             ///< upper bound in x
+  int  Lby;             ///< lower bound in y
+  int  Uby;             ///< upper bound in y
+  int  Lbz;             ///< lower bound in z
+  int  Ubz;             ///< upper bound in z
+  int  indexlb[3];      ///< index lower bound for MPI data exchange
+  int  indexub[3];      ///< index upper bound for MPI data exchange
+  int  dirlb[3];        ///< direction lower bound for MPI data exchange
+  int  dirub[3];        ///< direction upper bound for MPI data exchange
+  int  sendlb[3][3];    ///< lower bound for send
+  int  sendub[3][3];    ///< upper bound for send
+  int  recvlb[3][3];    ///< lower bound for recv
+  int  recvub[3][3];    ///< upper bound for recv
 
-  int boundary_margin; ///< boundary margin
-  int gdims[3];        ///< global number of grids
-  int offset[3];       ///< global index offset
-  int Lbx;             ///< lower bound in x
-  int Ubx;             ///< upper bound in x
-  int Lby;             ///< lower bound in y
-  int Uby;             ///< upper bound in y
-  int Lbz;             ///< lower bound in z
-  int Ubz;             ///< upper bound in z
-  int indexlb[3];      ///< index lower bound for MPI data exchange
-  int indexub[3];      ///< index upper bound for MPI data exchange
-  int dirlb[3];        ///< direction lower bound for MPI data exchange
-  int dirub[3];        ///< direction upper bound for MPI data exchange
-  int sendlb[3][3];    ///< lower bound for send
-  int sendub[3][3];    ///< upper bound for send
-  int recvlb[3][3];    ///< lower bound for recv
-  int recvub[3][3];    ///< upper bound for recv
-
-  float64      delx;      ///< grid size in x
-  float64      dely;      ///< grid size in y
-  float64      delz;      ///< grid size in z
-  float64      xlim[3];   ///< physical domain in x
-  float64      ylim[3];   ///< physical domain in y
-  float64      zlim[3];   ///< physical domain in z
-  float64      gxlim[3];  ///< global physical domain in x
-  float64      gylim[3];  ///< global physical domain in y
-  float64      gzlim[3];  ///< global physical domain in z
-  MpiBufferVec mpibufvec; ///< MPI buffer vector
-  json         option;    ///< internal option
+  float64              delx;      ///< grid size in x
+  float64              dely;      ///< grid size in y
+  float64              delz;      ///< grid size in z
+  float64              xlim[3];   ///< physical domain in x
+  float64              ylim[3];   ///< physical domain in y
+  float64              zlim[3];   ///< physical domain in z
+  float64              gxlim[3];  ///< global physical domain in x
+  float64              gylim[3];  ///< global physical domain in y
+  float64              gzlim[3];  ///< global physical domain in z
+  json                 option;    ///< internal option
+  std::vector<float64> load;      ///< load array of chunk
+  MpiBufferVec         mpibufvec; ///< MPI buffer vector
 
 public:
   ///
@@ -183,194 +113,184 @@ public:
   ///
   Chunk3D(const int dims[3], const bool has_dim[3], int id = 0);
 
-  ///
-  /// @brief set boundary margin
-  /// @param margin boundary margin
-  ///
-  void set_boundary_margin(int margin);
-
-  ///
   /// @brief setup initial condition (pure virtual)
-  /// @param config configuration
-  ///
   virtual void setup(json& config) = 0;
 
-  ///
-  /// @brief probe incoming messages and call recv if ready
-  /// @param mode mode of boundary exchange
-  /// @param wait blocking if true and non-blocking otherwise
-  ///
-  virtual bool set_boundary_probe(int mode, bool wait) = 0;
-
-  ///
-  /// @brief pack for boundary exchange (pure virtual)
-  /// @param mode mode of boundary exchange
-  ///
-  virtual void set_boundary_pack(int mode) override = 0;
-
-  ///
-  /// @brief unpack for boundary exchange (pure virtual)
-  /// @param mode mode of boundary exchange
-  ///
-  virtual void set_boundary_unpack(int mode) override = 0;
-
-  ///
-  /// @brief begin boundary exchange (pure virtual)
-  /// @param mode mode of boundary exchange
-  ///
-  virtual void set_boundary_begin(int mode) override = 0;
-
-  ///
-  /// @brief end boundary exchange (pure virtual)
-  /// @param mode mode of boundary exchange
-  ///
-  virtual void set_boundary_end(int mode) override = 0;
-
-  ///
   /// @brief return (approximate) size of Chunk in byte
-  /// @return size of Chunk in byte
-  ///
-  virtual int64_t get_size_byte() = 0;
+  virtual int64_t get_size_byte() const
+  {
+    return 0; // override me
+  }
 
-  ///
   /// @brief pack the content of Chunk into given `buffer`
-  /// @param buffer pointer to buffer to pack
-  /// @param address first address of buffer to which the data will be packed
-  /// @return `address` + (number of bytes packed as a result)
-  ///
-  virtual int pack(void* buffer, int address) override;
+  virtual int pack(void* buffer, int address);
 
-  ///
   /// @brief unpack the content of Chunk from given `buffer`
-  /// @param buffer point to buffer from unpack
-  /// @param address first address of buffer from which the data will be unpacked
-  /// @return `address` + (number of bytes unpacked as a result)
-  ///
-  virtual int unpack(void* buffer, int address) override;
+  virtual int unpack(void* buffer, int address);
 
-  ///
+  /// @brief set index bounds for MPI data exchange
+  virtual void set_index_bounds();
+
   /// @brief set coordinate of Chunk (using gdims and offset)
-  /// @param dz grid size in z direction
-  /// @param dy grid size in y direction
-  /// @param dx grid size in x direction
-  ///
   virtual void set_coordinate(float64 dz, float64 dy, float64 dx);
 
-  ///
   /// @brief set the global context of Chunk
-  /// @param offset offset for each direction in global dimensions
-  /// @param gdims global number of grids for each direction
-  ///
-  virtual void set_global_context(const int* offset, const int* gdims);
+  virtual void set_global_context(const int offset[3], const int gdims[3]);
 
-  ///
   /// @brief set MPI communicator to MpiBuffer of given `mode`
-  /// @param mode mode to specify MpiBuffer
-  /// @param comm MPI communicator to be set to MpiBuffer
-  ///
   virtual void set_mpi_communicator(int mode, int iz, int iy, int ix, MPI_Comm& comm);
 
-  ///
-  /// @brief query status of boundary exchange
-  /// @param mode mode of boundary exchange
-  /// @param sendrecv +1 for send, -1 for recv, 0 for both
-  /// @return 1 if boundary exchange is finished and 0 otherwise
-  ///
-  virtual int set_boundary_query(int mode = 0, int sendrecv = 0) override;
+  /// @brief reset load
+  virtual void reset_load()
+  {
+    load.assign(load.size(), 0.0);
+  }
 
-  ///
-  /// @brief set field boundary condition
-  /// @param mode mode of boundary exchange
-  ///
-  virtual void set_boundary_field(int mode = 0);
+  /// @brief get load array
+  virtual std::vector<float64> get_load()
+  {
+    return load;
+  }
 
-  ///
+  /// @brief get total load
+  virtual float64 get_total_load()
+  {
+    return std::accumulate(load.begin(), load.end(), 0.0);
+  }
+
+  /// @brief  set chunk ID
+  void set_id(int id)
+  {
+    myid = id;
+  }
+
+  /// @brief  get chunk ID
+  int get_id() const
+  {
+    return myid;
+  }
+
+  /// @brief set neighbor chunk ID
+  void set_nb_id(int dirz, int diry, int dirx, int id)
+  {
+    nbid[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)] = id;
+  }
+
+  /// @brief get neighbor chunk ID
+  int get_nb_id(int dirz, int diry, int dirx) const
+  {
+    return nbid[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)];
+  }
+
+  /// @brief set neighbor MPI rank
+  void set_nb_rank(int dirz, int diry, int dirx, int rank)
+  {
+    nbrank[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)] = rank;
+  }
+
+  /// @brief get neighbor MPI rank
+  int get_nb_rank(int dirz, int diry, int dirx) const
+  {
+    return nbrank[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)];
+  }
+
+  /// @brief get send tag for MPI
+  int get_sndtag(int dirz, int diry, int dirx) const
+  {
+    int dir = 9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1);
+    // return dummy tag for invalid neighbor
+    return nbid[dir] < 0 ? myid : nbid[dir] % MAX_CHUNK_PER_RANK;
+  }
+
+  /// @brief get recv tag for MPI
+  int get_rcvtag(int dirz, int diry, int dirx) const
+  {
+    return myid % MAX_CHUNK_PER_RANK;
+  }
+
   /// @brief setup MPI Buffer
-  /// @param mpibuf MPI buffer to be setup
-  /// @param mode +1 for send, -1 for recv, 0 for both
-  /// @param headbyte number of bytes used for header
-  /// @param elembyte number of bytes for each element
-  ///
   void set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int elembyte);
 
-  ///
   /// @brief return MpiBuffer of given mode of boundary exchange
-  /// @param mode mode of MpiBuffer
-  /// @return MpiBufferPtr or std::shared_ptr<MpiBuffer>
-  ///
   MpiBufferPtr get_mpi_buffer(int mode)
   {
     return mpibufvec[mode];
   }
 
-  ///
-  /// @brief get buffer ratio (relative to the required size) from configuration file
-  /// @return buffer ratio
-  ///
+  /// @brief get buffer ratio (relative to the required size)
   float64 get_buffer_ratio()
   {
     return option.value("buffer_ratio", 0.2);
   }
 
+  /// @brief set boundary margin
+  void set_boundary_margin(int margin)
+  {
+    boundary_margin = margin;
+    set_index_bounds();
+  }
+
+  /// @brief get boundary margin
   int get_boundary_margin() const
   {
     return boundary_margin;
   }
 
-  ///
-  /// @brief return if x dimension is ignorable
-  ///
+  /// @brief return if x dimension is ignorable or not
   bool has_xdim() const
   {
     return has_dim[2];
   }
 
-  ///
-  /// @brief return if y dimension is ignorable
-  ///
+  /// @brief return if y dimension is ignorable or not
   bool has_ydim() const
   {
     return has_dim[1];
   }
 
-  ///
-  /// @brief return if z dimension is ignorable
-  ///
+  /// @brief return if z dimension is ignorable or not
   bool has_zdim() const
   {
     return has_dim[0];
   }
 
+  /// @brief return grid size in x direction
   float64 get_delx() const
   {
     return delx;
   }
 
+  /// @brief return grid size in y direction
   float64 get_dely() const
   {
     return dely;
   }
 
+  /// @brief return grid size in z direction
   float64 get_delz() const
   {
     return delz;
   }
 
+  /// @brief return index bounds in x direction
   auto get_xbound() const
   {
     return std::pair(Lbx, Ubx);
   }
 
+  /// @brief return index bounds in y direction
   auto get_ybound() const
   {
     return std::pair(Lby, Uby);
   }
 
+  /// @brief return index bounds in z direction
   auto get_zbound() const
   {
     return std::pair(Lbz, Ubz);
   }
 
+  /// @brief return physical domain range in x direction
   auto get_xrange() const
   {
     float64 xmin = -std::numeric_limits<float64>::max();
@@ -384,6 +304,7 @@ public:
     return std::pair(xmin, xmax);
   }
 
+  /// @brief return physical domain range in y direction
   auto get_yrange() const
   {
     float64 ymin = -std::numeric_limits<float64>::max();
@@ -397,6 +318,7 @@ public:
     return std::pair(ymin, ymax);
   }
 
+  /// @brief return physical domain range in z direction
   auto get_zrange() const
   {
     float64 zmin = -std::numeric_limits<float64>::max();
@@ -410,28 +332,55 @@ public:
     return std::pair(zmin, zmax);
   }
 
+  /// @brief return global physical domain range in x direction
   auto get_xrange_global() const
   {
     return std::pair(gxlim[0], gxlim[1]);
   }
 
+  /// @brief return global physical domain range in y direction
   auto get_yrange_global() const
   {
     return std::pair(gylim[0], gylim[1]);
   }
 
+  /// @brief return global physical domain range in z direction
   auto get_zrange_global() const
   {
     return std::pair(gzlim[0], gzlim[1]);
   }
 
-protected:
-  ///
+  /// @brief probe incoming messages and call recv if ready
+  virtual bool set_boundary_probe(int mode, bool wait)
+  {
+    return false;
+  }
+
+  /// @brief pack for boundary exchange
+  virtual void set_boundary_pack(int mode)
+  {
+  }
+
+  /// @brief unpack for boundary exchange
+  virtual void set_boundary_unpack(int mode)
+  {
+  }
+
+  /// @brief begin boundary exchange
+  virtual void set_boundary_begin(int mode)
+  {
+  }
+
+  /// @brief end boundary exchange
+  virtual void set_boundary_end(int mode)
+  {
+  }
+
+  /// @brief query status of boundary exchange
+  virtual int set_boundary_query(int mode = 0, int sendrecv = 0);
+
   /// @brief probe incoming messages
-  /// @param mpibuf MPI buffer
-  /// @return true 1 recv has been called and 0 otherwise
-  ///
-  int probe_bc_exchange(MpiBufferPtr mpibuf);
+  virtual int probe_bc_exchange(MpiBufferPtr mpibuf);
 
   ///
   /// @brief pack for boundary exchange

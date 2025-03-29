@@ -3,23 +3,121 @@
 
 NIX_NAMESPACE_BEGIN
 
-#define DEFINE_MEMBER(type, name) type Chunk3D::name
-
-DEFINE_MEMBER(, Chunk3D)
-(const int dims[3], const bool has_dim[3], int id)
-    : Chunk<3>(dims, id), delx(1.0), dely(1.0), delz(1.0), option({})
+Chunk3D::Chunk3D(const int dims[3], const bool has_dim[3], int id)
+    : myid(id), delx(1.0), dely(1.0), delz(1.0), option({})
 {
   for (int i = 0; i < 3; i++) {
+    this->dims[i]    = dims[i];
     this->has_dim[i] = has_dim[i];
   }
+
+  load.resize(1);
   reset_load();
 }
 
-DEFINE_MEMBER(void, set_boundary_margin)(int margin)
+int Chunk3D::pack(void* buffer, int address)
 {
-  boundary_margin = margin;
+  address += memcpy_count(buffer, &myid, sizeof(int), address, 0);
+  address += memcpy_count(buffer, nbid, nbsize * sizeof(int), address, 0);
+  address += memcpy_count(buffer, nbrank, nbsize * sizeof(int), address, 0);
+  address += memcpy_count(buffer, &boundary_margin, sizeof(int), address, 0);
+  address += memcpy_count(buffer, gdims, 3 * sizeof(int), address, 0);
+  address += memcpy_count(buffer, offset, 3 * sizeof(int), address, 0);
+  address += memcpy_count(buffer, &delx, sizeof(float64), address, 0);
+  address += memcpy_count(buffer, &dely, sizeof(float64), address, 0);
+  address += memcpy_count(buffer, &delz, sizeof(float64), address, 0);
+  address += memcpy_count(buffer, xlim, 3 * sizeof(float64), address, 0);
+  address += memcpy_count(buffer, ylim, 3 * sizeof(float64), address, 0);
+  address += memcpy_count(buffer, zlim, 3 * sizeof(float64), address, 0);
+  address += memcpy_count(buffer, gxlim, 3 * sizeof(float64), address, 0);
+  address += memcpy_count(buffer, gylim, 3 * sizeof(float64), address, 0);
+  address += memcpy_count(buffer, gzlim, 3 * sizeof(float64), address, 0);
 
-  // direction indices
+  // option
+  {
+    std::vector<uint8_t> msgpack = json::to_msgpack(option);
+    int                  size    = msgpack.size();
+    address += memcpy_count(buffer, &size, sizeof(int), address, 0);
+    address += memcpy_count(buffer, msgpack.data(), size, address, 0);
+  }
+
+  // load
+  {
+    int size = load.size();
+    address += memcpy_count(buffer, &size, sizeof(int), address, 0);
+    address += memcpy_count(buffer, load.data(), sizeof(float64) * size, address, 0);
+  }
+
+  // MPI buffer
+  {
+    int nmode = mpibufvec.size();
+    address += memcpy_count(buffer, &nmode, sizeof(int), address, 0);
+
+    for (int mode = 0; mode < nmode; mode++) {
+      address = mpibufvec[mode]->pack(buffer, address);
+    }
+  }
+
+  return address;
+}
+
+int Chunk3D::unpack(void* buffer, int address)
+{
+  address += memcpy_count(&myid, buffer, sizeof(int), 0, address);
+  address += memcpy_count(nbid, buffer, nbsize * sizeof(int), 0, address);
+  address += memcpy_count(nbrank, buffer, nbsize * sizeof(int), 0, address);
+  address += memcpy_count(&boundary_margin, buffer, sizeof(int), 0, address);
+  address += memcpy_count(gdims, buffer, 3 * sizeof(int), 0, address);
+  address += memcpy_count(offset, buffer, 3 * sizeof(int), 0, address);
+  address += memcpy_count(&delx, buffer, sizeof(float64), 0, address);
+  address += memcpy_count(&dely, buffer, sizeof(float64), 0, address);
+  address += memcpy_count(&delz, buffer, sizeof(float64), 0, address);
+  address += memcpy_count(xlim, buffer, 3 * sizeof(float64), 0, address);
+  address += memcpy_count(ylim, buffer, 3 * sizeof(float64), 0, address);
+  address += memcpy_count(zlim, buffer, 3 * sizeof(float64), 0, address);
+  address += memcpy_count(gxlim, buffer, 3 * sizeof(float64), 0, address);
+  address += memcpy_count(gylim, buffer, 3 * sizeof(float64), 0, address);
+  address += memcpy_count(gzlim, buffer, 3 * sizeof(float64), 0, address);
+
+  // option
+  {
+    int size = 0;
+    address += memcpy_count(&size, buffer, sizeof(int), 0, address);
+
+    std::vector<uint8_t> msgpack(size);
+    address += memcpy_count(msgpack.data(), buffer, size, 0, address);
+
+    option = json::from_msgpack(msgpack);
+  }
+
+  // load
+  {
+    int size = 0;
+    address += memcpy_count(&size, buffer, sizeof(int), 0, address);
+    load.resize(size);
+    address += memcpy_count(load.data(), buffer, sizeof(float64) * size, 0, address);
+  }
+
+  // MPI buffer
+  {
+    int nmode = 0;
+    address += memcpy_count(&nmode, buffer, sizeof(int), 0, address);
+    mpibufvec.resize(nmode);
+
+    for (int mode = 0; mode < nmode; mode++) {
+      mpibufvec[mode] = std::make_shared<MpiBuffer>();
+      address         = mpibufvec[mode]->unpack(buffer, address);
+    }
+  }
+
+  set_index_bounds();
+
+  return address;
+}
+
+void Chunk3D::set_index_bounds()
+{
+
   indexlb[0] = 0;
   indexub[0] = 2;
   dirlb[0]   = -1;
@@ -33,7 +131,6 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
   dirlb[2]   = -1;
   dirub[2]   = +1;
 
-  // lower and upper bound
   Lbz = boundary_margin;
   Ubz = boundary_margin + this->dims[0] - 1;
   Lby = boundary_margin;
@@ -42,7 +139,7 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
   Ubx = boundary_margin + this->dims[2] - 1;
 
   if (has_zdim() == false) {
-    // z direction is ignorable coordinate
+
     Lbz        = boundary_margin;
     Ubz        = boundary_margin;
     indexlb[0] = 1;
@@ -52,7 +149,7 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
   }
 
   if (has_ydim() == false) {
-    // y direction is ignorable coordinate
+
     Lby        = boundary_margin;
     Uby        = boundary_margin;
     indexlb[1] = 1;
@@ -62,7 +159,7 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
   }
 
   if (has_xdim() == false) {
-    // x direction is ignorable coordinate
+
     Lbx        = boundary_margin;
     Ubx        = boundary_margin;
     indexlb[2] = 1;
@@ -71,7 +168,6 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
     dirub[2]   = 0;
   }
 
-  // MPI send
   sendlb[0][0] = Lbz;
   sendlb[0][1] = Lbz;
   sendlb[0][2] = Ubz - boundary_margin + 1;
@@ -91,7 +187,6 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
   sendub[2][1] = Ubx;
   sendub[2][2] = Ubx;
 
-  // MPI recv
   recvlb[0][0] = Lbz - boundary_margin;
   recvlb[0][1] = Lbz;
   recvlb[0][2] = Ubz + 1;
@@ -112,96 +207,13 @@ DEFINE_MEMBER(void, set_boundary_margin)(int margin)
   recvub[2][2] = Ubx + boundary_margin;
 }
 
-DEFINE_MEMBER(int, pack)(void* buffer, int address)
+void Chunk3D::set_coordinate(float64 dz, float64 dy, float64 dx)
 {
-  int count = address;
 
-  count = Chunk<3>::pack(buffer, count);
-
-  // option
-  {
-    std::vector<uint8_t> msgpack = json::to_msgpack(option);
-    int                  size    = msgpack.size();
-    count += memcpy_count(buffer, &size, sizeof(int), count, 0);
-    count += memcpy_count(buffer, msgpack.data(), size, count, 0);
-  }
-
-  count += memcpy_count(buffer, &boundary_margin, sizeof(int), count, 0);
-  count += memcpy_count(buffer, &delx, sizeof(float64), count, 0);
-  count += memcpy_count(buffer, &dely, sizeof(float64), count, 0);
-  count += memcpy_count(buffer, &delz, sizeof(float64), count, 0);
-  count += memcpy_count(buffer, xlim, 3 * sizeof(float64), count, 0);
-  count += memcpy_count(buffer, ylim, 3 * sizeof(float64), count, 0);
-  count += memcpy_count(buffer, zlim, 3 * sizeof(float64), count, 0);
-  count += memcpy_count(buffer, gxlim, 3 * sizeof(float64), count, 0);
-  count += memcpy_count(buffer, gylim, 3 * sizeof(float64), count, 0);
-  count += memcpy_count(buffer, gzlim, 3 * sizeof(float64), count, 0);
-  // MPI buffer (NOTE: MPI communicator is NOT packed)
-  {
-    int nmode = mpibufvec.size();
-    count += memcpy_count(buffer, &nmode, sizeof(int), count, 0);
-
-    for (int mode = 0; mode < nmode; mode++) {
-      count = mpibufvec[mode]->pack(buffer, count);
-    }
-  }
-
-  return count;
-}
-
-DEFINE_MEMBER(int, unpack)(void* buffer, int address)
-{
-  int count = address;
-
-  count = Chunk<3>::unpack(buffer, count);
-
-  // option
-  {
-    int size = 0;
-    count += memcpy_count(&size, buffer, sizeof(int), 0, count);
-
-    std::vector<uint8_t> msgpack(size);
-    count += memcpy_count(msgpack.data(), buffer, size, 0, count);
-
-    option = json::from_msgpack(msgpack);
-  }
-
-  count += memcpy_count(&boundary_margin, buffer, sizeof(int), 0, count);
-  count += memcpy_count(&delx, buffer, sizeof(float64), 0, count);
-  count += memcpy_count(&dely, buffer, sizeof(float64), 0, count);
-  count += memcpy_count(&delz, buffer, sizeof(float64), 0, count);
-  count += memcpy_count(xlim, buffer, 3 * sizeof(float64), 0, count);
-  count += memcpy_count(ylim, buffer, 3 * sizeof(float64), 0, count);
-  count += memcpy_count(zlim, buffer, 3 * sizeof(float64), 0, count);
-  count += memcpy_count(gxlim, buffer, 3 * sizeof(float64), 0, count);
-  count += memcpy_count(gylim, buffer, 3 * sizeof(float64), 0, count);
-  count += memcpy_count(gzlim, buffer, 3 * sizeof(float64), 0, count);
-  // MPI buffer (NOTE: MPI communicator is NOT unpacked)
-  {
-    int nmode = 0;
-    count += memcpy_count(&nmode, buffer, sizeof(int), 0, count);
-    mpibufvec.resize(nmode);
-
-    for (int mode = 0; mode < nmode; mode++) {
-      mpibufvec[mode] = std::make_shared<MpiBuffer>();
-      count           = mpibufvec[mode]->unpack(buffer, count);
-    }
-  }
-
-  // set boundary margin related variables
-  set_boundary_margin(boundary_margin);
-
-  return count;
-}
-
-DEFINE_MEMBER(void, set_coordinate)(float64 dz, float64 dy, float64 dx)
-{
-  // set internal data members
   delz = dz;
   dely = dy;
   delx = dx;
 
-  // z direction
   zlim[0]  = offset[0] * delz;
   zlim[1]  = offset[0] * delz + dims[0] * delz;
   zlim[2]  = zlim[1] - zlim[0];
@@ -209,7 +221,6 @@ DEFINE_MEMBER(void, set_coordinate)(float64 dz, float64 dy, float64 dx)
   gzlim[1] = gdims[0] * delz;
   gzlim[2] = gzlim[1] - gzlim[0];
 
-  // y direction
   ylim[0]  = offset[1] * dely;
   ylim[1]  = offset[1] * dely + dims[1] * dely;
   ylim[2]  = ylim[1] - ylim[0];
@@ -217,7 +228,6 @@ DEFINE_MEMBER(void, set_coordinate)(float64 dz, float64 dy, float64 dx)
   gylim[1] = gdims[1] * dely;
   gylim[2] = gylim[1] - gylim[0];
 
-  // x direction
   xlim[0]  = offset[2] * delx;
   xlim[1]  = offset[2] * delx + dims[2] * delx;
   xlim[2]  = xlim[1] - xlim[0];
@@ -226,7 +236,7 @@ DEFINE_MEMBER(void, set_coordinate)(float64 dz, float64 dy, float64 dx)
   gxlim[2] = gxlim[1] - gxlim[0];
 }
 
-DEFINE_MEMBER(void, set_global_context)(const int* offset, const int* gdims)
+void Chunk3D::set_global_context(const int* offset, const int* gdims)
 {
   this->gdims[0]  = gdims[0];
   this->gdims[1]  = gdims[1];
@@ -236,7 +246,7 @@ DEFINE_MEMBER(void, set_global_context)(const int* offset, const int* gdims)
   this->offset[2] = offset[2];
 }
 
-DEFINE_MEMBER(void, set_mpi_communicator)(int mode, int iz, int iy, int ix, MPI_Comm& comm)
+void Chunk3D::set_mpi_communicator(int mode, int iz, int iy, int ix, MPI_Comm& comm)
 {
   if (mode >= 0 && mode < mpibufvec.size()) {
     mpibufvec[mode]->comm(iz, iy, ix) = comm;
@@ -244,65 +254,7 @@ DEFINE_MEMBER(void, set_mpi_communicator)(int mode, int iz, int iy, int ix, MPI_
     ERROR << tfm::format("invalid index %d for mpibufvec", mode);
   }
 }
-
-DEFINE_MEMBER(int, set_boundary_query)(int mode, int sendrecv)
-{
-  int flag = 0;
-
-  // MPI buffer
-  MpiBufferPtr mpibuf = mpibufvec[mode];
-
-  OMP_MAYBE_CRITICAL
-  if (sendrecv == 0) {
-    // both send/recv
-    MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);
-    MPI_Testall(27, mpibuf->recvreq.data(), &flag, MPI_STATUSES_IGNORE);
-  } else if (sendrecv == +1) {
-    // send
-    MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);
-  } else if (sendrecv == -1) {
-    // recv
-    MPI_Testall(27, mpibuf->recvreq.data(), &flag, MPI_STATUSES_IGNORE);
-  }
-
-  return flag;
-}
-
-DEFINE_MEMBER(void, set_boundary_field)(int mode)
-{
-  // lower boundary in z
-  if (get_nb_rank(-1, 0, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
-  }
-
-  // upper boundary in z
-  if (get_nb_rank(+1, 0, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
-  }
-
-  // lower boundary in y
-  if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
-  }
-
-  // upper boundary in y
-  if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
-  }
-
-  // lower boundary in x
-  if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
-  }
-
-  // upper boundary in x
-  if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
-  }
-}
-
-DEFINE_MEMBER(void, set_mpi_buffer)
-(MpiBufferPtr mpibuf, int mode, int headbyte, int elembyte)
+void Chunk3D::set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int elembyte)
 {
   int size = 0;
 
@@ -325,7 +277,6 @@ DEFINE_MEMBER(void, set_mpi_buffer)
     }
   }
 
-  // buffer allocation
   if (mode == +1 || mode == 0) {
     mpibuf->sendbuf.resize(size);
   }
@@ -334,16 +285,34 @@ DEFINE_MEMBER(void, set_mpi_buffer)
   }
 }
 
-DEFINE_MEMBER(int, probe_bc_exchange)
-(MpiBufferPtr mpibuf)
+int Chunk3D::set_boundary_query(int mode, int sendrecv)
 {
-  // return if recv has already been called
+  int flag = 0;
+
+  MpiBufferPtr mpibuf = mpibufvec[mode];
+
+  OMP_MAYBE_CRITICAL
+  if (sendrecv == 0) {
+
+    MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);
+    MPI_Testall(27, mpibuf->recvreq.data(), &flag, MPI_STATUSES_IGNORE);
+  } else if (sendrecv == +1) {
+
+    MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);
+  } else if (sendrecv == -1) {
+
+    MPI_Testall(27, mpibuf->recvreq.data(), &flag, MPI_STATUSES_IGNORE);
+  }
+
+  return flag;
+}
+
+int Chunk3D::probe_bc_exchange(MpiBufferPtr mpibuf)
+{
+
   if (mpibuf->recvwait == true)
     return 1;
 
-  //
-  // probe incoming messages
-  //
   bool is_everyone_ready = true;
 
   mpibuf->bufsize.fill(0);
@@ -353,7 +322,7 @@ DEFINE_MEMBER(int, probe_bc_exchange)
   for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
     for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
       for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
-        // skip
+
         if (iz == 1 && iy == 1 && ix == 1)
           continue;
 
@@ -367,7 +336,6 @@ DEFINE_MEMBER(int, probe_bc_exchange)
 
         MPI_Iprobe(nbrank, recvtag, recvcomm, &is_ready, &status);
 
-        // get message size
         if (is_ready) {
           int count    = 0;
           int typebyte = 0;
@@ -375,7 +343,7 @@ DEFINE_MEMBER(int, probe_bc_exchange)
           MPI_Type_size(recvtype, &typebyte);
           mpibuf->bufsize(iz, iy, ix) = count * typebyte;
         } else {
-          // not ready yet
+
           is_everyone_ready = false;
         }
       }
@@ -385,13 +353,9 @@ DEFINE_MEMBER(int, probe_bc_exchange)
   if (is_everyone_ready == false)
     return 0;
 
-  //
-  // recv incoming messages
-  //
   {
     int bufsize = 0;
 
-    // prepare for recv
     for (int iz = indexlb[0]; iz <= indexub[0]; iz++) {
       for (int iy = indexlb[1]; iy <= indexub[1]; iy++) {
         for (int ix = indexlb[2]; ix <= indexub[2]; ix++) {
@@ -403,12 +367,11 @@ DEFINE_MEMBER(int, probe_bc_exchange)
     }
     mpibuf->recvbuf.resize(bufsize);
 
-    // recv
     OMP_MAYBE_CRITICAL
     for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
       for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
         for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
-          // skip
+
           if (iz == 1 && iy == 1 && ix == 1)
             continue;
 
@@ -431,7 +394,62 @@ DEFINE_MEMBER(int, probe_bc_exchange)
   return 1;
 }
 
-#undef DEFINE_MEMBER
+///
+/// Implementation of MpiBuffer
+///
+
+int64_t Chunk3D::MpiBuffer::get_size_byte() const
+{
+  int64_t size = 0;
+  size += sizeof(sendwait);
+  size += sizeof(recvwait);
+  size += sendbuf.size;
+  size += recvbuf.size;
+  size += bufsize.size() * sizeof(int);
+  size += bufaddr.size() * sizeof(int);
+  size += comm.size() * sizeof(MPI_Comm);
+  size += sendreq.size() * sizeof(MPI_Request);
+  size += recvreq.size() * sizeof(MPI_Request);
+  size += sendtype.size() * sizeof(MPI_Datatype);
+  size += recvtype.size() * sizeof(MPI_Datatype);
+  return size;
+}
+
+int Chunk3D::MpiBuffer::pack(void* buffer, int address)
+{
+  int ssize = sendbuf.size;
+  int rsize = recvbuf.size;
+  int asize = bufsize.size() * sizeof(int);
+
+  address += memcpy_count(buffer, &sendwait, sizeof(bool), address, 0);
+  address += memcpy_count(buffer, &recvwait, sizeof(bool), address, 0);
+  address += memcpy_count(buffer, &ssize, sizeof(int), address, 0);
+  address += memcpy_count(buffer, &rsize, sizeof(int), address, 0);
+  address += memcpy_count(buffer, bufsize.data(), asize, address, 0);
+  address += memcpy_count(buffer, bufaddr.data(), asize, address, 0);
+
+  return address;
+}
+
+int Chunk3D::MpiBuffer::unpack(void* buffer, int address)
+{
+  int ssize = 0;
+  int rsize = 0;
+  int asize = bufsize.size() * sizeof(int);
+
+  address += memcpy_count(&sendwait, buffer, sizeof(bool), 0, address);
+  address += memcpy_count(&recvwait, buffer, sizeof(bool), 0, address);
+  address += memcpy_count(&ssize, buffer, sizeof(int), 0, address);
+  address += memcpy_count(&rsize, buffer, sizeof(int), 0, address);
+  address += memcpy_count(bufsize.data(), buffer, asize, 0, address);
+  address += memcpy_count(bufaddr.data(), buffer, asize, 0, address);
+
+  // memory allocation
+  sendbuf.resize(ssize);
+  recvbuf.resize(rsize);
+
+  return address;
+}
 
 NIX_NAMESPACE_END
 

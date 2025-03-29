@@ -113,7 +113,7 @@ protected:
 public:
   PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
 
-  virtual int64_t get_size_byte() override;
+  virtual int64_t get_size_byte() const override;
 
   virtual int get_order() const;
 
@@ -144,6 +144,8 @@ public:
   virtual void get_diverror(float64& efd, float64& bfd);
 
   virtual void sort_particle(ParticleVec& particle);
+
+  virtual void set_boundary_field(int mode);
 
   virtual void set_boundary_particle(ParticleVec& particle);
 

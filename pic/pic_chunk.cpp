@@ -34,7 +34,7 @@ PicChunk::PicChunk(const int dims[3], const bool has_dim[3], int id)
   this->reset_load();
 }
 
-int64_t PicChunk::get_size_byte()
+int64_t PicChunk::get_size_byte() const
 {
   int64_t size = 0;
   size += uf.size() * sizeof(float64);
@@ -449,6 +449,34 @@ void PicChunk::sort_particle(ParticleVec& particle)
   for (int is = 0; is < particle.size(); is++) {
     particle[is]->count(0, particle[is]->Np - 1, true);
     particle[is]->sort();
+  }
+}
+
+void PicChunk::set_boundary_field(int mode)
+{
+
+  if (get_nb_rank(-1, 0, 0) == MPI_PROC_NULL) {
+    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+  }
+
+  if (get_nb_rank(+1, 0, 0) == MPI_PROC_NULL) {
+    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+  }
+
+  if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
+    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+  }
+
+  if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
+    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+  }
+
+  if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
+    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+  }
+
+  if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
+    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
   }
 }
 
