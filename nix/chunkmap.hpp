@@ -36,94 +36,31 @@ public:
   /// @param Cy number of chunk in y direction
   /// @param Cx number of chunk in x direction
   ///
-  ChunkMap(int Cz, int Cy, int Cx) : periodicity{1, 1, 1}
-  {
-    size    = Cz * Cy * Cx;
-    dims[0] = Cz;
-    dims[1] = Cy;
-    dims[2] = Cx;
-
-    // memory allocation
-    {
-      std::vector<size_t> dims1 = {static_cast<size_t>(size)};
-      std::vector<size_t> dims2 = {static_cast<size_t>(size), 3};
-      std::vector<size_t> dims3 = {static_cast<size_t>(Cz), static_cast<size_t>(Cy),
-                                   static_cast<size_t>(Cx)};
-
-      coord.resize(dims2);
-      chunkid.resize(dims3);
-
-      coord.fill(0);
-      chunkid.fill(0);
-    }
-
-    // build mapping
-    sfc::get_map3d(Cz, Cy, Cx, chunkid, coord);
-  }
+  ChunkMap(int Cz, int Cy, int Cx);
 
   ///
   /// @brief constructor
   /// @param dims number of chunk in each direction
   ///
-  ChunkMap(const int dims[3]) : ChunkMap(dims[0], dims[1], dims[2])
-  {
-  }
+  ChunkMap(const int dims[3]);
 
   ///
   /// @brief check the validity of map
   /// @return true if it is valid map, false otherwise
   ///
-  virtual bool validate()
-  {
-    return sfc::check_index(chunkid) & sfc::check_locality3d(coord);
-  }
+  virtual bool validate();
 
   ///
   /// @brief get map information as json object
   /// @return obj json object
   ///
-  virtual json to_json()
-  {
-    json obj;
-
-    // meta data
-    obj["size"]        = size;
-    obj["ndim"]        = 3;
-    obj["shape"]       = {dims[0], dims[1], dims[2]};
-    obj["periodicity"] = {periodicity[0], periodicity[1], periodicity[2]};
-
-    // map
-    obj["chunkid"]  = chunkid;
-    obj["coord"]    = coord;
-    obj["boundary"] = boundary;
-
-    return obj;
-  }
+  virtual json to_json();
 
   ///
   /// @brief restore map information from json object
   /// @param obj json object
   ///
-  virtual void from_json(json& obj)
-  {
-    if (obj["ndim"].get<int>() != 3) {
-      ERROR << tfm::format("Invalid input to ChunkMap::load_json");
-    }
-
-    // meta data
-    size           = obj["size"].get<int>();
-    dims[0]        = obj["shape"][0].get<int>();
-    dims[1]        = obj["shape"][1].get<int>();
-    dims[2]        = obj["shape"][2].get<int>();
-    periodicity[0] = obj["periodicity"][0].get<int>();
-    periodicity[1] = obj["periodicity"][1].get<int>();
-    periodicity[2] = obj["periodicity"][2].get<int>();
-
-    // map
-    chunkid  = obj["chunkid"];
-    coord    = obj["coord"];
-    boundary = obj["boundary"].get<std::vector<int>>();
-  }
+  virtual void from_json(json& obj);
 
   ///
   /// @brief set periodicity in each direction
@@ -131,12 +68,7 @@ public:
   /// @param py periodicity in y direction
   /// @param px periodicity in x direction
   ///
-  virtual void set_periodicity(int pz, int py, int px)
-  {
-    periodicity[0] = pz;
-    periodicity[1] = py;
-    periodicity[2] = px;
-  }
+  virtual void set_periodicity(int pz, int py, int px);
 
   ///
   /// @brief return neighbor coordinate for a specific direction `dir`
@@ -145,52 +77,27 @@ public:
   /// @param dir direction of coordinate
   /// @return `coord + delta` if not at boundary, otherwise boundary condition dependent
   ///
-  virtual int get_neighbor_coord(int coord, int delta, int dir)
-  {
-    int cdir = coord + delta;
-
-    if (periodicity[dir] == 1) {
-      cdir = cdir >= 0 ? cdir : dims[dir] - 1;
-      cdir = cdir < dims[dir] ? cdir : 0;
-    } else {
-      cdir = (cdir >= 0 && cdir < dims[dir]) ? cdir : -1;
-    }
-
-    return cdir;
-  }
+  virtual int get_neighbor_coord(int coord, int delta, int dir);
 
   ///
   /// @brief get process rank associated with chunk ID
   /// @param id chunk ID
   /// @return rank
   ///
-  virtual int get_rank(int id)
-  {
-    if (id >= 0 && id < size) {
-      auto it = std::upper_bound(boundary.begin(), boundary.end(), id);
-      return std::distance(boundary.begin(), it) - 1;
-    } else {
-      return MPI_PROC_NULL;
-    }
-  }
+  virtual int get_rank(int id);
 
   ///
   /// @brief set process rank boundary
   /// @param boundary array of rank boundary to set
   ///
-  virtual void set_rank_boundary(std::vector<int>& boundary)
-  {
-    this->boundary = boundary;
-  }
+  virtual void set_rank_boundary(std::vector<int>& boundary);
 
   ///
   /// @brief get process rank boundary
   /// @return array of rank boundary
   ///
-  virtual std::vector<int> get_rank_boundary()
-  {
-    return boundary;
-  }
+  virtual std::vector<int> get_rank_boundary();
+
   ///
   /// @brief get coordinate of chunk for 3D map
   /// @param id chunk ID
@@ -198,18 +105,7 @@ public:
   /// @param cy y coordinate of chunk will be stored
   /// @param cx x coordinate of chunk will be stored
   ///
-  virtual void get_coordinate(int id, int& cz, int& cy, int& cx)
-  {
-    if (id >= 0 && id < size) {
-      cx = coord(id, 0);
-      cy = coord(id, 1);
-      cz = coord(id, 2);
-    } else {
-      cz = -1;
-      cy = -1;
-      cx = -1;
-    }
-  }
+  virtual void get_coordinate(int id, int& cz, int& cy, int& cx);
 
   ///
   /// @brief get chunk ID for 3D map
@@ -218,14 +114,7 @@ public:
   /// @param cx x coordinate of chunk
   /// @return chunk ID
   ///
-  virtual int get_chunkid(int cz, int cy, int cx)
-  {
-    if ((cz >= 0 && cz < dims[0]) && (cy >= 0 && cy < dims[1]) && (cx >= 0 && cx < dims[2])) {
-      return chunkid(cz, cy, cx);
-    } else {
-      return -1;
-    }
-  }
+  virtual int get_chunkid(int cz, int cy, int cx);
 };
 
 NIX_NAMESPACE_END

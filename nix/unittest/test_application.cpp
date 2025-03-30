@@ -52,12 +52,12 @@ const std::string config_content  = R"(
 }
 )";
 
-class MockChunk : public Chunk<3>
+class MockChunk : public Chunk
 {
 public:
-  using Chunk<3>::Chunk;
+  using Chunk::Chunk;
 
-  MockChunk(const int dims[3], const bool has_dim[3], int id) : Chunk<3>(dims, id)
+  MockChunk(const int dims[3], const bool has_dim[3], int id) : Chunk(dims, has_dim, id)
   {
   }
 

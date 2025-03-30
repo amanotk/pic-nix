@@ -1,40 +1,40 @@
 // -*- C++ -*-
-
-#include "chunkvector.hpp"
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
+
+#include "chunkvector.hpp"
 
 #include "catch.hpp"
 
 using namespace nix;
 
-class MockChunkMap
+class MockChunkMap : public ChunkMap
 {
 private:
   int dims[3];
 
 public:
-  MockChunkMap(int cz, int cy, int cx) : dims{cz, cy, cx}
+  MockChunkMap(int cz, int cy, int cx) : ChunkMap(cz, cy, cx)
   {
   }
 
-  int get_chunkid(int cz, int cy, int cx)
-  {
-    return 0;
-  }
-
-  int get_rank(int id)
+  virtual int get_chunkid(int cz, int cy, int cx) override
   {
     return 0;
   }
 
-  int get_neighbor_coord(int coord, int delta, int dir)
+  virtual int get_rank(int id) override
   {
     return 0;
   }
 
-  void get_coordinate(int id, int& cz, int& cy, int& cx)
+  virtual int get_neighbor_coord(int coord, int delta, int dir) override
+  {
+    return 0;
+  }
+
+  virtual void get_coordinate(int id, int& cz, int& cy, int& cx) override
   {
     cx = 0;
     cy = 0;
@@ -140,8 +140,8 @@ TEST_CASE("set_neighbors")
   int Cy = GENERATE(1, 4);
   int Cz = GENERATE(1, 4);
 
-  std::unique_ptr<MockChunkMap> chunkmap = std::make_unique<MockChunkMap>(Cz, Cy, Cx);
-  ChunkVectorTest               chunktest;
+  std::unique_ptr<ChunkMap> chunkmap = std::make_unique<MockChunkMap>(Cz, Cy, Cx);
+  ChunkVectorTest           chunktest;
 
   for (int i = 0; i < Cz * Cy * Cx; i++) {
     chunktest.push_back(std::make_unique<MockChunk>(i));

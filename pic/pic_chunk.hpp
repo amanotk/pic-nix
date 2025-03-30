@@ -4,7 +4,7 @@
 
 #include "pic.hpp"
 
-#include "nix/chunk3d.hpp"
+#include "nix/chunk.hpp"
 
 ///
 /// @brief Chunk for 3D Explicit PIC Simulations
@@ -29,12 +29,12 @@
 /// In addition, custom diagnostics routines may also be implemented depending on the needs of
 /// applications.
 ///
-class PicChunk : public nix::Chunk3D
+class PicChunk : public nix::Chunk
 {
 public:
   struct InternalData; // forward declaration
   using this_type    = PicChunk;
-  using base_type    = typename nix::Chunk3D;
+  using base_type    = typename nix::Chunk;
   using data_type    = InternalData;
   using MpiBuffer    = typename base_type::MpiBuffer;
   using MpiBufferPtr = typename base_type::MpiBufferPtr;

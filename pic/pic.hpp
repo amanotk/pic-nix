@@ -22,10 +22,11 @@ using ParticlePtr  = std::shared_ptr<nix::XtensorParticle>;
 using ParticleVec  = std::vector<ParticlePtr>;
 using ParticleType = ParticlePtr::element_type;
 
-class PicApplication; // forward declaration of Application type
-class PicChunk;       // forward declaration of Chunk type
-class PicDiag;        // forward declaration of Diag type
-class PicPacker;      // forward declaration of Packer type
+// forward declaration
+class PicApplication;
+class PicChunk;
+class PicDiag;
+class PicPacker;
 
 // mode for load
 enum LoadMode {

@@ -4,6 +4,8 @@
 
 #include "nix.hpp"
 
+#include "chunkmap.hpp"
+
 NIX_NAMESPACE_BEGIN
 
 ///
@@ -50,7 +52,6 @@ public:
     this->shrink_to_fit();
   }
 
-  template <typename ChunkMap>
   void set_neighbors(std::unique_ptr<ChunkMap>& chunkmap)
   {
     for (int i = 0; i < this->size(); i++) {
@@ -81,7 +82,6 @@ public:
     }
   }
 
-  template <typename ChunkMap>
   bool validate(std::unique_ptr<ChunkMap>& chunkmap)
   {
     bool status = true;

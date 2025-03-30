@@ -1,9 +1,9 @@
 // -*- C++ -*-
-#include "chunk3d.hpp"
+#include "chunk.hpp"
 
 NIX_NAMESPACE_BEGIN
 
-Chunk3D::Chunk3D(const int dims[3], const bool has_dim[3], int id)
+Chunk::Chunk(const int dims[3], const bool has_dim[3], int id)
     : myid(id), delx(1.0), dely(1.0), delz(1.0), option({})
 {
   for (int i = 0; i < 3; i++) {
@@ -15,7 +15,7 @@ Chunk3D::Chunk3D(const int dims[3], const bool has_dim[3], int id)
   reset_load();
 }
 
-int Chunk3D::pack(void* buffer, int address)
+int Chunk::pack(void* buffer, int address)
 {
   address += memcpy_count(buffer, &myid, sizeof(int), address, 0);
   address += memcpy_count(buffer, nbid, nbsize * sizeof(int), address, 0);
@@ -61,7 +61,7 @@ int Chunk3D::pack(void* buffer, int address)
   return address;
 }
 
-int Chunk3D::unpack(void* buffer, int address)
+int Chunk::unpack(void* buffer, int address)
 {
   address += memcpy_count(&myid, buffer, sizeof(int), 0, address);
   address += memcpy_count(nbid, buffer, nbsize * sizeof(int), 0, address);
@@ -115,7 +115,7 @@ int Chunk3D::unpack(void* buffer, int address)
   return address;
 }
 
-void Chunk3D::set_index_bounds()
+void Chunk::set_index_bounds()
 {
 
   indexlb[0] = 0;
@@ -207,7 +207,7 @@ void Chunk3D::set_index_bounds()
   recvub[2][2] = Ubx + boundary_margin;
 }
 
-void Chunk3D::set_coordinate(float64 dz, float64 dy, float64 dx)
+void Chunk::set_coordinate(float64 dz, float64 dy, float64 dx)
 {
 
   delz = dz;
@@ -236,7 +236,7 @@ void Chunk3D::set_coordinate(float64 dz, float64 dy, float64 dx)
   gxlim[2] = gxlim[1] - gxlim[0];
 }
 
-void Chunk3D::set_global_context(const int* offset, const int* gdims)
+void Chunk::set_global_context(const int* offset, const int* gdims)
 {
   this->gdims[0]  = gdims[0];
   this->gdims[1]  = gdims[1];
@@ -246,7 +246,7 @@ void Chunk3D::set_global_context(const int* offset, const int* gdims)
   this->offset[2] = offset[2];
 }
 
-void Chunk3D::set_mpi_communicator(int mode, int iz, int iy, int ix, MPI_Comm& comm)
+void Chunk::set_mpi_communicator(int mode, int iz, int iy, int ix, MPI_Comm& comm)
 {
   if (mode >= 0 && mode < mpibufvec.size()) {
     mpibufvec[mode]->comm(iz, iy, ix) = comm;
@@ -254,7 +254,7 @@ void Chunk3D::set_mpi_communicator(int mode, int iz, int iy, int ix, MPI_Comm& c
     ERROR << tfm::format("invalid index %d for mpibufvec", mode);
   }
 }
-void Chunk3D::set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int elembyte)
+void Chunk::set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int elembyte)
 {
   int size = 0;
 
@@ -285,7 +285,7 @@ void Chunk3D::set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int el
   }
 }
 
-int Chunk3D::set_boundary_query(int mode, int sendrecv)
+int Chunk::set_boundary_query(int mode, int sendrecv)
 {
   int flag = 0;
 
@@ -307,7 +307,7 @@ int Chunk3D::set_boundary_query(int mode, int sendrecv)
   return flag;
 }
 
-int Chunk3D::probe_bc_exchange(MpiBufferPtr mpibuf)
+int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
 {
 
   if (mpibuf->recvwait == true)
@@ -398,7 +398,7 @@ int Chunk3D::probe_bc_exchange(MpiBufferPtr mpibuf)
 /// Implementation of MpiBuffer
 ///
 
-int64_t Chunk3D::MpiBuffer::get_size_byte() const
+int64_t Chunk::MpiBuffer::get_size_byte() const
 {
   int64_t size = 0;
   size += sizeof(sendwait);
@@ -415,7 +415,7 @@ int64_t Chunk3D::MpiBuffer::get_size_byte() const
   return size;
 }
 
-int Chunk3D::MpiBuffer::pack(void* buffer, int address)
+int Chunk::MpiBuffer::pack(void* buffer, int address)
 {
   int ssize = sendbuf.size;
   int rsize = recvbuf.size;
@@ -431,7 +431,7 @@ int Chunk3D::MpiBuffer::pack(void* buffer, int address)
   return address;
 }
 
-int Chunk3D::MpiBuffer::unpack(void* buffer, int address)
+int Chunk::MpiBuffer::unpack(void* buffer, int address)
 {
   int ssize = 0;
   int rsize = 0;
