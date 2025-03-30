@@ -160,7 +160,7 @@ public:
 
           // process particles in the cell
           for (int is = 0; is < ns; is++) {
-            int  ii      = up[is]->flatindex(iz, iy, ix); // 1D grid index
+            int  ii      = up[is]->flatindex(jz, jy, jx); // 1D grid index
             int  ip_zero = up[is]->pindex(ii);
             int  np_cell = up[is]->pindex(ii + 1) - ip_zero;
             int  np_simd = (np_cell / simd_f64::size) * simd_f64::size;

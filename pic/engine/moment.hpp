@@ -173,7 +173,7 @@ public:
             float64  mom[Sz][Sy][Sx][14]      = {0}; // scalar
             simd_f64 mom_simd[Sz][Sy][Sx][14] = {0}; // SIMD register
 
-            int ii      = up[is]->flatindex(iz, iy, ix); // 1D grid index
+            int ii      = up[is]->flatindex(jz, jy, jx); // 1D grid index
             int ip_zero = up[is]->pindex(ii);
             int np_cell = up[is]->pindex(ii + 1) - ip_zero;
             int np_simd = (np_cell / simd_f64::size) * simd_f64::size;
