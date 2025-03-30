@@ -46,9 +46,6 @@ public:
   int     ubx;
   int     uby;
   int     ubz;
-  int     stride_x;
-  int     stride_y;
-  int     stride_z;
   float64 cc;
   float64 dt;
   float64 dx;
@@ -71,9 +68,6 @@ public:
     ubx      = data.Ubx;
     uby      = data.Uby;
     ubz      = data.Ubz;
-    stride_x = 1;
-    stride_y = stride_x * (data.Ubx - data.Lbx + 2);
-    stride_z = stride_y * (data.Uby - data.Lby + 2);
     cc       = data.cc;
     dx       = data.delx;
     dy       = data.dely;
@@ -169,10 +163,9 @@ public:
     for (int iz = lbz, jz = 0; iz <= ubz; iz++, jz++) {
       for (int iy = lby, jy = 0; iy <= uby; iy++, jy++) {
         for (int ix = lbx, jx = 0; ix <= ubx; ix++, jx++) {
-          int ii = jz * stride_z + jy * stride_y + jx * stride_x; // 1D grid index
-
           // process particles in the cell
           for (int is = 0; is < ns; is++) {
+            int     ii      = up[is]->flatindex(iz, iy, ix); // 1D grid index
             int     ip_zero = up[is]->pindex(ii);
             int     np_cell = up[is]->pindex(ii + 1) - ip_zero;
             int     np_simd = (np_cell / simd_f64::size) * simd_f64::size;
@@ -565,7 +558,7 @@ public:
   }
 };
 
-} // namespace engine
+} // namespace pic_engine
 
 // Local Variables:
 // c-file-style   : "gnu"

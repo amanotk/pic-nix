@@ -17,9 +17,6 @@ public:
   int     ubx;
   int     uby;
   int     ubz;
-  int     stride_x;
-  int     stride_y;
-  int     stride_z;
   float64 cc;
   float64 dx;
   float64 dy;
@@ -34,28 +31,25 @@ public:
   template <typename T_data>
   BasePosition(const T_data& data)
   {
-    ns       = data.Ns;
-    cc       = data.cc;
-    ns       = data.Ns;
-    lbx      = data.Lbx;
-    lby      = data.Lby;
-    lbz      = data.Lbz;
-    ubx      = data.Ubx;
-    uby      = data.Uby;
-    ubz      = data.Ubz;
-    stride_x = 1;
-    stride_y = stride_x * (data.Ubx - data.Lbx + 2);
-    stride_z = stride_y * (data.Uby - data.Lby + 2);
-    cc       = data.cc;
-    dx       = data.delx;
-    dy       = data.dely;
-    dz       = data.delz;
-    xmin     = data.xlim[0];
-    ymin     = data.ylim[0];
-    zmin     = data.zlim[0];
-    xmax     = data.xlim[1];
-    ymax     = data.ylim[1];
-    zmax     = data.zlim[1];
+    ns   = data.Ns;
+    cc   = data.cc;
+    ns   = data.Ns;
+    lbx  = data.Lbx;
+    lby  = data.Lby;
+    lbz  = data.Lbz;
+    ubx  = data.Ubx;
+    uby  = data.Uby;
+    ubz  = data.Ubz;
+    cc   = data.cc;
+    dx   = data.delx;
+    dy   = data.dely;
+    dz   = data.delz;
+    xmin = data.xlim[0];
+    ymin = data.ylim[0];
+    zmin = data.zlim[0];
+    xmax = data.xlim[1];
+    ymax = data.ylim[1];
+    zmax = data.zlim[1];
   }
 
   template <typename T_particle>
@@ -160,7 +154,7 @@ public:
   }
 };
 
-} // namespace engine
+} // namespace pic_engine
 
 // Local Variables:
 // c-file-style   : "gnu"
