@@ -13,7 +13,7 @@ find_package(Filesystem REQUIRED)
 add_compile_definitions(XTENSOR_USE_XSIMD)
 
 # build static library
-add_library(nix STATIC balancer.cpp nixio.cpp sfc.cpp chunk.cpp chunkmap.cpp)
+add_library(nix STATIC application.cpp balancer.cpp nixio.cpp sfc.cpp chunk.cpp chunkmap.cpp)
 
 # include directory
 target_include_directories(nix PUBLIC ${PROJECT_SOURCE_DIR})

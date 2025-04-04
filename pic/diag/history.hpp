@@ -41,9 +41,10 @@ public:
       float64 ene_e = 0;
       float64 ene_b = 0;
       float64 ene_p[Ns];
+      auto    chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
 
-      data.chunkvec[i]->get_diverror(div_e, div_b);
-      data.chunkvec[i]->get_energy(ene_e, ene_b, ene_p);
+      chunk->get_diverror(div_e, div_b);
+      chunk->get_energy(ene_e, ene_b, ene_p);
 
       history[0] += div_e;
       history[1] += div_b;

@@ -106,8 +106,8 @@ public:
 
     // calculate buffer size
     for (int i = 0; i < data.chunkvec.size(); i++) {
-      auto chunk_data = data.chunkvec[i]->get_internal_data();
-      bufsize += packer(chunk_data, nullptr, 0);
+      auto chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
+      bufsize += packer(chunk->get_internal_data(), nullptr, 0);
     }
 
     // pack data
@@ -116,8 +116,8 @@ public:
     auto bufptr = buffer[index].get();
 
     for (int i = 0, address = 0; i < data.chunkvec.size(); i++) {
-      auto chunk_data = data.chunkvec[i]->get_internal_data();
-      address         = packer(chunk_data, bufptr, address);
+      auto chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
+      address    = packer(chunk->get_internal_data(), bufptr, address);
     }
 
     // write to the disk

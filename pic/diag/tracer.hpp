@@ -88,8 +88,8 @@ public:
     auto packer = PickupTracerPacker(config);
 
     for (int i = 0; i < data.chunkvec.size(); i++) {
-      auto chunk_data = data.chunkvec[i]->get_internal_data();
-      packer(chunk_data, nullptr, 0);
+      auto chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
+      packer(chunk->get_internal_data(), nullptr, 0);
     }
   }
 };

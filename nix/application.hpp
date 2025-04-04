@@ -2,33 +2,30 @@
 #ifndef _APPLICATION_HPP_
 #define _APPLICATION_HPP_
 
+#include "nix.hpp"
+
 #include "argparser.hpp"
 #include "balancer.hpp"
-#include "buffer.hpp"
 #include "cfgparser.hpp"
 #include "chunkmap.hpp"
 #include "chunkvector.hpp"
-#include "diag.hpp"
 #include "logger.hpp"
-#include "mpistream.hpp"
-#include "nix.hpp"
 #include "statehandler.hpp"
-#include "tinyformat.hpp"
-#include <nlohmann/json.hpp>
 
 NIX_NAMESPACE_BEGIN
 
+// forward declaration
+class Chunk;
+class Diag;
+
 ///
 /// @brief Base Application class
-/// @tparam Chunk Chunk type
-/// @tparam ChunkMap ChunkMap type
 ///
-template <typename Chunk>
 class Application
 {
 public:
   struct InternalData; // forward declaration
-  using this_type       = Application<Chunk>;
+  using this_type       = Application;
   using chunk_type      = Chunk;
   using diag_type       = Diag;
   using data_type       = InternalData;
@@ -107,24 +104,6 @@ public:
   }
 
   ///
-  /// @brief convert internal data to json object
-  /// @return json object
-  ///
-  virtual json to_json();
-
-  ///
-  /// @brief restore internal data from json object
-  /// @param obj json object
-  ///
-  virtual bool from_json(json& obj);
-
-  ///
-  /// @brief main loop of simulation
-  /// @return return code of application
-  ///
-  virtual int main();
-
-  ///
   /// @brief factory to create argument parser
   /// @return parser object
   ///
@@ -148,9 +127,7 @@ public:
   ///
   virtual std::unique_ptr<StateHandler> create_statehandler()
   {
-    std::string basedir = get_basedir();
-
-    return std::make_unique<StateHandler>(basedir);
+    return std::make_unique<StateHandler>(get_basedir());
   }
 
   ///
@@ -173,10 +150,9 @@ public:
   ///
   virtual std::unique_ptr<Logger> create_logger()
   {
-    auto        config  = cfgparser->get_application()["log"];
-    std::string basedir = get_basedir();
+    auto config = cfgparser->get_application()["log"];
 
-    return std::make_unique<Logger>(config, basedir, thisrank, is_initial_run());
+    return std::make_unique<Logger>(config, get_basedir(), thisrank, is_initial_run());
   }
 
   ///
@@ -203,6 +179,24 @@ public:
   {
     return std::make_unique<Chunk>(dims, has_dim, id);
   }
+
+  ///
+  /// @brief convert internal data to json object
+  /// @return json object
+  ///
+  virtual json to_json();
+
+  ///
+  /// @brief restore internal data from json object
+  /// @param obj json object
+  ///
+  virtual bool from_json(json& obj);
+
+  ///
+  /// @brief main loop of simulation
+  /// @return return code of application
+  ///
+  virtual int main();
 
 protected:
   ///
@@ -296,552 +290,54 @@ protected:
   ///
   virtual void push()
   {
+    // override me
   }
 
   ///
   /// @brief save profile of run
   ///
-  virtual void save_profile()
-  {
-    if (is_initial_run() == true) {
-      statehandler->save_application(*this, get_internal_data(), "profile");
-    }
-  }
+  virtual void save_profile();
 
   ///
   /// @brief check if this is the initial run or not
   /// @return true if no snapshot is specified and false otherwise
   ///
-  virtual bool is_initial_run()
-  {
-    return argparser->get_load() == "";
-  }
+  virtual bool is_initial_run();
 
   ///
   /// @brief check if further push is needed or not
   /// @return true if the maximum physical time is not yet reached and false otherwise
   ///
-  virtual bool is_push_needed()
-  {
-    if (curtime < argparser->get_physical_time_max() + cfgparser->get_delt()) {
-      return true;
-    }
-    return false;
-  }
+  virtual bool is_push_needed();
 
   ///
   /// @brief get basedir from configuration file
   /// @return return basedir
   ///
-  virtual std::string get_basedir()
-  {
-    return cfgparser->get_application().value("basedir", "");
-  }
+  virtual std::string get_basedir();
 
   ///
   /// @brief get I/O mode from configuration file
   /// @return return I/O mode
   ///
-  virtual std::string get_iomode()
-  {
-    return cfgparser->get_application().value("iomode", "mpiio");
-  }
+  virtual std::string get_iomode();
 
   ///
   /// @brief get available elapsed time
   /// @return available elapsed time in second
   ///
-  virtual float64 get_available_etime()
-  {
-    float64 etime;
-
-    if (thisrank == 0) {
-      etime = wall_clock() - wclock;
-    }
-    MPI_Bcast(&etime, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    return argparser->get_elapsed_time_max() - etime;
-  }
+  virtual float64 get_available_etime();
 
   ///
   /// @brief take log
   ///
-  virtual void take_log()
-  {
-    // timestamp
-    json log = {{"unixtime", nix::wall_clock()}};
-    logger->append(curstep, "timestamp", log);
-
-    logger->log(curstep);
-  }
+  virtual void take_log();
 
   ///
   /// @brief increment step and physical time
   ///
-  virtual void increment_time()
-  {
-    curtime += cfgparser->get_delt();
-    curstep++;
-  }
+  virtual void increment_time();
 };
-
-//
-// implementation follows
-//
-
-#define DEFINE_MEMBER(type, name)                                                                  \
-  template <typename Chunk>                                                                        \
-  type Application<Chunk>::name
-
-DEFINE_MEMBER(json, to_json)()
-{
-  json state = {{"timestamp", nix::wall_clock()},
-                {"wclock", wclock},
-                {"ndims", ndims},
-                {"cdims", cdims},
-                {"curstep", curstep},
-                {"curtime", curtime},
-                {"thisrank", thisrank},
-                {"nprocess", nprocess},
-                {"nthread", nthread},
-                {"configuration", cfgparser->get_root()},
-                {"chunkmap", chunkmap->to_json()}};
-
-  return state;
-}
-
-DEFINE_MEMBER(bool, from_json)(json& state)
-{
-  json current_state = to_json();
-
-  // check consistency
-  bool consistency = true;
-
-  consistency &= current_state["ndims"] == state["ndims"];
-  consistency &= current_state["cdims"] == state["cdims"];
-  consistency &= current_state["nprocess"] == state["nprocess"];
-  consistency &= current_state["configuration"]["parameter"] == state["configuration"]["parameter"];
-
-  if (consistency == false) {
-    ERROR << tfm::format("Trying to load inconsistent state");
-  } else {
-    curstep = state["curstep"].get<int>();
-    curtime = state["curtime"].get<float64>();
-    chunkmap->from_json(state["chunkmap"]);
-  }
-
-  return consistency;
-}
-
-DEFINE_MEMBER(int, main)()
-{
-  //
-  // initialize the application
-  //
-  initialize(cl_argc, cl_argv);
-  DEBUG1 << tfm::format("initialize");
-
-  //
-  // set initial condition
-  //
-  setup_chunks();
-  DEBUG1 << tfm::format("setup_chunks");
-
-  //
-  // save profile
-  //
-  save_profile();
-
-  //
-  // main loop
-  //
-  while (is_push_needed()) {
-    //
-    // output diagnostics
-    //
-    diagnostic();
-    DEBUG1 << tfm::format("step[%s] diagnostic", format_step(curstep));
-
-    //
-    // advance physical quantities by one step
-    //
-    push();
-    DEBUG1 << tfm::format("step[%s] push", format_step(curstep));
-
-    //
-    // perform rebalance
-    //
-    rebalance();
-    DEBUG1 << tfm::format("step[%s] rebalance", format_step(curstep));
-
-    //
-    // take log
-    //
-    take_log();
-    DEBUG1 << tfm::format("step[%s] logging", format_step(curstep));
-
-    //
-    // increment step and time
-    //
-    increment_time();
-
-    //
-    // exit if elapsed time exceeds the limit
-    //
-    if (get_available_etime() < 0) {
-      DEBUG1 << tfm::format("step[%s] run out of time", format_step(curstep));
-      break;
-    }
-  }
-
-  //
-  // finalize the application
-  //
-  DEBUG1 << tfm::format("finalize");
-  finalize();
-
-  return 0;
-}
-
-DEFINE_MEMBER(void, initialize)(int argc, char** argv)
-{
-  curstep = 0;
-  curtime = 0.0;
-
-  // parse command line arguments
-  argparser = create_argparser();
-  argparser->parse_check(argc, argv);
-
-  // parse configuration file
-  cfgparser = create_cfgparser();
-  cfgparser->parse_file(argparser->get_config());
-
-  initialize_mpi(&argc, &argv);
-
-  // object initialization
-  statehandler = create_statehandler();
-  balancer     = create_balancer();
-  logger       = create_logger();
-  chunkmap     = create_chunkmap();
-
-  // misc
-  initialize_debugprinting();
-  initialize_dimensions();
-  initialize_domain();
-  initialize_diagnostic();
-}
-
-DEFINE_MEMBER(void, finalize)()
-{
-  logger->flush();
-
-  // save snapshot
-  if (argparser->get_save() != "") {
-    statehandler->save(*this, get_internal_data(), argparser->get_save());
-  }
-
-  finalize_mpi();
-}
-
-DEFINE_MEMBER(void, initialize_base_directory)()
-{
-  if (thisrank == 0 && is_initial_run() == true) {
-    namespace fs = std::filesystem;
-
-    std::string basedir = get_basedir();
-    if (basedir != "" && fs::exists(basedir) == false) {
-      fs::create_directory(basedir);
-      nix::sync_directory(basedir);
-    }
-  }
-  // synchronize
-  MPI_Barrier(MPI_COMM_WORLD);
-}
-
-DEFINE_MEMBER(void, initialize_mpi)(int* argc, char*** argv)
-{
-  nthread = nix::get_max_threads();
-
-  // initialize MPI with thread support
-  {
-    int thread_required = NIX_MPI_THREAD_LEVEL;
-    int thread_provided = -1;
-
-    if (is_mpi_init_already_called == false) {
-      MPI_Init_thread(argc, argv, thread_required, &thread_provided);
-      is_mpi_init_already_called = true;
-    } else {
-      // MPI_Init should be already called when doing unit test
-      MPI_Init_thread(nullptr, nullptr, thread_required, &thread_provided);
-    }
-
-    if (thread_provided < thread_required) {
-      ERROR << tfm::format("Your MPI does not support required thread level!");
-      MPI_Finalize();
-      exit(-1);
-    }
-  }
-
-  MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
-  MPI_Comm_rank(MPI_COMM_WORLD, &thisrank);
-
-  wclock = wall_clock();
-  MPI_Bcast(&wclock, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-  // base directory and stdout/stderr redirection
-  {
-    namespace fs = std::filesystem;
-
-    json        config            = cfgparser->get_application();
-    std::string path              = "";
-    int         max_files_per_dir = 1000;
-
-    initialize_base_directory();
-
-    if (config.contains("mpistream") == false) {
-      // redirect to /dev/null except for rank 0 by default
-      MpiStream::initialize(path, max_files_per_dir);
-    } else if (config["mpistream"].is_object() == true) {
-      // redirect with user setting
-      config            = config["mpistream"];
-      path              = fs::path(get_basedir()) / config.value("path", path);
-      max_files_per_dir = config.value("max_files_per_dir", max_files_per_dir);
-      MpiStream::initialize(path, max_files_per_dir);
-    } else if (config["mpistream"] == false) {
-      // no redirection
-    } else {
-      ERROR << tfm::format("Ignore invalid configuration for mpistream\n");
-    }
-  }
-}
-
-DEFINE_MEMBER(void, finalize_mpi)()
-{
-  // these must be called before MPI_Finalize
-  MpiStream::finalize();
-  Diag::finalize();
-
-  MPI_Finalize();
-}
-
-DEFINE_MEMBER(void, assert_mpi)(bool condition, std::string msg)
-{
-  if (condition == false) {
-    MpiStream::finalize();
-    ERROR << msg << std::endl;
-    MPI_Abort(MPI_COMM_WORLD, -1);
-  }
-}
-
-DEFINE_MEMBER(void, initialize_debugprinting)()
-{
-  DebugPrinter::init();
-  DebugPrinter::set_level(argparser->get_verbosity());
-}
-
-DEFINE_MEMBER(void, initialize_dimensions)()
-{
-  ndims[0] = cfgparser->get_Nz();
-  ndims[1] = cfgparser->get_Ny();
-  ndims[2] = cfgparser->get_Nx();
-  ndims[3] = ndims[0] * ndims[1] * ndims[2];
-
-  cdims[0] = cfgparser->get_Cz();
-  cdims[1] = cfgparser->get_Cy();
-  cdims[2] = cfgparser->get_Cx();
-  cdims[3] = cdims[0] * cdims[1] * cdims[2];
-}
-
-DEFINE_MEMBER(void, initialize_domain)()
-{
-  // not necessary by default
-}
-
-DEFINE_MEMBER(void, initialize_workload)()
-{
-  balancer->fill_load(1.0);
-}
-
-DEFINE_MEMBER(void, initialize_diagnostic)()
-{
-  Diag::initialize(get_basedir(), get_iomode());
-}
-
-DEFINE_MEMBER(void, setup_chunks_init)()
-{
-  // error check
-  {
-    const int numchunk_global = cdims[3];
-
-    if (numchunk_global < nprocess) {
-      ERROR << tfm::format("Number of processes should not exceed number of chunks");
-      ERROR << tfm::format("* number of processes = %8d", nprocess);
-      ERROR << tfm::format("* number of chunks    = %8d", numchunk_global);
-      finalize();
-      exit(-1);
-    }
-  }
-
-  // initial assignment
-  initialize_workload();
-  auto boundary = balancer->assign_initial(nprocess);
-  chunkmap->set_rank_boundary(boundary);
-
-  // create local chunks
-  int  numchunk   = boundary[thisrank + 1] - boundary[thisrank];
-  bool has_dim[3] = {
-      (ndims[0] == 1 && cdims[0] == 1) ? false : true,
-      (ndims[1] == 1 && cdims[1] == 1) ? false : true,
-      (ndims[2] == 1 && cdims[2] == 1) ? false : true,
-  };
-  int dims[3]{
-      ndims[0] / cdims[0],
-      ndims[1] / cdims[1],
-      ndims[2] / cdims[2],
-  };
-
-  // check dimension
-  {
-    bool is_1d = has_dim[0] == false && has_dim[1] == false && has_dim[2] == true;
-    bool is_2d = has_dim[0] == false && has_dim[1] == true && has_dim[2] == true;
-    bool is_3d = has_dim[0] == true && has_dim[1] == true && has_dim[2] == true;
-
-    if (is_1d == false && is_2d == false && is_3d == false) {
-      ERROR << tfm::format("Invalid dimension");
-      ERROR << tfm::format("* has_dim = %d %d %d", has_dim[0], has_dim[1], has_dim[2]);
-      finalize();
-      exit(-1);
-    }
-  }
-
-  chunkvec.resize(numchunk);
-
-  for (int i = 0, id = boundary[thisrank]; id < boundary[thisrank + 1]; i++, id++) {
-    chunkvec[i] = create_chunk(dims, has_dim, id);
-  }
-  chunkvec.set_neighbors(chunkmap);
-
-  // set auxiliary information for chunk
-  for (int i = 0; i < chunkvec.size(); i++) {
-    int ix, iy, iz;
-    int offset[3];
-
-    chunkmap->get_coordinate(chunkvec[i]->get_id(), iz, iy, ix);
-    offset[0] = iz * ndims[0] / cdims[0];
-    offset[1] = iy * ndims[1] / cdims[1];
-    offset[2] = ix * ndims[2] / cdims[2];
-    chunkvec[i]->set_global_context(offset, ndims);
-  }
-
-  // setup initial condition
-  for (int i = 0; i < chunkvec.size(); i++) {
-    auto config      = cfgparser->get_parameter();
-    config["option"] = cfgparser->get_application()["option"];
-    chunkvec[i]->setup(config);
-  }
-}
-
-DEFINE_MEMBER(void, setup_chunks)()
-{
-  if (argparser->get_load() != "") {
-    statehandler->load(*this, get_internal_data(), argparser->get_load());
-  } else {
-    setup_chunks_init();
-  }
-
-  assert_mpi(validate_chunks() == true, "invalid chunks after setup_chunks");
-}
-
-DEFINE_MEMBER(bool, validate_chunks)()
-{
-  bool status = chunkvec.validate(chunkmap);
-
-  MPI_Allreduce(MPI_IN_PLACE, &status, 1, MPI_CXX_BOOL, MPI_LAND, MPI_COMM_WORLD);
-
-  return status;
-}
-
-DEFINE_MEMBER(bool, rebalance)()
-{
-  const int nchunk_global = cdims[3];
-
-  bool status   = false;
-  json log      = {};
-  json config   = cfgparser->get_application()["rebalance"];
-  int  interval = 100;
-  int  loglevel = 0;
-
-  DEBUG2 << "rebalance() start";
-  float64 wclock1 = nix::wall_clock();
-
-  if (config.is_null() == false) {
-    interval = config.value("interval", interval);
-    loglevel = config.value("loglevel", loglevel);
-  }
-
-  if (curstep > 0 && curstep % interval == 0) {
-    // update global load of chunks
-    balancer->update_global_load(get_internal_data());
-
-    // find new assignment
-    auto boundary = chunkmap->get_rank_boundary();
-    boundary      = balancer->assign(boundary);
-
-    // sned/recv chunks
-    balancer->sendrecv_chunk(*this, get_internal_data(), boundary);
-    chunkmap->set_rank_boundary(boundary);
-    chunkvec.set_neighbors(chunkmap);
-
-    assert_mpi(validate_chunks() == true, "invalid chunks after rebalance");
-
-    status = true;
-  }
-
-  if (loglevel >= 1 && curstep % interval == 0) {
-    // log assignment result
-    log["boundary"] = chunkmap->get_rank_boundary();
-  }
-
-  DEBUG2 << "rebalance() end";
-  float64 wclock2 = nix::wall_clock();
-
-  log["elapsed"] = wclock2 - wclock1;
-  log["status"]  = status;
-  logger->append(curstep, "rebalance", log);
-
-  return status;
-}
-
-DEFINE_MEMBER(void, diagnostic)()
-{
-  DEBUG2 << "diagnostic() start";
-  float64 wclock1 = nix::wall_clock();
-
-  json config = cfgparser->get_diagnostic();
-
-  for (json::iterator it = config.begin(); it != config.end(); ++it) {
-    auto element = *it;
-
-    if (element.contains("name") == false)
-      return;
-
-    for (auto& diag : diagvec) {
-      if (diag->match(element["name"])) {
-        (*diag)(element);
-      }
-    }
-  }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  DEBUG2 << "diagnostic() end";
-  float64 wclock2 = nix::wall_clock();
-
-  json log = {{"elapsed", wclock2 - wclock1}};
-  logger->append(curstep, "diagnostic", log);
-}
-
-#undef DEFINE_MEMBER
 
 NIX_NAMESPACE_END
 

@@ -77,11 +77,13 @@ void PicApplication::initialize_diagnostic()
 void PicApplication::set_chunk_communicator()
 {
   for (int i = 0; i < chunkvec.size(); i++) {
+    auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
     for (int mode = 0; mode < NumBoundaryMode; mode++) {
       for (int iz = 0; iz < 3; iz++) {
         for (int iy = 0; iy < 3; iy++) {
           for (int ix = 0; ix < 3; ix++) {
-            chunkvec[i]->set_mpi_communicator(mode, iz, iy, ix, mpicommvec(mode, iz, iy, ix));
+            chunk->set_mpi_communicator(mode, iz, iy, ix, mpicommvec(mode, iz, iy, ix));
           }
         }
       }
@@ -99,14 +101,18 @@ void PicApplication::setup_chunks()
   {
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_pack(BoundaryEmf);
-      chunkvec[i]->set_boundary_begin(BoundaryEmf);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_pack(BoundaryEmf);
+      chunk->set_boundary_begin(BoundaryEmf);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_end(BoundaryEmf);
-      chunkvec[i]->set_boundary_unpack(BoundaryEmf);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_end(BoundaryEmf);
+      chunk->set_boundary_unpack(BoundaryEmf);
     }
   }
 }
@@ -206,59 +212,69 @@ void PicApplication::push_openmp()
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
       // reset load
-      chunkvec[i]->reset_load();
+      chunk->reset_load();
 
       // push B for a half step
-      chunkvec[i]->push_bfd(0.5 * delt);
+      chunk->push_bfd(0.5 * delt);
 
       // push particle
-      chunkvec[i]->push_velocity(delt);
-      chunkvec[i]->push_position(delt);
+      chunk->push_velocity(delt);
+      chunk->push_position(delt);
 
       // calculate current
-      chunkvec[i]->deposit_current(delt);
+      chunk->deposit_current(delt);
 
       // begin boundary exchange for current
-      chunkvec[i]->set_boundary_pack(BoundaryCur);
-      chunkvec[i]->set_boundary_begin(BoundaryCur);
+      chunk->set_boundary_pack(BoundaryCur);
+      chunk->set_boundary_begin(BoundaryCur);
 
       // begin boundary exchange for particle
-      chunkvec[i]->set_boundary_pack(BoundaryParticle);
-      chunkvec[i]->set_boundary_begin(BoundaryParticle);
+      chunk->set_boundary_pack(BoundaryParticle);
+      chunk->set_boundary_begin(BoundaryParticle);
 
       // push B for a half step
-      chunkvec[i]->push_bfd(0.5 * delt);
+      chunk->push_bfd(0.5 * delt);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_end(BoundaryCur);
-      chunkvec[i]->set_boundary_unpack(BoundaryCur);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_end(BoundaryCur);
+      chunk->set_boundary_unpack(BoundaryCur);
 
       // push E
-      chunkvec[i]->push_efd(delt);
+      chunk->push_efd(delt);
 
       // begin boundary exchange for field
-      chunkvec[i]->set_boundary_pack(BoundaryEmf);
-      chunkvec[i]->set_boundary_begin(BoundaryEmf);
+      chunk->set_boundary_pack(BoundaryEmf);
+      chunk->set_boundary_begin(BoundaryEmf);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_probe(BoundaryParticle, true);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_probe(BoundaryParticle, true);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_end(BoundaryParticle);
-      chunkvec[i]->set_boundary_unpack(BoundaryParticle);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_end(BoundaryParticle);
+      chunk->set_boundary_unpack(BoundaryParticle);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_end(BoundaryEmf);
-      chunkvec[i]->set_boundary_unpack(BoundaryEmf);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_end(BoundaryEmf);
+      chunk->set_boundary_unpack(BoundaryEmf);
     }
   }
 }
@@ -269,15 +285,19 @@ void PicApplication::calculate_moment_openmp()
   {
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->deposit_moment();
-      chunkvec[i]->set_boundary_pack(BoundaryMom);
-      chunkvec[i]->set_boundary_begin(BoundaryMom);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->deposit_moment();
+      chunk->set_boundary_pack(BoundaryMom);
+      chunk->set_boundary_begin(BoundaryMom);
     }
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      chunkvec[i]->set_boundary_end(BoundaryMom);
-      chunkvec[i]->set_boundary_unpack(BoundaryMom);
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      chunk->set_boundary_end(BoundaryMom);
+      chunk->set_boundary_unpack(BoundaryMom);
     }
   }
 }
@@ -293,7 +313,9 @@ void PicApplication::push_taskflow()
   tf::CriticalSection critical_section;
 
   auto push1 = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto task = subflow.emplace([&]() {
         chunk->reset_load();
         chunk->push_bfd(0.5 * delt);
@@ -324,7 +346,9 @@ void PicApplication::push_taskflow()
   });
 
   auto push2 = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto task = subflow.emplace([&]() {
         chunk->push_efd(delt);
         chunk->set_boundary_pack(BoundaryEmf);
@@ -343,7 +367,9 @@ void PicApplication::push_taskflow()
   });
 
   auto particle_bc_probe = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto start = subflow.emplace([&]() {});
       auto probe =
           subflow.emplace([&]() { return chunk->set_boundary_probe(BoundaryParticle, false); });
@@ -360,7 +386,9 @@ void PicApplication::push_taskflow()
   });
 
   auto particle_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto start = subflow.emplace([&]() {});
       auto query =
           subflow.emplace([&]() { return chunk->set_boundary_query(BoundaryParticle, 0); });
@@ -380,7 +408,9 @@ void PicApplication::push_taskflow()
   });
 
   auto cur_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto start  = subflow.emplace([&]() {});
       auto query  = subflow.emplace([&]() { return chunk->set_boundary_query(BoundaryCur, 0); });
       auto end    = subflow.emplace([&]() { chunk->set_boundary_end(BoundaryCur); });
@@ -399,7 +429,9 @@ void PicApplication::push_taskflow()
   });
 
   auto emf_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto start  = subflow.emplace([&]() {});
       auto query  = subflow.emplace([&]() { return chunk->set_boundary_query(BoundaryEmf, 0); });
       auto end    = subflow.emplace([&]() { chunk->set_boundary_end(BoundaryEmf); });
@@ -433,7 +465,9 @@ void PicApplication::calculate_moment_taskflow()
   tf::Taskflow taskflow;
 
   auto deposit = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto local = subflow.emplace([&]() { chunk->deposit_moment(); });
       auto begin = subflow.emplace([&]() {
         chunk->set_boundary_pack(BoundaryMom);
@@ -445,7 +479,9 @@ void PicApplication::calculate_moment_taskflow()
   });
 
   auto bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& chunk : chunkvec) {
+    for (auto& basechunk : chunkvec) {
+      auto chunk = static_cast<PicChunk*>(basechunk.get());
+
       auto local = subflow.emplace([&]() {
         chunk->set_boundary_end(BoundaryMom);
         chunk->set_boundary_unpack(BoundaryMom);

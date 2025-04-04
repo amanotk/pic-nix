@@ -18,12 +18,11 @@
 /// chunk instance. In addition, custom diagnostics routines may also be implemented through the
 /// virtual method diagnostic().
 ///
-class PicApplication : public nix::Application<PicChunk>
+class PicApplication : public nix::Application
 {
 public:
   using this_type  = PicApplication;
-  using chunk_type = PicChunk;
-  using base_type  = nix::Application<PicChunk>;
+  using base_type  = nix::Application;
   using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
   PicApplication(int argc, char** argv);

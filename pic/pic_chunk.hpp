@@ -34,10 +34,10 @@ class PicChunk : public nix::Chunk
 public:
   struct InternalData; // forward declaration
   using this_type    = PicChunk;
-  using base_type    = typename nix::Chunk;
+  using base_type    = nix::Chunk;
   using data_type    = InternalData;
-  using MpiBuffer    = typename base_type::MpiBuffer;
-  using MpiBufferPtr = typename base_type::MpiBufferPtr;
+  using MpiBuffer    = base_type::MpiBuffer;
+  using MpiBufferPtr = base_type::MpiBufferPtr;
 
   ///
   /// @brief internal data struct
