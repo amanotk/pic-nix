@@ -8,6 +8,7 @@
 #include "cfgparser.hpp"
 #include "chunkmap.hpp"
 #include "chunkvector.hpp"
+#include "diag.hpp"
 #include "logger.hpp"
 #include "mpistream.hpp"
 #include "nix.hpp"
@@ -22,12 +23,12 @@ NIX_NAMESPACE_BEGIN
 /// @tparam Chunk Chunk type
 /// @tparam ChunkMap ChunkMap type
 ///
-template <typename Chunk, typename Diag>
+template <typename Chunk>
 class Application
 {
 public:
   struct InternalData; // forward declaration
-  using this_type       = Application<Chunk, Diag>;
+  using this_type       = Application<Chunk>;
   using chunk_type      = Chunk;
   using diag_type       = Diag;
   using data_type       = InternalData;
@@ -389,8 +390,8 @@ protected:
 //
 
 #define DEFINE_MEMBER(type, name)                                                                  \
-  template <typename Chunk, typename Diag>                                                         \
-  type Application<Chunk, Diag>::name
+  template <typename Chunk>                                                                        \
+  type Application<Chunk>::name
 
 DEFINE_MEMBER(json, to_json)()
 {
