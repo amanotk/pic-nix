@@ -21,10 +21,10 @@
 class PicApplication : public nix::Application<PicChunk, PicDiag>
 {
 public:
-  using this_type     = PicApplication;
-  using chunk_type    = PicChunk;
-  using base_type     = nix::Application<PicChunk, PicDiag>;
-  using MpiCommVec    = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
+  using this_type  = PicApplication;
+  using chunk_type = PicChunk;
+  using base_type  = nix::Application<PicChunk, PicDiag>;
+  using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
   PicApplication(int argc, char** argv);
 
@@ -33,9 +33,9 @@ public:
   virtual void calculate_moment();
 
 protected:
-  int          Ns;         ///< number of species
-  int          momstep;    ///< step at which moment quantities are cached
-  MpiCommVec   mpicommvec; ///< MPI Communicators
+  int        Ns;         ///< number of species
+  int        momstep;    ///< step at which moment quantities are cached
+  MpiCommVec mpicommvec; ///< MPI Communicators
 
   // factory method for creating a chunk
   virtual std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[],
@@ -54,8 +54,6 @@ protected:
   virtual void finalize() override;
 
   virtual std::string get_basedir() override;
-
-  virtual std::string get_iomode();
 
   virtual json to_json() override;
 

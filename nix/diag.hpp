@@ -6,74 +6,69 @@
 
 NIX_NAMESPACE_BEGIN
 
-class DiagInfo
-{
-public:
-  MPI_Comm    intra_comm; // intra-node communicator
-  MPI_Comm    inter_comm; // inter-node communicator
-  int         world_rank; // rank
-  int         world_size; // number of processes
-  int         intra_size; // number of processes in the same node
-  int         inter_size; // number of nodes
-  int         intra_rank; // rank in the same node
-  int         inter_rank; // rank of the node
-  std::string basedir;    // base directory
-  std::string iomode;     // I/O mode
-
-  DiagInfo(std::string basedir, std::string iomode) : basedir(basedir), iomode(iomode)
-  {
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-
-    // intra-node communicator
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, world_rank, MPI_INFO_NULL,
-                        &intra_comm);
-    MPI_Comm_size(intra_comm, &intra_size);
-    MPI_Comm_rank(intra_comm, &intra_rank);
-
-    // inter-node communicator
-    MPI_Comm_split(MPI_COMM_WORLD, intra_rank != 0, world_rank, &inter_comm);
-    {
-      int buffer[2] = {0, 0};
-
-      MPI_Comm_size(inter_comm, &buffer[0]);
-      MPI_Comm_rank(inter_comm, &buffer[1]);
-
-      MPI_Bcast(buffer, 2, MPI_INT, 0, intra_comm);
-
-      inter_size = buffer[0];
-      inter_rank = buffer[1];
-    }
-  }
-
-  ~DiagInfo()
-  {
-    MPI_Comm_free(&intra_comm);
-    MPI_Comm_free(&inter_comm);
-  }
-};
-
-template <typename Application>
 class Diag
 {
 protected:
-  using app_type  = Application;
-  using info_type = DiagInfo;
+  class Info; // forward declaration
+  using info_type = Info;
 
-  std::string                name;
-  Application&               application; // reference to application object
-  std::shared_ptr<info_type> info;
+  /// class to hold MPI information
+  class Info
+  {
+  public:
+    MPI_Comm    intra_comm; // intra-node communicator
+    MPI_Comm    inter_comm; // inter-node communicator
+    int         world_rank; // rank
+    int         world_size; // number of processes
+    int         intra_size; // number of processes in the same node
+    int         inter_size; // number of nodes
+    int         intra_rank; // rank in the same node
+    int         inter_rank; // rank of the node
+    std::string basedir;    // base directory
+    std::string iomode;     // I/O mode
+
+    Info(std::string basedir, std::string iomode) : basedir(basedir), iomode(iomode)
+    {
+      MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+      MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+      // intra-node communicator
+      MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, world_rank, MPI_INFO_NULL,
+                          &intra_comm);
+      MPI_Comm_size(intra_comm, &intra_size);
+      MPI_Comm_rank(intra_comm, &intra_rank);
+
+      // inter-node communicator
+      MPI_Comm_split(MPI_COMM_WORLD, intra_rank != 0, world_rank, &inter_comm);
+      {
+        int buffer[2] = {0, 0};
+
+        MPI_Comm_size(inter_comm, &buffer[0]);
+        MPI_Comm_rank(inter_comm, &buffer[1]);
+
+        MPI_Bcast(buffer, 2, MPI_INT, 0, intra_comm);
+
+        inter_size = buffer[0];
+        inter_rank = buffer[1];
+      }
+    }
+
+    ~Info()
+    {
+      MPI_Comm_free(&intra_comm);
+      MPI_Comm_free(&inter_comm);
+    }
+  };
+
+  inline static std::shared_ptr<Info> info; // MPI information
+  std::string                         name; // diagnostic name
 
 public:
   // constructor
-  Diag(std::string name, Application& application, std::shared_ptr<info_type> info)
-      : name(name), application(application), info(info)
+  Diag(std::string name) : name(name)
   {
     make_sure_directory_exists(format_dirname(""));
   }
-
-  // destructor
-  virtual ~Diag() = default;
 
   // main operation
   virtual void operator()(nix::json& config)
@@ -82,9 +77,23 @@ public:
   }
 
   // check if the given key matches the name
-  bool match(std::string key)
+  virtual bool match(std::string key)
   {
     return key == name;
+  }
+
+  // initialize static info
+  static void initialize(std::string basedir, std::string iomode)
+  {
+    info = std::make_shared<Info>(basedir, iomode);
+  }
+
+  // finalize static info
+  static void finalize()
+  {
+    if (info != nullptr) {
+      info.reset();
+    }
   }
 
   // check if the parent directory of the given path exists

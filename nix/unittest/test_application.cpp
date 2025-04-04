@@ -91,7 +91,7 @@ public:
   }
 };
 
-class MockDiag : public Diag<TestApplication>
+class MockDiag : public Diag
 {
 };
 

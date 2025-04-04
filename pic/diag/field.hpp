@@ -35,8 +35,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(app_type& application, std::shared_ptr<info_type> info)
-      : ParallelDiag(diag_name, application, info)
+  FieldDiag(app_type& application) : ParallelDiag(diag_name, application)
   {
   }
 

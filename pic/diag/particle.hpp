@@ -55,8 +55,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(app_type& application, std::shared_ptr<info_type> info)
-      : ParallelDiag(diag_name, application, info)
+  ParticleDiag(app_type& application) : ParallelDiag(diag_name, application)
   {
   }
 

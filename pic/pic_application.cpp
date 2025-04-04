@@ -63,15 +63,15 @@ void PicApplication::initialize_diagnostic()
     ERROR << tfm::format("Invalid diagnostic");
   }
 
-  auto info = std::make_shared<nix::DiagInfo>(get_basedir(), get_iomode());
+  base_type::initialize_diagnostic();
 
-  diagvec.push_back(std::make_unique<HistoryDiag>(*this, info));
-  diagvec.push_back(std::make_unique<ResourceDiag>(*this, info));
-  diagvec.push_back(std::make_unique<LoadDiag>(*this, info));
-  diagvec.push_back(std::make_unique<FieldDiag>(*this, info));
-  diagvec.push_back(std::make_unique<ParticleDiag>(*this, info));
-  diagvec.push_back(std::make_unique<PickupTracerDiag>(*this, info));
-  diagvec.push_back(std::make_unique<TracerDiag>(*this, info));
+  diagvec.push_back(std::make_unique<HistoryDiag>(*this));
+  diagvec.push_back(std::make_unique<ResourceDiag>(*this));
+  diagvec.push_back(std::make_unique<LoadDiag>(*this));
+  diagvec.push_back(std::make_unique<FieldDiag>(*this));
+  diagvec.push_back(std::make_unique<ParticleDiag>(*this));
+  diagvec.push_back(std::make_unique<PickupTracerDiag>(*this));
+  diagvec.push_back(std::make_unique<TracerDiag>(*this));
 }
 
 void PicApplication::set_chunk_communicator()
@@ -148,11 +148,6 @@ std::string PicApplication::get_basedir()
   } else {
     return std::filesystem::path(tmpdir) / basedir;
   }
-}
-
-std::string PicApplication::get_iomode()
-{
-  return cfgparser->get_application().value("iomode", "mpiio");
 }
 
 json PicApplication::to_json()

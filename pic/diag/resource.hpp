@@ -14,8 +14,7 @@ public:
 
 public:
   // constructor
-  ResourceDiag(app_type& application, std::shared_ptr<info_type> info)
-      : PicDiag(diag_name, application, info)
+  ResourceDiag(app_type& application) : PicDiag(diag_name, application)
   {
   }
 

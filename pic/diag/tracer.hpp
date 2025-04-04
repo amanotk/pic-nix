@@ -73,8 +73,7 @@ protected:
 
 public:
   // constructor
-  PickupTracerDiag(app_type& application, std::shared_ptr<info_type> info)
-      : PicDiag(diag_name, application, info)
+  PickupTracerDiag(app_type& application) : PicDiag(diag_name, application)
   {
   }
 
@@ -124,8 +123,7 @@ protected:
 
 public:
   // constructor
-  TracerDiag(app_type& application, std::shared_ptr<info_type> info)
-      : ParallelDiag(diag_name, application, info)
+  TracerDiag(app_type& application) : ParallelDiag(diag_name, application)
   {
   }
 

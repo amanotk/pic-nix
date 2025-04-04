@@ -338,6 +338,15 @@ protected:
   }
 
   ///
+  /// @brief get I/O mode from configuration file
+  /// @return return I/O mode
+  ///
+  virtual std::string get_iomode()
+  {
+    return cfgparser->get_application().value("iomode", "mpiio");
+  }
+
+  ///
   /// @brief get available elapsed time
   /// @return available elapsed time in second
   ///
@@ -609,7 +618,7 @@ DEFINE_MEMBER(void, finalize_mpi)()
 {
   // these must be called before MPI_Finalize
   MpiStream::finalize();
-  diagvec.clear();
+  Diag::finalize();
 
   MPI_Finalize();
 }
@@ -654,7 +663,7 @@ DEFINE_MEMBER(void, initialize_workload)()
 
 DEFINE_MEMBER(void, initialize_diagnostic)()
 {
-  // do nothing by default
+  Diag::initialize(get_basedir(), get_iomode());
 }
 
 DEFINE_MEMBER(void, setup_chunks_init)()

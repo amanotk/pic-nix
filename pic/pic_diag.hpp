@@ -8,16 +8,26 @@
 using namespace nix::typedefs;
 using namespace nixio;
 
-class PicDiag : public nix::Diag<PicApplication>
+class PicDiag : public nix::Diag
 {
 public:
-  using base_type = nix::Diag<PicApplication>;
+  using base_type = nix::Diag;
   using base_type::base_type; // inherit constructors
 
   // type alias
   using info_type = base_type::info_type;
-  using app_type  = base_type::app_type;
+  using app_type  = PicApplication;
   using data_type = app_type::data_type;
+
+protected:
+  app_type& application; ///< reference to the application
+
+public:
+  // constructor
+  PicDiag(std::string name, app_type& application) : nix::Diag(name), application(application)
+  {
+    make_sure_directory_exists(format_dirname(""));
+  }
 
   // check if the diagnostic is required
   virtual bool require_diagnostic(int curstep, json& config)

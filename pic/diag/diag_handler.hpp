@@ -8,10 +8,12 @@
 class PicDiagHandler
 {
 protected:
-  std::shared_ptr<nix::DiagInfo> info;
+  using info_type = PicDiag::info_type;
+
+  std::shared_ptr<info_type> info;
 
 public:
-  PicDiagHandler(std::shared_ptr<nix::DiagInfo> info) : info(info)
+  PicDiagHandler(std::shared_ptr<info_type> info) : info(info)
   {
   }
 
@@ -44,7 +46,7 @@ protected:
   std::vector<MPI_Request> request;
 
 public:
-  MpiioHandler(std::shared_ptr<nix::DiagInfo> info) : PicDiagHandler(info), is_opened(false)
+  MpiioHandler(std::shared_ptr<info_type> info) : PicDiagHandler(info), is_opened(false)
   {
   }
 
@@ -122,7 +124,7 @@ protected:
   std::ofstream file;
 
 public:
-  PosixHandler(std::shared_ptr<nix::DiagInfo> info) : PicDiagHandler(info)
+  PosixHandler(std::shared_ptr<info_type> info) : PicDiagHandler(info)
   {
   }
 

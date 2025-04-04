@@ -37,9 +37,7 @@ protected:
 
 public:
   // constructor
-  ParallelDiag(std::string name, app_type& application, std::shared_ptr<info_type> info,
-               int size = 0)
-      : PicDiag(name, application, info)
+  ParallelDiag(std::string name, app_type& application, int size = 0) : PicDiag(name, application)
   {
     // create handler
     if (info->iomode == "mpiio") {
