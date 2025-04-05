@@ -412,8 +412,7 @@ public:
     float64 ylen      = dely * dims[1];
 
     for (int i = 0; i < numchunk_global; i++) {
-      int cx, cy, cz;
-      chunkmap->get_coordinate(i, cz, cy, cx);
+      auto [cz, cy, cx] = chunkmap->get_coordinate(i);
 
       float64 ylmax = (ymin - ycs + ylen * (cy + 1)) / lcs;
       float64 ylmin = (ymin - ycs + ylen * cy) / lcs;

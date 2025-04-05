@@ -254,8 +254,7 @@ public:
     float64 z0          = 0.5 * dz * ndims[0];
 
     for (int i = 0; i < nchunk_global; i++) {
-      int cx, cy, cz;
-      chunkmap->get_coordinate(i, cz, cy, cx);
+      auto [cz, cy, cx] = chunkmap->get_coordinate(i);
 
       std::array<int, 2> zr = {cz * dims[0], (cz + 1) * dims[0]};
       std::array<int, 2> yr = {cy * dims[1], (cy + 1) * dims[1]};

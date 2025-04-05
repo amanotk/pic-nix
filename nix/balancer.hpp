@@ -219,6 +219,12 @@ public:
       int  index = std::distance(data.chunkvec.begin(), it);
 
       while (find_rank(chunkid, boundary) == rank) {
+        // skip inactive chunk
+        if (data.chunkmap->is_chunk_active(chunkid) == false) {
+          chunkid += dir;
+          continue;
+        }
+
         // pack
         size = data.chunkvec[index]->pack(buf, 0);
         data.chunkvec[index].reset(); // deallocate memory
@@ -244,6 +250,12 @@ public:
       }
 
       while (find_rank(chunkid, boundary) == thisrank) {
+        // skip inactive chunk
+        if (data.chunkmap->is_chunk_active(chunkid) == false) {
+          chunkid += dir;
+          continue;
+        }
+
         MPI_Irecv(buf, size, MPI_BYTE, rank, tag, MPI_COMM_WORLD, &request);
         MPI_Wait(&request, MPI_STATUS_IGNORE);
 

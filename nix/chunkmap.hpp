@@ -51,6 +51,11 @@ public:
   virtual bool validate();
 
   ///
+  /// @brief return if the chunk is active
+  ///
+  virtual bool is_chunk_active(int id);
+
+  ///
   /// @brief get map information as json object
   /// @return obj json object
   ///
@@ -105,7 +110,7 @@ public:
   /// @param cy y coordinate of chunk will be stored
   /// @param cx x coordinate of chunk will be stored
   ///
-  virtual void get_coordinate(int id, int& cz, int& cy, int& cx);
+  virtual std::tuple<int, int, int> get_coordinate(int id);
 
   ///
   /// @brief get chunk ID for 3D map

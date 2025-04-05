@@ -37,6 +37,11 @@ bool ChunkMap::validate()
   return sfc::check_index(chunkid) & sfc::check_locality3d(coord);
 }
 
+bool ChunkMap::is_chunk_active(int id)
+{
+  return true;
+}
+
 json ChunkMap::to_json()
 {
   json obj;
@@ -117,8 +122,10 @@ std::vector<int> ChunkMap::get_rank_boundary()
   return boundary;
 }
 
-void ChunkMap::get_coordinate(int id, int& cz, int& cy, int& cx)
+std::tuple<int, int, int> ChunkMap::get_coordinate(int id)
 {
+  int cz, cy, cx;
+
   if (id >= 0 && id < size) {
     cx = coord(id, 0);
     cy = coord(id, 1);
@@ -128,6 +135,8 @@ void ChunkMap::get_coordinate(int id, int& cz, int& cy, int& cx)
     cy = -1;
     cx = -1;
   }
+
+  return std::make_tuple(cz, cy, cx);
 }
 
 int ChunkMap::get_chunkid(int cz, int cy, int cx)

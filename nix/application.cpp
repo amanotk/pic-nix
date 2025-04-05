@@ -293,10 +293,9 @@ void Application::setup_chunks_init()
   chunkvec.set_neighbors(chunkmap);
 
   for (int i = 0; i < chunkvec.size(); i++) {
-    int ix, iy, iz;
     int offset[3];
+    auto [iz, iy, ix] = chunkmap->get_coordinate(chunkvec[i]->get_id());
 
-    chunkmap->get_coordinate(chunkvec[i]->get_id(), iz, iy, ix);
     offset[0] = iz * ndims[0] / cdims[0];
     offset[1] = iy * ndims[1] / cdims[1];
     offset[2] = ix * ndims[2] / cdims[2];

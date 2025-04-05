@@ -55,11 +55,8 @@ public:
   void set_neighbors(std::unique_ptr<ChunkMap>& chunkmap)
   {
     for (int i = 0; i < this->size(); i++) {
-      int ix = 0;
-      int iy = 0;
-      int iz = 0;
-      int id = (*this)[i]->get_id();
-      chunkmap->get_coordinate(id, iz, iy, ix);
+      int id            = (*this)[i]->get_id();
+      auto [iz, iy, ix] = chunkmap->get_coordinate(id);
 
       for (int dirz = -1; dirz <= +1; dirz++) {
         for (int diry = -1; diry <= +1; diry++) {
@@ -96,11 +93,8 @@ public:
 
     // check neighbor rank and ID
     for (int i = 0; i < size(); i++) {
-      int ix = 0;
-      int iy = 0;
-      int iz = 0;
-      int id = (*this)[i]->get_id();
-      chunkmap->get_coordinate(id, iz, iy, ix);
+      int id            = (*this)[i]->get_id();
+      auto [iz, iy, ix] = chunkmap->get_coordinate(id);
 
       // check neighbor ID and rank
       for (int dirz = -1; dirz <= +1; dirz++) {

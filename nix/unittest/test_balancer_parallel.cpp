@@ -105,6 +105,11 @@ public:
   {
   }
 
+  bool is_chunk_active(int id)
+  {
+    return true;
+  }
+
   int get_rank(int id)
   {
     return find_index(boundary, id);
@@ -246,9 +251,9 @@ public:
     // boundary before sendrecv
     std::vector<int> initial_boundary = {0, 4, 8, 12, 16, 20, 24, 28, 32};
 
-    PtrChunkMap     chunkmap  = std::make_unique<MockChunkMap>(initial_boundary);
-    ChunkVec        chunkvec  = create_chunkvec(initial_boundary);
-    PtrInterface    interface = std::make_shared<MockApplicationInterface>(
+    PtrChunkMap  chunkmap  = std::make_unique<MockChunkMap>(initial_boundary);
+    ChunkVec     chunkvec  = create_chunkvec(initial_boundary);
+    PtrInterface interface = std::make_shared<MockApplicationInterface>(
         ndims, cdims, thisrank, nprocess, chunkmap, chunkvec);
 
     set_chunkvec_data(chunkvec);

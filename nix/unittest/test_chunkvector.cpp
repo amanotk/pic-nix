@@ -34,11 +34,9 @@ public:
     return 0;
   }
 
-  virtual void get_coordinate(int id, int& cz, int& cy, int& cx) override
+  virtual std::tuple<int, int, int> get_coordinate(int id) override
   {
-    cx = 0;
-    cy = 0;
-    cz = 0;
+    return std::make_tuple(0, 0, 0);
   }
 };
 
