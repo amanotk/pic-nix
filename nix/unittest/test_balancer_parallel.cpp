@@ -11,8 +11,10 @@ using namespace nix;
 
 class MockChunk;
 class MockChunkMap;
-using ChunkVec    = ChunkVector<std::unique_ptr<MockChunk>>;
-using PtrChunkMap = std::unique_ptr<MockChunkMap>;
+class MockApplicationInterface;
+using ChunkVec     = ChunkVector<std::unique_ptr<MockChunk>>;
+using PtrChunkMap  = std::unique_ptr<MockChunkMap>;
+using PtrInterface = std::shared_ptr<MockApplicationInterface>;
 
 static const int ndata    = 10;
 static int       ndims[4] = {8, 8, 8, 8 * 8 * 8};
@@ -109,10 +111,38 @@ public:
   }
 };
 
-class MockApplication
+class MockApplicationInterface
 {
 public:
-  std::unique_ptr<MockChunk> create_chunk(const int dims[3], const bool has_dim[3], int id)
+  using PtrChunkMap = std::unique_ptr<MockChunkMap>;
+  using PtrChunk    = std::unique_ptr<MockChunk>;
+  using ChunkVec    = ChunkVector<PtrChunk>;
+
+  struct DataContainer {
+    int*         ndims;
+    int*         cdims;
+    int&         thisrank;
+    int&         nprocess;
+    PtrChunkMap& chunkmap;
+    ChunkVec&    chunkvec;
+  };
+
+  DataContainer data;
+
+  MockApplicationInterface(int* ndims, int* cdims, int& thisrank, int& nprocess,
+                           PtrChunkMap& chunkmap, ChunkVec& chunkvec)
+      : data{ndims, cdims, thisrank, nprocess, chunkmap, chunkvec}
+  {
+  }
+
+  ~MockApplicationInterface() = default;
+
+  virtual DataContainer get_data()
+  {
+    return data;
+  }
+
+  virtual PtrChunk create_chunk(const int dims[3], const bool has_dim[3], int id)
   {
     return std::make_unique<MockChunk>(dims, has_dim, id);
   }
@@ -123,15 +153,6 @@ class TestBalancer : public Balancer
 private:
   int nprocess;
   int thisrank;
-
-  struct InternalData {
-    int*         ndims;
-    int*         cdims;
-    int&         thisrank;
-    int&         nprocess;
-    PtrChunkMap& chunkmap;
-    ChunkVec&    chunkvec;
-  };
 
 public:
   TestBalancer(int nchunk) : Balancer(nchunk)
@@ -206,11 +227,12 @@ public:
     REQUIRE(boundary[0] == 0);
     REQUIRE(boundary[nprocess] == nchunk);
 
-    PtrChunkMap  chunkmap = std::make_unique<MockChunkMap>(boundary);
-    ChunkVec     chunkvec = create_chunkvec(boundary);
-    InternalData data     = {ndims, cdims, thisrank, nprocess, chunkmap, chunkvec};
+    PtrChunkMap  chunkmap  = std::make_unique<MockChunkMap>(boundary);
+    ChunkVec     chunkvec  = create_chunkvec(boundary);
+    PtrInterface interface = std::make_shared<MockApplicationInterface>(
+        ndims, cdims, thisrank, nprocess, chunkmap, chunkvec);
 
-    update_global_load(data);
+    update_global_load(interface);
 
     REQUIRE(is_load_valid(boundary) == true);
   }
@@ -224,13 +246,13 @@ public:
     // boundary before sendrecv
     std::vector<int> initial_boundary = {0, 4, 8, 12, 16, 20, 24, 28, 32};
 
-    MockApplication app;
-    PtrChunkMap     chunkmap = std::make_unique<MockChunkMap>(initial_boundary);
-    ChunkVec        chunkvec = create_chunkvec(initial_boundary);
-    InternalData    data     = {ndims, cdims, thisrank, nprocess, chunkmap, chunkvec};
+    PtrChunkMap     chunkmap  = std::make_unique<MockChunkMap>(initial_boundary);
+    ChunkVec        chunkvec  = create_chunkvec(initial_boundary);
+    PtrInterface    interface = std::make_shared<MockApplicationInterface>(
+        ndims, cdims, thisrank, nprocess, chunkmap, chunkvec);
 
     set_chunkvec_data(chunkvec);
-    sendrecv_chunk(app, data, boundary);
+    sendrecv_chunk(interface, boundary);
 
     REQUIRE(is_chunkvec_valid(chunkvec, boundary) == true);
   }

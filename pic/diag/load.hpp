@@ -64,14 +64,14 @@ protected:
 
 public:
   /// constructor
-  LoadDiag(app_type& application) : ParallelDiag(diag_name, application)
+  LoadDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;

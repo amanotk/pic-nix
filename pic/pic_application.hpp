@@ -6,6 +6,16 @@
 
 #include "pic.hpp"
 
+class PicApplicationInterface : public nix::Application::Interface
+{
+public:
+  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) = 0;
+
+  virtual int get_num_species();
+
+  virtual void calculate_moment();
+};
+
 ///
 /// @brief Application for 3D Explicit PIC Simulations
 ///
@@ -25,7 +35,7 @@ public:
   using base_type  = nix::Application;
   using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
-  PicApplication(int argc, char** argv);
+  PicApplication(int argc, char** argv, PtrInterface interface);
 
   virtual int get_num_species() const;
 
@@ -35,10 +45,6 @@ protected:
   int        Ns;         ///< number of species
   int        momstep;    ///< step at which moment quantities are cached
   MpiCommVec mpicommvec; ///< MPI Communicators
-
-  // factory method for creating a chunk
-  virtual std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[],
-                                                   int id) override = 0;
 
   virtual void initialize(int argc, char** argv) override;
 

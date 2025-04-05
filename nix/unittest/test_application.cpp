@@ -52,58 +52,18 @@ const std::string config_content  = R"(
 }
 )";
 
-class MockChunk : public Chunk
+class TestApplication : public Application
 {
 public:
-  using Chunk::Chunk;
-
-  MockChunk(const int dims[3], const bool has_dim[3], int id) : Chunk(dims, has_dim, id)
-  {
-  }
-
-  virtual int set_boundary_query(int mode, int sendrecv) override
-  {
-    return 0;
-  }
-
-  virtual void set_boundary_pack(int mode) override
-  {
-  }
-
-  virtual void set_boundary_unpack(int mode) override
-  {
-  }
-
-  virtual void set_boundary_begin(int mode) override
-  {
-  }
-
-  virtual void set_boundary_end(int mode) override
-  {
-  }
-
-  virtual void setup(json& config)
-  {
-  }
-
-  virtual void set_global_context(const int* offset, const int* gdims)
-  {
-  }
-};
-
-class MockDiag : public Diag
-{
-};
-
-class TestApplication : public Application<MockChunk, MockDiag>
-{
-public:
-  TestApplication() : Application<MockChunk, MockDiag>()
+  TestApplication() : Application()
   {
     is_mpi_init_already_called = true;
 
     std::ofstream ofs(config_filename);
     ofs << config_content;
+
+    interface = std::make_shared<Interface>();
+    interface->set_application(this);
   }
 
   ~TestApplication()

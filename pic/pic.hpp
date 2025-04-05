@@ -23,6 +23,7 @@ using ParticleVec  = std::vector<ParticlePtr>;
 using ParticleType = ParticlePtr::element_type;
 
 // forward declaration
+class PicApplicationInterface;
 class PicApplication;
 class PicChunk;
 class PicDiag;

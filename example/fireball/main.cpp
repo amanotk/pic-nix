@@ -5,9 +5,6 @@
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
 
-class MainChunk;
-class MainApplication;
-
 // return true if the point (x, y, z) is inside the fireball
 static bool is_inside_fireball(float64 z, float64 y, float64 x, float64 r)
 {
@@ -222,15 +219,19 @@ public:
   }
 };
 
+class MainInterface : public PicApplicationInterface
+{
+public:
+  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) override
+  {
+    return std::make_unique<MainChunk>(dims, has_dim, id);
+  }
+};
+
 class MainApplication : public PicApplication
 {
 public:
   using PicApplication::PicApplication; // inherit constructors
-
-  std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[], int id) override
-  {
-    return std::make_unique<MainChunk>(dims, has_dim, id);
-  }
 
   void initialize_workload() override
   {
@@ -274,7 +275,7 @@ public:
 //
 int main(int argc, char** argv)
 {
-  MainApplication app(argc, argv);
+  MainApplication app(argc, argv, std::make_shared<MainInterface>());
   return app.main();
 }
 

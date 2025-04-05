@@ -15,16 +15,17 @@ public:
   using base_type::base_type; // inherit constructors
 
   // type alias
-  using info_type = base_type::info_type;
-  using app_type  = PicApplication;
-  using data_type = app_type::data_type;
+  using info_type    = base_type::info_type;
+  using app_type     = PicApplication;
+  using data_type    = app_type::data_type;
+  using PtrInterface = std::shared_ptr<PicApplicationInterface>;
 
 protected:
-  app_type& application; ///< reference to the application
+  PtrInterface interface; ///< interface
 
 public:
   // constructor
-  PicDiag(std::string name, app_type& application) : nix::Diag(name), application(application)
+  PicDiag(std::string name, PtrInterface interface) : nix::Diag(name), interface(interface)
   {
     make_sure_directory_exists(format_dirname(""));
   }

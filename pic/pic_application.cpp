@@ -12,7 +12,18 @@
 
 #include <taskflow/taskflow.hpp>
 
-PicApplication::PicApplication(int argc, char** argv) : base_type(argc, argv), Ns(1), momstep(-1)
+int PicApplicationInterface::get_num_species()
+{
+  return static_cast<PicApplication*>(app_pointer)->get_num_species();
+}
+
+void PicApplicationInterface::calculate_moment()
+{
+  static_cast<PicApplication*>(app_pointer)->calculate_moment();
+}
+
+PicApplication::PicApplication(int argc, char** argv, PtrInterface interface)
+    : base_type(argc, argv, interface), Ns(1), momstep(-1)
 {
 }
 
@@ -65,13 +76,14 @@ void PicApplication::initialize_diagnostic()
 
   base_type::initialize_diagnostic();
 
-  diagvec.push_back(std::make_unique<HistoryDiag>(*this));
-  diagvec.push_back(std::make_unique<ResourceDiag>(*this));
-  diagvec.push_back(std::make_unique<LoadDiag>(*this));
-  diagvec.push_back(std::make_unique<FieldDiag>(*this));
-  diagvec.push_back(std::make_unique<ParticleDiag>(*this));
-  diagvec.push_back(std::make_unique<PickupTracerDiag>(*this));
-  diagvec.push_back(std::make_unique<TracerDiag>(*this));
+  auto interface = std::static_pointer_cast<PicApplicationInterface>(get_interface());
+  diagvec.push_back(std::make_unique<HistoryDiag>(interface));
+  diagvec.push_back(std::make_unique<ResourceDiag>(interface));
+  diagvec.push_back(std::make_unique<LoadDiag>(interface));
+  diagvec.push_back(std::make_unique<FieldDiag>(interface));
+  diagvec.push_back(std::make_unique<ParticleDiag>(interface));
+  diagvec.push_back(std::make_unique<PickupTracerDiag>(interface));
+  diagvec.push_back(std::make_unique<TracerDiag>(interface));
 }
 
 void PicApplication::set_chunk_communicator()

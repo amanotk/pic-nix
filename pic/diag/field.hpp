@@ -35,15 +35,15 @@ protected:
 
 public:
   // constructor
-  FieldDiag(app_type& application) : ParallelDiag(diag_name, application)
+  FieldDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
-    auto Ns   = application.get_num_species();
+    auto data = interface->get_data();
+    auto Ns   = interface->get_num_species();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -84,7 +84,7 @@ public:
     //
     // moment
     //
-    application.calculate_moment();
+    interface->calculate_moment();
     {
       // data
       auto   packer = MomentPacker();

@@ -73,14 +73,14 @@ protected:
 
 public:
   // constructor
-  PickupTracerDiag(app_type& application) : PicDiag(diag_name, application)
+  PickupTracerDiag(PtrInterface interface) : PicDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   virtual void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -123,14 +123,14 @@ protected:
 
 public:
   // constructor
-  TracerDiag(app_type& application) : ParallelDiag(diag_name, application)
+  TracerDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   virtual void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;

@@ -115,7 +115,7 @@ void Application::finalize()
   logger->flush();
 
   if (argparser->get_save() != "") {
-    statehandler->save(*this, get_internal_data(), argparser->get_save());
+    statehandler->save(get_interface(), argparser->get_save());
   }
 
   finalize_mpi();
@@ -288,7 +288,7 @@ void Application::setup_chunks_init()
   chunkvec.resize(numchunk);
 
   for (int i = 0, id = boundary[thisrank]; id < boundary[thisrank + 1]; i++, id++) {
-    chunkvec[i] = create_chunk(dims, has_dim, id);
+    chunkvec[i] = interface->create_chunk(dims, has_dim, id);
   }
   chunkvec.set_neighbors(chunkmap);
 
@@ -313,7 +313,7 @@ void Application::setup_chunks_init()
 void Application::setup_chunks()
 {
   if (argparser->get_load() != "") {
-    statehandler->load(*this, get_internal_data(), argparser->get_load());
+    statehandler->load(get_interface(), argparser->get_load());
   } else {
     setup_chunks_init();
   }
@@ -349,13 +349,13 @@ bool Application::rebalance()
   }
 
   if (curstep > 0 && curstep % interval == 0) {
-
-    balancer->update_global_load(get_internal_data());
+    auto interface = get_interface();
+    balancer->update_global_load(interface);
 
     auto boundary = chunkmap->get_rank_boundary();
     boundary      = balancer->assign(boundary);
 
-    balancer->sendrecv_chunk(*this, get_internal_data(), boundary);
+    balancer->sendrecv_chunk(interface, boundary);
     chunkmap->set_rank_boundary(boundary);
     chunkvec.set_neighbors(chunkmap);
 
@@ -411,7 +411,7 @@ void Application::diagnostic()
 void Application::save_profile()
 {
   if (is_initial_run() == true) {
-    statehandler->save_application(*this, get_internal_data(), "profile");
+    statehandler->save_application(get_interface(), "profile");
   }
 }
 

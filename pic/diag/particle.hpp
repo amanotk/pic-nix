@@ -55,15 +55,15 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(app_type& application) : ParallelDiag(diag_name, application)
+  ParticleDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
-    auto Ns   = application.get_num_species();
+    auto data = interface->get_data();
+    auto Ns   = interface->get_num_species();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;

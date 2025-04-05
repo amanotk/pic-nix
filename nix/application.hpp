@@ -19,31 +19,79 @@ class Chunk;
 class Diag;
 
 ///
-/// @brief Base Application class
+/// @brief Application interface for interaction with external objects
+///
+template <typename T_Application>
+class ApplicationInterface
+{
+protected:
+  T_Application* app_pointer;
+
+public:
+  using DataContainer = typename T_Application::DataContainer;
+  using PtrChunk      = typename T_Application::PtrChunk;
+
+  ApplicationInterface() = default;
+
+  virtual ~ApplicationInterface() = default;
+
+  // set
+  virtual void set_application(T_Application* app)
+  {
+    app_pointer = app;
+  }
+
+  // create chunk
+  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id)
+  {
+    return std::make_unique<Chunk>(dims, has_dim, id);
+  }
+
+  // return data
+  virtual DataContainer get_data()
+  {
+    return app_pointer->get_internal_data();
+  }
+
+  // convert to json
+  virtual json to_json()
+  {
+    return app_pointer->to_json();
+  }
+
+  // restore from json
+  virtual bool from_json(json& state)
+  {
+    return app_pointer->from_json(state);
+  }
+};
+
+///
+/// @brief Application class
 ///
 class Application
 {
 public:
-  struct InternalData; // forward declaration
-  using this_type       = Application;
-  using chunk_type      = Chunk;
-  using diag_type       = Diag;
-  using data_type       = InternalData;
+  struct DataContainer;
+  using Interface       = ApplicationInterface<Application>;
+  using PtrChunkMap     = std::unique_ptr<ChunkMap>;
+  using PtrChunk        = std::unique_ptr<Chunk>;
+  using ChunkVec        = ChunkVector<PtrChunk>;
+  using PtrInterface    = std::shared_ptr<Interface>;
   using PtrArgParser    = std::unique_ptr<ArgParser>;
   using PtrCfgParser    = std::unique_ptr<CfgParser>;
   using PtrStateHandler = std::unique_ptr<StateHandler>;
   using PtrBalancer     = std::unique_ptr<Balancer>;
   using PtrLogger       = std::unique_ptr<Logger>;
-  using PtrChunkMap     = std::unique_ptr<ChunkMap>;
-  using PtrChunk        = std::unique_ptr<Chunk>;
   using PtrDiag         = std::unique_ptr<Diag>;
-  using ChunkVec        = ChunkVector<PtrChunk>;
   using DiagVec         = std::vector<PtrDiag>;
+  using this_type       = Application;
+  using chunk_type      = Chunk;
+  using diag_type       = Diag;
+  using data_type       = DataContainer;
 
-  ///
-  /// @brief internal data struct
-  ///
-  struct InternalData {
+  // internal data
+  struct DataContainer {
     int*         ndims;
     int*         cdims;
     int&         thisrank;
@@ -55,15 +103,8 @@ public:
     ChunkVec&    chunkvec;
   };
 
-  ///
-  /// @brief return internal data struct
-  ///
-  InternalData get_internal_data()
-  {
-    return {ndims, cdims, thisrank, nprocess, nthread, curstep, curtime, chunkmap, chunkvec};
-  }
-
 protected:
+  PtrInterface    interface;    ///< application interface
   PtrArgParser    argparser;    ///< argument parser
   PtrCfgParser    cfgparser;    ///< configuration parser
   PtrStateHandler statehandler; ///< state handler
@@ -88,7 +129,7 @@ protected:
 
 public:
   /// @brief default constructor
-  Application() : Application(0, nullptr)
+  Application() : Application(0, nullptr, nullptr)
   {
   }
 
@@ -97,10 +138,27 @@ public:
   /// @param argc number of arguments
   /// @param argv array of arguments
   ///
-  Application(int argc, char** argv) : is_mpi_init_already_called(false)
+  Application(int argc, char** argv, PtrInterface interface)
+      : is_mpi_init_already_called(false), interface(interface)
   {
     cl_argc = argc;
     cl_argv = argv;
+
+    if (interface != nullptr) {
+      interface->set_application(this);
+    }
+  }
+
+  /// @brief return Application interface
+  virtual PtrInterface get_interface()
+  {
+    return interface;
+  }
+
+  /// @brief return Application internal data
+  DataContainer get_internal_data()
+  {
+    return {ndims, cdims, thisrank, nprocess, nthread, curstep, curtime, chunkmap, chunkvec};
   }
 
   ///
@@ -167,17 +225,6 @@ public:
     int Cy = parameter.value("Cy", 1);
     int Cz = parameter.value("Cz", 1);
     return std::make_unique<ChunkMap>(Cz, Cy, Cx);
-  }
-
-  ///
-  /// @brief factory to create chunk object
-  /// @param dims local number of grids in each direction
-  /// @param id chunk ID
-  /// @return chunk object
-  ///
-  virtual std::unique_ptr<Chunk> create_chunk(const int dims[], const bool has_dim[], int id)
-  {
-    return std::make_unique<Chunk>(dims, has_dim, id);
   }
 
   ///

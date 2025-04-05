@@ -11,17 +11,16 @@ class HistoryDiag : public PicDiag
 {
 public:
   static constexpr const char* diag_name = "history";
-  using PicDiag::app_type;
 
   // constructor
-  HistoryDiag(app_type& application) : PicDiag(diag_name, application)
+  HistoryDiag(PtrInterface interface) : PicDiag(diag_name, interface)
   {
   }
 
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
-    auto Ns   = application.get_num_species();
+    auto data = interface->get_data();
+    auto Ns   = interface->get_num_species();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -32,7 +31,7 @@ public:
     std::fill(history.begin(), history.end(), 0.0);
 
     // calculate moment if not cached
-    application.calculate_moment();
+    interface->calculate_moment();
 
     // calculate divergence error and energy
     for (int i = 0; i < data.chunkvec.size(); i++) {
