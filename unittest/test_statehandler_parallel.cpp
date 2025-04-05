@@ -9,7 +9,16 @@
 using namespace nix;
 
 class MockChunk;
+class MockApplication;
 using ChunkVec = std::vector<std::unique_ptr<MockChunk>>;
+
+struct DataContainer {
+  int*      ndims;
+  int*      cdims;
+  int&      nprocess;
+  int&      thisrank;
+  ChunkVec& chunkvec;
+};
 
 static const int ndata    = 10;
 static int       ndims[4] = {8, 8, 8, 8 * 8 * 8};
@@ -61,28 +70,64 @@ public:
   }
 };
 
+template <typename T_Application>
+class MockApplicationInterface
+{
+protected:
+  T_Application* app_pointer;
+
+public:
+  using PtrChunk = std::unique_ptr<MockChunk>;
+
+  MockApplicationInterface() = default;
+
+  virtual ~MockApplicationInterface() = default;
+
+  // set
+  virtual void set_application(T_Application* app)
+  {
+    app_pointer = app;
+  }
+
+  // create chunk
+  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id)
+  {
+    return std::make_unique<MockChunk>(dims, has_dim, id);
+  }
+
+  // return data
+  virtual DataContainer get_data()
+  {
+    return app_pointer->get_internal_data();
+  }
+
+  // convert to json
+  virtual json to_json()
+  {
+    return app_pointer->to_json();
+  }
+
+  // restore from json
+  virtual bool from_json(json& state)
+  {
+    return app_pointer->from_json(state);
+  }
+};
+
 class MockApplication
 {
 private:
+  using Interface    = MockApplicationInterface<MockApplication>;
+  using PtrInterface = std::shared_ptr<Interface>;
+
+  PtrInterface interface;
+
   int      thisrank;
   int      nprocess;
   double   x;
   double   y;
   double   z;
   ChunkVec chunkvec;
-
-  struct InternalData {
-    int*      ndims;
-    int*      cdims;
-    int&      nprocess;
-    int&      thisrank;
-    ChunkVec& chunkvec;
-  };
-
-  InternalData get_internal_data()
-  {
-    return {ndims, cdims, nprocess, thisrank, chunkvec};
-  }
 
 public:
   MockApplication()
@@ -93,11 +138,19 @@ public:
     x = 1.0;
     y = sqrt(2.0);
     z = exp(3.0);
+
+    interface = std::make_unique<Interface>();
+    interface->set_application(this);
   }
 
-  std::unique_ptr<MockChunk> create_chunk(const int dims[4], const bool has_dim[3], int id)
+  PtrInterface get_interface()
   {
-    return std::make_unique<MockChunk>(dims, has_dim, id);
+    return interface;
+  }
+
+  DataContainer get_internal_data()
+  {
+    return {ndims, cdims, nprocess, thisrank, chunkvec};
   }
 
   json to_json()
@@ -139,7 +192,7 @@ public:
 
     for (int i = 0; i < numchunk; i++) {
       int id = i + thisrank * numchunk;
-      chunkvec.push_back(create_chunk(ndims, has_dim, id));
+      chunkvec.push_back(get_interface()->create_chunk(ndims, has_dim, id));
 
       // fill data
       for (int j = 0; j < ndata; j++) {
@@ -170,11 +223,11 @@ public:
     StateHandler statehandler;
 
     // save
-    bool save = statehandler.save_application(*this, get_internal_data(), "foo");
+    bool save = statehandler.save_application(get_interface(), "foo");
     MPI_Barrier(MPI_COMM_WORLD);
 
     // load
-    bool load = statehandler.load_application(*this, get_internal_data(), "foo");
+    bool load = statehandler.load_application(get_interface(), "foo");
     MPI_Barrier(MPI_COMM_WORLD);
 
     // cleanup
@@ -195,11 +248,11 @@ public:
     prepare_chunkvec(numchunk);
 
     // save
-    bool save = statehandler.save_chunkvec(*this, get_internal_data(), "foo");
+    bool save = statehandler.save_chunkvec(get_interface(), "foo");
     MPI_Barrier(MPI_COMM_WORLD);
 
     // load
-    bool load = statehandler.load_chunkvec(*this, get_internal_data(), "foo");
+    bool load = statehandler.load_chunkvec(get_interface(), "foo");
     MPI_Barrier(MPI_COMM_WORLD);
 
     REQUIRE(validate_chunkvec(numchunk) == true);

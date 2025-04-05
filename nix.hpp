@@ -102,7 +102,7 @@ constexpr int MAX_CHUNK_PER_RANK = 32768;
 #ifndef NIX_SIMD_WIDTH
 #define NIX_SIMD_WIDTH 8
 #endif
-constexpr int nix_simd_width = NIX_SIMD_WIDTH;
+constexpr int simd_width = NIX_SIMD_WIDTH;
 
 // mathematical constants
 namespace math

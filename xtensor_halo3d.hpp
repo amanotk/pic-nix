@@ -9,6 +9,9 @@
 
 NIX_NAMESPACE_BEGIN
 
+using ParticlePtr = std::shared_ptr<XtensorParticle>;
+using ParticleVec = std::vector<ParticlePtr>;
+
 ///
 /// @brief Boundary Halo3D class for field
 ///
@@ -211,12 +214,9 @@ public:
   template <typename BufferPtr>
   void pre_pack(BufferPtr& mpibuf, int indexlb[3], int indexub[3])
   {
-    const float64 xmin = chunk->get_xmin();
-    const float64 xmax = chunk->get_xmax();
-    const float64 ymin = chunk->get_ymin();
-    const float64 ymax = chunk->get_ymax();
-    const float64 zmin = chunk->get_zmin();
-    const float64 zmax = chunk->get_zmax();
+    auto [xmin, xmax] = chunk->get_xrange();
+    auto [ymin, ymax] = chunk->get_yrange();
+    auto [zmin, zmax] = chunk->get_zrange();
 
     std::array<size_t, 4>   shape = {static_cast<size_t>(Ns + 1), 3ul, 3ul, 3ul};
     xt::xtensor<int32_t, 4> send_count(shape);
@@ -492,8 +492,8 @@ public:
     for (int is = 0; is < Ns; is++) {
       int np_prev = particle[is]->Np;
       int np_next = particle[is]->Np + num_unpacked[is];
-      chunk->set_boundary_particle_after_sendrecv(particle[is], np_prev, np_next - 1, is);
-      chunk->count_particle(particle[is], np_prev, np_next - 1, false);
+      particle[is]->set_boundary_periodic(np_prev, np_next);
+      particle[is]->count(np_prev, np_next - 1, false, chunk->get_order());
       // now update number of particles
       particle[is]->Np = np_next;
     }
