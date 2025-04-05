@@ -8,7 +8,12 @@
 NIX_NAMESPACE_BEGIN
 
 ///
-/// @brief Load Balancer
+/// @brief Balancer class for load balancing
+///
+/// The Balancer class is responsible for distributing the computation load
+/// among chunks in a distributed system by assigning them to different processes.
+/// This class maintains an array of chunk loads and provides several methods
+/// to calculate and adjust the assignment based on various algorithms.
 ///
 class Balancer
 {
@@ -16,104 +21,60 @@ protected:
   int                  nchunk;    ///< number of chunks
   std::vector<float64> chunkload; ///< array of chunk load
 
-  ///
-  /// @brief perform assignment of chunks according to SMILEI code (Derouillat et al. 2018)
-  ///
-  /// @param[in] load load of chunks
-  /// @param[out] boundary boundary between ranks
-  /// @return true if the assignment is changed and false otherwise
-  ///
+  /// @brief perform assignment of chunks according to SMILEI (Derouillat et al. 2018)
   bool assign_smilei(std::vector<float64>& load, std::vector<int>& boundary);
 
-  ///
-  /// @brief perform assignment of chunks via binary search for the best
-  ///
-  /// @param[in] load load of chunks
-  /// @param[out] boundary boundary between ranks
-  /// @return true if the assignment is successful and false otherwise
-  ///
+  /// @brief perform assignment of chunks via binary search
   bool assign_binarysearch(std::vector<float64>& load, std::vector<int>& boundary);
 
 public:
-  // default constructor
+  /// @brief default constructor
   Balancer() : Balancer(0)
   {
   }
 
-  // constructor with size
+  /// @brief constructor with number of chunks
   Balancer(int n) : nchunk(n), chunkload(n, 0.0)
   {
   }
 
-  // accessor to chunkload
+  /// @breif accessor to chunkload
   double& load(int i)
   {
     return chunkload[i];
   }
 
-  // const accessor to chunkload
+  /// @brief const accessor to chunkload
   const double& load(int i) const
   {
     return chunkload[i];
   }
 
-  // fill chunkload with given value
+  /// @brief fill chunkload with given value
   void fill_load(float64 value)
   {
     std::fill(chunkload.begin(), chunkload.end(), value);
   }
 
-  ///
-  /// @brief assignment for the first time (without given boundary)
-  /// @return array of boundary as a result of assignment
-  ///
+  /// @brief initial assignment (without assignment boundary given)
   virtual std::vector<int> assign_initial(int nprocess);
 
-  ///
-  /// @brief assignment with current assignment boundary
-  /// @param[in] boundary array of current boundary
-  /// @return array of boundary as a result of assignment
-  ///
+  /// @brief assignment with given current assignment boundary
   virtual std::vector<int> assign(std::vector<int>& boundary);
 
-  ///
   /// @brief return array of load for each rank
-  ///
-  /// @param[in] boundary boundary array
-  /// @param[in] load load array for each chunk
-  /// @return array of load for each rank
-  ///
   std::vector<float64> get_rankload(std::vector<int>& boundary, std::vector<float64>& load);
 
-  ///
   /// @brief print summary of load as a result of assignment
-  ///
-  /// @param[in] out output stream
-  /// @param[in] boundary boundary array
-  ///
   void print_assignment(std::ostream& out, std::vector<int>& boundary);
 
-  ///
   /// @brief check if the boundary is in ascending order
-  ///
-  /// @param[in] boundary array of boundary
-  /// @return true if the boundary is in ascending order
-  ///
   bool is_boundary_ascending(const std::vector<int>& boundary);
 
-  ///
   /// @brief check if the boundary is optimum
-  ///
-  /// @param[in] boundary array of boundary
-  /// @return true if the boundary is optimum
-  ///
   bool is_boundary_optimum(const std::vector<int>& boundary);
 
-  ///
   /// @brief update global chunk load
-  ///
-  /// @tparam Data Application internal data struct
-  ///
   template <typename PtrInterface>
   void update_global_load(PtrInterface interface)
   {
@@ -157,15 +118,7 @@ public:
     }
   }
 
-  ///
-  /// @brief send/recv chunks for load balancing
-  ///
-  /// @tparam App Application class
-  /// @tparam Data Application internal data struct
-  /// @param app Application object
-  /// @param data Application internal data object
-  /// @param boundary array of boundary
-  ///
+  /// @brief perform send/recv of chunks for load balancing
   template <typename PtrInterface>
   void sendrecv_chunk(PtrInterface interface, std::vector<int>& boundary)
   {

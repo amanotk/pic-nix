@@ -11,9 +11,11 @@ NIX_NAMESPACE_BEGIN
 ///
 /// @brief ChunkMap class
 ///
-/// The chunk ID is defined with row-major ordering of chunks in cartesian
-/// coordinate. Mapping between chunk ID and cartesian coordinate may be
-/// calculated via get_chunk() and get_coordinate() methods.
+/// The ChunkMap class provides a bidirectional mapping between a linear chunk ID
+/// used for identifying a block in a distributed system and its corresponding
+/// 3D Cartesian coordinates within a grid. This mapping facilitates operations
+/// such as neighbor lookup, boundary condition handling, and rank assignment
+/// in parallel processing scenarios.
 ///
 class ChunkMap
 {
@@ -30,95 +32,43 @@ protected:
   IntArray3D       chunkid;        ///< coordinate to chunk ID map
 
 public:
-  ///
-  /// @brief constructor for 3D map
-  /// @param Cz number of chunk in z direction
-  /// @param Cy number of chunk in y direction
-  /// @param Cx number of chunk in x direction
-  ///
+  /// @brief constructor
   ChunkMap(int Cz, int Cy, int Cx);
 
-  ///
   /// @brief constructor
-  /// @param dims number of chunk in each direction
-  ///
   ChunkMap(const int dims[3]);
 
-  ///
-  /// @brief check the validity of map
-  /// @return true if it is valid map, false otherwise
-  ///
+  /// @brief return true if the chunkamp is valid
   virtual bool validate();
 
-  ///
   /// @brief return if the chunk is active
-  ///
   virtual bool is_chunk_active(int id);
 
-  ///
-  /// @brief get map information as json object
-  /// @return obj json object
-  ///
+  /// @brief serialize to json object
   virtual json to_json();
 
-  ///
-  /// @brief restore map information from json object
-  /// @param obj json object
-  ///
+  /// @brief deserialize from json object
   virtual void from_json(json& obj);
 
-  ///
-  /// @brief set periodicity in each direction
-  /// @param pz periodicity in z direction
-  /// @param py periodicity in y direction
-  /// @param px periodicity in x direction
-  ///
+  /// @brief set periodicity for each direction
   virtual void set_periodicity(int pz, int py, int px);
 
-  ///
-  /// @brief return neighbor coordinate for a specific direction `dir`
-  /// @param coord index of coordinate
-  /// @param delta difference of index of coordinate from `coord`
-  /// @param dir direction of coordinate
-  /// @return `coord + delta` if not at boundary, otherwise boundary condition dependent
-  ///
+  /// @brief return neighbor coordinate for a specific direction
   virtual int get_neighbor_coord(int coord, int delta, int dir);
 
-  ///
-  /// @brief get process rank associated with chunk ID
-  /// @param id chunk ID
-  /// @return rank
-  ///
+  /// @brief get rank for chunk
   virtual int get_rank(int id);
 
-  ///
   /// @brief set process rank boundary
-  /// @param boundary array of rank boundary to set
-  ///
   virtual void set_rank_boundary(std::vector<int>& boundary);
 
-  ///
   /// @brief get process rank boundary
-  /// @return array of rank boundary
-  ///
   virtual std::vector<int> get_rank_boundary();
 
-  ///
-  /// @brief get coordinate of chunk for 3D map
-  /// @param id chunk ID
-  /// @param cz z coordinate of chunk will be stored
-  /// @param cy y coordinate of chunk will be stored
-  /// @param cx x coordinate of chunk will be stored
-  ///
+  /// @brief get coordinate of chunk
   virtual std::tuple<int, int, int> get_coordinate(int id);
 
-  ///
-  /// @brief get chunk ID for 3D map
-  /// @param cz z coordinate of chunk
-  /// @param cy y coordinate of chunk
-  /// @param cx x coordinate of chunk
-  /// @return chunk ID
-  ///
+  /// @brief get chunk ID for coordinate
   virtual int get_chunkid(int cz, int cy, int cx);
 };
 

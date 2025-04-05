@@ -10,6 +10,14 @@ NIX_NAMESPACE_BEGIN
 
 static constexpr int default_max_file_per_dir = 1000;
 
+///
+/// @brief StateHandler class for managing simulation state persistence
+///
+/// The StateHandler class is responsible for saving and loading the simulation
+/// state, including both application parameters and chunk vector data. It provides
+/// methods to serialize the state into a message-packed binary format and to restore
+/// the state from disk.
+///
 class StateHandler
 {
 protected:

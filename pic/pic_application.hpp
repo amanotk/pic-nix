@@ -6,6 +6,9 @@
 
 #include "pic.hpp"
 
+///
+/// @brief PIC Application Interface
+///
 class PicApplicationInterface : public nix::Application::Interface
 {
 public:
@@ -17,16 +20,7 @@ public:
 };
 
 ///
-/// @brief Application for 3D Explicit PIC Simulations
-///
-/// This class takes care of initialization of various objects (ChunkMap, Balancer, etc.) and a main
-/// loop for explicit PIC simulations. Core numerical solvers are implemented in a chunk class, and
-/// this class only deals with the management of a collection of chunks.
-///
-/// A problem specific application class must be defined by deriving this class, which should
-/// override the virtual factory method create_chunk() to return a pointer to a problem specific
-/// chunk instance. In addition, custom diagnostics routines may also be implemented through the
-/// virtual method diagnostic().
+/// @brief Application for 3D PIC Simulations
 ///
 class PicApplication : public nix::Application
 {
@@ -37,14 +31,16 @@ public:
 
   PicApplication(int argc, char** argv, PtrInterface interface);
 
-  virtual int get_num_species() const;
-
-  virtual void calculate_moment();
-
 protected:
+  friend class PicApplicationInterface;
+
   int        Ns;         ///< number of species
   int        momstep;    ///< step at which moment quantities are cached
   MpiCommVec mpicommvec; ///< MPI Communicators
+
+  virtual int get_num_species() const;
+
+  virtual void calculate_moment();
 
   virtual void initialize(int argc, char** argv) override;
 

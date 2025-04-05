@@ -1,6 +1,7 @@
 # PIC-NIX
 A Particle-In-Cell (PIC) simulation code for collisionless space plasmas.  
-This is based on the kinetic plasma simulation framework `nix`, which can be found [here](https://github.com/amanotk/nix).
+This is based on the kinetic plasma simulation framework `nix`, which is included as a subtree.
+A separate repository for `nix` can be found [here](https://github.com/amanotk/nix).
 
 # Compiling and Executing the Code
 

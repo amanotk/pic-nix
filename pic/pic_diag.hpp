@@ -8,6 +8,9 @@
 using namespace nix::typedefs;
 using namespace nixio;
 
+///
+/// @brief Diagnostic for 3D PIC Simulations
+///
 class PicDiag : public nix::Diag
 {
 public:
