@@ -128,6 +128,13 @@ enum SendRecvMode {
   RecvMode = 0b10000000000000, // 8192
 };
 
+// array layout
+enum ArrayLayout {
+  LAYOUT_LEFT  = 0, // Fortran-style column-major order
+  LAYOUT_RIGHT = 1, // C-style row-major order
+};
+constexpr int ARRAY_LAYOUT = LAYOUT_RIGHT;
+
 ///
 /// @brief return wall clock time since epoch
 /// @return time in second
@@ -279,7 +286,7 @@ static auto get_stride(T_array& array, int dim)
 template <typename T_array, typename T>
 void fill_all(T_array& array, T&& value)
 {
-    std::fill_n(get_data_pointer(array), array.size(), value);
+  std::fill_n(get_data_pointer(array), array.size(), value);
 }
 
 NIX_NAMESPACE_END

@@ -139,7 +139,7 @@ public:
       // meta data
       root["meta"] = {{"endian", nix::get_endian_flag()},
                       {"rawfile", fn_data},
-                      {"order", 1},
+                      {"layout", nix::ARRAY_LAYOUT},
                       {"time", data.curtime},
                       {"step", data.curstep},
                       {"chunk_id_range", chunk_id_range}};

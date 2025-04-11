@@ -27,7 +27,7 @@ def get_json_meta(obj):
         print("unrecognized endian flag: {}".format(endian))
 
     datafile = meta.get("rawfile")
-    layout = meta.get("order", 0)
+    layout = meta.get("layout", meta.get("order", 0)) # for backward compatibility
     chunk_id_range = meta.get("chunk_id_range", None)
 
     return byteorder, datafile, layout, chunk_id_range
