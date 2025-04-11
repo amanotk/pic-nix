@@ -323,7 +323,7 @@ public:
   }
 
   // count particles in each cell
-  void count(int Lbp, int Ubp, bool reset, int order = 1)
+  void count(int Lbp, int Ubp, bool reset, int order)
   {
     using nix::primitives::digitize;
 

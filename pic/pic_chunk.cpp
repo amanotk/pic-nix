@@ -447,7 +447,7 @@ void PicChunk::get_diverror(float64& efd, float64& bfd)
 void PicChunk::sort_particle(ParticleVec& particle)
 {
   for (int is = 0; is < particle.size(); is++) {
-    particle[is]->count(0, particle[is]->Np - 1, true);
+    particle[is]->count(0, particle[is]->Np - 1, true, order);
     particle[is]->sort();
   }
 }
