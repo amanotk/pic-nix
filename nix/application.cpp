@@ -260,7 +260,6 @@ void Application::setup_chunks_init()
   auto boundary = balancer->assign_initial(nprocess);
   chunkmap->set_rank_boundary(boundary);
 
-  int  numchunk   = boundary[thisrank + 1] - boundary[thisrank];
   bool has_dim[3] = {
       (ndims[0] == 1 && cdims[0] == 1) ? false : true,
       (ndims[1] == 1 && cdims[1] == 1) ? false : true,
@@ -285,10 +284,10 @@ void Application::setup_chunks_init()
     }
   }
 
-  chunkvec.resize(numchunk);
-
   for (int i = 0, id = boundary[thisrank]; id < boundary[thisrank + 1]; i++, id++) {
-    chunkvec[i] = interface->create_chunk(dims, has_dim, id);
+    if (chunkmap->is_chunk_active(id) == true) {
+      chunkvec.push_back(interface->create_chunk(dims, has_dim, id));
+    }
   }
   chunkvec.set_neighbors(chunkmap);
 

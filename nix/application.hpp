@@ -139,7 +139,7 @@ public:
   /// @param argv array of arguments
   ///
   Application(int argc, char** argv, PtrInterface interface)
-      : is_mpi_init_already_called(false), interface(interface)
+      : is_mpi_init_already_called(false), interface(interface), chunkvec()
   {
     cl_argc = argc;
     cl_argv = argv;

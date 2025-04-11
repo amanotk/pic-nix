@@ -18,6 +18,7 @@ class ChunkVector : private std::vector<PtrChunk>
 {
 public:
   using vector_type = std::vector<PtrChunk>;
+  using vector_type::vector_type; // inherit constructors
   using vector_type::push_back;
   using vector_type::emplace_back;
   using vector_type::begin;
