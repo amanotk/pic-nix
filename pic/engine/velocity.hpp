@@ -47,13 +47,15 @@ public:
   int     uby;
   int     ubz;
   float64 cc;
-  float64 dt;
   float64 dx;
   float64 dy;
   float64 dz;
   float64 xmin;
   float64 ymin;
   float64 zmin;
+  float64 cflx;
+  float64 cfly;
+  float64 cflz;
 
   template <typename T_data>
   BaseVelocity(const T_data& data, bool has_dim[3])
@@ -99,6 +101,10 @@ public:
   template <typename T_particle, typename T_array>
   void call_scalar_impl(T_particle& up, T_array& uf, float64 delt)
   {
+    // cache for WT interpolation
+    cflx = cc * delt / dx;
+    cfly = cc * delt / dy;
+    cflz = cc * delt / dz;
 
     auto push = [&](T_array& uf, float64 xu[], float64 dt) {
       // 1D version
@@ -139,6 +145,11 @@ public:
     const int ubx = has_xdim ? this->ubx + is_odd : this->ubx;
     const int uby = has_ydim ? this->uby + is_odd : this->uby;
     const int ubz = has_zdim ? this->ubz + is_odd : this->ubz;
+
+    // cache for WT interpolation
+    cflx = cc * delt / dx;
+    cfly = cc * delt / dy;
+    cflz = cc * delt / dz;
 
     auto push = [&](T_array& uf, int iz, int iy, int ix, auto xu[], auto dt) {
       // 1D version
@@ -216,8 +227,8 @@ public:
     T_float xigrid = xmin + 0.5 * dx;
     T_float xhgrid = xmin;
     T_float rdx    = 1 / dx;
-    T_float dtx    = cc * dt / dx;
-    T_float rdtx   = 1 / dtx;
+    T_float cdtx   = cflx;
+    T_float rcdtx  = 1 / cdtx;
 
     // grid indices and positions
     auto ix0 = digitize(xu[0], ximin, rdx);
@@ -232,7 +243,7 @@ public:
 
     // WT weights
     if constexpr (Interp == InterpWT) {
-      shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
+      shape_wt<Order>(xu[0], xig, rdx, cdtx, rcdtx, wix);
     }
 
     shape_mc<Order>(xu[0], xhg, rdx, whx);
@@ -253,10 +264,10 @@ public:
     T_float yhgrid = ymin;
     T_float rdx    = 1 / dx;
     T_float rdy    = 1 / dy;
-    T_float dtx    = cc * dt / dx;
-    T_float dty    = cc * dt / dy;
-    T_float rdtx   = 1 / dtx;
-    T_float rdty   = 1 / dty;
+    T_float cdtx   = cflx;
+    T_float cdty   = cfly;
+    T_float rcdtx  = 1 / cdtx;
+    T_float rcdty  = 1 / cdty;
 
     // grid indices and positions
     auto ix0 = digitize(xu[0], ximin, rdx);
@@ -276,8 +287,8 @@ public:
 
     // WT weights
     if constexpr (Interp == InterpWT) {
-      shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
-      shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
+      shape_wt<Order>(xu[0], xig, rdx, cdtx, rcdtx, wix);
+      shape_wt<Order>(xu[1], yig, rdy, cdty, rcdty, wiy);
     }
 
     shape_mc<Order>(xu[0], xhg, rdx, whx);
@@ -305,12 +316,12 @@ public:
     T_float rdx    = 1 / dx;
     T_float rdy    = 1 / dy;
     T_float rdz    = 1 / dz;
-    T_float dtx    = cc * dt / dx;
-    T_float dty    = cc * dt / dy;
-    T_float dtz    = cc * dt / dz;
-    T_float rdtx   = 1 / dtx;
-    T_float rdty   = 1 / dty;
-    T_float rdtz   = 1 / dtz;
+    T_float cdtx   = cflx;
+    T_float cdty   = cfly;
+    T_float cdtz   = cflz;
+    T_float rcdtx  = 1 / cdtx;
+    T_float rcdty  = 1 / cdty;
+    T_float rcdtz  = 1 / cdtz;
 
     // grid indices and positions
     auto ix0 = digitize(xu[0], ximin, rdx);
@@ -335,9 +346,9 @@ public:
 
     // WT weights
     if constexpr (Interp == InterpWT) {
-      shape_wt<Order>(xu[0], xig, rdx, dtx, rdtx, wix);
-      shape_wt<Order>(xu[1], yig, rdy, dty, rdty, wiy);
-      shape_wt<Order>(xu[2], zig, rdz, dtz, rdtz, wiz);
+      shape_wt<Order>(xu[0], xig, rdx, cdtx, rcdtx, wix);
+      shape_wt<Order>(xu[1], yig, rdy, cdty, rcdty, wiy);
+      shape_wt<Order>(xu[2], zig, rdz, cdtz, rcdtz, wiz);
     }
 
     shape_mc<Order>(xu[0], xhg, rdx, whx);
@@ -407,7 +418,7 @@ public:
   }
 
   template <typename T_array>
-  void push_scalar3d(T_array& uf, float64 xu[], float64 dt1)
+  void push_scalar3d(T_array& uf, float64 xu[], float64 dt)
   {
     constexpr int Stencil = Order - 1;
     using nix::interp::interp3d;
