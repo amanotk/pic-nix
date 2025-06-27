@@ -406,8 +406,6 @@ public:
     // resize particle buffer if needed
     //
     {
-      const float64 target = 1 + chunk->get_buffer_ratio();
-
       for (int is = 0; is < Ns; is++) {
         int np_next = particle[is]->Np;
         for (int iz = indexlb[0]; iz <= indexub[0]; iz++) {
@@ -417,14 +415,7 @@ public:
             }
           }
         }
-
-        if (np_next > particle[is]->Np_total) {
-          // expand
-          particle[is]->resize(target * np_next);
-        } else if (target * np_next < particle[is]->Np_total) {
-          // shrink
-          particle[is]->resize(target * np_next);
-        }
+        particle[is]->resize(np_next); // actual size is determined inside resize
       }
     }
 

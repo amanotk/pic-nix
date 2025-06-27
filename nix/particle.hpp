@@ -15,7 +15,8 @@ NIX_NAMESPACE_BEGIN
 class Particle
 {
 public:
-  static constexpr int Nc = 7; ///< # component for each particle (including ID)
+  static constexpr int Nc         = 7;   ///< # component for each particle (including ID)
+  static constexpr int alloc_unit = 128; ///< allocation unit for particle buffer
 
   int     Np_total; ///< # total particles
   int     Np;       ///< # particles in active
@@ -77,7 +78,7 @@ public:
   }
 
   template <typename T_chunk>
-  Particle(int Np_total, T_chunk& chunk) : Np_total(Np_total), Np(0)
+  Particle(T_chunk& chunk) : Particle()
   {
     has_xdim                           = chunk.has_xdim();
     has_ydim                           = chunk.has_ydim();
@@ -109,10 +110,10 @@ public:
   int64_t get_size_byte();
 
   /// @brief initial memory allocation
-  void allocate(int Np_total, int Ng);
+  void allocate(int np_required);
 
   /// @brief resize particle array
-  void resize(int newsize);
+  void resize(int np_required);
 
   /// @brief swap pointer of particle array with temporary array
   void swap();
@@ -140,6 +141,18 @@ public:
 
   /// @brief set periodic boundary condition
   void set_boundary_periodic(int Lbp, int Ubp);
+
+  /// @brief round up to alloc_unit
+  static int round_up_alloc(int np_required)
+  {
+    return ((np_required + alloc_unit) / alloc_unit) * alloc_unit;
+  }
+
+  template <typename... Args>
+  static std::array<size_t, sizeof...(Args)> to_size(Args... args)
+  {
+    return {static_cast<size_t>(args)...};
+  }
 };
 
 NIX_NAMESPACE_END

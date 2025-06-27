@@ -23,9 +23,9 @@ public:
   }
 
   template <typename T_chunk>
-  XtensorParticle(int Np_total, T_chunk& chunk) : Particle(Np_total, chunk)
+  XtensorParticle(int np_required, T_chunk& chunk) : Particle(chunk)
   {
-    allocate(Np_total, Ng);
+    allocate(np_required);
   }
 
   ///
@@ -46,17 +46,16 @@ public:
   ///
   /// @brief initial memory allocation
   ///
-  void allocate(int Np_total, int Ng)
+  void allocate(int np_required)
   {
-    const size_t np = Np_total;
-    const size_t ng = Ng;
-    const size_t nc = Nc;
+    // actual array size round up to alloc_unit
+    Np_total = Particle::round_up_alloc(np_required);
 
-    xu.resize({np, nc});
-    xv.resize({np, nc});
-    gindex.resize({np});
-    pindex.resize({ng + 1});
-    pcount.resize({ng + 1, nix::simd_width});
+    xu.resize(Particle::to_size(Np_total, Nc));
+    xv.resize(Particle::to_size(Np_total, Nc));
+    gindex.resize(Particle::to_size(Np_total));
+    pindex.resize(Particle::to_size(Ng + 1));
+    pcount.resize(Particle::to_size(Ng + 1, nix::simd_width));
 
     xu.fill(0);
     xv.fill(0);
@@ -68,18 +67,17 @@ public:
   ///
   /// @brief resize particle array
   ///
-  void resize(int newsize)
+  void resize(int np_required)
   {
-    const size_t np = newsize;
-    const size_t nc = Nc;
+    //
+    // resize should not be performed either of the following conditions are met:
+    //
+    // (1) np_new is equal to the original (no need to resize)
+    // (2) np_new is smaller than the current active particle number (erroneous!)
+    //
+    int np_new = Particle::round_up_alloc(np_required); // round up to alloc_unit
 
-    //
-    // Resize should not be performed either of the following conditions are met:
-    //
-    // (1) newsize is equal to the original (no need to resize)
-    // (2) newsize is smaller than the current active particle number (erroneous!)
-    //
-    if (newsize == Np_total || newsize <= Np) {
+    if (np_new == Np_total || np_new <= Np) {
       return;
     }
 
@@ -89,31 +87,31 @@ public:
     //
 
     {
-      const size_t size = std::min(xu.size(), np * nc) * sizeof(float64);
+      const size_t size = std::min(xu.size(), static_cast<size_t>(np_new) * Nc) * sizeof(float64);
       auto         tmp(xu);
 
-      xu.resize({np, nc});
+      xu.resize(Particle::to_size(np_new, Nc));
       std::memcpy(xu.data(), tmp.data(), size);
     }
 
     {
-      const size_t size = std::min(xv.size(), np * nc) * sizeof(float64);
+      const size_t size = std::min(xv.size(), static_cast<size_t>(np_new) * Nc) * sizeof(float64);
       auto         tmp(xv);
 
-      xv.resize({np, nc});
+      xv.resize(Particle::to_size(np_new, Nc));
       std::memcpy(xv.data(), tmp.data(), size);
     }
 
     {
-      const size_t size = std::min(gindex.size(), np) * sizeof(int32);
+      const size_t size = std::min(gindex.size(), static_cast<size_t>(np_new)) * sizeof(int32);
       auto         tmp(gindex);
 
-      gindex.resize({np});
+      gindex.resize(Particle::to_size(np_new));
       std::memcpy(gindex.data(), tmp.data(), size);
     }
 
     // set new total number of particles
-    Np_total = newsize;
+    Np_total = np_new;
   }
 
   ///
@@ -207,7 +205,7 @@ public:
     address += memcpy_count(&zmax_global, buffer, sizeof(float64), 0, address);
 
     // memory allocation before reading arrays
-    allocate(Np_total, Ng);
+    allocate(Np_total);
 
     // array
     address += memcpy_count(xu.data(), buffer, xu.size() * sizeof(float64), 0, address);
