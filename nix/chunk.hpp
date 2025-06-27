@@ -107,6 +107,11 @@ public:
   /// @brief constructor
   Chunk(const int dims[3], const bool has_dim[3], int id = 0);
 
+  /// @brief destructor
+  virtual ~Chunk()
+  {
+  }
+
   /// @brief setup initial condition (pure virtual)
   virtual void setup(json& config)
   {

@@ -89,6 +89,8 @@ protected:
 public:
   PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
 
+  virtual ~PicChunk() override = default;
+
   virtual int64_t get_size_byte() const override;
 
   virtual int get_order() const;

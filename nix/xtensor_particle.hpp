@@ -46,10 +46,10 @@ public:
   ///
   /// @brief initial memory allocation
   ///
-  void allocate(int np_required)
+  void allocate(int np_required, bool strict = false)
   {
     // actual array size round up to alloc_unit
-    Np_total = Particle::round_up_alloc(np_required);
+    Np_total = Particle::round_up_alloc(np_required, strict);
 
     xu.resize(Particle::to_size(Np_total, Nc));
     xv.resize(Particle::to_size(Np_total, Nc));
@@ -205,7 +205,7 @@ public:
     address += memcpy_count(&zmax_global, buffer, sizeof(float64), 0, address);
 
     // memory allocation before reading arrays
-    allocate(Np_total);
+    allocate(Np_total, true);
 
     // array
     address += memcpy_count(xu.data(), buffer, xu.size() * sizeof(float64), 0, address);

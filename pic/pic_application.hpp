@@ -31,6 +31,8 @@ public:
 
   PicApplication(int argc, char** argv, PtrInterface interface);
 
+  virtual ~PicApplication() override = default;
+
 protected:
   friend class PicApplicationInterface;
 

@@ -149,6 +149,10 @@ public:
     }
   }
 
+  virtual ~Application()
+  {
+  }
+
   /// @brief return Application interface
   virtual PtrInterface get_interface()
   {

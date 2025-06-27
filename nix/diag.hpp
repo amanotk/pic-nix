@@ -55,8 +55,20 @@ protected:
 
     ~Info()
     {
-      MPI_Comm_free(&intra_comm);
-      MPI_Comm_free(&inter_comm);
+      // call free_mpi_comm() explicitly to free communicators
+    }
+
+    void free_mpi_comm()
+    {
+      if (intra_comm != MPI_COMM_NULL) {
+        MPI_Comm_free(&intra_comm);
+        intra_comm = MPI_COMM_NULL;
+      }
+
+      if (inter_comm != MPI_COMM_NULL) {
+        MPI_Comm_free(&inter_comm);
+        inter_comm = MPI_COMM_NULL;
+      }
     }
   };
 
@@ -68,6 +80,10 @@ public:
   Diag(std::string name) : name(name)
   {
     make_sure_directory_exists(format_dirname(""));
+  }
+
+  virtual ~Diag()
+  {
   }
 
   // main operation
@@ -92,6 +108,7 @@ public:
   static void finalize()
   {
     if (info != nullptr) {
+      info->free_mpi_comm();
       info.reset();
     }
   }

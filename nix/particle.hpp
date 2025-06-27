@@ -110,7 +110,7 @@ public:
   int64_t get_size_byte();
 
   /// @brief initial memory allocation
-  void allocate(int np_required);
+  void allocate(int np_required, bool strict = false);
 
   /// @brief resize particle array
   void resize(int np_required);
@@ -143,9 +143,13 @@ public:
   void set_boundary_periodic(int Lbp, int Ubp);
 
   /// @brief round up to alloc_unit
-  static int round_up_alloc(int np_required)
+  static int round_up_alloc(int np_required, bool strict = false)
   {
-    return ((np_required + alloc_unit) / alloc_unit) * alloc_unit;
+    if (strict) {
+      return np_required;
+    } else {
+      return ((np_required + alloc_unit) / alloc_unit) * alloc_unit;
+    }
   }
 
   template <typename... Args>
