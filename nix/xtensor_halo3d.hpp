@@ -492,7 +492,7 @@ public:
     for (int is = 0; is < Ns; is++) {
       int np_prev = particle[is]->Np;
       int np_next = particle[is]->Np + num_unpacked[is];
-      particle[is]->set_boundary_periodic(np_prev, np_next);
+      particle[is]->set_boundary_periodic(np_prev, np_next - 1);
       particle[is]->count(np_prev, np_next - 1, false, chunk->get_order());
       // now update number of particles
       particle[is]->Np = np_next;
