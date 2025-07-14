@@ -160,6 +160,30 @@ class Run(object):
 
         return data
 
+    def remove_file_at(self, prefix, step, are_you_sure=False):
+        handler = self.diag_handlers[prefix]
+        if not are_you_sure:
+            print(
+                "*** WARNING ***\n"
+                "This will remove files for prefix {:s} at step {:d}\n"
+                "If you really want to do this, please set\n"
+                "   `are_you_sure=True`   \n"
+                "and run again!\n".format(prefix, step)
+            )
+            return
+
+        # now remove files
+        jsonfile_to_be_removed = handler.find_json_at_step(step)
+        for jsonfile in jsonfile_to_be_removed:
+            _, meta = read_jsonfile(jsonfile)
+            datafile = os.sep.join([meta["dirname"], meta["datafile"]])
+            try:
+                os.remove(jsonfile)
+                os.remove(datafile)
+                self.diag_handlers[prefix].remove_json_at_step(step)
+            except OSError as e:
+                print(f"Error removing file {jsonfile} or {datafile}: {e}")
+
     @staticmethod
     def prepare_read(all_jsonfiles, pattern):
         dims = dict()

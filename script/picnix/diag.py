@@ -145,6 +145,16 @@ class DiagHandler(object):
         else:
             return None
 
+    def remove_json_at_step(self, step):
+        index = self.find_index_at_step(step)
+        if index is None:
+            return
+
+        # remove entries at index
+        self.file = np.delete(self.file, index, axis=1)
+        self.step = np.delete(self.step, index)
+        self.time = np.delete(self.time, index)
+
     @staticmethod
     def read_time_and_step(filename):
         with open(filename, "r") as fp:
