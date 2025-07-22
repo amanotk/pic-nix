@@ -5,6 +5,7 @@ import numpy as np
 import re
 import pathlib
 import json
+import toml
 import msgpack
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
@@ -23,11 +24,11 @@ from .diag import DiagHandler
 
 
 class Run(object):
-    def __init__(self, profile, method=None):
+    def __init__(self, profile, method=None, config=None):
         self.cache = dict()
         self.profile = profile
         self.method = method
-        self.read_profile(profile)
+        self.read_profile(profile, config)
         self.set_coordinate()
 
     def format_log_filename(self):
@@ -52,14 +53,23 @@ class Run(object):
     def get_iomode(self):
         return self.config["application"].get("iomode", "mpiio")
 
-    def read_profile(self, profile):
+    def read_profile(self, profile, config=None):
         # read profile
         with open(profile, "rb") as fp:
             obj = msgpack.load(fp)
             self.timestamp = obj["timestamp"]
             self.nprocess = obj["nprocess"]
             self.chunkmap = obj["chunkmap"]
-            self.config = obj["configuration"]
+            config_in_profile = obj["configuration"]
+        # read given config if specified
+        if config is None:
+            self.config = config_in_profile
+        elif config.endswith(".toml"):
+            with open(config, "r") as fileobj:
+                self.config = toml.load(fileobj)
+        elif config.endswith(".json"):
+            with open(config, "r") as fileobj:
+                self.config = json.load(fileobj)
 
         # store some parameters
         parameter = self.config["parameter"]
