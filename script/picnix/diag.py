@@ -91,6 +91,8 @@ class DiagHandler(object):
             self.step[i], self.time[i] = result[i]
 
     def get_matching_jsons(self, dirname):
+        if not os.path.isdir(dirname):
+            return []
         files = []
         for f in os.listdir(dirname):
             if self.file_pattern.match(f):
@@ -98,6 +100,8 @@ class DiagHandler(object):
         return sorted(files)
 
     def get_matching_nodes(self, dirname):
+        if not os.path.isdir(dirname):
+            return []
         nodes = []
         for f in os.listdir(dirname):
             if self.node_pattern.match(f):
