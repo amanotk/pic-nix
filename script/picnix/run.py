@@ -1,26 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import re
-import pathlib
-import json
-import toml
-import msgpack
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
-import aiofiles
+import json
+import pathlib
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import msgpack
 import nest_asyncio
+import numpy as np
+import toml
 
 from picnix import (
     DEFAULT_LOG_PREFIX,
-    DEFAULT_LOAD_PREFIX,
-    DEFAULT_FIELD_PREFIX,
-    DEFAULT_PARTICLE_PREFIX,
-    DEFAULT_TRACER_PREFIX,
 )
-from .utils import *
+
 from .diag import DiagHandler
+from .utils import *
 
 
 class Run(object):
@@ -89,9 +86,7 @@ class Run(object):
         self.diag_handlers = dict()
 
         for diagnostic in self.config["diagnostic"]:
-            handler = DiagHandler.create_handler(
-                diagnostic, basedir, iomode, self.method
-            )
+            handler = DiagHandler.create_handler(diagnostic, basedir, iomode, self.method)
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler
 
@@ -132,11 +127,7 @@ class Run(object):
             cache_step = cache.get("step", None)
             cache_pattern = cache.get("pattern", None)
             cache_data = cache.get("data", None)
-            if (
-                cache_data is not None
-                and cache_step == step
-                and cache_pattern == pattern
-            ):
+            if cache_data is not None and cache_step == step and cache_pattern == pattern:
                 return cache_data
 
         # default pattern (read everything)
@@ -164,6 +155,9 @@ class Run(object):
         # convert array format
         if handler.is_chunked_data_conversion_required():
             data = convert_array_format(data, self.chunkmap)
+
+        # append auxiliary data if needed
+        data = handler.append_auxiliary_data(data, self.config)
 
         # store cache
         self.cache[prefix] = {"step": step, "pattern": pattern, "data": data}
@@ -322,9 +316,7 @@ class Run(object):
         result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        result = Run.thread_read_data_files(
-            result, address, json_contents, names, pattern
-        )
+        result = Run.thread_read_data_files(result, address, json_contents, names, pattern)
 
         return result
 
@@ -373,8 +365,6 @@ class Run(object):
         result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        result = await Run.async_read_data_files(
-            result, address, json_contents, names, pattern
-        )
+        result = await Run.async_read_data_files(result, address, json_contents, names, pattern)
 
         return result

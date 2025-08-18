@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import numpy as np
+import asyncio
+import json
 import os
 import re
-import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import asyncio
+
 import aiofiles
 import nest_asyncio
+import numpy as np
 
 from picnix import (
-    DEFAULT_LOG_PREFIX,
-    DEFAULT_LOAD_PREFIX,
     DEFAULT_FIELD_PREFIX,
+    DEFAULT_LOAD_PREFIX,
     DEFAULT_PARTICLE_PREFIX,
     DEFAULT_TRACER_PREFIX,
 )
@@ -25,7 +25,7 @@ class DiagHandler(object):
         self.prefix = prefix
         self.basedir = basedir
         self.iomode = iomode
-        self.file_pattern = re.compile(rf"\d+\.json$")
+        self.file_pattern = re.compile(r"\d+\.json$")
         self.node_pattern = re.compile(r"node\d+$")
 
     def match(self, name):
@@ -42,6 +42,9 @@ class DiagHandler(object):
 
     def is_chunked_data_shape_uniform(self):
         return False
+
+    def append_auxiliary_data(self, data, config_root):
+        return data
 
     def setup(self, config):
         self.config = config
@@ -82,9 +85,7 @@ class DiagHandler(object):
         # read time and step via asyncio
         tasks = []
         for i, file in enumerate(self.file[0, :]):
-            tasks.append(
-                asyncio.create_task(DiagHandler.async_read_time_and_step(file))
-            )
+            tasks.append(asyncio.create_task(DiagHandler.async_read_time_and_step(file)))
         result = await asyncio.gather(*tasks)
 
         for i in range(len(result)):
@@ -233,6 +234,36 @@ class FieldDiagHandler(DiagHandler):
 
     def is_chunked_data_shape_uniform(self):
         return True
+
+    def append_auxiliary_data(self, data, config_root):
+        decimate = self.config.get("decimate", -1)
+        parameter = config_root["parameter"]
+
+        nx = self.calc_decimated_grid(parameter["Nx"], parameter["Cx"], decimate)
+        ny = self.calc_decimated_grid(parameter["Ny"], parameter["Cy"], decimate)
+        nz = self.calc_decimated_grid(parameter["Nz"], parameter["Cz"], decimate)
+        dx = (parameter["Nx"] // nx) * parameter["delh"]
+        dy = (parameter["Ny"] // ny) * parameter["delh"]
+        dz = (parameter["Nz"] // nz) * parameter["delh"]
+
+        data["xc"] = dx * (np.arange(nx) + 0.5)
+        data["yc"] = dy * (np.arange(ny) + 0.5)
+        data["zc"] = dz * (np.arange(nz) + 0.5)
+
+        return data
+
+    def calc_decimated_grid(self, num_grid, num_chunk, decimate):
+        m = num_grid // num_chunk
+
+        if m <= decimate:
+            grid_per_chunk = 1
+        elif (decimate < 0) or (decimate > 0 and m % decimate == 0):
+            grid_per_chunk = m // decimate
+        else:
+            # something wrong
+            raise ValueError("Invalid decimate value: {}".format(decimate))
+
+        return grid_per_chunk * num_chunk
 
 
 class ParticleDiagHandler(DiagHandler):

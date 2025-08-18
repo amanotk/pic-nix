@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import pathlib
+import sys
 
-import numpy as np
 import matplotlib as mpl
+import numpy as np
 
 mpl.use("Agg") if __name__ == "__main__" else None
 from matplotlib import pyplot as plt
@@ -24,16 +24,17 @@ class Run(picnix.Run):
         super().__init__(profile)
         self.plot_chunk_boundary = boundary
 
-    def calc_reconnexted_flux(self, step):
+    def calc_reconnected_flux(self, step):
         parameter = self.config["parameter"]
         mime = parameter["mime"]
         delh = parameter["delh"] / np.sqrt(mime)
         b0 = np.sqrt(parameter["sigma"])
 
         data = self.read_at("field", step)
+        yc = data["yc"]
         uf = data["uf"]
         um = data["um"]
-        iy = self.Ny // 2
+        iy = yc.size // 2
 
         return 0.5 * np.sum(np.abs(uf[:, iy, :, 4]) * delh) / (b0 * self.Nz)
 
@@ -65,11 +66,11 @@ class Run(picnix.Run):
         L = cc / wpi
 
         data = self.read_at("field", step)
+        xc = data["xc"] / L
+        yc = data["yc"] / L
         uf = data["uf"]
         um = data["um"]
         tt = self.get_time_at("field", step) / T
-        xc = self.xc / L
-        yc = self.yc / L
         xlim = (0, self.Nx * self.delh / L)
         ylim = (0, self.Ny * self.delh / L)
 
@@ -144,10 +145,10 @@ class Run(picnix.Run):
             ax_pos = axs[i].get_position()
             cx_pos = cxs[i].get_position()
             cxs[i].set_position([cx_pos.x0, ax_pos.y0, cx_pos.width, ax_pos.height])
-        axs[0].set_ylabel(r"$y / c/\omega_{pe}$")
-        axs[2].set_ylabel(r"$y / c/\omega_{pe}$")
-        axs[2].set_xlabel(r"$x / c/\omega_{pe}$")
-        axs[3].set_xlabel(r"$x / c/\omega_{pe}$")
+        axs[0].set_ylabel(r"$y / c/\omega_{pi}$")
+        axs[2].set_ylabel(r"$y / c/\omega_{pi}$")
+        axs[2].set_xlabel(r"$x / c/\omega_{pi}$")
+        axs[3].set_xlabel(r"$x / c/\omega_{pi}$")
 
         # chunk distribution
         if self.plot_chunk_boundary:
@@ -155,9 +156,7 @@ class Run(picnix.Run):
             rank = self.get_chunk_rank(step)
             cdelx = self.delh * self.Nx / self.Cx / L
             cdely = self.delh * self.Ny / self.Cy / L
-            picnix.plot_chunk_dist2d(
-                axs[0], coord, rank, cdelx, cdely, colors="white", width=0.5
-            )
+            picnix.plot_chunk_dist2d(axs[0], coord, rank, cdelx, cdely, colors="white", width=0.5)
 
         # title
         fig.suptitle(r"$\Omega_{{ci}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
@@ -175,7 +174,7 @@ def doit_job(profile, prefix, fps, cleanup):
 
     # for all snapshots
     for i, step in enumerate(run.get_step("field")):
-        flux[i] = run.calc_reconnexted_flux(step)
+        flux[i] = run.calc_reconnected_flux(step)
         fig = run.summary2d(step)
         fig.savefig("{:s}-{:08d}.png".format(prefix, step))
         plt.close(fig)

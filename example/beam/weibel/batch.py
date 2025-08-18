@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import pathlib
+import sys
 
-import numpy as np
 import matplotlib as mpl
+import numpy as np
 
 mpl.use("Agg") if __name__ == "__main__" else None
 from matplotlib import pyplot as plt
@@ -27,8 +27,8 @@ class Run(picnix.Run):
     def summary(self, step):
         data = self.read_at("field", step)
         qm = [particle["qm"] for particle in self.config["parameter"]["particle"]]
-        xc = self.xc
-        yc = self.yc
+        xc = data["xc"]
+        yc = data["yc"]
         uf = data["uf"]
         um = data["um"]
         tt = self.get_time_at("field", step)
@@ -74,8 +74,10 @@ class Run(picnix.Run):
         cxs[1].set_title(r"$|B|$")
 
         ## current density
+        Nx = xc.size
+        Ny = yc.size
         plt.sca(axs[2])
-        jz = np.zeros((self.Ny, self.Nx))
+        jz = np.zeros((Ny, Nx))
         for i in range(len(qm)):
             jz[...] += qm[i] * um[..., i, 3].mean(axis=(0))
         plt.pcolormesh(X, Y, jz, shading="nearest")
@@ -103,9 +105,7 @@ class Run(picnix.Run):
             cdelx = self.delh * self.Nx // self.Cx
             cdely = self.delh * self.Ny // self.Cy
             for i in range(3):
-                picnix.plot_chunk_dist2d(
-                    axs[i], coord, rank, cdelx, cdely, colors="white"
-                )
+                picnix.plot_chunk_dist2d(axs[i], coord, rank, cdelx, cdely, colors="white")
 
         fig.suptitle(r"$\omega_{{pe}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
 
