@@ -69,7 +69,7 @@ public:
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
-    int         decimate = config.value("decimate", -1);
+    int         decimate = config.value("decimate", 1); // default 1
     size_t      disp     = 0;
     std::string prefix   = this->get_prefix(config, "field");
     std::string dirname  = this->format_dirname(prefix);

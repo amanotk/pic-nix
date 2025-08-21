@@ -137,20 +137,6 @@ public:
     return count;
   }
 
-  /// calculate decimated coordinates
-  static inline auto calc_decimated_coord(int Lb, int Ub, int decimate)
-  {
-    int size = Ub - Lb + 1;
-
-    if (size <= decimate) {
-      return std::make_tuple(Lb, Ub);
-    } else {
-      int new_Lb = Lb + (size % decimate) / 2;
-      int new_Ub = Ub - (size % decimate) / 2;
-      return std::make_tuple(new_Lb, new_Ub);
-    }
-  }
-
   /// calculate decimated size for each dimension
   template <typename Array, typename Data>
   static inline auto calc_decimated_size(Array& x, Data data, int decimate)

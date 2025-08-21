@@ -236,7 +236,7 @@ class FieldDiagHandler(DiagHandler):
         return True
 
     def append_auxiliary_data(self, data, config_root):
-        decimate = self.config.get("decimate", -1)
+        decimate = self.config.get("decimate", 1)
         parameter = config_root["parameter"]
 
         nx = self.calc_decimated_grid(parameter["Nx"], parameter["Cx"], decimate)
