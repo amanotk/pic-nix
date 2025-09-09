@@ -83,7 +83,7 @@ public:
   }
 
   template <typename T_field, typename T_current, typename T_friedman>
-  void push_efd_1d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
+  void push_efd_1d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt, json& option)
   {
     const int     Nb   = boundary_margin;
     const float64 cflx = cc * delt / dx;
@@ -146,7 +146,7 @@ public:
   }
 
   template <typename T_field, typename T_current, typename T_friedman>
-  void push_bfd_1d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
+  void push_bfd_1d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt, json& option)
   {
     const int     Nb   = boundary_margin;
     const float64 A    = 1 + 0.5 * theta;
@@ -174,7 +174,7 @@ public:
 
     // Bx
     {
-      // do nothing
+        // do nothing
     }
 
     // By
@@ -229,7 +229,7 @@ public:
   }
 
   template <typename T_field, typename T_current, typename T_friedman>
-  void push_efd_2d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
+  void push_efd_2d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt, json& option)
   {
     const int     Nb   = boundary_margin;
     const float64 cflx = cc * delt / dx;
@@ -290,7 +290,7 @@ public:
   }
 
   template <typename T_field, typename T_current, typename T_friedman>
-  void push_bfd_2d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
+  void push_bfd_2d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt, json& option)
   {
     const int     Nb   = boundary_margin;
     const float64 A    = 1 + 0.5 * theta;
@@ -381,7 +381,7 @@ public:
   }
 
   template <typename T_field, typename T_current, typename T_friedman>
-  void push_efd_3d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
+  void push_efd_3d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt, json& option)
   {
     const int     Nb   = boundary_margin;
     const float64 cflx = cc * delt / dx;
@@ -440,7 +440,7 @@ public:
   }
 
   template <typename T_field, typename T_current, typename T_friedman>
-  void push_bfd_3d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt)
+  void push_bfd_3d(T_field& uf, T_current& uj, T_friedman& ff, float64 delt, json& option)
   {
     const int     Nb   = boundary_margin;
     const float64 A    = 1 + 0.5 * theta;
@@ -496,7 +496,7 @@ public:
   }
 };
 
-} // namespace engine
+} // namespace pic_engine
 
 // Local Variables:
 // c-file-style   : "gnu"

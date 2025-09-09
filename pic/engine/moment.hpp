@@ -425,7 +425,7 @@ public:
   using BaseMoment<Dim, Order>::BaseMoment; // inherit constructor
 
   template <typename T_particle, typename T_array>
-  void operator()(T_particle& up, T_array& um)
+  void operator()(T_particle& up, T_array& um, json& option)
   {
     this->call_scalar_impl(up, um);
   }
@@ -438,7 +438,7 @@ public:
   using BaseMoment<Dim, Order>::BaseMoment; // inherit constructor
 
   template <typename T_particle, typename T_array>
-  void operator()(T_particle& up, T_array& um)
+  void operator()(T_particle& up, T_array& um, json& option)
   {
     this->call_vector_impl(up, um);
   }

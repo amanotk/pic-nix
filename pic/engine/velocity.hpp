@@ -550,7 +550,7 @@ public:
   using BaseVelocity<Dim, Order, Pusher, Interp>::BaseVelocity; // inherit constructor
 
   template <typename T_particle, typename T_array>
-  void operator()(T_particle& up, T_array& uf, float64 delt)
+  void operator()(T_particle& up, T_array& uf, float64 delt, json& option)
   {
     this->call_scalar_impl(up, uf, delt);
   }
@@ -563,7 +563,7 @@ public:
   using BaseVelocity<Dim, Order, Pusher, Interp>::BaseVelocity; // inherit constructor
 
   template <typename T_particle, typename T_array>
-  void operator()(T_particle& up, T_array& uf, float64 delt)
+  void operator()(T_particle& up, T_array& uf, float64 delt, json& option)
   {
     this->call_vector_impl(up, uf, delt);
   }

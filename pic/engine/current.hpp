@@ -426,7 +426,7 @@ public:
   using BaseCurrent<Dim, Order>::BaseCurrent; // inherit constructor
 
   template <typename T_particle, typename T_array>
-  void operator()(T_particle& up, T_array& uj, float64 delt)
+  void operator()(T_particle& up, T_array& uj, float64 delt, json& option)
   {
     this->call_scalar_impl(up, uj, delt);
   }
@@ -439,7 +439,7 @@ public:
   using BaseCurrent<Dim, Order>::BaseCurrent; // inherit constructor
 
   template <typename T_particle, typename T_array>
-  void operator()(T_particle& up, T_array& uj, float64 delt)
+  void operator()(T_particle& up, T_array& uj, float64 delt, json& option)
   {
     this->call_vector_impl(up, uj, delt);
   }
