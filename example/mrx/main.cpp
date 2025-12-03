@@ -25,8 +25,9 @@ public:
     float64 sigma = config["sigma"].get<float64>();
     float64 mime  = config["mime"].get<float64>();
     float64 tite  = config["tite"].get<float64>();
-    float64 bz    = config["bz"].get<float64>();
+    float64 bg    = config["bg"].get<float64>();
     float64 db    = config["db"].get<float64>();
+    float64 phi   = config["phi"].get<float64>() * M_PI / 180.0;
     float64 b0    = sqrt(sigma);
     float64 qe    = -1.0 / ncs;
     float64 qi    = +1.0 / ncs;
@@ -36,6 +37,8 @@ public:
     float64 vde   = +cc * b0 / (qi * ncs * lcs) / (1 + tite) * 1.0;
     float64 vti   = sqrt(0.5 * b0 * b0 / (ncs * mi) / (1 + tite) * tite);
     float64 vte   = sqrt(0.5 * b0 * b0 / (ncs * me) / (1 + tite) * 1.0);
+    float64 cosp  = cos(phi);
+    float64 sinp  = sin(phi);
 
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
@@ -60,17 +63,23 @@ public:
             float64 yi    = ylim[0] + (iy - Lby + 0.5) * dely - ycs;
             float64 xm    = xi - delx;
             float64 ym    = yi - dely;
-            float64 bx    = tanh(yi / lcs);
             float64 az_00 = 2 * db * lcs * exp(-(xi * xi + yi * yi) / (4 * lcs * lcs));
             float64 az_01 = 2 * db * lcs * exp(-(xi * xi + ym * ym) / (4 * lcs * lcs));
             float64 az_10 = 2 * db * lcs * exp(-(xm * xm + yi * yi) / (4 * lcs * lcs));
+            float64 dbx   = b0 * (+(az_00 - az_01) / dely);
+            float64 dby   = b0 * (-(az_00 - az_10) / delx);
+            float64 dbz   = 0.0;
+            float64 bxp   = b0 * tanh(yi / lcs);
+            float64 bzp   = b0 * bg;
+            float64 bx    = cosp * bxp - sinp * bzp;
+            float64 bz    = sinp * bxp + cosp * bzp;
 
             uf(iz, iy, ix, 0) = 0;
             uf(iz, iy, ix, 1) = 0;
             uf(iz, iy, ix, 2) = 0;
-            uf(iz, iy, ix, 3) = b0 * (+(az_00 - az_01) / dely + bx);
-            uf(iz, iy, ix, 4) = b0 * (-(az_00 - az_10) / delx);
-            uf(iz, iy, ix, 5) = b0 * bz;
+            uf(iz, iy, ix, 3) = dbx + bx;
+            uf(iz, iy, ix, 4) = dby;
+            uf(iz, iy, ix, 5) = dbz + bz;
           }
         }
       }
@@ -124,13 +133,11 @@ public:
           // electron
           up[0]->xu(ip, 0) = x;
           up[0]->xu(ip, 2) = z;
-          up[0]->xu(ip, 3) = normal(mtv) * vte;
           up[0]->xu(ip, 4) = normal(mtv) * vte;
 
           // ion
           up[1]->xu(ip, 0) = x;
           up[1]->xu(ip, 2) = z;
-          up[1]->xu(ip, 3) = normal(mtv) * vti;
           up[1]->xu(ip, 4) = normal(mtv) * vti;
 
           if (uniform(mtp) < rcs / (rcs + rbg)) {
@@ -142,11 +149,13 @@ public:
 
             // electron
             up[0]->xu(ip, 1) = y;
-            up[0]->xu(ip, 5) = normal(mtv) * vte + vde;
+            up[0]->xu(ip, 3) = normal(mtv) * vte - vde * sinp;
+            up[0]->xu(ip, 5) = normal(mtv) * vte + vde * cosp;
 
             // ion
             up[1]->xu(ip, 1) = y;
-            up[1]->xu(ip, 5) = normal(mtv) * vti + vdi;
+            up[1]->xu(ip, 3) = normal(mtv) * vti - vdi * sinp;
+            up[1]->xu(ip, 5) = normal(mtv) * vti + vdi * cosp;
           } else {
             //
             // background population
@@ -155,10 +164,12 @@ public:
 
             // electron
             up[0]->xu(ip, 1) = y;
+            up[0]->xu(ip, 3) = normal(mtv) * vte;
             up[0]->xu(ip, 5) = normal(mtv) * vte;
 
             // ion
             up[1]->xu(ip, 1) = y;
+            up[1]->xu(ip, 3) = normal(mtv) * vti;
             up[1]->xu(ip, 5) = normal(mtv) * vti;
           }
         }
@@ -340,9 +351,9 @@ public:
   void set_boundary_particle(ParticleVec& particle) override
   {
     //
-    // lower boundary in x
+    // lower boundary in y
     //
-    if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
+    if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
       for (int is = 0; is < Ns; is++) {
         auto& xu = particle[is]->xu;
         for (int ip = 0; ip < particle[is]->Np; ip++) {
@@ -355,9 +366,9 @@ public:
     }
 
     //
-    // upper boundary in x
+    // upper boundary in y
     //
-    if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
+    if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
       for (int is = 0; is < Ns; is++) {
         auto& xu = particle[is]->xu;
         for (int ip = 0; ip < particle[is]->Np; ip++) {

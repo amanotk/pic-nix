@@ -45,5 +45,6 @@
   mime = 25
   sigma = 0.0625
   tite = 5.0
-  bz = 0.0
+  bg = 0.0
   db = 0.1
+  phi = 0.0
