@@ -93,15 +93,15 @@ public:
     BaseMaxwell maxwell(data);
 
     if (dimension == 1) {
-      maxwell.push_efd_1d(data.uf, data.uj, data.ff, delt);
+      maxwell.push_efd_1d(data.uf, data.uj, data.ff, delt, data.option);
     }
 
     if (dimension == 2) {
-      maxwell.push_efd_2d(data.uf, data.uj, data.ff, delt);
+      maxwell.push_efd_2d(data.uf, data.uj, data.ff, delt, data.option);
     }
 
     if (dimension == 3) {
-      maxwell.push_efd_3d(data.uf, data.uj, data.ff, delt);
+      maxwell.push_efd_3d(data.uf, data.uj, data.ff, delt, data.option);
     }
   }
 
@@ -110,15 +110,15 @@ public:
     BaseMaxwell maxwell(data);
 
     if (dimension == 1) {
-      maxwell.push_bfd_1d(data.uf, data.uj, data.ff, delt);
+      maxwell.push_bfd_1d(data.uf, data.uj, data.ff, delt, data.option);
     }
 
     if (dimension == 2) {
-      maxwell.push_bfd_2d(data.uf, data.uj, data.ff, delt);
+      maxwell.push_bfd_2d(data.uf, data.uj, data.ff, delt, data.option);
     }
 
     if (dimension == 3) {
-      maxwell.push_bfd_3d(data.uf, data.uj, data.ff, delt);
+      maxwell.push_bfd_3d(data.uf, data.uj, data.ff, delt, data.option);
     }
   }
 };
@@ -148,12 +148,12 @@ private:
 
     if constexpr (isVector == 0) {
       ScalarCurrent<Dim, Order> current(data, has_dim);
-      current(data.up, data.uj, delt);
+      current(data.up, data.uj, delt, data.option);
     }
 
     if constexpr (isVector == 1) {
       VectorCurrent<Dim, Order> current(data, has_dim);
-      current(data.up, data.uj, delt);
+      current(data.up, data.uj, delt, data.option);
     }
   }
 
@@ -219,12 +219,12 @@ private:
 
     if constexpr (isVector == 0) {
       ScalarMoment<Dim, Order> moment(data, has_dim);
-      moment(data.up, data.um);
+      moment(data.up, data.um, data.option);
     }
 
     if constexpr (isVector == 1) {
       VectorMoment<Dim, Order> moment(data, has_dim);
-      moment(data.up, data.um);
+      moment(data.up, data.um, data.option);
     }
   }
 
@@ -278,13 +278,13 @@ private:
   {
     if constexpr (isVector == 0) {
       ScalarPosition position(data);
-      position(data.up, delt);
+      position(data.up, delt, data.option);
       set_boundary(position, chunk, data, order, delt);
     }
 
     if constexpr (isVector == 1) {
       VectorPosition position(data);
-      position(data.up, delt);
+      position(data.up, delt, data.option);
       set_boundary(position, chunk, data, order, delt);
     }
   }
@@ -352,12 +352,12 @@ private:
 
     if constexpr (isVector == 0) {
       ScalarVelocity<Dim, Order, Pusher, Interp> velocity(data, has_dim);
-      velocity(data.up, data.uf, delt);
+      velocity(data.up, data.uf, delt, data.option);
     }
 
     if constexpr (isVector == 1) {
       VectorVelocity<Dim, Order, Pusher, Interp> velocity(data, has_dim);
-      velocity(data.up, data.uf, delt);
+      velocity(data.up, data.uf, delt, data.option);
     }
   }
 

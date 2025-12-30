@@ -5,9 +5,6 @@
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
 
-class MainChunk;
-class MainApplication;
-
 // return true if the point (x, y, z) is inside the fireball
 static bool is_inside_fireball(float64 z, float64 y, float64 x, float64 r)
 {
@@ -222,15 +219,19 @@ public:
   }
 };
 
+class MainInterface : public PicApplicationInterface
+{
+public:
+  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) override
+  {
+    return std::make_unique<MainChunk>(dims, has_dim, id);
+  }
+};
+
 class MainApplication : public PicApplication
 {
 public:
   using PicApplication::PicApplication; // inherit constructors
-
-  std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[], int id) override
-  {
-    return std::make_unique<MainChunk>(dims, has_dim, id);
-  }
 
   void initialize_workload() override
   {
@@ -253,8 +254,7 @@ public:
     float64 z0          = 0.5 * dz * ndims[0];
 
     for (int i = 0; i < nchunk_global; i++) {
-      int cx, cy, cz;
-      chunkmap->get_coordinate(i, cz, cy, cx);
+      auto [cz, cy, cx] = chunkmap->get_coordinate(i);
 
       std::array<int, 2> zr = {cz * dims[0], (cz + 1) * dims[0]};
       std::array<int, 2> yr = {cy * dims[1], (cy + 1) * dims[1]};
@@ -274,7 +274,7 @@ public:
 //
 int main(int argc, char** argv)
 {
-  MainApplication app(argc, argv);
+  MainApplication app(argc, argv, std::make_shared<MainInterface>());
   return app.main();
 }
 

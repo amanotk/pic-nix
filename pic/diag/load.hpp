@@ -64,15 +64,14 @@ protected:
 
 public:
   /// constructor
-  LoadDiag(app_type& application, std::shared_ptr<info_type> info)
-      : ParallelDiag(diag_name, application, info)
+  LoadDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -140,7 +139,7 @@ public:
       // meta data
       root["meta"] = {{"endian", nix::get_endian_flag()},
                       {"rawfile", fn_data},
-                      {"order", 1},
+                      {"layout", nix::ARRAY_LAYOUT},
                       {"time", data.curtime},
                       {"step", data.curstep},
                       {"chunk_id_range", chunk_id_range}};

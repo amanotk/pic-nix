@@ -5,8 +5,7 @@
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
 
-class MainChunk;
-class MainApplication;
+using MainApplication = PicApplication;
 
 class MainChunk : public PicChunk
 {
@@ -161,12 +160,10 @@ public:
   }
 };
 
-class MainApplication : public PicApplication
+class MainInterface : public PicApplicationInterface
 {
 public:
-  using PicApplication::PicApplication; // inherit constructors
-
-  std::unique_ptr<chunk_type> create_chunk(const int dims[], const bool has_dim[], int id) override
+  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) override
   {
     return std::make_unique<MainChunk>(dims, has_dim, id);
   }
@@ -177,7 +174,7 @@ public:
 //
 int main(int argc, char** argv)
 {
-  MainApplication app(argc, argv);
+  MainApplication app(argc, argv, std::make_shared<MainInterface>());
   return app.main();
 }
 

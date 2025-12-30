@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import toml
 
 caution = """
      <<< CAUTION >>>
@@ -14,8 +15,13 @@ memory more than twice of the estimate given here.
 
 
 def doit(config, **kwargs):
-    with open(config, "r") as f:
-        data = json.load(f)
+    if config.endswith(".toml"):
+        data = toml.load(config)
+    elif config.endswith(".json"):
+        with open(config, "r") as f:
+            data = json.load(f)
+    else:
+        raise ValueError("Unsupported file format. Use .toml or .json")
     parameter = data["parameter"]
     parameter.update(kwargs)  # overwrite parameter with kwargs
     Nx = parameter["Nx"]
@@ -54,7 +60,7 @@ def doit(config, **kwargs):
     ### field data size
     ###
     # 3 for E, 3 for B, 4 for J, and 11 for moments for each species
-    byte_per_em_field = 8 * (6 + 4 + Ns * 11)
+    byte_per_em_field = 8 * (6 + 4 + Ns * 14)
 
     # field data size (send + recv buffers)
     halo_field = 2 * byte_per_em_field * (volume1 - volume0)
@@ -84,7 +90,7 @@ def doit(config, **kwargs):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Memory Usage Estimater")
+    parser = argparse.ArgumentParser(description="Memory Usage Estimator")
     parser.add_argument("filename", help="The name of the file to process")
     parser.add_argument(
         "--nproc",

@@ -55,16 +55,15 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(app_type& application, std::shared_ptr<info_type> info)
-      : ParallelDiag(diag_name, application, info)
+  ParticleDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
-    auto Ns   = application.get_num_species();
+    auto data = interface->get_data();
+    auto Ns   = interface->get_num_species();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -117,7 +116,7 @@ public:
       // meta data
       root["meta"] = {{"endian", nix::get_endian_flag()},
                       {"rawfile", fn_data},
-                      {"order", 1},
+                      {"layout", nix::ARRAY_LAYOUT},
                       {"time", data.curtime},
                       {"step", data.curstep}};
       // dataset

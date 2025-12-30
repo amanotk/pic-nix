@@ -73,15 +73,14 @@ protected:
 
 public:
   // constructor
-  PickupTracerDiag(app_type& application, std::shared_ptr<info_type> info)
-      : PicDiag(diag_name, application, info)
+  PickupTracerDiag(PtrInterface interface) : PicDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   virtual void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -89,8 +88,8 @@ public:
     auto packer = PickupTracerPacker(config);
 
     for (int i = 0; i < data.chunkvec.size(); i++) {
-      auto chunk_data = data.chunkvec[i]->get_internal_data();
-      packer(chunk_data, nullptr, 0);
+      auto chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
+      packer(chunk->get_internal_data(), nullptr, 0);
     }
   }
 };
@@ -124,15 +123,14 @@ protected:
 
 public:
   // constructor
-  TracerDiag(app_type& application, std::shared_ptr<info_type> info)
-      : ParallelDiag(diag_name, application, info)
+  TracerDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
   {
   }
 
   // data packing functor
   virtual void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -182,7 +180,7 @@ public:
       // meta data
       root["meta"] = {{"endian", nix::get_endian_flag()},
                       {"rawfile", fn_data},
-                      {"order", 1},
+                      {"layout", nix::ARRAY_LAYOUT},
                       {"time", data.curtime},
                       {"step", data.curstep}};
       // dataset

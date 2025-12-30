@@ -1,33 +1,31 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import re
-import pathlib
-import json
-import msgpack
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
-import aiofiles
+import json
+import pathlib
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import msgpack
 import nest_asyncio
+import numpy as np
+import toml
 
 from picnix import (
     DEFAULT_LOG_PREFIX,
-    DEFAULT_LOAD_PREFIX,
-    DEFAULT_FIELD_PREFIX,
-    DEFAULT_PARTICLE_PREFIX,
-    DEFAULT_TRACER_PREFIX,
 )
-from .utils import *
+
 from .diag import DiagHandler
+from .utils import *
 
 
 class Run(object):
-    def __init__(self, profile, method=None):
+    def __init__(self, profile, method=None, config=None):
         self.cache = dict()
         self.profile = profile
         self.method = method
-        self.read_profile(profile)
+        self.read_profile(profile, config)
         self.set_coordinate()
 
     def format_log_filename(self):
@@ -52,14 +50,23 @@ class Run(object):
     def get_iomode(self):
         return self.config["application"].get("iomode", "mpiio")
 
-    def read_profile(self, profile):
+    def read_profile(self, profile, config=None):
         # read profile
         with open(profile, "rb") as fp:
             obj = msgpack.load(fp)
             self.timestamp = obj["timestamp"]
             self.nprocess = obj["nprocess"]
             self.chunkmap = obj["chunkmap"]
-            self.config = obj["configuration"]
+            config_in_profile = obj["configuration"]
+        # read given config if specified
+        if config is None:
+            self.config = config_in_profile
+        elif config.endswith(".toml"):
+            with open(config, "r") as fileobj:
+                self.config = toml.load(fileobj)
+        elif config.endswith(".json"):
+            with open(config, "r") as fileobj:
+                self.config = json.load(fileobj)
 
         # store some parameters
         parameter = self.config["parameter"]
@@ -79,9 +86,7 @@ class Run(object):
         self.diag_handlers = dict()
 
         for diagnostic in self.config["diagnostic"]:
-            handler = DiagHandler.create_handler(
-                diagnostic, basedir, iomode, self.method
-            )
+            handler = DiagHandler.create_handler(diagnostic, basedir, iomode, self.method)
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler
 
@@ -122,11 +127,7 @@ class Run(object):
             cache_step = cache.get("step", None)
             cache_pattern = cache.get("pattern", None)
             cache_data = cache.get("data", None)
-            if (
-                cache_data is not None
-                and cache_step == step
-                and cache_pattern == pattern
-            ):
+            if cache_data is not None and cache_step == step and cache_pattern == pattern:
                 return cache_data
 
         # default pattern (read everything)
@@ -155,10 +156,37 @@ class Run(object):
         if handler.is_chunked_data_conversion_required():
             data = convert_array_format(data, self.chunkmap)
 
+        # append auxiliary data if needed
+        data = handler.append_auxiliary_data(data, self.config)
+
         # store cache
         self.cache[prefix] = {"step": step, "pattern": pattern, "data": data}
 
         return data
+
+    def remove_file_at(self, prefix, step, are_you_sure=False):
+        handler = self.diag_handlers[prefix]
+        if not are_you_sure:
+            print(
+                "*** WARNING ***\n"
+                "This will remove files for prefix {:s} at step {:d}\n"
+                "If you really want to do this, please set\n"
+                "   `are_you_sure=True`   \n"
+                "and run again!\n".format(prefix, step)
+            )
+            return
+
+        # now remove files
+        jsonfile_to_be_removed = handler.find_json_at_step(step)
+        for jsonfile in jsonfile_to_be_removed:
+            _, meta = read_jsonfile(jsonfile)
+            datafile = os.sep.join([meta["dirname"], meta["datafile"]])
+            try:
+                os.remove(jsonfile)
+                os.remove(datafile)
+                self.diag_handlers[prefix].remove_json_at_step(step)
+            except OSError as e:
+                print(f"Error removing file {jsonfile} or {datafile}: {e}")
 
     @staticmethod
     def prepare_read(all_jsonfiles, pattern):
@@ -288,9 +316,7 @@ class Run(object):
         result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        result = Run.thread_read_data_files(
-            result, address, json_contents, names, pattern
-        )
+        result = Run.thread_read_data_files(result, address, json_contents, names, pattern)
 
         return result
 
@@ -339,8 +365,6 @@ class Run(object):
         result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        result = await Run.async_read_data_files(
-            result, address, json_contents, names, pattern
-        )
+        result = await Run.async_read_data_files(result, address, json_contents, names, pattern)
 
         return result

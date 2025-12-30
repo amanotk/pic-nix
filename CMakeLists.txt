@@ -17,23 +17,8 @@ if(MPI_THREAD_MULTIPLE)
     add_compile_definitions(HAS_MPI_THREAD_MULTIPLE)
 endif()
 
-# nix as an external project
-include(FetchContent)
-
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/nix)
-  # use the existing nix directory by default
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
-else()
-  # otherwise, fetch the nix repository from github
-  FetchContent_Declare(
-    nix
-    GIT_REPOSITORY https://github.com/amanotk/nix.git
-    GIT_TAG v0.2.0
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/nix
-    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/nix
-  )
-  FetchContent_MakeAvailable(nix)
-endif()
+# nix
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
 
 # Filesystem package
 set(CMAKE_MODULE_PATH ${nix_SOURCE_DIR})

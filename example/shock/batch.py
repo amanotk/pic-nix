@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import pathlib
+import sys
 
-import numpy as np
 import matplotlib as mpl
+import numpy as np
 
 mpl.use("Agg") if __name__ == "__main__" else None
 from matplotlib import pyplot as plt
@@ -25,9 +25,9 @@ class Run(picnix.Run):
         self.plot_chunk_boundary = boundary
 
     def summary(self, step, **kwargs):
-        xc = self.xc
         # field
         field = self.read_at("field", step)
+        xc = field["xc"]
         uf = field["uf"]
         um = field["um"]
         # particle
@@ -64,9 +64,7 @@ class Run(picnix.Run):
             hspace=0.25,
             wspace=0.02,
         )
-        gridspec = fig.add_gridspec(
-            4, 2, height_ratios=[1, 1, 1, 1], width_ratios=[50, 1]
-        )
+        gridspec = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1], width_ratios=[50, 1])
         axs = [0] * 4
         for i in range(4):
             axs[i] = fig.add_subplot(gridspec[i, 0])

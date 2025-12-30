@@ -9,7 +9,6 @@ compiler.mk
 *.mp4
 *.stdout
 *.stderr
-nix
 build
 __pycache__
 .vscode

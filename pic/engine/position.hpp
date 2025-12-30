@@ -136,7 +136,7 @@ public:
   using BasePosition::BasePosition; // inherit constructor
 
   template <typename T_particle>
-  void operator()(const T_particle& up, const float64 delt)
+  void operator()(const T_particle& up, const float64 delt, json& option)
   {
     this->call_scalar_impl(up, delt);
   }
@@ -148,7 +148,7 @@ public:
   using BasePosition::BasePosition; // inherit constructor
 
   template <typename T_particle>
-  void operator()(const T_particle& up, const float64 delt)
+  void operator()(const T_particle& up, const float64 delt, json& option)
   {
     this->call_vector_impl(up, delt);
   }

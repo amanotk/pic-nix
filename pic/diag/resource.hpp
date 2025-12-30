@@ -14,14 +14,13 @@ public:
 
 public:
   // constructor
-  ResourceDiag(app_type& application, std::shared_ptr<info_type> info)
-      : PicDiag(diag_name, application, info)
+  ResourceDiag(PtrInterface interface) : PicDiag(diag_name, interface)
   {
   }
 
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
+    auto data = interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;

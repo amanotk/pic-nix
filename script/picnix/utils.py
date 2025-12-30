@@ -27,7 +27,7 @@ def get_json_meta(obj):
         print("unrecognized endian flag: {}".format(endian))
 
     datafile = meta.get("rawfile")
-    layout = meta.get("order", 0)
+    layout = meta.get("layout", meta.get("order", 0))  # for backward compatibility
     chunk_id_range = meta.get("chunk_id_range", None)
 
     return byteorder, datafile, layout, chunk_id_range
@@ -46,6 +46,13 @@ def process_json_content(content, filename):
     dataset = obj["dataset"]
 
     return dataset, meta
+
+
+def process_meta(meta):
+    byteorder = meta["byteorder"]
+    layout = meta["layout"]
+    datafile = os.sep.join([meta["dirname"], meta["datafile"]])
+    return byteorder, layout, datafile
 
 
 def read_jsonfile(filename):
@@ -70,10 +77,7 @@ def read_single_dataset(fp, offset, datatype, shape):
 
 
 def read_datafile(dataset, meta, pattern):
-    byteorder = meta["byteorder"]
-    layout = meta["layout"]
-    dirname = meta["dirname"]
-    datafile = os.sep.join([dirname, meta["datafile"]])
+    byteorder, layout, datafile = process_meta(meta)
 
     with open(datafile, "r") as fp:
         data = {}

@@ -7,42 +7,20 @@
 #include "nix/chunk.hpp"
 
 ///
-/// @brief Chunk for 3D Explicit PIC Simulations
-/// @tparam Order order of shape function
-///
-/// This class implements the standard explicit FDTD PIC simulation scheme. The order of shape
-/// function is given as a template parameter, so that specific implementation should be provided
-/// through explicit instantiation.
-///
-/// Problem specific codes should be provided by making a derived class which implements the
-/// following virtual methods (if the default ones are not appropriate):
-///
-/// - setup()
-///   physics-wise initial condition (both for particles and fields)
-/// - set_boundary_field()
-///   non-periodic boundary condition for fields
-/// - set_boundary_particle()
-///   non-periodic boundary condition for particles
-/// - inject_particle()
-///   particle injection into the system
-///
-/// In addition, custom diagnostics routines may also be implemented depending on the needs of
-/// applications.
+/// @brief Chunk for 3D PIC Simulations
 ///
 class PicChunk : public nix::Chunk
 {
 public:
-  struct InternalData; // forward declaration
+  struct DataContainer; // forward declaration
   using this_type    = PicChunk;
-  using base_type    = typename nix::Chunk;
-  using data_type    = InternalData;
-  using MpiBuffer    = typename base_type::MpiBuffer;
-  using MpiBufferPtr = typename base_type::MpiBufferPtr;
+  using base_type    = nix::Chunk;
+  using data_type    = DataContainer;
+  using MpiBuffer    = base_type::MpiBuffer;
+  using MpiBufferPtr = base_type::MpiBufferPtr;
 
-  ///
   /// @brief internal data struct
-  ///
-  struct InternalData {
+  struct DataContainer {
     int&     boundary_margin;
     int&     Lbx;
     int&     Ubx;
@@ -67,10 +45,8 @@ public:
     json&                    option;
   };
 
-  ///
   /// @brief return internal data struct
-  ///
-  InternalData get_internal_data()
+  DataContainer get_internal_data()
   {
     // clang-format off
     return {boundary_margin,
@@ -112,6 +88,8 @@ protected:
 
 public:
   PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
+
+  virtual ~PicChunk() override = default;
 
   virtual int64_t get_size_byte() const override;
 

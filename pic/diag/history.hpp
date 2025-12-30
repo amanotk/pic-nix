@@ -11,18 +11,16 @@ class HistoryDiag : public PicDiag
 {
 public:
   static constexpr const char* diag_name = "history";
-  using PicDiag::app_type;
 
   // constructor
-  HistoryDiag(app_type& application, std::shared_ptr<info_type> info)
-      : PicDiag(diag_name, application, info)
+  HistoryDiag(PtrInterface interface) : PicDiag(diag_name, interface)
   {
   }
 
   void operator()(json& config) override
   {
-    auto data = application.get_internal_data();
-    auto Ns   = application.get_num_species();
+    auto data = interface->get_data();
+    auto Ns   = interface->get_num_species();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -33,7 +31,7 @@ public:
     std::fill(history.begin(), history.end(), 0.0);
 
     // calculate moment if not cached
-    application.calculate_moment();
+    interface->calculate_moment();
 
     // calculate divergence error and energy
     for (int i = 0; i < data.chunkvec.size(); i++) {
@@ -42,9 +40,10 @@ public:
       float64 ene_e = 0;
       float64 ene_b = 0;
       float64 ene_p[Ns];
+      auto    chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
 
-      data.chunkvec[i]->get_diverror(div_e, div_b);
-      data.chunkvec[i]->get_energy(ene_e, ene_b, ene_p);
+      chunk->get_diverror(div_e, div_b);
+      chunk->get_energy(ene_e, ene_b, ene_p);
 
       history[0] += div_e;
       history[1] += div_b;

@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import pathlib
+import sys
 
-import numpy as np
 import matplotlib as mpl
+import numpy as np
 
 mpl.use("Agg") if __name__ == "__main__" else None
 from matplotlib import pyplot as plt
@@ -26,8 +26,8 @@ class Run(picnix.Run):
 
     def summary(self, step):
         data = self.read_at("field", step)
-        xc = self.xc
-        yc = self.yc
+        xc = data["xc"]
+        yc = data["yc"]
         uf = data["uf"]
         um = data["um"]
         tt = self.get_time_at("field", step)
@@ -92,9 +92,7 @@ class Run(picnix.Run):
             cdelx = self.delh * self.Nx / self.Cx
             cdely = self.delh * self.Ny / self.Cy
             for i in range(2):
-                picnix.plot_chunk_dist2d(
-                    axs[i], coord, rank, cdelx, cdely, colors="white"
-                )
+                picnix.plot_chunk_dist2d(axs[i], coord, rank, cdelx, cdely, colors="white")
 
         fig.suptitle(r"$\omega_{{pe}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
 

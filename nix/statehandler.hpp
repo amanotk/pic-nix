@@ -10,6 +10,14 @@ NIX_NAMESPACE_BEGIN
 
 static constexpr int default_max_file_per_dir = 1000;
 
+///
+/// @brief StateHandler class for managing simulation state persistence
+///
+/// The StateHandler class is responsible for saving and loading the simulation
+/// state, including both application parameters and chunk vector data. It provides
+/// methods to serialize the state into a message-packed binary format and to restore
+/// the state from disk.
+///
 class StateHandler
 {
 protected:
@@ -24,20 +32,22 @@ public:
   {
   }
 
-  template <typename App, typename Data>
-  bool save(App&& app, Data&& data, std::string prefix)
+  template <typename PtrInterface>
+  bool save(PtrInterface interface, std::string prefix)
   {
-    save_application(app, data, prefix);
-    save_chunkvec(app, data, prefix);
+    save_application(interface, prefix);
+    save_chunkvec(interface, prefix);
 
     return true;
   }
 
-  template <typename App, typename Data>
-  bool save_application(App&& app, Data&& data, std::string prefix)
+  template <typename PtrInterface>
+  bool save_application(PtrInterface interface, std::string prefix)
   {
+    auto data = interface->get_data();
+
     if (data.thisrank == 0) {
-      json                      state  = app.to_json();
+      json                      state  = interface->to_json();
       std::vector<std::uint8_t> buffer = json::to_msgpack(state);
 
       std::string   filename = get_path_with_basedir(prefix) + ".msgpack";
@@ -52,9 +62,11 @@ public:
     return true;
   }
 
-  template <typename App, typename Data>
-  bool save_chunkvec(App&& app, Data&& data, std::string prefix)
+  template <typename PtrInterface>
+  bool save_chunkvec(PtrInterface interface, std::string prefix)
   {
+    auto data = interface->get_data();
+
     int thisrank = data.thisrank;
     int nprocess = data.nprocess;
 
@@ -71,8 +83,8 @@ public:
       Vector size;
       Vector offset;
 
-      save_chunkvec_header(app, data, filename, id, size, offset);
-      save_chunkvec_content(app, data, filename, id, size, offset);
+      save_chunkvec_header(interface, filename, id, size, offset);
+      save_chunkvec_content(interface, filename, id, size, offset);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -82,32 +94,34 @@ public:
     return true;
   }
 
-  template <typename App, typename Data>
-  bool load(App&& app, Data&& data, std::string prefix)
+  template <typename PtrInterface>
+  bool load(PtrInterface interface, std::string prefix)
   {
-    load_application(app, data, prefix);
-    load_chunkvec(app, data, prefix);
+    load_application(interface, prefix);
+    load_chunkvec(interface, prefix);
 
     return true;
   }
 
-  template <typename App, typename Data>
-  bool load_application(App&& app, Data&& data, std::string prefix)
+  template <typename PtrInterface>
+  bool load_application(PtrInterface interface, std::string prefix)
   {
     std::string   filename = get_path_with_basedir(prefix) + ".msgpack";
     std::ifstream ifs(filename, std::ios::binary);
 
     json state  = json::from_msgpack(ifs);
-    bool status = app.from_json(state);
+    bool status = interface->from_json(state);
 
     ifs.close();
 
     return status;
   }
 
-  template <typename App, typename Data>
-  bool load_chunkvec(App&& app, Data&& data, std::string prefix)
+  template <typename PtrInterface>
+  bool load_chunkvec(PtrInterface interface, std::string prefix)
   {
+    auto data = interface->get_data();
+
     int thisrank = data.thisrank;
     int nprocess = data.nprocess;
 
@@ -123,8 +137,8 @@ public:
       Vector size;
       Vector offset;
 
-      load_chunkvec_header(app, data, filename, id, size, offset);
-      load_chunkvec_content(app, data, filename, id, size, offset);
+      load_chunkvec_header(interface, filename, id, size, offset);
+      load_chunkvec_content(interface, filename, id, size, offset);
     }
 
     DEBUG2 << tfm::format("finish loading chunkvec with prefix %s", prefix);
@@ -158,10 +172,12 @@ protected:
     return full_path.string();
   }
 
-  template <typename App, typename Data>
-  bool save_chunkvec_header(App&& app, Data&& data, std::string filename, Vector& id, Vector& size,
+  template <typename PtrInterface>
+  bool save_chunkvec_header(PtrInterface interface, std::string filename, Vector& id, Vector& size,
                             Vector& offset)
   {
+    auto data = interface->get_data();
+
     const int element_size = sizeof(Vector::value_type);
 
     int64 numchunk    = data.chunkvec.size();
@@ -196,10 +212,12 @@ protected:
     return true;
   }
 
-  template <typename App, typename Data>
-  bool save_chunkvec_content(App&& app, Data&& data, std::string filename, Vector& id, Vector& size,
+  template <typename PtrInterface>
+  bool save_chunkvec_content(PtrInterface interface, std::string filename, Vector& id, Vector& size,
                              Vector& offset)
   {
+    auto data = interface->get_data();
+
     Buffer buffer;
     buffer.resize(*std::max_element(size.begin(), size.end()));
 
@@ -222,8 +240,8 @@ protected:
     return true;
   }
 
-  template <typename App, typename Data>
-  bool load_chunkvec_header(App&& app, Data&& data, std::string filename, Vector& id, Vector& size,
+  template <typename PtrInterface>
+  bool load_chunkvec_header(PtrInterface interface, std::string filename, Vector& id, Vector& size,
                             Vector& offset)
   {
     const int element_size = sizeof(Vector::value_type);
@@ -247,10 +265,12 @@ protected:
     return true;
   }
 
-  template <typename App, typename Data>
-  bool load_chunkvec_content(App&& app, Data&& data, std::string filename, Vector& id, Vector& size,
+  template <typename PtrInterface>
+  bool load_chunkvec_content(PtrInterface interface, std::string filename, Vector& id, Vector& size,
                              Vector& offset)
   {
+    auto data = interface->get_data();
+
     Buffer buffer;
     buffer.resize(*std::max_element(size.begin(), size.end()));
 
@@ -274,7 +294,7 @@ protected:
 
     // read data
     for (int i = 0; i < id.size(); i++) {
-      auto chunk = app.create_chunk(dims, has_dim, 0);
+      auto chunk = interface->create_chunk(dims, has_dim, 0);
 
       ifs.seekg(offset[i], std::ios::beg);
       ifs.read(reinterpret_cast<char*>(buffer.get()), size[i]);

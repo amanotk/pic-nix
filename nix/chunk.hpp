@@ -107,8 +107,16 @@ public:
   /// @brief constructor
   Chunk(const int dims[3], const bool has_dim[3], int id = 0);
 
+  /// @brief destructor
+  virtual ~Chunk()
+  {
+  }
+
   /// @brief setup initial condition (pure virtual)
-  virtual void setup(json& config) = 0;
+  virtual void setup(json& config)
+  {
+    // override me
+  }
 
   /// @brief return (approximate) size of Chunk in byte
   virtual int64_t get_size_byte() const

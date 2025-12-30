@@ -4,10 +4,12 @@
 
 #include "pic.hpp"
 
+///
+/// @brief Packer for 3D PIC Simulations
+///
 class PicPacker : public nix::XtensorPacker3D
 {
 public:
-  // type alias
   using chunk_data_type = PicChunk::data_type;
 
   virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) = 0;
