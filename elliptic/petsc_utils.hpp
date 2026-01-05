@@ -31,6 +31,25 @@ protected:
   IS         is_obj_l;
   IS         is_obj_g;
 
+private:
+  int get_indexset(IS& is_obj, std::vector<int>& index)
+  {
+    PetscInt        size;
+    const PetscInt* data;
+
+    ISGetLocalSize(is_obj, &size);
+    ISGetIndices(is_obj, &data);
+
+    index.resize(size);
+    for (int i = 0; i < size; ++i) {
+      index[i] = data[i];
+    }
+
+    ISRestoreIndices(is_obj, &data);
+
+    return 0;
+  }
+
 public:
   PetscUtils(DM* dm) : dm_ptr(dm), sc_obj(nullptr), is_obj_l(nullptr), is_obj_g(nullptr)
   {
@@ -88,7 +107,7 @@ public:
     return 0;
   }
 
-  int setup_indexset_local(std::vector<PetscInt>& index)
+  int setup_indexset_local(std::vector<int>& index)
   {
     if (is_obj_l != nullptr) {
       ISDestroy(&is_obj_l);
@@ -99,7 +118,7 @@ public:
     return 0;
   }
 
-  int setup_indexset_global(std::vector<PetscInt>& index)
+  int setup_indexset_global(std::vector<int>& index)
   {
     if (is_obj_g != nullptr) {
       ISDestroy(&is_obj_g);
@@ -125,6 +144,16 @@ public:
     VecScatterCreate(vec_local, is_obj_l, vec_global, is_obj_g, &sc_obj);
 
     return 0;
+  }
+
+  int get_indexset_local(std::vector<int>& index)
+  {
+    return get_indexset(is_obj_l, index);
+  }
+
+  int get_indexset_global(std::vector<int>& index)
+  {
+    return get_indexset(is_obj_g, index);
   }
 
   template <typename T_array>

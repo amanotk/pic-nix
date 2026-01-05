@@ -127,6 +127,16 @@ public:
   {
     return uj;
   }
+
+  void set_id(int new_id)
+  {
+    id = new_id;
+  }
+
+  int get_id() const
+  {
+    return id;
+  }
 };
 
 MockChunkVec create_chunkvec_1d(int rank, int Cz, int Cy, int Cx, int npx)
