@@ -15,8 +15,9 @@
 #include <petscdmda.h>
 #include <petscksp.h>
 
-// ensure compatibility of PetscInt and int
-static_assert(sizeof(PetscInt) == sizeof(int), "PetscInt and int must have the same size");
+// ensure compatibility
+static_assert(sizeof(PetscInt) == sizeof(int), "PetscInt and int are incompatible");
+static_assert(sizeof(PetscScalar) == sizeof(double), "PetscScalar and double are incompatible");
 
 namespace elliptic
 {
@@ -68,30 +69,30 @@ public:
     }
   }
 
-  int scatter_forward_begin(Vec& vec_local, Vec& vec_global)
+  int scatter_forward_begin(Vec& src, Vec& dst)
   {
-    VecScatterBegin(sc_obj, vec_local, vec_global, INSERT_VALUES, SCATTER_FORWARD);
+    VecScatterBegin(sc_obj, src, dst, INSERT_VALUES, SCATTER_FORWARD);
 
     return 0;
   }
 
-  int scatter_forward_end(Vec& vec_local, Vec& vec_global)
+  int scatter_forward_end(Vec& src, Vec& dst)
   {
-    VecScatterEnd(sc_obj, vec_local, vec_global, INSERT_VALUES, SCATTER_FORWARD);
+    VecScatterEnd(sc_obj, src, dst, INSERT_VALUES, SCATTER_FORWARD);
 
     return 0;
   }
 
-  int scatter_reverse_begin(Vec& vec_local, Vec& vec_global)
+  int scatter_reverse_begin(Vec& src, Vec& dst)
   {
-    VecScatterBegin(sc_obj, vec_local, vec_global, INSERT_VALUES, SCATTER_REVERSE);
+    VecScatterBegin(sc_obj, dst, src, INSERT_VALUES, SCATTER_REVERSE);
 
     return 0;
   }
 
-  int scatter_reverse_end(Vec& vec_local, Vec& vec_global)
+  int scatter_reverse_end(Vec& src, Vec& dst)
   {
-    VecScatterEnd(sc_obj, vec_local, vec_global, INSERT_VALUES, SCATTER_REVERSE);
+    VecScatterEnd(sc_obj, dst, src, INSERT_VALUES, SCATTER_REVERSE);
 
     return 0;
   }
@@ -107,13 +108,13 @@ public:
     return 0;
   }
 
-  int setup_indexset_local(std::vector<int>& index)
+  int setup_indexset_local(int size)
   {
     if (is_obj_l != nullptr) {
       ISDestroy(&is_obj_l);
     }
 
-    ISCreateStride(PETSC_COMM_SELF, index.size(), 0, 1, &is_obj_l);
+    ISCreateStride(PETSC_COMM_SELF, size, 0, 1, &is_obj_l);
 
     return 0;
   }

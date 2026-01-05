@@ -112,7 +112,7 @@ public:
     petsc_utils->setup_vector_local(sol_local, vec_sol_l);
 
     // scatter object
-    petsc_utils->setup_indexset_local(index);
+    petsc_utils->setup_indexset_local(index.size());
     petsc_utils->setup_indexset_global(index);
     petsc_utils->setup_scatter(vec_src_l, vec_src_g);
 
