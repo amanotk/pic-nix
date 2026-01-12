@@ -12,11 +12,11 @@
 #include <petscdmda.h>
 #include <petscvec.h>
 
-#include "petsc_utils.hpp"
+#include "petsc_scatter.hpp"
 #include "test_parallel_common.hpp"
 
 using namespace nix::typedefs;
-using elliptic::PetscUtils;
+using elliptic::PetscScatter;
 
 TEST_CASE("PetscUtils::setup_indexset_local", "[np=1]")
 {
@@ -28,10 +28,10 @@ TEST_CASE("PetscUtils::setup_indexset_local", "[np=1]")
   const int        local_size = 10;
   std::vector<int> index(local_size);
 
-  PetscUtils petsc_utils(nullptr);
+  PetscScatter scatter(nullptr);
 
-  petsc_utils.setup_indexset_local(index.size());
-  petsc_utils.get_indexset_local(index);
+  scatter.setup_indexset_local(index.size());
+  scatter.get_indexset_local(index);
 
   CHECK(index.size() == static_cast<size_t>(local_size));
   CHECK(index[0] == 0);
@@ -55,7 +55,7 @@ TEST_CASE("PetscUtils::setup_indexset_global", "[np=8]")
   /// test setup_indexset_global
   auto [index_test, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscUtils::calc_global_index(chunkvec, global_dims, index_test);
+  PetscScatter::calc_global_index(chunkvec, global_dims, index_test);
 
   // index_test: natural ordering indices (to be converted)
   // index_true: PETSc ordering indices (ground truth)
@@ -72,9 +72,9 @@ TEST_CASE("PetscUtils::setup_indexset_global", "[np=8]")
   AOApplicationToPetsc(ao_obj, static_cast<PetscInt>(index_true.size()), index_true.data());
 
   // convert index_test to PETSc ordering index
-  PetscUtils petsc_utils(&dm_obj);
-  petsc_utils.setup_indexset_global(index_test);
-  petsc_utils.get_indexset_global(index_test);
+  PetscScatter scatter(&dm_obj);
+  scatter.setup_indexset_global(index_test);
+  scatter.get_indexset_global(index_test);
 
   for (size_t i = 0; i < index_test.size(); ++i) {
     CHECK(index_true[i] == index_test[i]);
@@ -92,11 +92,11 @@ TEST_CASE("PetrscUtils::flatten_index", "[np=1]")
 
   const std::array<int, 3> dims{4, 5, 6};
 
-  CHECK(PetscUtils::flatten_index(0, 0, 0, dims) == 0);
-  CHECK(PetscUtils::flatten_index(0, 0, 1, dims) == 1);
-  CHECK(PetscUtils::flatten_index(0, 1, 0, dims) == 6);
-  CHECK(PetscUtils::flatten_index(1, 0, 0, dims) == 30);
-  CHECK(PetscUtils::flatten_index(3, 4, 5, dims) == 119);
+  CHECK(PetscScatter::flatten_index(0, 0, 0, dims) == 0);
+  CHECK(PetscScatter::flatten_index(0, 0, 1, dims) == 1);
+  CHECK(PetscScatter::flatten_index(0, 1, 0, dims) == 6);
+  CHECK(PetscScatter::flatten_index(1, 0, 0, dims) == 30);
+  CHECK(PetscScatter::flatten_index(3, 4, 5, dims) == 119);
 }
 
 TEST_CASE("PetscUtils::calc_global_index with 8 ranks", "[np=8]")
@@ -115,7 +115,7 @@ TEST_CASE("PetscUtils::calc_global_index with 8 ranks", "[np=8]")
   /// test calc_global_index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscUtils::calc_global_index(chunkvec, global_dims, index);
+  PetscScatter::calc_global_index(chunkvec, global_dims, index);
 
   for (size_t i = 0; i < chunkvec.size(); ++i) {
     auto offset = chunkvec[i]->get_offset();
@@ -126,8 +126,8 @@ TEST_CASE("PetscUtils::calc_global_index with 8 ranks", "[np=8]")
           int jz         = iz + offset[0];
           int jy         = iy + offset[1];
           int jx         = ix + offset[2];
-          int idx_local  = PetscUtils::flatten_index(iz, iy, ix, chunk_dims) + i * chunk_size;
-          int idx_global = PetscUtils::flatten_index(jz, jy, jx, global_dims);
+          int idx_local  = PetscScatter::flatten_index(iz, iy, ix, chunk_dims) + i * chunk_size;
+          int idx_global = PetscScatter::flatten_index(jz, jy, jx, global_dims);
 
           CHECK(index[idx_local] == idx_global);
         }
@@ -154,7 +154,7 @@ TEST_CASE("PetscUtils::scatter_forward_begin/end", "[np=8]")
   // chunkvec and global index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscUtils::calc_global_index(chunkvec, global_dims, index);
+  PetscScatter::calc_global_index(chunkvec, global_dims, index);
 
   // DMDA
   DM dm_obj = nullptr;
@@ -177,14 +177,14 @@ TEST_CASE("PetscUtils::scatter_forward_begin/end", "[np=8]")
 
   // perform forward scatter
   {
-    PetscUtils petsc_utils(&dm_obj);
+    PetscScatter scatter(&dm_obj);
 
-    petsc_utils.setup_vector_local(buf, vec_local);
-    petsc_utils.setup_indexset_local(index.size());
-    petsc_utils.setup_indexset_global(index);
-    petsc_utils.setup_scatter(vec_local, vec_global);
-    petsc_utils.scatter_forward_begin(vec_local, vec_global);
-    petsc_utils.scatter_forward_end(vec_local, vec_global);
+    scatter.setup_vector_local(buf, vec_local);
+    scatter.setup_indexset_local(index.size());
+    scatter.setup_indexset_global(index);
+    scatter.setup_scatter(vec_local, vec_global);
+    scatter.scatter_forward_begin(vec_local, vec_global);
+    scatter.scatter_forward_end(vec_local, vec_global);
   }
 
   // verify results
@@ -197,7 +197,7 @@ TEST_CASE("PetscUtils::scatter_forward_begin/end", "[np=8]")
     for (int iz = info_obj.zs; iz < info_obj.zs + info_obj.zm; ++iz) {
       for (int iy = info_obj.ys; iy < info_obj.ys + info_obj.ym; ++iy) {
         for (int ix = info_obj.xs; ix < info_obj.xs + info_obj.xm; ++ix) {
-          int         ii       = PetscUtils::flatten_index(iz, iy, ix, global_dims);
+          int         ii       = PetscScatter::flatten_index(iz, iy, ix, global_dims);
           PetscScalar expected = index_to_val(ii);
           CHECK(std::abs(vec[iz][iy][ix] - expected) < 1.0e-10);
         }
@@ -229,7 +229,7 @@ TEST_CASE("PetscUtils::scatter_reverse_begin/end", "[np=8]")
   // chunkvec and global index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscUtils::calc_global_index(chunkvec, global_dims, index);
+  PetscScatter::calc_global_index(chunkvec, global_dims, index);
 
   // DMDA
   DM dm_obj = nullptr;
@@ -258,7 +258,7 @@ TEST_CASE("PetscUtils::scatter_reverse_begin/end", "[np=8]")
     for (int iz = info_obj.zs; iz < info_obj.zs + info_obj.zm; ++iz) {
       for (int iy = info_obj.ys; iy < info_obj.ys + info_obj.ym; ++iy) {
         for (int ix = info_obj.xs; ix < info_obj.xs + info_obj.xm; ++ix) {
-          int ii = PetscUtils::flatten_index(iz, iy, ix, global_dims);
+          int ii = PetscScatter::flatten_index(iz, iy, ix, global_dims);
 
           vec[iz][iy][ix] = index_to_val(ii);
         }
@@ -271,15 +271,15 @@ TEST_CASE("PetscUtils::scatter_reverse_begin/end", "[np=8]")
 
   // perform reverse scatter
   {
-    PetscUtils       petsc_utils(&dm_obj);
-    std::vector<int> petsc_index(index);
+    PetscScatter     scatter(&dm_obj);
+    std::vector<int> scatter_index(index);
 
-    petsc_utils.setup_vector_local(buf, vec_local);
-    petsc_utils.setup_indexset_local(petsc_index.size());
-    petsc_utils.setup_indexset_global(petsc_index);
-    petsc_utils.setup_scatter(vec_local, vec_global);
-    petsc_utils.scatter_reverse_begin(vec_local, vec_global);
-    petsc_utils.scatter_reverse_end(vec_local, vec_global);
+    scatter.setup_vector_local(buf, vec_local);
+    scatter.setup_indexset_local(scatter_index.size());
+    scatter.setup_indexset_global(scatter_index);
+    scatter.setup_scatter(vec_local, vec_global);
+    scatter.scatter_reverse_begin(vec_local, vec_global);
+    scatter.scatter_reverse_end(vec_local, vec_global);
   }
 
   // verify results

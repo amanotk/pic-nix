@@ -10,7 +10,7 @@
 #include <petscksp.h>
 
 #include "petsc_solver.hpp"
-#include "petsc_utils.hpp"
+#include "petsc_scatter.hpp"
 
 namespace elliptic
 {
@@ -31,7 +31,7 @@ protected:
   Vec vec_sol_l;
   Vec vec_sol_g;
 
-  std::unique_ptr<PetscUtils> petsc_utils;
+  std::unique_ptr<PetscScatter> scatter;
 
   std::vector<int>     dims;
   std::vector<float64> src_local;
@@ -48,7 +48,7 @@ public:
     this->dims[2] = dims[2];
 
     PetscSolver::initialize_dmda(dm_obj, this->dims);
-    petsc_utils = std::make_unique<PetscUtils>(&dm_obj);
+    scatter = std::make_unique<PetscScatter>(&dm_obj);
 
     // create global vectors
     DMCreateGlobalVector(dm_obj, &vec_src_g);
@@ -67,28 +67,28 @@ public:
 
   int scatter_forward_begin()
   {
-    petsc_utils->scatter_forward_begin(vec_src_l, vec_src_g);
+    scatter->scatter_forward_begin(vec_src_l, vec_src_g);
 
     return 0;
   }
 
   int scatter_forward_end()
   {
-    petsc_utils->scatter_forward_end(vec_src_l, vec_src_g);
+    scatter->scatter_forward_end(vec_src_l, vec_src_g);
 
     return 0;
   }
 
   int scatter_reverse_begin()
   {
-    petsc_utils->scatter_reverse_begin(vec_sol_l, vec_sol_g);
+    scatter->scatter_reverse_begin(vec_sol_l, vec_sol_g);
 
     return 0;
   }
 
   int scatter_reverse_end()
   {
-    petsc_utils->scatter_reverse_end(vec_sol_l, vec_sol_g);
+    scatter->scatter_reverse_end(vec_sol_l, vec_sol_g);
 
     return 0;
   }
@@ -103,18 +103,18 @@ public:
     std::vector<PetscInt> index(num_grids);
 
     // global index for the local data
-    PetscUtils::calc_global_index(chunkvec, dims, index);
+    PetscScatter::calc_global_index(chunkvec, dims, index);
 
     // local vectors
     src_local.resize(num_grids);
     sol_local.resize(num_grids);
-    petsc_utils->setup_vector_local(src_local, vec_src_l);
-    petsc_utils->setup_vector_local(sol_local, vec_sol_l);
+    scatter->setup_vector_local(src_local, vec_src_l);
+    scatter->setup_vector_local(sol_local, vec_sol_l);
 
     // scatter object
-    petsc_utils->setup_indexset_local(index.size());
-    petsc_utils->setup_indexset_global(index);
-    petsc_utils->setup_scatter(vec_src_l, vec_src_g);
+    scatter->setup_indexset_local(index.size());
+    scatter->setup_indexset_global(index);
+    scatter->setup_scatter(vec_src_l, vec_src_g);
 
     return 0;
   }

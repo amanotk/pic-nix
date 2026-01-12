@@ -1,6 +1,6 @@
 // -*- C++-*-
-#ifndef _PETSC_UTILS_HPP_
-#define _PETSC_UTILS_HPP_
+#ifndef _PETSC_SCATTER_HPP_
+#define _PETSC_SCATTER_HPP_
 
 #include <array>
 #include <cassert>
@@ -24,7 +24,7 @@ namespace elliptic
 
 using namespace nix::typedefs;
 
-class PetscUtils
+class PetscScatter
 {
 protected:
   DM*        dm_ptr; // reference to DM object
@@ -52,11 +52,11 @@ private:
   }
 
 public:
-  PetscUtils(DM* dm) : dm_ptr(dm), sc_obj(nullptr), is_obj_l(nullptr), is_obj_g(nullptr)
+  PetscScatter(DM* dm) : dm_ptr(dm), sc_obj(nullptr), is_obj_l(nullptr), is_obj_g(nullptr)
   {
   }
 
-  virtual ~PetscUtils()
+  virtual ~PetscScatter()
   {
     if (sc_obj != nullptr) {
       VecScatterDestroy(&sc_obj);
