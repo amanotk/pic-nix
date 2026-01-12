@@ -9,8 +9,8 @@
 #include <petscdmda.h>
 #include <petscksp.h>
 
-#include "petsc_solver.hpp"
 #include "petsc_scatter.hpp"
+#include "petsc_solver.hpp"
 
 namespace elliptic
 {
