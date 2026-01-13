@@ -2,10 +2,10 @@
 #include "thirdparty/catch.hpp"
 
 #include <array>
-#include <cassert> // assert
+#include <cassert>
 #include <memory>
-#include <tuple>   // std::tuple
-#include <utility> // std::pair
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include <petscao.h>
@@ -18,7 +18,7 @@
 using namespace nix::typedefs;
 using elliptic::PetscScatter;
 
-TEST_CASE("PetscUtils::setup_indexset_local", "[np=1]")
+TEST_CASE("PetscScatter::setup_indexset_local", "[np=1]")
 {
   if (get_mpi_size() != 1) {
     SUCCEED("Skipping test because of incompatible MPI rank");
@@ -40,7 +40,7 @@ TEST_CASE("PetscUtils::setup_indexset_local", "[np=1]")
   CHECK(index[9] == 9);
 }
 
-TEST_CASE("PetscUtils::setup_indexset_global", "[np=8]")
+TEST_CASE("PetscScatter::setup_indexset_global", "[np=8]")
 {
   if (get_mpi_size() != 8) {
     SUCCEED("Skipping test because of incompatible MPI rank");
@@ -83,7 +83,7 @@ TEST_CASE("PetscUtils::setup_indexset_global", "[np=8]")
   DMDestroy(&dm_obj);
 }
 
-TEST_CASE("PetrscUtils::flatten_index", "[np=1]")
+TEST_CASE("PetscScatter::flatten_index", "[np=1]")
 {
   if (get_mpi_size() != 1) {
     SUCCEED("Skipping test because of incompatible MPI rank");
@@ -99,7 +99,7 @@ TEST_CASE("PetrscUtils::flatten_index", "[np=1]")
   CHECK(PetscScatter::flatten_index(3, 4, 5, dims) == 119);
 }
 
-TEST_CASE("PetscUtils::calc_global_index with 8 ranks", "[np=8]")
+TEST_CASE("PetscScatter::calc_global_index with 8 ranks", "[np=8]")
 {
   if (get_mpi_size() != 8) {
     SUCCEED("Skipping test because of incompatible MPI rank");
@@ -136,7 +136,7 @@ TEST_CASE("PetscUtils::calc_global_index with 8 ranks", "[np=8]")
   }
 }
 
-TEST_CASE("PetscUtils::scatter_forward_begin/end", "[np=8]")
+TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
 {
   if (get_mpi_size() != 8) {
     SUCCEED("Skipping test because of incompatible MPI rank");
@@ -211,7 +211,7 @@ TEST_CASE("PetscUtils::scatter_forward_begin/end", "[np=8]")
   DMDestroy(&dm_obj);
 }
 
-TEST_CASE("PetscUtils::scatter_reverse_begin/end", "[np=8]")
+TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
 {
   if (get_mpi_size() != 8) {
     SUCCEED("Skipping test because of incompatible MPI rank");
