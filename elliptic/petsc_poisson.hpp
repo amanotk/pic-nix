@@ -2,6 +2,7 @@
 #define _PETSC_POISSON_HPP_
 
 #include "elliptic.hpp"
+#include "petsc_interface.hpp"
 
 namespace elliptic
 {
@@ -17,7 +18,7 @@ public:
   }
 
 protected:
-  void set_matrix(float64 hx, float64 hy, float64 hz) override
+  virtual void set_matrix(float64 hx, float64 hy, float64 hz) override
   {
     const float64 hx2_inv = 1.0 / (hx * hx);
     const float64 hy2_inv = 1.0 / (hy * hy);
