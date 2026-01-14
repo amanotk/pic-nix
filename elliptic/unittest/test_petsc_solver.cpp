@@ -24,11 +24,11 @@
 using namespace nix::typedefs;
 using elliptic::PetscInterface;
 
-struct PetscSolverTest final : public PetscInterface {
+struct PetscInterfaceTest final : public PetscInterface {
   using PetscInterface::apply_petsc_option;
   using PetscInterface::make_petsc_option;
 
-  PetscSolverTest() : PetscInterface({1, 1, 2})
+  PetscInterfaceTest() : PetscInterface({1, 1, 2})
   {
   }
   void set_matrix(float64, float64, float64) override
@@ -74,12 +74,12 @@ bool is_option_valid(const PetscInterface::OptionVec& option, std::string key, T
   return false;
 };
 
-TEST_CASE("PetscSolver::compile", "[np=1]")
+TEST_CASE("PetscInterface::compile", "[np=1]")
 {
   elliptic::Poisson3D poisson3d({10, 10, 10});
 }
 
-TEST_CASE("PetscSolver::toml_options", "[np=1]")
+TEST_CASE("PetscInterface::toml_options", "[np=1]")
 {
   std::string toml_string = R"(
   ksp_monitor = true
@@ -89,7 +89,7 @@ TEST_CASE("PetscSolver::toml_options", "[np=1]")
   )";
 
   auto config = toml::parse_str(toml_string);
-  auto option = PetscSolverTest::make_petsc_option(config);
+  auto option = PetscInterfaceTest::make_petsc_option(config);
 
   REQUIRE(is_option_valid(option, "ksp_monitor", true));
   REQUIRE(is_option_valid(option, "ksp_type", "gmres"));
@@ -97,10 +97,10 @@ TEST_CASE("PetscSolver::toml_options", "[np=1]")
   REQUIRE(is_option_valid(option, "ksp_rtol", 1e-8));
 
   REQUIRE(PetscOptionsClear(nullptr) == 0);
-  REQUIRE(PetscSolverTest::apply_petsc_option(option) == 0);
+  REQUIRE(PetscInterfaceTest::apply_petsc_option(option) == 0);
 }
 
-TEST_CASE("PetscSolver::json_options", "[np=1]")
+TEST_CASE("PetscInterface::json_options", "[np=1]")
 {
   const std::string json_string = R"({
     "ksp_monitor": true,
@@ -110,7 +110,7 @@ TEST_CASE("PetscSolver::json_options", "[np=1]")
   })";
 
   const auto config = nlohmann::json::parse(json_string);
-  const auto option = PetscSolverTest::make_petsc_option(config);
+  const auto option = PetscInterfaceTest::make_petsc_option(config);
 
   REQUIRE(is_option_valid(option, "ksp_monitor", true));
   REQUIRE(is_option_valid(option, "ksp_type", "gmres"));
@@ -118,5 +118,5 @@ TEST_CASE("PetscSolver::json_options", "[np=1]")
   REQUIRE(is_option_valid(option, "ksp_rtol", 1e-8));
 
   REQUIRE(PetscOptionsClear(nullptr) == 0);
-  REQUIRE(PetscSolverTest::apply_petsc_option(option) == 0);
+  REQUIRE(PetscInterfaceTest::apply_petsc_option(option) == 0);
 }

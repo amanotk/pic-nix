@@ -10,6 +10,7 @@
 
 using namespace nix;
 using namespace nix::typedefs;
+using nix::Dims3D;
 
 class MockChunk;
 using MockChunkPtr = std::unique_ptr<MockChunk>;
@@ -26,11 +27,12 @@ protected:
   int                     Uby;
   int                     Lbz;
   int                     Ubz;
-  xt::xtensor<float64, 4> uj;
+  xt::xtensor<float64, 3> src;
+  xt::xtensor<float64, 3> sol;
 
   // Members mimicking nix::Chunk
-  int dims[3];
   int id;
+  int dims[3];
   int offset[3];
   int global_dims[3];
 
@@ -42,7 +44,8 @@ public:
     int&                     Uby;
     int&                     Lbz;
     int&                     Ubz;
-    xt::xtensor<float64, 4>& uj;
+    xt::xtensor<float64, 3>& src;
+    xt::xtensor<float64, 3>& sol;
   };
 
   MockChunk() : Nb(2), id(0)
@@ -50,10 +53,6 @@ public:
     std::fill(std::begin(dims), std::end(dims), 0);
     std::fill(std::begin(offset), std::end(offset), 0);
     std::fill(std::begin(global_dims), std::end(global_dims), 0);
-
-    // Minimal initialization
-    uj.resize({(size_t)2 * Nb, (size_t)2 * Nb, (size_t)2 * Nb, 4});
-    uj.fill(0);
   }
 
   MockChunk(const int dims[3], int id = 0) : Nb(2), id(id)
@@ -73,11 +72,13 @@ public:
     Lbx = Nb;
     Ubx = Lbx + dims[0] - 1;
 
-    uj.resize({nz, ny, nx, 4});
-    uj.fill(0);
+    src.resize({nz, ny, nx});
+    src.fill(0);
+    sol.resize({nz, ny, nx});
+    sol.fill(0);
   }
 
-  void set_dims(const std::vector<int>& d)
+  void set_dims(Dims3D d)
   {
     if (d.size() < 3)
       return;
@@ -94,8 +95,10 @@ public:
     Lbx = Nb;
     Ubx = Lbx + dims[0] - 1;
 
-    uj.resize({nz, ny, nx, 4});
-    uj.fill(0);
+    src.resize({nz, ny, nx});
+    src.fill(0);
+    sol.resize({nz, ny, nx});
+    sol.fill(0);
   }
 
   void set_offset(const std::vector<int>& o)
@@ -124,12 +127,7 @@ public:
 
   DataContainer get_internal_data()
   {
-    return DataContainer{Lbx, Ubx, Lby, Uby, Lbz, Ubz, uj};
-  }
-
-  xt::xtensor<float64, 4>& get_uj()
-  {
-    return uj;
+    return DataContainer{Lbx, Ubx, Lby, Uby, Lbz, Ubz, src, sol};
   }
 
   void set_id(int new_id)
@@ -201,7 +199,7 @@ public:
             int jx = ix - data.Lbx;
             int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size;
 
-            buffer[jj] = data.uj(iz, iy, ix, 0);
+            buffer[jj] = data.src(iz, iy, ix);
             ++count;
           }
         }
@@ -233,7 +231,7 @@ public:
             int jx = ix - data.Lbx;
             int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size;
 
-            data.uj(iz, iy, ix, 0) = buffer[jj];
+            data.sol(iz, iy, ix) = buffer[jj];
             ++count;
           }
         }

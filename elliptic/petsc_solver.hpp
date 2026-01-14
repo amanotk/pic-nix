@@ -55,19 +55,18 @@ protected:
   static OptionVec   make_petsc_option(const nlohmann::json& config);
   static OptionVec   make_petsc_option(const toml::value& config);
 
-  int scatter_forward_begin();
-  int scatter_forward_end();
-  int scatter_reverse_begin();
-  int scatter_reverse_end();
-
+  virtual int  scatter_forward_begin();
+  virtual int  scatter_forward_end();
+  virtual int  scatter_reverse_begin();
+  virtual int  scatter_reverse_end();
+  virtual int  update_mapping(ChunkAccessor& accessor);
+  virtual int  copy_chunk_to_src(ChunkAccessor& accessor);
+  virtual int  copy_sol_to_chunk(ChunkAccessor& accessor);
   virtual void create_dm(Dims3D dims);
   virtual void create_dm1d(Dims3D dims);
   virtual void create_dm2d(Dims3D dims);
   virtual void create_dm3d(Dims3D dims);
   virtual void set_matrix(float64 hx, float64 hy, float64 hz) = 0;
-  virtual int  update_mapping(ChunkAccessor& accessor);
-  virtual int  copy_chunk_to_src(ChunkAccessor& accessor);
-  virtual int  copy_sol_to_chunk(ChunkAccessor& accessor);
 };
 
 class Poisson3D : public PetscInterface
