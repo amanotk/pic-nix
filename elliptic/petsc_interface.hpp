@@ -36,17 +36,19 @@ public:
   explicit PetscInterface(Dims3D dims);
   virtual ~PetscInterface();
 
+  virtual int solve() = 0;
+
 protected:
   Dims3D               dims;
-  std::vector<float64> src_local;
-  std::vector<float64> sol_local;
+  std::vector<float64> src_buf;
+  std::vector<float64> sol_buf;
   DM                   dm_obj;
   KSP                  ksp_obj;
   Mat                  matrix;
-  Vec                  vector_src_l;
   Vec                  vector_src_g;
-  Vec                  vector_sol_l;
   Vec                  vector_sol_g;
+  Vec                  vector_src_l;
+  Vec                  vector_sol_l;
   OptionVec            option;
   PtrScatter           scatter;
 
@@ -68,7 +70,8 @@ protected:
   virtual void create_dm1d(Dims3D dims);
   virtual void create_dm2d(Dims3D dims);
   virtual void create_dm3d(Dims3D dims);
-  virtual void set_matrix(float64 hx, float64 hy, float64 hz) = 0;
+  virtual void setup();
+  virtual int  set_matrix() = 0;
 };
 
 } // namespace elliptic

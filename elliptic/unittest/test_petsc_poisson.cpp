@@ -15,9 +15,21 @@
 #include "test_parallel_common.hpp"
 
 using namespace nix::typedefs;
-using elliptic::PetscPoisson3D;
 
-TEST_CASE("PetscPoisson::compile", "[np=1]")
+TEST_CASE("PetscPoisson1D::compile", "[np=1]")
 {
-  elliptic::PetscPoisson3D poisson3d({10, 10, 10});
+  elliptic::PetscPoisson1D solver({1, 1, 10}, 1.0);
+  solver.solve();
+}
+
+TEST_CASE("PetscPoisson2D::compile", "[np=1]")
+{
+  elliptic::PetscPoisson2D solver({1, 10, 10}, 1.0);
+  solver.solve();
+}
+
+TEST_CASE("PetscPoisson3D::compile", "[np=1]")
+{
+  elliptic::PetscPoisson3D solver({10, 10, 10}, 1.0);
+  solver.solve();
 }

@@ -24,6 +24,7 @@ public:
   virtual int update_mapping(ChunkAccessor& accessor)    = 0;
   virtual int copy_chunk_to_src(ChunkAccessor& accessor) = 0;
   virtual int copy_sol_to_chunk(ChunkAccessor& accessor) = 0;
+  virtual int solve()                                    = 0;
 };
 
 class Solver
@@ -49,6 +50,11 @@ public:
   int copy_sol_to_chunk(ChunkAccessor& accessor)
   {
     return interface->copy_sol_to_chunk(accessor);
+  }
+
+  int solve()
+  {
+    return interface->solve();
   }
 
 protected:

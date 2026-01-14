@@ -9,24 +9,196 @@ namespace elliptic
 using namespace nix::typedefs;
 using nix::Dims3D;
 
-class PetscPoisson3D : public PetscInterface
+class PetscPoisson : public PetscInterface
 {
 public:
-  PetscPoisson3D(Dims3D dims) : PetscInterface(dims)
+  PetscPoisson(Dims3D dims, float64 delh) : PetscInterface(dims), delx(delh), dely(delh), delz(delh)
   {
-    set_matrix(1.0, 1.0, 1.0);
+  }
+
+  virtual int solve() override
+  {
+    KSPSolve(ksp_obj, vector_src_g, vector_sol_g);
+    return 0;
   }
 
 protected:
-  virtual void set_matrix(float64 hx, float64 hy, float64 hz) override
+  float64 delx;
+  float64 dely;
+  float64 delz;
+};
+
+/// @brief 1D Poisson solver with periodic boundary conditions
+class PetscPoisson1D : public PetscPoisson
+{
+public:
+  PetscPoisson1D(Dims3D dims, float64 delh) : PetscPoisson(dims, delh)
   {
-    const float64 hx2_inv = 1.0 / (hx * hx);
-    const float64 hy2_inv = 1.0 / (hy * hy);
-    const float64 hz2_inv = 1.0 / (hz * hz);
-    const float64 diag    = 2.0 * hx2_inv + 2.0 * hy2_inv + 2.0 * hz2_inv;
-    const float64 ofdx    = -1.0 * hx2_inv;
-    const float64 ofdy    = -1.0 * hy2_inv;
-    const float64 ofdz    = -1.0 * hz2_inv;
+    setup();
+  }
+
+protected:
+  virtual int set_matrix() override
+  {
+    const float64 dx2_inv = 1.0 / (delx * delx);
+    const float64 diag    = +2.0 * dx2_inv;
+    const float64 ofdx    = -1.0 * dx2_inv;
+
+    DMDALocalInfo info;
+    DMDAGetLocalInfo(dm_obj, &info);
+
+    if (matrix != nullptr) {
+      MatDestroy(&matrix);
+    }
+    DMCreateMatrix(dm_obj, &matrix);
+
+    for (int ix = info.xs; ix < info.xs + info.xm; ++ix) {
+      MatStencil row;
+      MatStencil col[3];
+      float64    vals[3];
+      int        ncols = 0;
+
+      row.i = ix;
+      row.j = 0;
+      row.k = 0;
+      row.c = 0;
+
+      col[ncols]    = row;
+      vals[ncols++] = diag;
+
+      col[ncols].i  = ix - 1;
+      col[ncols].j  = 0;
+      col[ncols].k  = 0;
+      col[ncols].c  = 0;
+      vals[ncols++] = ofdx;
+
+      col[ncols].i  = ix + 1;
+      col[ncols].j  = 0;
+      col[ncols].k  = 0;
+      col[ncols].c  = 0;
+      vals[ncols++] = ofdx;
+
+      MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, INSERT_VALUES);
+    }
+
+    MatAssemblyBegin(matrix, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(matrix, MAT_FINAL_ASSEMBLY);
+
+    // set null space
+    {
+      MatNullSpace ns;
+      MatNullSpaceCreate(PETSC_COMM_WORLD, PETSC_TRUE, 0, NULL, &ns);
+      MatSetNullSpace(matrix, ns);
+      MatNullSpaceDestroy(&ns);
+    }
+
+    return 0;
+  }
+};
+
+/// @brief 2D Poisson solver with periodic boundary conditions
+class PetscPoisson2D : public PetscPoisson
+{
+public:
+  PetscPoisson2D(Dims3D dims, float64 delh) : PetscPoisson(dims, delh)
+  {
+    setup();
+  }
+
+protected:
+  virtual int set_matrix() override
+  {
+    const float64 dx2_inv = 1.0 / (delx * delx);
+    const float64 dy2_inv = 1.0 / (dely * dely);
+    const float64 diag    = +2.0 * dx2_inv + 2.0 * dy2_inv;
+    const float64 ofdx    = -1.0 * dx2_inv;
+    const float64 ofdy    = -1.0 * dy2_inv;
+
+    DMDALocalInfo info;
+    DMDAGetLocalInfo(dm_obj, &info);
+
+    if (matrix != nullptr) {
+      MatDestroy(&matrix);
+    }
+    DMCreateMatrix(dm_obj, &matrix);
+
+    for (int iy = info.ys; iy < info.ys + info.ym; ++iy) {
+      for (int ix = info.xs; ix < info.xs + info.xm; ++ix) {
+        MatStencil row;
+        MatStencil col[5];
+        float64    vals[5];
+        int        ncols = 0;
+
+        row.i = ix;
+        row.j = iy;
+        row.k = 0;
+        row.c = 0;
+
+        col[ncols]    = row;
+        vals[ncols++] = diag;
+
+        col[ncols].i  = ix - 1;
+        col[ncols].j  = iy;
+        col[ncols].k  = 0;
+        col[ncols].c  = 0;
+        vals[ncols++] = ofdx;
+
+        col[ncols].i  = ix + 1;
+        col[ncols].j  = iy;
+        col[ncols].k  = 0;
+        col[ncols].c  = 0;
+        vals[ncols++] = ofdx;
+
+        col[ncols].i  = ix;
+        col[ncols].j  = iy - 1;
+        col[ncols].k  = 0;
+        col[ncols].c  = 0;
+        vals[ncols++] = ofdy;
+
+        col[ncols].i  = ix;
+        col[ncols].j  = iy + 1;
+        col[ncols].k  = 0;
+        col[ncols].c  = 0;
+        vals[ncols++] = ofdy;
+
+        MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, INSERT_VALUES);
+      }
+    }
+
+    MatAssemblyBegin(matrix, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(matrix, MAT_FINAL_ASSEMBLY);
+
+    // set null space
+    {
+      MatNullSpace ns;
+      MatNullSpaceCreate(PETSC_COMM_WORLD, PETSC_TRUE, 0, NULL, &ns);
+      MatSetNullSpace(matrix, ns);
+      MatNullSpaceDestroy(&ns);
+    }
+
+    return 0;
+  }
+};
+
+/// @brief 3D Poisson solver with periodic boundary conditions
+class PetscPoisson3D : public PetscPoisson
+{
+public:
+  PetscPoisson3D(Dims3D dims, float64 delh) : PetscPoisson(dims, delh)
+  {
+    setup();
+  }
+
+protected:
+  virtual int set_matrix() override
+  {
+    const float64 dx2_inv = 1.0 / (delx * delx);
+    const float64 dy2_inv = 1.0 / (dely * dely);
+    const float64 dz2_inv = 1.0 / (delz * delz);
+    const float64 diag    = +2.0 * dx2_inv + 2.0 * dy2_inv + 2.0 * dz2_inv;
+    const float64 ofdx    = -1.0 * dx2_inv;
+    const float64 ofdy    = -1.0 * dy2_inv;
+    const float64 ofdz    = -1.0 * dz2_inv;
 
     DMDALocalInfo info;
     DMDAGetLocalInfo(dm_obj, &info);
@@ -115,6 +287,8 @@ protected:
       MatSetNullSpace(matrix, ns);
       MatNullSpaceDestroy(&ns);
     }
+
+    return 0;
   }
 };
 

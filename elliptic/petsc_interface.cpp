@@ -12,10 +12,9 @@ namespace elliptic
 {
 
 PetscInterface::PetscInterface(Dims3D dims)
-    : dm_obj(nullptr), ksp_obj(nullptr), matrix(nullptr), vector_src_l(nullptr),
+    : dims(dims), dm_obj(nullptr), ksp_obj(nullptr), matrix(nullptr), vector_src_l(nullptr),
       vector_src_g(nullptr), vector_sol_l(nullptr), vector_sol_g(nullptr)
 {
-  create_dm(dims);
 }
 
 PetscInterface::~PetscInterface()
@@ -185,6 +184,38 @@ int PetscInterface::scatter_reverse_end()
   return 0;
 }
 
+int PetscInterface::update_mapping(ChunkAccessor& accessor)
+{
+  const int num_grids = accessor.get_num_grids_total();
+
+  // global index for the local data
+  std::vector<int> index(num_grids);
+  accessor.build_global_index(index, dims);
+
+  // local vectors
+  src_buf.resize(num_grids);
+  sol_buf.resize(num_grids);
+  scatter->setup_vector_local(src_buf, vector_src_l);
+  scatter->setup_vector_local(sol_buf, vector_sol_l);
+
+  // scatter object
+  scatter->setup_indexset_local(index.size());
+  scatter->setup_indexset_global(index);
+  scatter->setup_scatter(vector_src_l, vector_src_g);
+
+  return 0;
+}
+
+int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
+{
+  return accessor.pack(src_buf.data(), static_cast<int>(src_buf.size()));
+}
+
+int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
+{
+  return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
+}
+
 void PetscInterface::create_dm(Dims3D dims)
 {
   assert(dims.size() == 3);
@@ -229,36 +260,25 @@ void PetscInterface::create_dm3d(Dims3D dims)
                PETSC_DECIDE, 1, 1, nullptr, nullptr, nullptr, &dm_obj);
 }
 
-int PetscInterface::update_mapping(ChunkAccessor& accessor)
+void PetscInterface::setup()
 {
-  const int num_grids = accessor.get_num_grids_total();
+  create_dm(dims);
 
-  // global index for the local data
-  std::vector<int> index(num_grids);
-  accessor.build_global_index(index, dims);
+  // create global vectors (local vectors are created in update_mapping)
+  DMCreateGlobalVector(dm_obj, &vector_src_g);
+  DMCreateGlobalVector(dm_obj, &vector_sol_g);
 
-  // local vectors
-  src_local.resize(num_grids);
-  sol_local.resize(num_grids);
-  scatter->setup_vector_local(src_local, vector_src_l);
-  scatter->setup_vector_local(sol_local, vector_sol_l);
+  // create matrix
+  set_matrix();
+
+  // create KSP solver
+  KSPCreate(PETSC_COMM_WORLD, &ksp_obj);
+  KSPSetDM(ksp_obj, dm_obj);
+  KSPSetOperators(ksp_obj, matrix, matrix);
+  KSPSetFromOptions(ksp_obj);
 
   // scatter object
-  scatter->setup_indexset_local(index.size());
-  scatter->setup_indexset_global(index);
-  scatter->setup_scatter(vector_src_l, vector_src_g);
-
-  return 0;
-}
-
-int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
-{
-  return accessor.pack(src_local.data(), static_cast<int>(src_local.size()));
-}
-
-int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
-{
-  return accessor.unpack(sol_local.data(), static_cast<int>(sol_local.size()));
+  scatter = std::make_unique<PetscScatter>(&dm_obj);
 }
 
 } // namespace elliptic

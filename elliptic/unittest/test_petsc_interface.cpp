@@ -28,8 +28,19 @@ struct PetscInterfaceTest final : public PetscInterface {
   using PetscInterface::apply_petsc_option;
   using PetscInterface::make_petsc_option;
 
-  PetscInterfaceTest() : PetscInterface({1, 1, 2}) {}
-  void set_matrix(float64, float64, float64) override {}
+  PetscInterfaceTest() : PetscInterface({1, 1, 2})
+  {
+  }
+
+  int set_matrix() override
+  {
+    return 0;
+  }
+
+  int solve() override
+  {
+    return 0;
+  }
 };
 
 template <typename T>
