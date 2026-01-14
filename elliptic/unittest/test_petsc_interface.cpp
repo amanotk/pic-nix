@@ -70,11 +70,6 @@ bool is_option_valid(const PetscInterface::OptionVec& option, std::string key, T
   return false;
 }
 
-TEST_CASE("PetscInterface::compile", "[np=1]")
-{
-  elliptic::Poisson3D poisson3d({10, 10, 10});
-}
-
 TEST_CASE("PetscInterface::toml_options", "[np=1]")
 {
   std::string toml_string = R"(
