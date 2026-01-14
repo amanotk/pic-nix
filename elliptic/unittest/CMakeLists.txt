@@ -7,6 +7,7 @@ set(UNITTEST_INCLUDE_DIRS
 )
 
 set(PARALLEL_EXECS
+        test_chunk_accessor
         test_petsc_scatter
         test_petsc_solver
 )
@@ -28,6 +29,12 @@ foreach(target IN ITEMS ${PARALLEL_EXECS})
         )
 endforeach()
 
+add_test(NAME test_chunk_accessor_np1
+        COMMAND ${MPIEXEC} -n 1 $<TARGET_FILE:test_chunk_accessor> "[np=1]"
+)
+add_test(NAME test_chunk_accessor_np8
+        COMMAND ${MPIEXEC} -n 8 $<TARGET_FILE:test_chunk_accessor> "[np=8]"
+)
 add_test(NAME test_petsc_scatter_np1
         COMMAND ${MPIEXEC} -n 1 $<TARGET_FILE:test_petsc_scatter> "[np=1]"
 )

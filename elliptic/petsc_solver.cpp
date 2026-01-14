@@ -11,11 +11,11 @@
 namespace elliptic
 {
 
-PetscInterface::PetscInterface(std::vector<int> dims)
+PetscInterface::PetscInterface(Dims3D dims)
     : dm_obj(nullptr), ksp_obj(nullptr), matrix(nullptr), vector_src_l(nullptr),
       vector_src_g(nullptr), vector_sol_l(nullptr), vector_sol_g(nullptr)
 {
-  create_dm(std::move(dims));
+  create_dm(dims);
 }
 
 PetscInterface::~PetscInterface()
@@ -185,7 +185,7 @@ int PetscInterface::scatter_reverse_end()
   return 0;
 }
 
-void PetscInterface::create_dm(std::vector<int> dims)
+void PetscInterface::create_dm(Dims3D dims)
 {
   assert(dims.size() == 3);
 
@@ -211,22 +211,54 @@ void PetscInterface::create_dm(std::vector<int> dims)
   DMSetUp(dm_obj);
 }
 
-void PetscInterface::create_dm1d(std::vector<int> dims)
+void PetscInterface::create_dm1d(Dims3D dims)
 {
   DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, dims[2], 1, 1, nullptr, &dm_obj);
 }
 
-void PetscInterface::create_dm2d(std::vector<int> dims)
+void PetscInterface::create_dm2d(Dims3D dims)
 {
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, DMDA_STENCIL_STAR,
                dims[2], dims[1], PETSC_DECIDE, PETSC_DECIDE, 1, 1, nullptr, nullptr, &dm_obj);
 }
 
-void PetscInterface::create_dm3d(std::vector<int> dims)
+void PetscInterface::create_dm3d(Dims3D dims)
 {
   DMDACreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
                DMDA_STENCIL_STAR, dims[2], dims[1], dims[0], PETSC_DECIDE, PETSC_DECIDE,
                PETSC_DECIDE, 1, 1, nullptr, nullptr, nullptr, &dm_obj);
+}
+
+int PetscInterface::update_mapping(ChunkAccessor& accessor)
+{
+  const int num_grids = accessor.get_num_grids_total();
+
+  // global index for the local data
+  std::vector<int> index(num_grids);
+  accessor.build_global_index(index, dims);
+
+  // local vectors
+  src_local.resize(num_grids);
+  sol_local.resize(num_grids);
+  scatter->setup_vector_local(src_local, vector_src_l);
+  scatter->setup_vector_local(sol_local, vector_sol_l);
+
+  // scatter object
+  scatter->setup_indexset_local(index.size());
+  scatter->setup_indexset_global(index);
+  scatter->setup_scatter(vector_src_l, vector_src_g);
+
+  return 0;
+}
+
+int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
+{
+  return accessor.pack(src_local.data(), static_cast<int>(src_local.size()));
+}
+
+int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
+{
+  return accessor.unpack(sol_local.data(), static_cast<int>(sol_local.size()));
 }
 
 } // namespace elliptic

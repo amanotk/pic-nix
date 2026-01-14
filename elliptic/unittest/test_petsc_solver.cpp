@@ -76,8 +76,7 @@ bool is_option_valid(const PetscInterface::OptionVec& option, std::string key, T
 
 TEST_CASE("PetscSolver::compile", "[np=1]")
 {
-  std::vector<int>    dims = {10, 10, 10};
-  elliptic::Poisson3D poisson3d(dims);
+  elliptic::Poisson3D poisson3d({10, 10, 10});
 }
 
 TEST_CASE("PetscSolver::toml_options", "[np=1]")

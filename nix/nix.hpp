@@ -135,6 +135,11 @@ enum ArrayLayout {
 };
 constexpr int ARRAY_LAYOUT = LAYOUT_RIGHT;
 
+// array dimension types
+using Dims1D = std::array<int, 1>;
+using Dims2D = std::array<int, 2>;
+using Dims3D = std::array<int, 3>;
+
 ///
 /// @brief return wall clock time since epoch
 /// @return time in second

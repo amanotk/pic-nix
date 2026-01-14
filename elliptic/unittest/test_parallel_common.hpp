@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "chunk_accessor.hpp"
+
 using namespace nix;
 using namespace nix::typedefs;
 
@@ -141,6 +143,124 @@ public:
   }
 };
 
+// MockChunkAccessor class for testing
+class MockChunkAccessor : public elliptic::ChunkAccessor
+{
+private:
+  MockChunkVec& chunkvec;
+
+public:
+  MockChunkAccessor(MockChunkVec& chunks) : chunkvec(chunks)
+  {
+  }
+
+  virtual void build_global_index(std::vector<int>& index, Dims3D dims) const
+  {
+    assert(chunkvec.size() > 0);
+
+    auto chunk_dims = chunkvec[0]->get_dims();
+    int  chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
+
+    for (int i = 0; i < chunkvec.size(); ++i) {
+      auto offset = chunkvec[i]->get_offset();
+
+      for (int iz = 0; iz < chunk_dims[0]; ++iz) {
+        for (int iy = 0; iy < chunk_dims[1]; ++iy) {
+          for (int ix = 0; ix < chunk_dims[2]; ++ix) {
+            int jz = iz + offset[0];
+            int jy = iy + offset[1];
+            int jx = ix + offset[2];
+            int jj = flatten_index(iz, iy, ix, chunk_dims) + i * chunk_size;
+
+            index[jj] = flatten_index(jz, jy, jx, dims);
+          }
+        }
+      }
+    }
+  }
+
+  virtual int pack(float64* buffer, int size)
+  {
+    assert(chunkvec.size() > 0);
+    assert(size >= get_num_grids_total());
+
+    auto             chunk_dims = chunkvec[0]->get_dims();
+    int              chunk_size = get_num_grids_per_chunk();
+    std::vector<int> lstride    = {chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
+
+    int count = 0;
+
+    for (int i = 0; i < static_cast<int>(chunkvec.size()); ++i) {
+      auto data = chunkvec[i]->get_internal_data();
+
+      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+            int jz = iz - data.Lbz;
+            int jy = iy - data.Lby;
+            int jx = ix - data.Lbx;
+            int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size;
+
+            buffer[jj] = data.uj(iz, iy, ix, 0);
+            ++count;
+          }
+        }
+      }
+    }
+
+    return count;
+  }
+
+  virtual int unpack(float64* buffer, int size)
+  {
+    assert(chunkvec.size() > 0);
+    assert(size >= get_num_grids_total());
+
+    auto             chunk_dims = chunkvec[0]->get_dims();
+    int              chunk_size = get_num_grids_per_chunk();
+    std::vector<int> lstride    = {chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
+
+    int count = 0;
+
+    for (int i = 0; i < static_cast<int>(chunkvec.size()); ++i) {
+      auto data = chunkvec[i]->get_internal_data();
+
+      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+            int jz = iz - data.Lbz;
+            int jy = iy - data.Lby;
+            int jx = ix - data.Lbx;
+            int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size;
+
+            data.uj(iz, iy, ix, 0) = buffer[jj];
+            ++count;
+          }
+        }
+      }
+    }
+
+    return count;
+  }
+
+  virtual int get_num_chunks() const
+  {
+    return static_cast<int>(chunkvec.size());
+  }
+
+  virtual int get_num_grids_per_chunk() const
+  {
+    assert(chunkvec.size() > 0);
+    auto chunk_dims = chunkvec[0]->get_dims();
+    return chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
+  }
+
+  virtual int get_num_grids_total() const
+  {
+    return get_num_chunks() * get_num_grids_per_chunk();
+  }
+};
+
 inline int get_mpi_size()
 {
   int size;
@@ -203,11 +323,11 @@ inline auto get_chunkvec(const std::array<int, 3>& dims, const std::vector<int>&
                          const std::vector<int>& oz, const std::vector<int>& oy,
                          const std::vector<int>& ox)
 {
-  std::vector<std::shared_ptr<MockChunk>> chunkvec;
+  MockChunkVec chunkvec;
   chunkvec.reserve(id.size());
 
   for (size_t i = 0; i < id.size(); ++i) {
-    auto chunk = std::make_shared<MockChunk>();
+    auto chunk = std::make_unique<MockChunk>();
     chunk->set_id(id[i]);
     chunk->set_dims({dims[0], dims[1], dims[2]});
     chunk->set_offset({oz[i] * dims[0], oy[i] * dims[1], ox[i] * dims[2]});

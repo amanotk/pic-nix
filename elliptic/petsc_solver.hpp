@@ -29,11 +29,11 @@ public:
   using OptionVec  = std::vector<Option>;
   using PtrScatter = std::unique_ptr<PetscScatter>;
 
-  explicit PetscInterface(std::vector<int> dims);
+  explicit PetscInterface(Dims3D dims);
   virtual ~PetscInterface();
 
 protected:
-  std::vector<int>     dims;
+  Dims3D               dims;
   std::vector<float64> src_local;
   std::vector<float64> sol_local;
   DM                   dm_obj;
@@ -60,102 +60,20 @@ protected:
   int scatter_reverse_begin();
   int scatter_reverse_end();
 
-  virtual void create_dm(std::vector<int> dims);
-  virtual void create_dm1d(std::vector<int> dims);
-  virtual void create_dm2d(std::vector<int> dims);
-  virtual void create_dm3d(std::vector<int> dims);
+  virtual void create_dm(Dims3D dims);
+  virtual void create_dm1d(Dims3D dims);
+  virtual void create_dm2d(Dims3D dims);
+  virtual void create_dm3d(Dims3D dims);
   virtual void set_matrix(float64 hx, float64 hy, float64 hz) = 0;
-
-  template <typename T_chunkvec>
-  int update_mapping(T_chunkvec& chunkvec)
-  {
-    assert(chunkvec.size() > 0);
-
-    auto                  chunk_dims = chunkvec[0]->get_dims();
-    int                   chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
-    int                   num_grids  = chunk_size * chunkvec.size();
-    std::vector<PetscInt> index(num_grids);
-
-    // global index for the local data
-    PetscScatter::calc_global_index(chunkvec, dims, index);
-
-    // local vectors
-    src_local.resize(num_grids);
-    sol_local.resize(num_grids);
-    scatter->setup_vector_local(src_local, vector_src_l);
-    scatter->setup_vector_local(sol_local, vector_sol_l);
-
-    // scatter object
-    scatter->setup_indexset_local(index.size());
-    scatter->setup_indexset_global(index);
-    scatter->setup_scatter(vector_src_l, vector_src_g);
-
-    return 0;
-  }
-
-  template <typename T_chunkvec>
-  int copy_chunk_to_src(T_chunkvec& chunkvec)
-  {
-    assert(chunkvec.size() > 0);
-
-    auto             chunk_dims = chunkvec[0]->get_dims();
-    int              chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
-    std::vector<int> lstride    = {chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
-
-    for (int i = 0; i < chunkvec.size(); ++i) {
-      auto data = chunkvec[i]->get_internal_data();
-
-      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-            int jz = iz - data.Lbz;
-            int jy = iy - data.Lby;
-            int jx = ix - data.Lbx;
-            int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size;
-
-            src_local[jj] = data.uj(iz, iy, ix, 0);
-          }
-        }
-      }
-    }
-
-    return 0;
-  }
-
-  template <typename T_chunkvec>
-  int copy_sol_to_chunk(T_chunkvec& chunkvec)
-  {
-    assert(chunkvec.size() > 0);
-
-    auto             chunk_dims = chunkvec[0]->get_dims();
-    int              chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
-    std::vector<int> lstride    = {chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
-
-    for (int i = 0; i < chunkvec.size(); ++i) {
-      auto data = chunkvec[i]->get_internal_data();
-
-      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-            int jz = iz - data.Lbz;
-            int jy = iy - data.Lby;
-            int jx = ix - data.Lbx;
-            int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size;
-
-            data.uj(iz, iy, ix, 0) = sol_local[jj];
-          }
-        }
-      }
-    }
-
-    return 0;
-  }
+  virtual int  update_mapping(ChunkAccessor& accessor);
+  virtual int  copy_chunk_to_src(ChunkAccessor& accessor);
+  virtual int  copy_sol_to_chunk(ChunkAccessor& accessor);
 };
 
 class Poisson3D : public PetscInterface
 {
 public:
-  Poisson3D(std::vector<int> dims) : PetscInterface(dims)
+  Poisson3D(Dims3D dims) : PetscInterface(dims)
   {
     set_matrix(1.0, 1.0, 1.0);
   }

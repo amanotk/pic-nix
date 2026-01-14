@@ -9,6 +9,7 @@
 #include <petscdmda.h>
 #include <petscksp.h>
 
+#include "chunk_accessor.hpp"
 #include "petsc_scatter.hpp"
 #include "petsc_solver.hpp"
 
@@ -16,37 +17,45 @@ namespace elliptic
 {
 
 using namespace nix::typedefs;
+using nix::Dims3D;
 
 class SolverInterface
 {
+public:
+  virtual ~SolverInterface()                             = default;
+  virtual int update_mapping(ChunkAccessor& accessor)    = 0;
+  virtual int copy_chunk_to_src(ChunkAccessor& accessor) = 0;
+  virtual int copy_sol_to_chunk(ChunkAccessor& accessor) = 0;
 };
 
-template <typename T_chunkvec>
 class Solver
 {
 public:
-  using Interfacce   = SolverInterface;
-  using PtrInterface = std::unique_ptr<Interfacce>;
+  using Interface    = SolverInterface;
+  using PtrInterface = std::unique_ptr<Interface>;
 
-public:
-  Solver(int dims[3])
+  Solver(Dims3D dims, PtrInterface interface) : dims(dims), interface(std::move(interface))
   {
   }
 
-  int update_mapping(T_chunkvec& chunkvec)
+  int update_mapping(ChunkAccessor& accessor)
   {
-    return 0;
+    return interface->update_mapping(accessor);
   }
 
-  int copy_chunk_to_src(T_chunkvec& chunkvec)
+  int copy_chunk_to_src(ChunkAccessor& accessor)
   {
-    return 0;
+    return interface->copy_chunk_to_src(accessor);
   }
 
-  int copy_sol_to_chunk(T_chunkvec& chunkvec)
+  int copy_sol_to_chunk(ChunkAccessor& accessor)
   {
-    return 0;
+    return interface->copy_sol_to_chunk(accessor);
   }
+
+protected:
+  Dims3D       dims;
+  PtrInterface interface;
 };
 
 } // namespace elliptic

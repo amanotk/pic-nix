@@ -12,6 +12,7 @@
 #include <petscdmda.h>
 #include <petscvec.h>
 
+#include "chunk_accessor.hpp"
 #include "petsc_scatter.hpp"
 #include "test_parallel_common.hpp"
 
@@ -47,15 +48,16 @@ TEST_CASE("PetscScatter::setup_indexset_global", "[np=8]")
     return;
   }
 
-  const int                rank                = get_mpi_rank();
-  const int                num_chunks_per_rank = 8;
-  const std::array<int, 3> global_dims{8, 8, 8};
-  const std::array<int, 3> chunk_dims{2, 2, 2};
+  const int    rank                = get_mpi_rank();
+  const int    num_chunks_per_rank = 8;
+  const Dims3D global_dims{8, 8, 8};
+  const Dims3D chunk_dims{2, 2, 2};
 
   /// test setup_indexset_global
   auto [index_test, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscScatter::calc_global_index(chunkvec, global_dims, index_test);
+  MockChunkAccessor accessor(chunkvec);
+  accessor.build_global_index(index_test, global_dims);
 
   // index_test: natural ordering indices (to be converted)
   // index_true: PETSc ordering indices (ground truth)
@@ -83,59 +85,6 @@ TEST_CASE("PetscScatter::setup_indexset_global", "[np=8]")
   DMDestroy(&dm_obj);
 }
 
-TEST_CASE("PetscScatter::flatten_index", "[np=1]")
-{
-  if (get_mpi_size() != 1) {
-    SUCCEED("Skipping test because of incompatible MPI rank");
-    return;
-  }
-
-  const std::array<int, 3> dims{4, 5, 6};
-
-  CHECK(PetscScatter::flatten_index(0, 0, 0, dims) == 0);
-  CHECK(PetscScatter::flatten_index(0, 0, 1, dims) == 1);
-  CHECK(PetscScatter::flatten_index(0, 1, 0, dims) == 6);
-  CHECK(PetscScatter::flatten_index(1, 0, 0, dims) == 30);
-  CHECK(PetscScatter::flatten_index(3, 4, 5, dims) == 119);
-}
-
-TEST_CASE("PetscScatter::calc_global_index with 8 ranks", "[np=8]")
-{
-  if (get_mpi_size() != 8) {
-    SUCCEED("Skipping test because of incompatible MPI rank");
-    return;
-  }
-
-  const int                rank                = get_mpi_rank();
-  const int                num_chunks_per_rank = 8;
-  const std::array<int, 3> global_dims{8, 12, 16};
-  const std::array<int, 3> chunk_dims{2, 3, 4};
-  const int                chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
-
-  /// test calc_global_index
-  auto [index, chunkvec] =
-      get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscScatter::calc_global_index(chunkvec, global_dims, index);
-
-  for (size_t i = 0; i < chunkvec.size(); ++i) {
-    auto offset = chunkvec[i]->get_offset();
-
-    for (int iz = 0; iz < chunk_dims[0]; ++iz) {
-      for (int iy = 0; iy < chunk_dims[1]; ++iy) {
-        for (int ix = 0; ix < chunk_dims[2]; ++ix) {
-          int jz         = iz + offset[0];
-          int jy         = iy + offset[1];
-          int jx         = ix + offset[2];
-          int idx_local  = PetscScatter::flatten_index(iz, iy, ix, chunk_dims) + i * chunk_size;
-          int idx_global = PetscScatter::flatten_index(jz, jy, jx, global_dims);
-
-          CHECK(index[idx_local] == idx_global);
-        }
-      }
-    }
-  }
-}
-
 TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
 {
   if (get_mpi_size() != 8) {
@@ -143,10 +92,10 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
     return;
   }
 
-  const int                rank                = get_mpi_rank();
-  const int                num_chunks_per_rank = 8;
-  const std::array<int, 3> global_dims{8, 8, 8};
-  const std::array<int, 3> chunk_dims{2, 2, 2};
+  const int    rank                = get_mpi_rank();
+  const int    num_chunks_per_rank = 8;
+  const Dims3D global_dims{8, 8, 8};
+  const Dims3D chunk_dims{2, 2, 2};
 
   // deterministic index to value mapping
   auto index_to_val = [](const int index) { return static_cast<PetscScalar>(index) * 13 + 47; };
@@ -154,7 +103,8 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
   // chunkvec and global index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscScatter::calc_global_index(chunkvec, global_dims, index);
+  MockChunkAccessor accessor(chunkvec);
+  accessor.build_global_index(index, global_dims);
 
   // DMDA
   DM dm_obj = nullptr;
@@ -197,7 +147,7 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
     for (int iz = info_obj.zs; iz < info_obj.zs + info_obj.zm; ++iz) {
       for (int iy = info_obj.ys; iy < info_obj.ys + info_obj.ym; ++iy) {
         for (int ix = info_obj.xs; ix < info_obj.xs + info_obj.xm; ++ix) {
-          int         ii       = PetscScatter::flatten_index(iz, iy, ix, global_dims);
+          int         ii       = MockChunkAccessor::flatten_index(iz, iy, ix, global_dims);
           PetscScalar expected = index_to_val(ii);
           CHECK(std::abs(vec[iz][iy][ix] - expected) < 1.0e-10);
         }
@@ -218,10 +168,10 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
     return;
   }
 
-  const int                rank                = get_mpi_rank();
-  const int                num_chunks_per_rank = 8;
-  const std::array<int, 3> global_dims{8, 8, 8};
-  const std::array<int, 3> chunk_dims{2, 2, 2};
+  const int    rank                = get_mpi_rank();
+  const int    num_chunks_per_rank = 8;
+  const Dims3D global_dims{8, 8, 8};
+  const Dims3D chunk_dims{2, 2, 2};
 
   // deterministic index to value mapping
   auto index_to_val = [](const int index) { return static_cast<PetscScalar>(index) * 13 + 47; };
@@ -229,7 +179,8 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
   // chunkvec and global index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  PetscScatter::calc_global_index(chunkvec, global_dims, index);
+  MockChunkAccessor accessor(chunkvec);
+  accessor.build_global_index(index, global_dims);
 
   // DMDA
   DM dm_obj = nullptr;
@@ -258,7 +209,7 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
     for (int iz = info_obj.zs; iz < info_obj.zs + info_obj.zm; ++iz) {
       for (int iy = info_obj.ys; iy < info_obj.ys + info_obj.ym; ++iy) {
         for (int ix = info_obj.xs; ix < info_obj.xs + info_obj.xm; ++ix) {
-          int ii = PetscScatter::flatten_index(iz, iy, ix, global_dims);
+          int ii = MockChunkAccessor::flatten_index(iz, iy, ix, global_dims);
 
           vec[iz][iy][ix] = index_to_val(ii);
         }
