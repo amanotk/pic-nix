@@ -10,8 +10,6 @@
 #include <petscksp.h>
 
 #include "chunk_accessor.hpp"
-#include "petsc_scatter.hpp"
-#include "petsc_solver.hpp"
 
 namespace elliptic
 {

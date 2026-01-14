@@ -1,4 +1,4 @@
-#include "petsc_solver.hpp"
+#include "petsc_interface.hpp"
 
 #include <cassert>
 #include <iomanip>

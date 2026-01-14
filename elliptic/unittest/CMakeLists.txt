@@ -9,7 +9,7 @@ set(UNITTEST_INCLUDE_DIRS
 set(PARALLEL_EXECS
         test_chunk_accessor
         test_petsc_scatter
-        test_petsc_solver
+        test_petsc_interface
 )
 
 set(MPIEXEC mpiexec)
@@ -41,6 +41,6 @@ add_test(NAME test_petsc_scatter_np1
 add_test(NAME test_petsc_scatter_np8
         COMMAND ${MPIEXEC} -n 8 $<TARGET_FILE:test_petsc_scatter> "[np=8]"
 )
-add_test(NAME test_petsc_solver_np1
-        COMMAND ${MPIEXEC} -n 1 $<TARGET_FILE:test_petsc_solver> "[np=1]"
+add_test(NAME test_petsc_interface_np1
+        COMMAND ${MPIEXEC} -n 1 $<TARGET_FILE:test_petsc_interface> "[np=1]"
 )

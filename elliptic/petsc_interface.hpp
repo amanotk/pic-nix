@@ -1,10 +1,10 @@
-#ifndef _PETSC_SOLVER_HPP_
-#define _PETSC_SOLVER_HPP_
+#ifndef _PETSC_INTERFACE_HPP_
+#define _PETSC_INTERFACE_HPP_
 
 #include "nix.hpp"
 #include <iomanip>
 #include <limits>
-#include <memory> // add
+#include <memory>
 #include <optional>
 #include <petscdm.h>
 #include <petscdmda.h>

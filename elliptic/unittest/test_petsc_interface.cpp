@@ -18,7 +18,7 @@
 #include <petscsys.h>
 #include <petscvec.h>
 
-#include "petsc_solver.hpp"
+#include "petsc_interface.hpp"
 #include "test_parallel_common.hpp"
 
 using namespace nix::typedefs;
@@ -28,12 +28,8 @@ struct PetscInterfaceTest final : public PetscInterface {
   using PetscInterface::apply_petsc_option;
   using PetscInterface::make_petsc_option;
 
-  PetscInterfaceTest() : PetscInterface({1, 1, 2})
-  {
-  }
-  void set_matrix(float64, float64, float64) override
-  {
-  }
+  PetscInterfaceTest() : PetscInterface({1, 1, 2}) {}
+  void set_matrix(float64, float64, float64) override {}
 };
 
 template <typename T>
@@ -72,7 +68,7 @@ bool is_option_valid(const PetscInterface::OptionVec& option, std::string key, T
   }
 
   return false;
-};
+}
 
 TEST_CASE("PetscInterface::compile", "[np=1]")
 {
