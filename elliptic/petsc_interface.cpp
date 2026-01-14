@@ -273,7 +273,6 @@ void PetscInterface::setup()
 
   // create KSP solver
   KSPCreate(PETSC_COMM_WORLD, &ksp_obj);
-  KSPSetDM(ksp_obj, dm_obj);
   KSPSetOperators(ksp_obj, matrix, matrix);
   KSPSetFromOptions(ksp_obj);
 
