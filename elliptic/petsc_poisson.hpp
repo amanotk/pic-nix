@@ -16,7 +16,7 @@ public:
   {
   }
 
-  virtual int solve() override
+  virtual int solve(ChunkAccessor& accessor) override
   {
     PetscErrorCode ierr = KSPSolve(ksp_obj, vector_src_g, vector_sol_g);
     if (ierr != PETSC_SUCCESS) {

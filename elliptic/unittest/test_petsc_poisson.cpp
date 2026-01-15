@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "petsc_poisson.hpp"
+#include "test_parallel_common.hpp"
 
 using namespace nix::typedefs;
 using nix::Dims3D;
@@ -293,7 +294,8 @@ public:
 TEST_CASE("PetscPoisson1D solver", "[np=1]")
 {
   PetscPoisson1DTest solver(64);
-  solver.solve();
+  MockChunkAccessor  accessor;
+  solver.solve(accessor);
 
   const auto err_norm = solver.get_error_norm();
   const auto res_norm = solver.get_residual_norm();
@@ -305,7 +307,8 @@ TEST_CASE("PetscPoisson1D solver", "[np=1]")
 TEST_CASE("PetscPoisson2D solver", "[np=1]")
 {
   PetscPoisson2DTest solver(32);
-  solver.solve();
+  MockChunkAccessor  accessor;
+  solver.solve(accessor);
 
   const auto err_norm = solver.get_error_norm();
   const auto res_norm = solver.get_residual_norm();
@@ -317,7 +320,8 @@ TEST_CASE("PetscPoisson2D solver", "[np=1]")
 TEST_CASE("PetscPoisson3D solver", "[np=1]")
 {
   PetscPoisson3DTest solver(16);
-  solver.solve();
+  MockChunkAccessor  accessor;
+  solver.solve(accessor);
 
   const auto err_norm = solver.get_error_norm();
   const auto res_norm = solver.get_residual_norm();

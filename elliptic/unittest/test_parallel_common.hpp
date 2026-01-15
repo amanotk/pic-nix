@@ -148,6 +148,10 @@ private:
   MockChunkVec& chunkvec;
 
 public:
+  MockChunkAccessor() : chunkvec(*(new MockChunkVec()))
+  {
+  }
+
   MockChunkAccessor(MockChunkVec& chunks) : chunkvec(chunks)
   {
   }

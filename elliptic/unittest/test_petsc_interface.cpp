@@ -37,7 +37,7 @@ struct PetscInterfaceTest final : public PetscInterface {
     return 0;
   }
 
-  int solve() override
+  int solve(elliptic::ChunkAccessor& accessor) override
   {
     return 0;
   }

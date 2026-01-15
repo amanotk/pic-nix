@@ -36,7 +36,10 @@ public:
   explicit PetscInterface(Dims3D dims);
   virtual ~PetscInterface();
 
-  virtual int solve() = 0;
+  virtual int solve(ChunkAccessor& accessor) = 0;
+  virtual int update_mapping(ChunkAccessor& accessor);
+  virtual int copy_chunk_to_src(ChunkAccessor& accessor);
+  virtual int copy_sol_to_chunk(ChunkAccessor& accessor);
 
 protected:
   Dims3D               dims;
@@ -63,9 +66,6 @@ protected:
   virtual int  scatter_forward_end();
   virtual int  scatter_reverse_begin();
   virtual int  scatter_reverse_end();
-  virtual int  update_mapping(ChunkAccessor& accessor);
-  virtual int  copy_chunk_to_src(ChunkAccessor& accessor);
-  virtual int  copy_sol_to_chunk(ChunkAccessor& accessor);
   virtual void create_dm(Dims3D dims);
   virtual void create_dm1d(Dims3D dims);
   virtual void create_dm2d(Dims3D dims);
