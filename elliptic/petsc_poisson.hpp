@@ -18,8 +18,11 @@ public:
 
   virtual int solve() override
   {
-    KSPSolve(ksp_obj, vector_src_g, vector_sol_g);
-    return 0;
+    PetscErrorCode ierr = KSPSolve(ksp_obj, vector_src_g, vector_sol_g);
+    if (ierr != PETSC_SUCCESS) {
+      ERROR << "KSPSolve failed with error code: " << ierr << std::endl;
+    }
+    return ierr;
   }
 
   float64 get_residual_norm()
