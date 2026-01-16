@@ -76,12 +76,11 @@ int PetscInterface::apply_petsc_option(const OptionVec& opts)
   // There does not seem to be a way to check valid PETSc options.
   //
   for (const auto& [key, val] : opts) {
-    const char* keystr = ("-" + key).c_str();
-    const char* valstr = val.c_str();
+    const std::string opt    = "-" + key;
 
-    PetscErrorCode ierr = PetscOptionsSetValue(NULL, keystr, valstr);
+    PetscErrorCode ierr = PetscOptionsSetValue(NULL, opt.c_str(), val.c_str());
     if (ierr != PETSC_SUCCESS) {
-      PetscPrintf(PETSC_COMM_WORLD, "failed to set PETSc option: %s, %s\n", keystr, valstr);
+      PetscPrintf(PETSC_COMM_WORLD, "failed to set PETSc option: %s\n", opt.c_str());
       return 1;
     }
   }

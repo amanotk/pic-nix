@@ -91,6 +91,7 @@ public:
     }
 
     VecRestoreArray(vector_err_g, &err);
+    VecRestoreArray(vector_sol_g, &sol);
 
     VecNorm(vector_err_g, NORM_2, &err_norm);
     VecNorm(vector_sol_g, NORM_2, &sol_norm);
