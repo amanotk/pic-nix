@@ -76,7 +76,7 @@ int PetscInterface::apply_petsc_option(const OptionVec& opts)
   // There does not seem to be a way to check valid PETSc options.
   //
   for (const auto& [key, val] : opts) {
-    const std::string opt    = "-" + key;
+    const std::string opt = "-" + key;
 
     PetscErrorCode ierr = PetscOptionsSetValue(NULL, opt.c_str(), val.c_str());
     if (ierr != PETSC_SUCCESS) {

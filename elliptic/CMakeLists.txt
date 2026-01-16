@@ -21,6 +21,7 @@ set(ELLIPTIC_INCLUDE_DIRS
 add_library(elliptic STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/petsc_interface.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/petsc_scatter.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/petsc_poisson.cpp
 )
 target_include_directories(elliptic PUBLIC ${ELLIPTIC_INCLUDE_DIRS})
 target_link_libraries(elliptic PUBLIC nix PkgConfig::PETSC)
