@@ -15,7 +15,6 @@ namespace elliptic
 {
 
 using namespace nix::typedefs;
-using nix::Dims3D;
 
 class SolverInterface
 {

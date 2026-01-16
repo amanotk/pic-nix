@@ -78,6 +78,10 @@ using float32 = float;
 using float64 = double;
 using real    = float64;
 
+// array types
+using Dims3D = std::array<int, 3>;
+using Bool3D = std::array<bool, 3>;
+
 // SIMD types
 using simd_f32 = xsimd::batch<float32>;
 using simd_f64 = xsimd::batch<float64>;
@@ -134,11 +138,6 @@ enum ArrayLayout {
   LAYOUT_RIGHT = 1, // C-style row-major order
 };
 constexpr int ARRAY_LAYOUT = LAYOUT_RIGHT;
-
-// array dimension types
-using Dims1D = std::array<int, 1>;
-using Dims2D = std::array<int, 2>;
-using Dims3D = std::array<int, 3>;
 
 ///
 /// @brief return wall clock time since epoch

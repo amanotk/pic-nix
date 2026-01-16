@@ -10,11 +10,10 @@
 
 using namespace nix;
 using namespace nix::typedefs;
-using nix::Dims3D;
 
 class MockChunk;
-using MockChunkPtr = std::unique_ptr<MockChunk>;
-using MockChunkVec = std::vector<std::unique_ptr<MockChunk>>;
+using MockChunkPtr = std::shared_ptr<MockChunk>;
+using MockChunkVec = std::vector<std::shared_ptr<MockChunk>>;
 
 // MockChunk class for testing
 class MockChunk
@@ -145,10 +144,10 @@ public:
 class MockChunkAccessor : public elliptic::ChunkAccessor
 {
 private:
-  MockChunkVec& chunkvec;
+  MockChunkVec chunkvec;
 
 public:
-  MockChunkAccessor() : chunkvec(*(new MockChunkVec()))
+  MockChunkAccessor()
   {
   }
 

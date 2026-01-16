@@ -29,7 +29,7 @@ TEST_CASE("PetscScatter::setup_indexset_local", "[np=1]")
   const int        local_size = 10;
   std::vector<int> index(local_size);
 
-  PetscScatter scatter(nullptr);
+  PetscScatter scatter(nullptr, {1, 1, 1});
 
   scatter.setup_indexset_local(index.size());
   scatter.get_indexset_local(index);
@@ -74,7 +74,7 @@ TEST_CASE("PetscScatter::setup_indexset_global", "[np=8]")
   AOApplicationToPetsc(ao_obj, static_cast<PetscInt>(index_true.size()), index_true.data());
 
   // convert index_test to PETSc ordering index
-  PetscScatter scatter(&dm_obj);
+  PetscScatter scatter(&dm_obj, global_dims);
   scatter.setup_indexset_global(index_test);
   scatter.get_indexset_global(index_test);
 
@@ -103,8 +103,9 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
   // chunkvec and global index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  MockChunkAccessor accessor(chunkvec);
-  accessor.build_global_index(index, global_dims);
+  std::vector<float64> sol_buf(index.size());
+  std::vector<float64> src_buf(index.size());
+  MockChunkAccessor    accessor(chunkvec);
 
   // DMDA
   DM dm_obj = nullptr;
@@ -114,27 +115,24 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
   DMSetUp(dm_obj);
 
   // vectors
-  Vec vec_local  = nullptr;
+  Vec vec_src    = nullptr;
+  Vec vec_sol    = nullptr;
   Vec vec_global = nullptr;
   DMCreateGlobalVector(dm_obj, &vec_global);
   VecSet(vec_global, static_cast<PetscScalar>(0.0));
 
-  // buffer for local vector
-  std::vector<float64> buf(index.size());
-  for (size_t i = 0; i < index.size(); ++i) {
-    buf[i] = index_to_val(index[i]);
-  }
-
   // perform forward scatter
   {
-    PetscScatter scatter(&dm_obj);
+    PetscScatter scatter(&dm_obj, global_dims);
 
-    scatter.setup_vector_local(buf, vec_local);
-    scatter.setup_indexset_local(index.size());
-    scatter.setup_indexset_global(index);
-    scatter.setup_scatter(vec_local, vec_global);
-    scatter.scatter_forward_begin(vec_local, vec_global);
-    scatter.scatter_forward_end(vec_local, vec_global);
+    // scatter from src_buf
+    accessor.build_global_index(index, global_dims);
+    std::transform(index.begin(), index.end(), src_buf.begin(),
+                   [index_to_val](int idx) { return index_to_val(idx); });
+
+    scatter.setup_scatter(accessor, src_buf, sol_buf, vec_src, vec_sol, vec_global);
+    scatter.scatter_forward_begin(vec_src, vec_global);
+    scatter.scatter_forward_end(vec_src, vec_global);
   }
 
   // verify results
@@ -156,7 +154,8 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
     DMDAVecRestoreArrayRead(dm_obj, vec_global, &vec);
   }
 
-  VecDestroy(&vec_local);
+  VecDestroy(&vec_src);
+  VecDestroy(&vec_sol);
   VecDestroy(&vec_global);
   DMDestroy(&dm_obj);
 }
@@ -179,8 +178,9 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
   // chunkvec and global index
   auto [index, chunkvec] =
       get_index_and_chunkvec(rank, chunk_dims, global_dims, num_chunks_per_rank);
-  MockChunkAccessor accessor(chunkvec);
-  accessor.build_global_index(index, global_dims);
+  std::vector<float64> sol_buf(index.size());
+  std::vector<float64> src_buf(index.size());
+  MockChunkAccessor    accessor(chunkvec);
 
   // DMDA
   DM dm_obj = nullptr;
@@ -190,14 +190,11 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
   DMSetUp(dm_obj);
 
   // vectors
-  Vec vec_local  = nullptr;
+  Vec vec_src    = nullptr;
+  Vec vec_sol    = nullptr;
   Vec vec_global = nullptr;
   DMCreateGlobalVector(dm_obj, &vec_global);
   VecSet(vec_global, static_cast<PetscScalar>(0.0));
-
-  // buffer for local vector
-  std::vector<float64> buf(index.size());
-  std::fill(buf.begin(), buf.end(), -1.0);
 
   // populate global vector
   {
@@ -222,24 +219,24 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
 
   // perform reverse scatter
   {
-    PetscScatter     scatter(&dm_obj);
-    std::vector<int> scatter_index(index);
+    PetscScatter scatter(&dm_obj, global_dims);
 
-    scatter.setup_vector_local(buf, vec_local);
-    scatter.setup_indexset_local(scatter_index.size());
-    scatter.setup_indexset_global(scatter_index);
-    scatter.setup_scatter(vec_local, vec_global);
-    scatter.scatter_reverse_begin(vec_local, vec_global);
-    scatter.scatter_reverse_end(vec_local, vec_global);
+    accessor.build_global_index(index, global_dims);
+    std::fill(sol_buf.begin(), sol_buf.end(), -1.0);
+
+    scatter.setup_scatter(accessor, src_buf, sol_buf, vec_src, vec_sol, vec_global);
+    scatter.scatter_reverse_begin(vec_sol, vec_global);
+    scatter.scatter_reverse_end(vec_sol, vec_global);
   }
 
   // verify results
   for (size_t i = 0; i < index.size(); ++i) {
     PetscScalar expected = index_to_val(index[i]);
-    CHECK(std::abs(buf[i] - expected) < 1.0e-10);
+    CHECK(std::abs(sol_buf[i] - expected) < 1.0e-10);
   }
 
-  VecDestroy(&vec_local);
+  VecDestroy(&vec_src);
+  VecDestroy(&vec_sol);
   VecDestroy(&vec_global);
   DMDestroy(&dm_obj);
 }

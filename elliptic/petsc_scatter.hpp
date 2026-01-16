@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "chunk_accessor.hpp"
 #include "nix.hpp"
 #include <petscdm.h>
 #include <petscdmda.h>
@@ -29,6 +30,7 @@ class PetscScatter
 {
 protected:
   DM*        dm_ptr; // reference to DM object
+  Dims3D     dims;
   VecScatter sc_obj;
   IS         is_obj_l;
   IS         is_obj_g;
@@ -37,7 +39,7 @@ private:
   int get_indexset(IS& is_obj, std::vector<int>& index);
 
 public:
-  PetscScatter(DM* dm);
+  PetscScatter(DM* dm, Dims3D dims);
   virtual ~PetscScatter();
 
   int scatter_forward_begin(Vec& src, Vec& dst);
@@ -48,12 +50,12 @@ public:
   int setup_vector_local(std::vector<float64>& buffer, Vec& vec);
   int setup_indexset_local(int size);
   int setup_indexset_global(std::vector<int>& index);
-  int setup_scatter(Vec& vec_local, Vec& vec_global);
-
+  int setup_scatter(ChunkAccessor& accessor, std::vector<float64>& src, std::vector<float64>& sol,
+                    Vec& vec_src, Vec& vec_sol, Vec& vec_global);
   int get_indexset_local(std::vector<int>& index);
   int get_indexset_global(std::vector<int>& index);
 };
 
 }; // namespace elliptic
 
-#endif // _PETSC_UTILS_HPP_
+#endif // _PETSC_SCATTER_HPP_

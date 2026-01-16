@@ -7,7 +7,6 @@
 namespace elliptic
 {
 using namespace nix::typedefs;
-using nix::Dims3D;
 
 class PetscPoisson : public PetscInterface
 {

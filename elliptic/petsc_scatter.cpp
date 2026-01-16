@@ -12,16 +12,15 @@ int PetscScatter::get_indexset(IS& is_obj, std::vector<int>& index)
   ISGetIndices(is_obj, &data);
 
   index.resize(static_cast<size_t>(size));
-  for (int i = 0; i < size; ++i) {
-    index[i] = data[i];
-  }
+  std::copy(data, data + size, index.begin());
 
   ISRestoreIndices(is_obj, &data);
 
   return 0;
 }
 
-PetscScatter::PetscScatter(DM* dm) : dm_ptr(dm), sc_obj(nullptr), is_obj_l(nullptr), is_obj_g(nullptr)
+PetscScatter::PetscScatter(DM* dm, Dims3D dims)
+    : dm_ptr(dm), dims(dims), sc_obj(nullptr), is_obj_l(nullptr), is_obj_g(nullptr)
 {
 }
 
@@ -68,7 +67,8 @@ int PetscScatter::setup_vector_local(std::vector<float64>& buffer, Vec& vec)
     VecDestroy(&vec);
   }
 
-  VecCreateSeqWithArray(PETSC_COMM_SELF, 1, static_cast<PetscInt>(buffer.size()), buffer.data(), &vec);
+  VecCreateSeqWithArray(PETSC_COMM_SELF, 1, static_cast<PetscInt>(buffer.size()), buffer.data(),
+                        &vec);
   return 0;
 }
 
@@ -99,13 +99,30 @@ int PetscScatter::setup_indexset_global(std::vector<int>& index)
   return 0;
 }
 
-int PetscScatter::setup_scatter(Vec& vec_local, Vec& vec_global)
+int PetscScatter::setup_scatter(ChunkAccessor& accessor, std::vector<float64>& src,
+                                std::vector<float64>& sol, Vec& vec_src, Vec& vec_sol,
+                                Vec& vec_global)
 {
   if (sc_obj != nullptr) {
     VecScatterDestroy(&sc_obj);
   }
 
-  VecScatterCreate(vec_local, is_obj_l, vec_global, is_obj_g, &sc_obj);
+  // build global index for the local data
+  const int        num_grids = accessor.get_num_grids_total();
+  std::vector<int> index(num_grids);
+  accessor.build_global_index(index, dims);
+
+  // setup local and global index sets
+  setup_indexset_local(static_cast<int>(index.size()));
+  setup_indexset_global(index);
+
+  // setup vectors
+  src.resize(num_grids);
+  sol.resize(num_grids);
+  setup_vector_local(src, vec_src);
+  setup_vector_local(sol, vec_sol);
+
+  VecScatterCreate(vec_src, is_obj_l, vec_global, is_obj_g, &sc_obj);
   return 0;
 }
 

@@ -21,7 +21,7 @@ TEST_CASE("ChunkAccessor::flatten_index", "[np=1]")
     return;
   }
 
-  const nix::Dims3D dims{4, 5, 6};
+  const Dims3D dims{4, 5, 6};
 
   CHECK(ChunkAccessor::flatten_index(0, 0, 0, dims) == 0);
   CHECK(ChunkAccessor::flatten_index(0, 0, 1, dims) == 1);
@@ -37,11 +37,11 @@ TEST_CASE("ChunkAccessor::build_global_index with 8 ranks", "[np=8]")
     return;
   }
 
-  const int         rank                = get_mpi_rank();
-  const int         num_chunks_per_rank = 8;
-  const nix::Dims3D global_dims{8, 12, 16};
-  const nix::Dims3D chunk_dims{2, 3, 4};
-  const int         chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
+  const int    rank                = get_mpi_rank();
+  const int    num_chunks_per_rank = 8;
+  const Dims3D global_dims{8, 12, 16};
+  const Dims3D chunk_dims{2, 3, 4};
+  const int    chunk_size = chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
 
   /// test build_global_index
   auto [index, chunkvec] =

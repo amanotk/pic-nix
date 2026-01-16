@@ -186,23 +186,7 @@ int PetscInterface::scatter_reverse_end()
 
 int PetscInterface::update_mapping(ChunkAccessor& accessor)
 {
-  const int num_grids = accessor.get_num_grids_total();
-
-  // global index for the local data
-  std::vector<int> index(num_grids);
-  accessor.build_global_index(index, dims);
-
-  // local vectors
-  src_buf.resize(num_grids);
-  sol_buf.resize(num_grids);
-  scatter->setup_vector_local(src_buf, vector_src_l);
-  scatter->setup_vector_local(sol_buf, vector_sol_l);
-
-  // scatter object
-  scatter->setup_indexset_local(index.size());
-  scatter->setup_indexset_global(index);
-  scatter->setup_scatter(vector_src_l, vector_src_g);
-
+  scatter->setup_scatter(accessor, src_buf, sol_buf, vector_src_l, vector_sol_l, vector_src_g);
   return 0;
 }
 
@@ -277,7 +261,7 @@ void PetscInterface::setup()
   KSPSetFromOptions(ksp_obj);
 
   // scatter object
-  scatter = std::make_unique<PetscScatter>(&dm_obj);
+  scatter = std::make_unique<PetscScatter>(&dm_obj, dims);
 }
 
 } // namespace elliptic
