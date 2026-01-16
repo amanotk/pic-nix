@@ -23,6 +23,7 @@ public:
   virtual int update_mapping(ChunkAccessor& accessor)    = 0;
   virtual int copy_chunk_to_src(ChunkAccessor& accessor) = 0;
   virtual int copy_sol_to_chunk(ChunkAccessor& accessor) = 0;
+  virtual int set_option(const nlohmann::json& config)   = 0;
   virtual int solve(ChunkAccessor& accessor)             = 0;
 };
 
@@ -61,6 +62,13 @@ public:
     if (interface == nullptr)
       return 1;
     return interface->copy_sol_to_chunk(accessor);
+  }
+
+  int set_option(const nlohmann::json& config)
+  {
+    if (interface == nullptr)
+      return 1;
+    return interface->set_option(config);
   }
 
   int solve(ChunkAccessor& accessor)

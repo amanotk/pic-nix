@@ -36,10 +36,11 @@ public:
   explicit PetscInterface(Dims3D dims);
   virtual ~PetscInterface();
 
+  virtual int update_mapping(ChunkAccessor& accessor) override;
+  virtual int copy_chunk_to_src(ChunkAccessor& accessor) override;
+  virtual int copy_sol_to_chunk(ChunkAccessor& accessor) override;
+  virtual int set_option(const nlohmann::json& config) override;
   virtual int solve(ChunkAccessor& accessor) = 0;
-  virtual int update_mapping(ChunkAccessor& accessor);
-  virtual int copy_chunk_to_src(ChunkAccessor& accessor);
-  virtual int copy_sol_to_chunk(ChunkAccessor& accessor);
 
 protected:
   Dims3D               dims;

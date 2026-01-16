@@ -22,6 +22,7 @@
 #include "test_parallel_common.hpp"
 
 using namespace nix::typedefs;
+using elliptic::ChunkAccessor;
 using elliptic::PetscInterface;
 
 struct PetscInterfaceTest final : public PetscInterface {
@@ -37,7 +38,7 @@ struct PetscInterfaceTest final : public PetscInterface {
     return 0;
   }
 
-  int solve(elliptic::ChunkAccessor& accessor) override
+  int solve(ChunkAccessor& accessor) override
   {
     return 0;
   }
@@ -121,4 +122,18 @@ TEST_CASE("PetscInterface::json_options", "[np=1]")
 
   REQUIRE(PetscOptionsClear(nullptr) == 0);
   REQUIRE(PetscInterfaceTest::apply_petsc_option(option) == 0);
+}
+
+TEST_CASE("PetscInterface::set_option ignores missing petsc section", "[np=1]")
+{
+  PetscInterfaceTest solver;
+  nlohmann::json     config = {{"dummy", 1}};
+  REQUIRE(solver.set_option(config) == 0);
+}
+
+TEST_CASE("PetscInterface::set_option handles empty petsc object", "[np=1]")
+{
+  PetscInterfaceTest solver;
+  nlohmann::json     config = {{"petsc", nlohmann::json::object()}};
+  REQUIRE(solver.set_option(config) == 0);
 }

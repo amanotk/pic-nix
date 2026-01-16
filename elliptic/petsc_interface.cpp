@@ -71,11 +71,16 @@ std::string PetscInterface::float_to_string(double x)
 
 int PetscInterface::apply_petsc_option(const OptionVec& opts)
 {
+  //
+  // Note:
+  // There does not seem to be a way to check valid PETSc options.
+  //
   for (const auto& [key, val] : opts) {
-    const char*    keystr = ("-" + key).c_str();
-    const char*    valstr = val.c_str();
-    PetscErrorCode ierr   = PetscOptionsSetValue(NULL, keystr, valstr);
-    if (ierr) {
+    const char* keystr = ("-" + key).c_str();
+    const char* valstr = val.c_str();
+
+    PetscErrorCode ierr = PetscOptionsSetValue(NULL, keystr, valstr);
+    if (ierr != PETSC_SUCCESS) {
       PetscPrintf(PETSC_COMM_WORLD, "failed to set PETSc option: %s, %s\n", keystr, valstr);
       return 1;
     }
@@ -198,6 +203,16 @@ int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
 int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
 {
   return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
+}
+
+int PetscInterface::set_option(const nlohmann::json& config)
+{
+  auto it = config.find("petsc");
+  if (it == config.end() || !it->is_object()) {
+    return 0;
+  }
+
+  return apply_petsc_option(make_petsc_option(*it));
 }
 
 void PetscInterface::create_dm(Dims3D dims)
