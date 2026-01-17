@@ -101,6 +101,18 @@ public:
 
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
+
+  void scatter_forward()
+  {
+    scatter_forward_begin();
+    scatter_forward_end();
+  }
+
+  void scatter_reverse()
+  {
+    scatter_reverse_begin();
+    scatter_reverse_end();
+  }
 };
 
 class PetscPoisson2DTest : public elliptic::PetscPoisson2D
@@ -328,4 +340,58 @@ TEST_CASE("PetscPoisson3D solver", "[np=1]")
 
   REQUIRE(err_norm < tolerance);
   REQUIRE(res_norm < tolerance);
+}
+
+TEST_CASE("PetscPoisson1D copy/solve/copy flow", "[np=1]")
+{
+  const int n          = 32;
+  const int num_chunks = 4;
+  const int chunk_n    = n / num_chunks;
+  REQUIRE(n % num_chunks == 0);
+  PetscPoisson1DTest solver(n);
+  const float64      delx = 1.0 / static_cast<float64>(n);
+
+  MockChunkVec chunks;
+  for (int i = 0; i < num_chunks; ++i) {
+    auto chunk = std::make_shared<MockChunk>(std::array<int, 3>{1, 1, chunk_n}.data(), i);
+    chunk->set_offset({0, 0, i * chunk_n});
+    chunks.push_back(chunk);
+  }
+
+  MockChunkAccessor accessor(chunks);
+  solver.update_mapping(accessor);
+
+  for (size_t i = 0; i < chunks.size(); ++i) {
+    auto data   = chunks[i]->get_internal_data();
+    auto offset = chunks[i]->get_offset();
+    for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+      const int     idx                = (ix - data.Lbx) + offset[2];
+      const float64 x                  = static_cast<float64>(idx) * delx;
+      data.src(data.Lbz, data.Lby, ix) = solver.get_source(x);
+    }
+  }
+
+  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
+  solver.scatter_forward();
+  REQUIRE(solver.solve() == 0);
+  solver.scatter_reverse();
+  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+
+  float64 err_norm = 0.0;
+  float64 sol_norm = 0.0;
+  for (size_t i = 0; i < chunks.size(); ++i) {
+    auto data   = chunks[i]->get_internal_data();
+    auto offset = chunks[i]->get_offset();
+    for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+      const int     idx   = (ix - data.Lbx) + offset[2];
+      const float64 x     = static_cast<float64>(idx) * delx;
+      const float64 exact = solver.get_solution(x);
+      const float64 diff  = exact - data.sol(data.Lbz, data.Lby, ix);
+      err_norm += diff * diff;
+      sol_norm += exact * exact;
+    }
+  }
+
+  err_norm = std::sqrt(err_norm / (sol_norm + 1.0e-32));
+  REQUIRE(err_norm < tolerance);
 }

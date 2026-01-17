@@ -60,16 +60,16 @@ public:
     std::fill(std::begin(offset), std::end(offset), 0);
     std::fill(std::begin(global_dims), std::end(global_dims), 0);
 
-    size_t nz = dims[2] + 2 * Nb;
+    size_t nz = dims[0] + 2 * Nb;
     size_t ny = dims[1] + 2 * Nb;
-    size_t nx = dims[0] + 2 * Nb;
+    size_t nx = dims[2] + 2 * Nb;
 
     Lbz = Nb;
-    Ubz = Lbz + dims[2] - 1;
+    Ubz = Lbz + dims[0] - 1;
     Lby = Nb;
     Uby = Lby + dims[1] - 1;
     Lbx = Nb;
-    Ubx = Lbx + dims[0] - 1;
+    Ubx = Lbx + dims[2] - 1;
 
     src.resize({nz, ny, nx});
     src.fill(0);
@@ -83,16 +83,16 @@ public:
       return;
     std::copy(d.begin(), d.begin() + 3, dims);
 
-    size_t nz = dims[2] + 2 * Nb;
+    size_t nz = dims[0] + 2 * Nb;
     size_t ny = dims[1] + 2 * Nb;
-    size_t nx = dims[0] + 2 * Nb;
+    size_t nx = dims[2] + 2 * Nb;
 
     Lbz = Nb;
-    Ubz = Lbz + dims[2] - 1;
+    Ubz = Lbz + dims[0] - 1;
     Lby = Nb;
     Uby = Lby + dims[1] - 1;
     Lbx = Nb;
-    Ubx = Lbx + dims[0] - 1;
+    Ubx = Lbx + dims[2] - 1;
 
     src.resize({nz, ny, nx});
     src.fill(0);
