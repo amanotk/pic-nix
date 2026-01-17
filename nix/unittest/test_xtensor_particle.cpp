@@ -220,9 +220,9 @@ TEST_CASE("CreateParticle")
   particle.Np = Np;
 
   // check array size
-  REQUIRE(particle.xu.size() == Np * Particle::Nc);
-  REQUIRE(particle.xv.size() == Np * Particle::Nc);
-  REQUIRE(particle.gindex.size() == Np);
+  REQUIRE(particle.xu.size() == static_cast<size_t>(particle.Np_total) * Particle::Nc);
+  REQUIRE(particle.xv.size() == static_cast<size_t>(particle.Np_total) * Particle::Nc);
+  REQUIRE(particle.gindex.size() == static_cast<size_t>(particle.Np_total));
   REQUIRE(particle.pindex.size() == Ng + 1);
   REQUIRE(particle.pcount.size() == (Ng + 1) * nix::simd_width);
 
