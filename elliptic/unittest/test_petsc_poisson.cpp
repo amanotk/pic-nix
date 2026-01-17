@@ -577,3 +577,84 @@ TEST_CASE("PetscPoisson3D copy/solve/copy flow", "[np=1]")
   err_norm = std::sqrt(err_norm / (sol_norm + 1.0e-32));
   REQUIRE(err_norm < tolerance);
 }
+
+TEST_CASE("PetscPoisson3D copy/solve/copy flow np8", "[np=8]")
+{
+  if (get_mpi_size() != 8) {
+    SUCCEED("Skipping test because of incompatible MPI rank");
+    return;
+  }
+
+  const int    n                   = 16;
+  const int    num_chunks_per_rank = 2;
+  const Dims3D global_dims{n, n, n};
+  const Dims3D chunk_dims{8, 8, 4};
+  const auto   rank_dims = get_rank_dims(chunk_dims, global_dims);
+
+  REQUIRE(rank_dims[0] * rank_dims[1] * rank_dims[2] == get_mpi_size() * num_chunks_per_rank);
+
+  PetscPoisson3DTest solver(n);
+  const float64      delx = 1.0 / static_cast<float64>(n);
+  const float64      dely = 1.0 / static_cast<float64>(n);
+  const float64      delz = 1.0 / static_cast<float64>(n);
+
+  const int         rank     = get_mpi_rank();
+  auto              chunkvec = get_chunkvec(rank, chunk_dims, rank_dims, num_chunks_per_rank);
+  MockChunkAccessor accessor(chunkvec);
+  solver.update_mapping(accessor);
+
+  for (size_t i = 0; i < chunkvec.size(); ++i) {
+    auto data   = chunkvec[i]->get_internal_data();
+    auto offset = chunkvec[i]->get_offset();
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      const int     idz = (iz - data.Lbz) + offset[0];
+      const float64 z   = static_cast<float64>(idz) * delz;
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        const int     idy = (iy - data.Lby) + offset[1];
+        const float64 y   = static_cast<float64>(idy) * dely;
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          const int     idx    = (ix - data.Lbx) + offset[2];
+          const float64 x      = static_cast<float64>(idx) * delx;
+          data.src(iz, iy, ix) = solver.get_source(x, y, z);
+        }
+      }
+    }
+  }
+
+  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
+  solver.scatter_forward();
+  REQUIRE(solver.solve() == 0);
+  solver.scatter_reverse();
+  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+
+  float64 local_err_norm = 0.0;
+  float64 local_sol_norm = 0.0;
+  for (size_t i = 0; i < chunkvec.size(); ++i) {
+    auto data   = chunkvec[i]->get_internal_data();
+    auto offset = chunkvec[i]->get_offset();
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      const int     idz = (iz - data.Lbz) + offset[0];
+      const float64 z   = static_cast<float64>(idz) * delz;
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        const int     idy = (iy - data.Lby) + offset[1];
+        const float64 y   = static_cast<float64>(idy) * dely;
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          const int     idx   = (ix - data.Lbx) + offset[2];
+          const float64 x     = static_cast<float64>(idx) * delx;
+          const float64 exact = solver.get_solution(x, y, z);
+          const float64 diff  = exact - data.sol(iz, iy, ix);
+          local_err_norm += diff * diff;
+          local_sol_norm += exact * exact;
+        }
+      }
+    }
+  }
+
+  float64 err_norm = 0.0;
+  float64 sol_norm = 0.0;
+  MPI_Allreduce(&local_err_norm, &err_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_sol_norm, &sol_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+  err_norm = std::sqrt(err_norm / (sol_norm + 1.0e-32));
+  REQUIRE(err_norm < tolerance);
+}

@@ -48,3 +48,6 @@ add_test(NAME test_petsc_interface_np1
 add_test(NAME test_petsc_poisson_np1
         COMMAND ${MPIEXEC} -n 1 $<TARGET_FILE:test_petsc_poisson> "[np=1]"
 )
+add_test(NAME test_petsc_poisson_np8
+        COMMAND ${MPIEXEC} -n 8 $<TARGET_FILE:test_petsc_poisson> "[np=8]"
+)
