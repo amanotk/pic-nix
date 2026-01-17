@@ -84,7 +84,8 @@ int PetscInterface::apply_petsc_option(const OptionVec& opts)
   for (const auto& [key, val] : opts) {
     const std::string opt = "-" + key;
 
-    PetscErrorCode ierr = PetscOptionsSetValue(NULL, opt.c_str(), val.c_str());
+    const char*    value = val.empty() ? nullptr : val.c_str();
+    PetscErrorCode ierr  = PetscOptionsSetValue(NULL, opt.c_str(), value);
     if (ierr != 0) {
       PetscPrintf(PETSC_COMM_WORLD, "failed to set PETSc option: %s\n", opt.c_str());
       return 1;
@@ -111,7 +112,10 @@ PetscInterface::OptionVec PetscInterface::make_petsc_option(const nlohmann::json
       continue;
 
     if (val.is_boolean()) {
-      option.emplace_back(key, bool_to_string(val.get<bool>()));
+      if (val.get<bool>()) {
+        option.emplace_back(key, std::string{});
+      }
+      continue;
     }
 
     if (val.is_number_integer()) {
@@ -147,7 +151,9 @@ PetscInterface::OptionVec PetscInterface::make_petsc_option(const toml::value& c
     const auto&       val = item.second;
 
     if (val.is_boolean()) {
-      option.emplace_back(key, bool_to_string(val.as_boolean()));
+      if (val.as_boolean()) {
+        option.emplace_back(key, std::string{});
+      }
       continue;
     }
 

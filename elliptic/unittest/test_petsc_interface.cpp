@@ -31,6 +31,7 @@ struct PetscInterfaceTest final : public PetscInterface {
 
   PetscInterfaceTest() : PetscInterface({1, 1, 2})
   {
+    KSPCreate(PETSC_COMM_WORLD, &ksp_obj);
   }
 
   int set_matrix() override
@@ -41,6 +42,11 @@ struct PetscInterfaceTest final : public PetscInterface {
   int solve(ChunkAccessor& accessor) override
   {
     return 0;
+  }
+
+  KSP get_ksp() const
+  {
+    return ksp_obj;
   }
 };
 
@@ -55,7 +61,7 @@ bool is_option_valid(const PetscInterface::OptionVec& option, std::string key, T
 
   for (const auto& opt : option) {
     if constexpr (is_bool) {
-      if (opt.first == key && ((val && opt.second == "true") || (!val && opt.second == "false"))) {
+      if (opt.first == key && ((val && opt.second.empty()) || (!val && opt.second == "false"))) {
         return true;
       }
     }
@@ -136,4 +142,25 @@ TEST_CASE("PetscInterface::set_option handles empty petsc object", "[np=1]")
   PetscInterfaceTest solver;
   nlohmann::json     config = {{"petsc", nlohmann::json::object()}};
   REQUIRE(solver.set_option(config) == 0);
+}
+
+TEST_CASE("PetscInterface::set_option applies ksp and pc options", "[np=1]")
+{
+  PetscInterfaceTest solver;
+  nlohmann::json     config = {
+          {"petsc", {{"ksp_type", "cg"}, {"pc_type", "none"}}},
+  };
+
+  REQUIRE(PetscOptionsClear(nullptr) == 0);
+  REQUIRE(solver.set_option(config) == 0);
+
+  const char* ksp_type = nullptr;
+  REQUIRE(KSPGetType(solver.get_ksp(), &ksp_type) == 0);
+  REQUIRE(std::string(ksp_type) == "cg");
+
+  PC          pc_obj  = nullptr;
+  const char* pc_type = nullptr;
+  REQUIRE(KSPGetPC(solver.get_ksp(), &pc_obj) == 0);
+  REQUIRE(PCGetType(pc_obj, &pc_type) == 0);
+  REQUIRE(std::string(pc_type) == "none");
 }
