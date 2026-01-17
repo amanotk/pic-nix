@@ -22,6 +22,17 @@ using nix::Dims3D;
 constexpr float64 tolerance = 1.0e-10;
 constexpr float64 ksp_rtol  = 1.0e-15;
 
+template <typename SolverT>
+void run_copy_solve_copy(SolverT& solver, MockChunkAccessor& accessor)
+{
+  solver.update_mapping(accessor);
+  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
+  solver.scatter_forward();
+  REQUIRE(solver.solve() == 0);
+  solver.scatter_reverse();
+  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+}
+
 class PetscPoisson1DTest : public elliptic::PetscPoisson1D
 {
 private:
@@ -384,7 +395,6 @@ TEST_CASE("PetscPoisson1D copy/solve/copy flow", "[np=1]")
   }
 
   MockChunkAccessor accessor(chunks);
-  solver.update_mapping(accessor);
 
   for (size_t i = 0; i < chunks.size(); ++i) {
     auto data   = chunks[i]->get_internal_data();
@@ -396,11 +406,7 @@ TEST_CASE("PetscPoisson1D copy/solve/copy flow", "[np=1]")
     }
   }
 
-  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
-  solver.scatter_forward();
-  REQUIRE(solver.solve() == 0);
-  solver.scatter_reverse();
-  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+  run_copy_solve_copy(solver, accessor);
 
   float64 err_norm = 0.0;
   float64 sol_norm = 0.0;
@@ -447,7 +453,6 @@ TEST_CASE("PetscPoisson2D copy/solve/copy flow", "[np=1]")
   }
 
   MockChunkAccessor accessor(chunks);
-  solver.update_mapping(accessor);
 
   for (size_t i = 0; i < chunks.size(); ++i) {
     auto data   = chunks[i]->get_internal_data();
@@ -463,11 +468,7 @@ TEST_CASE("PetscPoisson2D copy/solve/copy flow", "[np=1]")
     }
   }
 
-  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
-  solver.scatter_forward();
-  REQUIRE(solver.solve() == 0);
-  solver.scatter_reverse();
-  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+  run_copy_solve_copy(solver, accessor);
 
   float64 err_norm = 0.0;
   float64 sol_norm = 0.0;
@@ -525,7 +526,6 @@ TEST_CASE("PetscPoisson3D copy/solve/copy flow", "[np=1]")
   }
 
   MockChunkAccessor accessor(chunks);
-  solver.update_mapping(accessor);
 
   for (size_t i = 0; i < chunks.size(); ++i) {
     auto data   = chunks[i]->get_internal_data();
@@ -545,11 +545,7 @@ TEST_CASE("PetscPoisson3D copy/solve/copy flow", "[np=1]")
     }
   }
 
-  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
-  solver.scatter_forward();
-  REQUIRE(solver.solve() == 0);
-  solver.scatter_reverse();
-  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+  run_copy_solve_copy(solver, accessor);
 
   float64 err_norm = 0.0;
   float64 sol_norm = 0.0;
@@ -601,7 +597,6 @@ TEST_CASE("PetscPoisson3D copy/solve/copy flow np8", "[np=8]")
   const int         rank     = get_mpi_rank();
   auto              chunkvec = get_chunkvec(rank, chunk_dims, rank_dims, num_chunks_per_rank);
   MockChunkAccessor accessor(chunkvec);
-  solver.update_mapping(accessor);
 
   for (size_t i = 0; i < chunkvec.size(); ++i) {
     auto data   = chunkvec[i]->get_internal_data();
@@ -621,11 +616,7 @@ TEST_CASE("PetscPoisson3D copy/solve/copy flow np8", "[np=8]")
     }
   }
 
-  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
-  solver.scatter_forward();
-  REQUIRE(solver.solve() == 0);
-  solver.scatter_reverse();
-  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+  run_copy_solve_copy(solver, accessor);
 
   float64 local_err_norm = 0.0;
   float64 local_sol_norm = 0.0;
