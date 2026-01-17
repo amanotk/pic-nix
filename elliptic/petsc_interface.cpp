@@ -20,6 +20,11 @@ PetscInterface::PetscInterface(Dims3D dims)
 
 PetscInterface::~PetscInterface()
 {
+  destroy_petsc_objects();
+}
+
+void PetscInterface::destroy_petsc_objects()
+{
   if (ksp_obj != nullptr) {
     KSPDestroy(&ksp_obj);
   }
@@ -230,6 +235,7 @@ void PetscInterface::create_dm(Dims3D dims)
 
   if (invalid) {
     ERROR << "Invalid dimension is specified for PetscInterface::create_dm()";
+    return;
   } else if (is_1d) {
     create_dm1d(dims);
   } else if (is_2d) {
@@ -261,7 +267,12 @@ void PetscInterface::create_dm3d(Dims3D dims)
 
 void PetscInterface::setup()
 {
+  destroy_petsc_objects();
   create_dm(dims);
+  
+  if (dm_obj == nullptr) {
+    return;
+  }
 
   // create global vectors (local vectors are created in update_mapping)
   DMCreateGlobalVector(dm_obj, &vector_src_g);

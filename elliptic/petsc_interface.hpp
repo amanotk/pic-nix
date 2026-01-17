@@ -57,6 +57,7 @@ protected:
   static int         apply_petsc_option(const OptionVec& opts);
   static OptionVec   make_petsc_option(const nlohmann::json& config);
   static OptionVec   make_petsc_option(const toml::value& config);
+  void               destroy_petsc_objects();
 
   virtual int  scatter_forward_begin();
   virtual int  scatter_forward_end();

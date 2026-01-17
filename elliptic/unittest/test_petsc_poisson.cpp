@@ -32,7 +32,6 @@ public:
   {
     kx = 3 * nix::math::pi2;
 
-    setup();
     initialize_rhs();
     KSPSetTolerances(this->ksp_obj, ksp_rtol, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT);
   }
@@ -116,7 +115,6 @@ public:
     kx = 3 * nix::math::pi2;
     ky = 4 * nix::math::pi2;
 
-    setup();
     initialize_rhs();
     KSPSetTolerances(this->ksp_obj, ksp_rtol, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT);
   }
@@ -209,7 +207,6 @@ public:
     ky = 4 * nix::math::pi2;
     kz = 5 * nix::math::pi2;
 
-    setup();
     initialize_rhs();
     KSPSetTolerances(this->ksp_obj, ksp_rtol, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT);
   }
