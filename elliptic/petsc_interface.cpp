@@ -79,7 +79,7 @@ int PetscInterface::apply_petsc_option(const OptionVec& opts)
     const std::string opt = "-" + key;
 
     PetscErrorCode ierr = PetscOptionsSetValue(NULL, opt.c_str(), val.c_str());
-    if (ierr != PETSC_SUCCESS) {
+    if (ierr != 0) {
       PetscPrintf(PETSC_COMM_WORLD, "failed to set PETSc option: %s\n", opt.c_str());
       return 1;
     }
