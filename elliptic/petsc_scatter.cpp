@@ -1,5 +1,8 @@
 #include "petsc_scatter.hpp"
 
+#include <petscao.h>
+#include <petscdmda.h>
+
 namespace elliptic
 {
 

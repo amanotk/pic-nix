@@ -5,9 +5,6 @@
 #include <memory>
 
 #include "nix.hpp"
-#include <petscdm.h>
-#include <petscdmda.h>
-#include <petscksp.h>
 
 #include "chunk_accessor.hpp"
 

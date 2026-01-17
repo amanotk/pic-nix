@@ -2,20 +2,14 @@
 #ifndef _PETSC_SCATTER_HPP_
 #define _PETSC_SCATTER_HPP_
 
-#include <array>
-#include <cassert>
-#include <cstddef>
-#include <initializer_list>
-#include <memory>
-#include <type_traits>
-#include <utility>
 #include <vector>
 
 #include "chunk_accessor.hpp"
 #include "nix.hpp"
 #include <petscdm.h>
-#include <petscdmda.h>
-#include <petscksp.h>
+#include <petscis.h>
+#include <petscsys.h>
+#include <petscvec.h>
 
 // ensure compatibility
 static_assert(sizeof(PetscInt) == sizeof(int), "PetscInt and int are incompatible");

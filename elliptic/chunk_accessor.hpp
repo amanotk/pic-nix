@@ -3,7 +3,6 @@
 
 #include "nix.hpp"
 #include <cstddef>
-#include <petscsys.h>
 #include <vector>
 
 namespace elliptic

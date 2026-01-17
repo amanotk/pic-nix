@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include <petscdmda.h>
+
 #include "petsc_poisson.hpp"
 #include "test_parallel_common.hpp"
 

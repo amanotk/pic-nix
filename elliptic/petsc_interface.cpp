@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include <petscdmda.h>
 #include <petscsys.h>
 
 namespace elliptic

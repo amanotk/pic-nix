@@ -2,14 +2,9 @@
 #define _PETSC_INTERFACE_HPP_
 
 #include "nix.hpp"
-#include <iomanip>
-#include <limits>
 #include <memory>
-#include <optional>
 #include <petscdm.h>
-#include <petscdmda.h>
 #include <petscksp.h>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>

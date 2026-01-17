@@ -1,5 +1,7 @@
 #include "petsc_poisson.hpp"
 
+#include <petscdmda.h>
+
 namespace elliptic
 {
 
