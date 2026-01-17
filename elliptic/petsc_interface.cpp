@@ -217,7 +217,14 @@ int PetscInterface::set_option(const nlohmann::json& config)
     return 0;
   }
 
-  return apply_petsc_option(make_petsc_option(*it));
+  const int status = apply_petsc_option(make_petsc_option(*it));
+  if (status != 0) {
+    return status;
+  }
+  if (ksp_obj != nullptr) {
+    KSPSetFromOptions(ksp_obj);
+  }
+  return 0;
 }
 
 void PetscInterface::create_dm(Dims3D dims)
@@ -269,7 +276,7 @@ void PetscInterface::setup()
 {
   destroy_petsc_objects();
   create_dm(dims);
-  
+
   if (dm_obj == nullptr) {
     return;
   }
