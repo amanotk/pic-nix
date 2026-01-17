@@ -313,6 +313,18 @@ public:
 
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
+
+  void scatter_forward()
+  {
+    scatter_forward_begin();
+    scatter_forward_end();
+  }
+
+  void scatter_reverse()
+  {
+    scatter_reverse_begin();
+    scatter_reverse_end();
+  }
 };
 
 TEST_CASE("PetscPoisson1D solver", "[np=1]")
@@ -472,6 +484,92 @@ TEST_CASE("PetscPoisson2D copy/solve/copy flow", "[np=1]")
         const float64 diff  = exact - data.sol(data.Lbz, iy, ix);
         err_norm += diff * diff;
         sol_norm += exact * exact;
+      }
+    }
+  }
+
+  err_norm = std::sqrt(err_norm / (sol_norm + 1.0e-32));
+  REQUIRE(err_norm < tolerance);
+}
+
+TEST_CASE("PetscPoisson3D copy/solve/copy flow", "[np=1]")
+{
+  const int n            = 12;
+  const int num_chunks_x = 3;
+  const int num_chunks_y = 2;
+  const int num_chunks_z = 2;
+  const int chunk_x      = n / num_chunks_x;
+  const int chunk_y      = n / num_chunks_y;
+  const int chunk_z      = n / num_chunks_z;
+  REQUIRE(n % num_chunks_x == 0);
+  REQUIRE(n % num_chunks_y == 0);
+  REQUIRE(n % num_chunks_z == 0);
+
+  PetscPoisson3DTest solver(n);
+  const float64      delx = 1.0 / static_cast<float64>(n);
+  const float64      dely = 1.0 / static_cast<float64>(n);
+  const float64      delz = 1.0 / static_cast<float64>(n);
+
+  MockChunkVec chunks;
+  int          id = 0;
+  for (int cz = 0; cz < num_chunks_z; ++cz) {
+    for (int cy = 0; cy < num_chunks_y; ++cy) {
+      for (int cx = 0; cx < num_chunks_x; ++cx) {
+        auto chunk =
+            std::make_shared<MockChunk>(std::array<int, 3>{chunk_z, chunk_y, chunk_x}.data(), id);
+        chunk->set_offset({cz * chunk_z, cy * chunk_y, cx * chunk_x});
+        chunks.push_back(chunk);
+        ++id;
+      }
+    }
+  }
+
+  MockChunkAccessor accessor(chunks);
+  solver.update_mapping(accessor);
+
+  for (size_t i = 0; i < chunks.size(); ++i) {
+    auto data   = chunks[i]->get_internal_data();
+    auto offset = chunks[i]->get_offset();
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      const int     idz = (iz - data.Lbz) + offset[0];
+      const float64 z   = static_cast<float64>(idz) * delz;
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        const int     idy = (iy - data.Lby) + offset[1];
+        const float64 y   = static_cast<float64>(idy) * dely;
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          const int     idx    = (ix - data.Lbx) + offset[2];
+          const float64 x      = static_cast<float64>(idx) * delx;
+          data.src(iz, iy, ix) = solver.get_source(x, y, z);
+        }
+      }
+    }
+  }
+
+  REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
+  solver.scatter_forward();
+  REQUIRE(solver.solve() == 0);
+  solver.scatter_reverse();
+  REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
+
+  float64 err_norm = 0.0;
+  float64 sol_norm = 0.0;
+  for (size_t i = 0; i < chunks.size(); ++i) {
+    auto data   = chunks[i]->get_internal_data();
+    auto offset = chunks[i]->get_offset();
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      const int     idz = (iz - data.Lbz) + offset[0];
+      const float64 z   = static_cast<float64>(idz) * delz;
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        const int     idy = (iy - data.Lby) + offset[1];
+        const float64 y   = static_cast<float64>(idy) * dely;
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          const int     idx   = (ix - data.Lbx) + offset[2];
+          const float64 x     = static_cast<float64>(idx) * delx;
+          const float64 exact = solver.get_solution(x, y, z);
+          const float64 diff  = exact - data.sol(iz, iy, ix);
+          err_norm += diff * diff;
+          sol_norm += exact * exact;
+        }
       }
     }
   }
