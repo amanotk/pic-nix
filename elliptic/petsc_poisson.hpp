@@ -13,6 +13,7 @@ class PetscPoisson : public PetscInterface
 public:
   PetscPoisson(Dims3D dims, float64 delh);
 
+  virtual int solve() override;
   virtual int solve(ChunkAccessor& accessor) override;
 
   float64 get_residual_norm();

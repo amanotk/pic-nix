@@ -35,6 +35,7 @@ public:
   virtual int copy_chunk_to_src(ChunkAccessor& accessor) override;
   virtual int copy_sol_to_chunk(ChunkAccessor& accessor) override;
   virtual int set_option(const nlohmann::json& config) override;
+  virtual int solve() override               = 0;
   virtual int solve(ChunkAccessor& accessor) = 0;
 
 protected:

@@ -44,6 +44,11 @@ struct PetscInterfaceTest final : public PetscInterface {
     return 0;
   }
 
+  int solve() override
+  {
+    return 0;
+  }
+
   KSP get_ksp() const
   {
     return ksp_obj;

@@ -14,6 +14,11 @@ PetscPoisson::PetscPoisson(Dims3D dims, float64 delh)
 
 int PetscPoisson::solve(ChunkAccessor& accessor)
 {
+  return solve();
+}
+
+int PetscPoisson::solve()
+{
   PetscErrorCode ierr = KSPSolve(ksp_obj, vector_src_g, vector_sol_g);
   if (ierr != 0) {
     ERROR << "KSPSolve failed with error code: " << ierr << std::endl;
