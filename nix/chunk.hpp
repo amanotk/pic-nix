@@ -352,6 +352,18 @@ public:
     return std::pair(gzlim[0], gzlim[1]);
   }
 
+  /// @brief return global index offset
+  std::vector<int> get_offset() const
+  {
+    return {offset[0], offset[1], offset[2]};
+  }
+
+  /// @brief return number of grids
+  std::vector<int> get_dims() const
+  {
+    return {dims[0], dims[1], dims[2]};
+  }
+
   /// @brief probe incoming messages and call recv if ready
   virtual bool set_boundary_probe(int mode, bool wait)
   {
