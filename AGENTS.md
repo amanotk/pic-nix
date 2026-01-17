@@ -1,16 +1,16 @@
 # Project Instructions
 
 ## Testing
-Tests are in the `unittest` directory of `nix` and `elliptic` modules.
+Tests are in the `unittest` directory of `nix` and `elliptic` modules.  
 See the instructions below for building and running tests.
 
-- Configure
+- Configure  
   Configure with MPI compiler and enable tests as follows:
   ```
   cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
   ```
   Of course, a different compiler can be specified.
-- Build
+- Build  
   After configuration, build with:
   ```
   cmake --build build
@@ -19,7 +19,7 @@ See the instructions below for building and running tests.
   ```
   cmake --build build --clean-first
   ```
-- Test
+- Test  
   After building, run the tests with:
   ```
   ctest --test-dir build --output-on-failure
