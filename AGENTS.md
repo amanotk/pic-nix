@@ -1,11 +1,15 @@
 # Project Instructions
 
+## Coding Style
+The coding style of any C++ codes need to follow that specified by .clang-format file in the root directory. The code has to be formatted via the `clang-format` command before making a commit.
+
 ## Testing
-Tests are in the `unittest` directory of `nix` and `elliptic` modules.  
+Tests are in the `unittest` directory of the `nix` and `elliptic` modules.  
+When running test of these modules, always run configure/build/test from the module subdirectory, not the root directory.  
 See the instructions below for building and running tests.
 
 - Configure  
-  Configure with MPI compiler and enable tests as follows:
+  From the module subdirectory, configure with MPI compiler and enable tests as follows:
   ```
   cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
   ```
