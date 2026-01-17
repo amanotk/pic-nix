@@ -4,6 +4,8 @@ set(CMAKE_CXX_STANDARD 17)
 # project
 project(nix CXX)
 
+include(CTest)
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
 
 # filesystem
@@ -20,7 +22,7 @@ target_include_directories(nix PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(nix PUBLIC ${PROJECT_SOURCE_DIR}/thirdparty)
 
 # unittest
-if(ENABLE_TESTING)
+if(BUILD_TESTING)
 	enable_testing()
 	add_subdirectory(unittest)
 endif()

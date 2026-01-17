@@ -6,8 +6,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# nix
+# nix (disable nix tests while configuring elliptic)
+set(_ELLIPTIC_BUILD_TESTING ${BUILD_TESTING})
+set(BUILD_TESTING OFF)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../nix ${CMAKE_CURRENT_BINARY_DIR}/nix_build)
+set(BUILD_TESTING ${_ELLIPTIC_BUILD_TESTING})
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
@@ -26,5 +29,7 @@ add_library(elliptic STATIC
 target_include_directories(elliptic PUBLIC ${ELLIPTIC_INCLUDE_DIRS})
 target_link_libraries(elliptic PUBLIC nix PkgConfig::PETSC)
 
-enable_testing()
-add_subdirectory(unittest)
+if(ENABLE_TESTING)
+  enable_testing()
+  add_subdirectory(unittest)
+endif()
