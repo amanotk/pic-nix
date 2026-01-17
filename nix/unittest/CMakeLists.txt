@@ -32,6 +32,7 @@ set(SERIAL_EXECS
 	test_cfgparser
 	test_application
 	test_xtensor_halo3d
+	test_xtensor_packer3d
 	)
 
 add_library(obj_serial OBJECT test_serial.cpp)
