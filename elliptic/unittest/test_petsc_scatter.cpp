@@ -34,11 +34,11 @@ TEST_CASE("PetscScatter::setup_indexset_local", "[np=1]")
   scatter.setup_indexset_local(index.size());
   scatter.get_indexset_local(index);
 
-  CHECK(index.size() == static_cast<size_t>(local_size));
-  CHECK(index[0] == 0);
-  CHECK(index[1] == 1);
-  CHECK(index[5] == 5);
-  CHECK(index[9] == 9);
+  REQUIRE(index.size() == static_cast<size_t>(local_size));
+  REQUIRE(index[0] == 0);
+  REQUIRE(index[1] == 1);
+  REQUIRE(index[5] == 5);
+  REQUIRE(index[9] == 9);
 }
 
 TEST_CASE("PetscScatter::setup_indexset_global", "[np=8]")
@@ -79,7 +79,7 @@ TEST_CASE("PetscScatter::setup_indexset_global", "[np=8]")
   scatter.get_indexset_global(index_test);
 
   for (size_t i = 0; i < index_test.size(); ++i) {
-    CHECK(index_true[i] == index_test[i]);
+    REQUIRE(index_true[i] == index_test[i]);
   }
 
   DMDestroy(&dm_obj);
@@ -147,7 +147,7 @@ TEST_CASE("PetscScatter::scatter_forward_begin/end", "[np=8]")
         for (int ix = info_obj.xs; ix < info_obj.xs + info_obj.xm; ++ix) {
           int         ii       = MockChunkAccessor::flatten_index(iz, iy, ix, global_dims);
           PetscScalar expected = index_to_val(ii);
-          CHECK(std::abs(vec[iz][iy][ix] - expected) < 1.0e-10);
+          REQUIRE(std::abs(vec[iz][iy][ix] - expected) < 1.0e-10);
         }
       }
     }
@@ -232,7 +232,7 @@ TEST_CASE("PetscScatter::scatter_reverse_begin/end", "[np=8]")
   // verify results
   for (size_t i = 0; i < index.size(); ++i) {
     PetscScalar expected = index_to_val(index[i]);
-    CHECK(std::abs(sol_buf[i] - expected) < 1.0e-10);
+    REQUIRE(std::abs(sol_buf[i] - expected) < 1.0e-10);
   }
 
   VecDestroy(&vec_src);

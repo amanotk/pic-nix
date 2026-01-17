@@ -23,11 +23,11 @@ TEST_CASE("ChunkAccessor::flatten_index", "[np=1]")
 
   const Dims3D dims{4, 5, 6};
 
-  CHECK(ChunkAccessor::flatten_index(0, 0, 0, dims) == 0);
-  CHECK(ChunkAccessor::flatten_index(0, 0, 1, dims) == 1);
-  CHECK(ChunkAccessor::flatten_index(0, 1, 0, dims) == 6);
-  CHECK(ChunkAccessor::flatten_index(1, 0, 0, dims) == 30);
-  CHECK(ChunkAccessor::flatten_index(3, 4, 5, dims) == 119);
+  REQUIRE(ChunkAccessor::flatten_index(0, 0, 0, dims) == 0);
+  REQUIRE(ChunkAccessor::flatten_index(0, 0, 1, dims) == 1);
+  REQUIRE(ChunkAccessor::flatten_index(0, 1, 0, dims) == 6);
+  REQUIRE(ChunkAccessor::flatten_index(1, 0, 0, dims) == 30);
+  REQUIRE(ChunkAccessor::flatten_index(3, 4, 5, dims) == 119);
 }
 
 TEST_CASE("ChunkAccessor::build_global_index with 8 ranks", "[np=8]")
@@ -61,7 +61,7 @@ TEST_CASE("ChunkAccessor::build_global_index with 8 ranks", "[np=8]")
           int idx_local  = ChunkAccessor::flatten_index(iz, iy, ix, chunk_dims) + i * chunk_size;
           int idx_global = ChunkAccessor::flatten_index(jz, jy, jx, global_dims);
 
-          CHECK(index[idx_local] == idx_global);
+          REQUIRE(index[idx_local] == idx_global);
         }
       }
     }
