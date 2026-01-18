@@ -17,6 +17,9 @@ if(MPI_THREAD_MULTIPLE)
     add_compile_definitions(HAS_MPI_THREAD_MULTIPLE)
 endif()
 
+# tests
+option(BUILD_TESTING "Build tests" OFF)
+
 # nix
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
 
@@ -27,9 +30,9 @@ find_package(Filesystem REQUIRED)
 # explicit PIC library
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/pic ${CMAKE_CURRENT_BINARY_DIR}/pic)
 
-# build all executables in example directory
+# build all executables in pic/example directory
 option(PICNIX_BUILD_EXAMPLE "Build example" ON)
 
 if(PICNIX_BUILD_EXAMPLE)
-  add_subdirectory(example)
+  add_subdirectory(pic/example)
 endif()
