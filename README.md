@@ -3,54 +3,25 @@ A Particle-In-Cell (PIC) simulation code for collisionless space plasmas.
 This is based on the kinetic plasma simulation framework `nix`, which is included as a subtree.  
 A separate repository for `nix` can be found [here](https://github.com/amanotk/nix).
 
-# Compiling and Executing the Code
+## Contents  
+- [Build](#build)  
+  - [Clone](#clone)  
+  - [Compile](#compile)  
+- [Run](#run)  
+- [Post-processing](#post-processing)  
+  - [Environment Variable](#environment-variable)  
+  - [Python Script Dependencies](#python-script-dependencies)  
+  - [Plot](#plot)  
 
-## Environment Variable
-```
-$ export PICNIX_DIR=/some/where/pic-nix
-```
-Setting the environment variable `PICNIX_DIR` is optional, but it will be useful for running diagnostic python scripts.
+## Build
 
-## Python Script Dependencies  
-Third-party modules needed by the scripts under `script/` are listed in `script/requirements.txt`.  
-You can install them with `pip` or `uv` (both use the same file).  
-If you are new to Python environments: a virtual environment keeps project packages isolated  
-from your system Python. You can either install packages directly with `pip`/`uv`,  
-or install inside a virtual environment (`venv`). See the docs for details:  
-- https://docs.python.org/3/library/venv.html  
-- https://pip.pypa.io/en/stable/  
-- https://docs.astral.sh/uv/  
-  
-With `pip`:  
-```
-$ python -m venv picnix
-$ source picnix/bin/activate
-$ python -m pip install --upgrade pip
-$ python -m pip install -r script/requirements.txt
-```  
-With `uv`:  
-```
-$ uv venv picnix
-$ source picnix/bin/activate
-$ uv pip install -r script/requirements.txt
-```  
-`picnix` is just the environment directory name; you can rename it if you prefer.  
-Direct install without a virtual environment (installs into your current Python):  
-```
-$ python -m pip install --user -r script/requirements.txt
-```
-Or with `uv` (may require `--system` depending on your Python setup):  
-```
-$ uv pip install -r script/requirements.txt
-```  
-
-## Clone
+### Clone
 Clone the repository to a local working directory via:
 ```
 $ git clone git@github.com:amanotk/pic-nix.git
 ```
 
-## Compile
+### Compile
 The code can be compiled with `cmake`, to which a proper C++ compiler and its compiler flags should be specified.  
 The simplest way is to use a pre-configured cache file provided in `cmake` directory.  
 For instance, you can do as follows in the repository's top directory:
@@ -99,7 +70,48 @@ options:
   -?, --help       print this message
 ```
   
-## Plot
+## Post-processing
+
+### Environment Variable
+```
+$ export PICNIX_DIR=/some/where/pic-nix
+```
+Setting the environment variable `PICNIX_DIR` is necessary for running diagnostic python scripts.
+
+### Python Script Dependencies  
+Third-party modules needed by the scripts under `script/` are listed in `script/requirements.txt`.  
+You can install them with `pip` or `uv` (both use the same file).  
+If you are new to Python environments: a virtual environment keeps project packages isolated  
+from your system Python. You can either install packages directly with `pip`/`uv`,  
+or install inside a virtual environment (`venv`). See the docs for details:  
+- https://docs.python.org/3/library/venv.html  
+- https://pip.pypa.io/en/stable/  
+- https://docs.astral.sh/uv/  
+  
+With `pip`:  
+```
+$ python -m venv picnix
+$ source picnix/bin/activate
+$ python -m pip install --upgrade pip
+$ python -m pip install -r script/requirements.txt
+```  
+With `uv`:  
+```
+$ uv venv picnix
+$ source picnix/bin/activate
+$ uv pip install -r script/requirements.txt
+```  
+`picnix` is just the environment directory name; you can rename it if you prefer.  
+Direct install without a virtual environment (installs into your current Python):  
+```
+$ python -m pip install --user -r script/requirements.txt
+```
+Or with `uv` (may require `--system` depending on your Python setup):  
+```
+$ uv pip install -r script/requirements.txt
+```  
+
+### Plot
 After finishing the simulation, you can run the following command in the same directory:
 ```
 $ python batch.py data/profile.msgpack
