@@ -1,8 +1,8 @@
 enable_testing()
 
 set(UNITTEST_INCLUDE_DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../nix
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../nix/thirdparty
+        ${NIX_DIR}
+        ${NIX_DIR}/thirdparty
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 
@@ -24,7 +24,6 @@ foreach(target IN ITEMS ${PARALLEL_EXECS})
         target_include_directories(${target} PRIVATE ${UNITTEST_INCLUDE_DIRS})
         target_link_libraries(${target} PRIVATE
                 obj_parallel
-                nix
                 elliptic
                 PkgConfig::PETSC
         )

@@ -11,9 +11,11 @@ endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# nix (disable nix tests while configuring elliptic)
-set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests")
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../nix ${CMAKE_CURRENT_BINARY_DIR}/nix_build)
+# nix headers (no nix build)
+set(NIX_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../nix" CACHE PATH "Path to nix source tree")
+if(NOT EXISTS "${NIX_DIR}/nix.hpp")
+  message(FATAL_ERROR "NIX_DIR does not contain nix.hpp: ${NIX_DIR}")
+endif()
 
 option(BUILD_TESTING "Build tests" OFF)
 include(CTest)
@@ -22,8 +24,8 @@ pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 
 set(ELLIPTIC_INCLUDE_DIRS
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/../nix
-  ${CMAKE_CURRENT_SOURCE_DIR}/../nix/thirdparty
+  ${NIX_DIR}
+  ${NIX_DIR}/thirdparty
 )
 
 add_library(elliptic STATIC
@@ -32,7 +34,7 @@ add_library(elliptic STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/petsc_poisson.cpp
 )
 target_include_directories(elliptic PUBLIC ${ELLIPTIC_INCLUDE_DIRS})
-target_link_libraries(elliptic PUBLIC nix PkgConfig::PETSC)
+target_link_libraries(elliptic PUBLIC PkgConfig::PETSC)
 
 if(BUILD_TESTING)
   add_subdirectory(unittest)
