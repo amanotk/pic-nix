@@ -13,12 +13,12 @@ Markdown documents should be human-friendly (i.e., not only for AIs) with proper
 ## Directory Structure
 - `nix/` : Module for dynamic load balancing  
 - `pic/` : Module for Particle-in-Cell simulation  
+  Examples of PIC simulations are under `pic/example/`.  
 - `elliptic/` : Module for elliptic PDE solvers  
 - `script/` : Utility scripts  
-Examples of PIC simulations are under `pic/example/`.  
 
 ## Third-Party Code
-`nix/thirdparty/` should not be modified unless explicitly instructed.  
+The code under `nix/thirdparty/` should not be modified unless explicitly instructed.  
 
 ## Testing
 Tests are in the `unittest` directory of the `nix` and `elliptic` modules.  
