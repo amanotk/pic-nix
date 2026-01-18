@@ -295,8 +295,4 @@ void fill_all(T_array& array, T&& value)
 
 NIX_NAMESPACE_END
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

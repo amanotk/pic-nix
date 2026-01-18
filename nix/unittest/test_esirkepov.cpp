@@ -1274,7 +1274,3 @@ bool test_deposit3d_xsimd(T_array& xu, T_array& xv, const int Np, float64 delt, 
   return status1 && status2;
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

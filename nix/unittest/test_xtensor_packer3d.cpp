@@ -326,7 +326,3 @@ TEST_CASE("XtensorPacker3D pack_tracer packs negative IDs only")
                       Particle::get_particle_size()) == 0);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

@@ -444,7 +444,3 @@ int main(int argc, char** argv)
   return app.main();
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

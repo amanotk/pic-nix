@@ -344,8 +344,4 @@ void put_attribute(json& obj, string name, const size_t disp, const int32_t leng
 
 } // namespace nixio
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

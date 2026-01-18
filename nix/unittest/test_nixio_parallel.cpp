@@ -692,7 +692,3 @@ TEST_CASE("WriteSubarray")
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

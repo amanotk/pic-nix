@@ -142,8 +142,4 @@ public:
   virtual void push_bfd(float64 delt);
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

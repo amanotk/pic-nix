@@ -214,7 +214,3 @@ TEST_CASE("XtensorHaloParticle3D pack/unpack +x wraps particles")
   REQUIRE(wrapped == 2);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

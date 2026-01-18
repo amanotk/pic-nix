@@ -233,8 +233,4 @@ static auto interp3d(T_array& eb, T_int iz0, T_int iy0, T_int ix0, int ik, T_flo
 
 NIX_NAMESPACE_END
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

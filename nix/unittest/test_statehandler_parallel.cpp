@@ -279,7 +279,3 @@ TEST_CASE("test_save_load_chunkvec")
   app.test_save_load_chunkvec();
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

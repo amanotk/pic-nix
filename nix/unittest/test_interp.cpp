@@ -882,7 +882,3 @@ bool test_interp3d_xsimd(T_array eb, T_int iz0, T_int iy0, T_int ix0, float64 de
   return status;
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

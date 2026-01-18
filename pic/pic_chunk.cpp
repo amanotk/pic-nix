@@ -549,7 +549,3 @@ void PicChunk::push_bfd(float64 delt)
   maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

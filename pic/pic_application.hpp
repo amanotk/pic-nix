@@ -73,8 +73,4 @@ protected:
   virtual void calculate_moment_taskflow();
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

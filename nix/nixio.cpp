@@ -498,7 +498,3 @@ template void   get_attribute(json& obj, string name, size_t& disp, int32_t leng
 
 } // namespace nixio
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

@@ -27,7 +27,3 @@ TEST_CASE("Buffer resize")
   REQUIRE(buffer.size == 512);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

@@ -366,7 +366,3 @@ TEST_CASE("SortParticle3D")
   REQUIRE(check_sort3d(particle, Nx, Ny, Nz) == true);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

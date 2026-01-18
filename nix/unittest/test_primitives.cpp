@@ -2245,7 +2245,3 @@ bool test_append_moment3d_xsimd(T_array& um, T_array& vm, T_int iz0, T_int iy0, 
   }
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

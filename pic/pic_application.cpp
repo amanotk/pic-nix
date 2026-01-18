@@ -506,7 +506,3 @@ void PicApplication::calculate_moment_taskflow()
   executor.run(taskflow).wait();
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
