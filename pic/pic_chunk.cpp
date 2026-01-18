@@ -34,13 +34,6 @@ PicChunk::PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id)
   this->reset_load();
 }
 
-PicChunk::PicChunk(const int dims[3], const bool has_dim[3], int id)
-    : PicChunk(nix::Dims3D{dims[0], dims[1], dims[2]},
-               nix::Bool3D{has_dim[0], has_dim[1], has_dim[2]},
-               id)
-{
-}
-
 int64_t PicChunk::get_size_byte() const
 {
   int64_t size = 0;

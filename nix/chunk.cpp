@@ -3,11 +3,7 @@
 
 NIX_NAMESPACE_BEGIN
 
-Chunk::Chunk(Dims3D dims, Bool3D has_dim, int id) : Chunk(dims.data(), has_dim.data(), id)
-{
-}
-
-Chunk::Chunk(const int dims[3], const bool has_dim[3], int id)
+Chunk::Chunk(Dims3D dims, Bool3D has_dim, int id)
     : myid(id), delx(1.0), dely(1.0), delz(1.0), option({})
 {
   for (int i = 0; i < 3; i++) {
