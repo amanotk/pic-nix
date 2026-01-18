@@ -1,17 +1,22 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(elliptic LANGUAGES CXX)
+# project (standalone build)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  project(elliptic LANGUAGES CXX)
+endif()
 
-set(CMAKE_CXX_STANDARD 17)
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # nix (disable nix tests while configuring elliptic)
-set(_ELLIPTIC_BUILD_TESTING ${BUILD_TESTING})
-set(BUILD_TESTING OFF)
+set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests")
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../nix ${CMAKE_CURRENT_BINARY_DIR}/nix_build)
-set(BUILD_TESTING ${_ELLIPTIC_BUILD_TESTING})
 
+option(BUILD_TESTING "Build tests" OFF)
+include(CTest)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 
@@ -29,7 +34,6 @@ add_library(elliptic STATIC
 target_include_directories(elliptic PUBLIC ${ELLIPTIC_INCLUDE_DIRS})
 target_link_libraries(elliptic PUBLIC nix PkgConfig::PETSC)
 
-if(ENABLE_TESTING)
-  enable_testing()
+if(BUILD_TESTING)
   add_subdirectory(unittest)
 endif()

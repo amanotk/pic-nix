@@ -4,6 +4,9 @@ set(CMAKE_CXX_STANDARD 17)
 # project
 project(pic-nix CXX)
 
+option(BUILD_TESTING "Build tests" OFF)
+include(CTest)
+
 if(NOT DEFINED PICNIX_DIR)
   set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
@@ -17,14 +20,11 @@ if(MPI_THREAD_MULTIPLE)
     add_compile_definitions(HAS_MPI_THREAD_MULTIPLE)
 endif()
 
-# tests
-option(BUILD_TESTING "Build tests" OFF)
-
 # nix
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
 
 # Filesystem package
-set(CMAKE_MODULE_PATH ${nix_SOURCE_DIR})
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/nix")
 find_package(Filesystem REQUIRED)
 
 # explicit PIC library
