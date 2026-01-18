@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
+    branches: ["develop", "main"]
   pull_request:
+    branches: ["develop", "main"]
 
 jobs:
   build-test:
@@ -27,6 +29,11 @@ jobs:
             openmpi-bin \
             libopenmpi-dev
           sudo apt-get install -y libpetsc-real-dev || sudo apt-get install -y libpetsc-dev petsc-dev
+
+      - name: Build root
+        run: |
+          cmake -S . -B build -DCMAKE_CXX_COMPILER=mpicxx
+          cmake --build build --parallel
 
       - name: Build and test nix
         run: |
