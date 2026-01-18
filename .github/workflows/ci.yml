@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ["22.04", "24.04"]
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            pkg-config \
+            openmpi-bin \
+            libopenmpi-dev
+          sudo apt-get install -y libpetsc-real-dev || sudo apt-get install -y libpetsc-dev petsc-dev
+
+      - name: Build and test nix
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+        working-directory: nix
+
+      - name: Build and test elliptic
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+        working-directory: elliptic
