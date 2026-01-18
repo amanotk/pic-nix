@@ -9,7 +9,6 @@
 #include <iostream>
 #include <mpi.h>
 #include <ostream>
-#include <sstream>
 
 #include "nix.hpp"
 

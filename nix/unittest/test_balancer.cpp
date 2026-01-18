@@ -1,7 +1,6 @@
 // -*- C++ -*-
 
 #include "balancer.hpp"
-#include <iostream>
 
 #include "catch.hpp"
 

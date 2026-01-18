@@ -1,7 +1,6 @@
 // -*- C++ -*-
 
 #include "chunk.hpp"
-#include <iostream>
 
 #include "catch.hpp"
 

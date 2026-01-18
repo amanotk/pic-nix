@@ -1,6 +1,5 @@
 // -*- C++ -*-
 
-#include <iostream>
 #include <mpi.h>
 
 #define CATCH_CONFIG_RUNNER

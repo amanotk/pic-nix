@@ -3,7 +3,6 @@
 #include "balancer.hpp"
 #include "chunkvector.hpp"
 
-#include <iostream>
 
 #include "catch.hpp"
 

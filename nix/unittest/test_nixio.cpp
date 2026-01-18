@@ -1,7 +1,6 @@
 // -*- C++ -*-
 
 #include "nixio.hpp"
-#include <iostream>
 
 #include "catch.hpp"
 

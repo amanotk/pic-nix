@@ -1,7 +1,6 @@
 // -*- C++ -*-
 
 #include "buffer.hpp"
-#include <iostream>
 
 #include "catch.hpp"
 

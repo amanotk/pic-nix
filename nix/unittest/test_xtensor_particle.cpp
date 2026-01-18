@@ -1,7 +1,6 @@
 // -*- C++ -*-
 
 #include "xtensor_particle.hpp"
-#include <iostream>
 
 #include "catch.hpp"
 

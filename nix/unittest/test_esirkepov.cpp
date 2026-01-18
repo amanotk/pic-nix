@@ -5,7 +5,6 @@
 #include "primitives.hpp"
 
 #include <experimental/mdspan>
-#include <iostream>
 
 #include "catch.hpp"
 
