@@ -11,6 +11,39 @@ $ export PICNIX_DIR=/some/where/pic-nix
 ```
 Setting the environment variable `PICNIX_DIR` is optional, but it will be useful for running diagnostic python scripts.
 
+## Python Script Dependencies  
+Third-party modules needed by the scripts under `script/` are listed in `script/requirements.txt`.  
+You can install them with `pip` or `uv` (both use the same file).  
+If you are new to Python environments: a virtual environment keeps project packages isolated  
+from your system Python. You can either install packages directly with `pip`/`uv`,  
+or install inside a virtual environment (`venv`). See the docs for details:  
+- https://docs.python.org/3/library/venv.html  
+- https://pip.pypa.io/en/stable/  
+- https://docs.astral.sh/uv/  
+  
+With `pip`:  
+```
+$ python -m venv picnix
+$ source picnix/bin/activate
+$ python -m pip install --upgrade pip
+$ python -m pip install -r script/requirements.txt
+```  
+With `uv`:  
+```
+$ uv venv picnix
+$ source picnix/bin/activate
+$ uv pip install -r script/requirements.txt
+```  
+`picnix` is just the environment directory name; you can rename it if you prefer.  
+Direct install without a virtual environment (installs into your current Python):  
+```
+$ python -m pip install --user -r script/requirements.txt
+```
+Or with `uv` (may require `--system` depending on your Python setup):  
+```
+$ uv pip install -r script/requirements.txt
+```  
+
 ## Clone
 Clone the repository to a local working directory via:
 ```
