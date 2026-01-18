@@ -12,15 +12,13 @@ using namespace nix;
 class TestChunk : public Chunk
 {
 public:
-  static const int* defaultDims()
+  static Dims3D defaultDims()
   {
-    static const int dims[3] = {1, 1, 1};
-    return dims;
+    return Dims3D{1, 1, 1};
   }
-  static const bool* defaultHasDim()
+  static Bool3D defaultHasDim()
   {
-    static const bool has_dim[3] = {true, true, true};
-    return has_dim;
+    return Bool3D{true, true, true};
   }
 
   TestChunk() : Chunk(defaultDims(), defaultHasDim(), 0)
@@ -152,4 +150,3 @@ TEST_CASE("Chunk")
     }
   }
 }
-

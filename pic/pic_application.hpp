@@ -12,7 +12,7 @@
 class PicApplicationInterface : public nix::Application::Interface
 {
 public:
-  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) = 0;
+  virtual PtrChunk create_chunk(nix::Dims3D dims, nix::Bool3D has_dim, int id) = 0;
 
   virtual int get_num_species();
 

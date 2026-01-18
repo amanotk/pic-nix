@@ -105,6 +105,7 @@ protected:
 
 public:
   /// @brief constructor
+  Chunk(Dims3D dims, Bool3D has_dim, int id = 0);
   Chunk(const int dims[3], const bool has_dim[3], int id = 0);
 
   /// @brief destructor

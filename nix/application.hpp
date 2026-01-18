@@ -42,7 +42,7 @@ public:
   }
 
   // create chunk
-  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id)
+  virtual PtrChunk create_chunk(Dims3D dims, Bool3D has_dim, int id)
   {
     return std::make_unique<Chunk>(dims, has_dim, id);
   }

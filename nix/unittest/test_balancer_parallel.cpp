@@ -40,7 +40,7 @@ private:
   std::vector<float64> x;
 
 public:
-  MockChunk(const int dims[3], const bool has_dim[3], int id) : myid(id)
+  MockChunk(Dims3D dims, Bool3D has_dim, int id) : myid(id)
   {
     x.resize(ndata);
   }
@@ -148,7 +148,7 @@ public:
     return data;
   }
 
-  virtual PtrChunk create_chunk(const int dims[3], const bool has_dim[3], int id)
+  virtual PtrChunk create_chunk(Dims3D dims, Bool3D has_dim, int id)
   {
     return std::make_unique<MockChunk>(dims, has_dim, id);
   }
@@ -175,10 +175,11 @@ public:
   {
     ChunkVec chunkvec;
 
-    bool has_dim[3] = {true, true, true};
+    Bool3D has_dim{true, true, true};
+    Dims3D dims{ndims[0], ndims[1], ndims[2]};
 
     for (int i = boundary[thisrank], j = 0; i < boundary[thisrank + 1]; i++, j++) {
-      chunkvec.push_back(std::make_unique<MockChunk>(ndims, has_dim, i));
+      chunkvec.push_back(std::make_unique<MockChunk>(dims, has_dim, i));
       chunkvec[j]->set_load(1.0 / (boundary[thisrank + 1] - boundary[thisrank]));
     }
 
@@ -290,4 +291,3 @@ TEST_CASE("test_sendrecv_chunk", "[np=8]")
 
   balancer.test_sendrecv_chunk(boundary);
 }
-

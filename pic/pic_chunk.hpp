@@ -87,6 +87,7 @@ protected:
   ParticleVec             up; ///< list of particles
 
 public:
+  PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id = 0);
   PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
 
   virtual ~PicChunk() override = default;

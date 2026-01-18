@@ -385,7 +385,7 @@ public:
 class MainInterface : public PicApplicationInterface
 {
 public:
-  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) override
+  virtual PtrChunk create_chunk(nix::Dims3D dims, nix::Bool3D has_dim, int id) override
   {
     return std::make_unique<MainChunk>(dims, has_dim, id);
   }
@@ -443,4 +443,3 @@ int main(int argc, char** argv)
   MainApplication app(argc, argv, std::make_shared<MainInterface>());
   return app.main();
 }
-

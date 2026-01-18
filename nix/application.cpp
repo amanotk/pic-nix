@@ -260,12 +260,12 @@ void Application::setup_chunks_init()
   auto boundary = balancer->assign_initial(nprocess);
   chunkmap->set_rank_boundary(boundary);
 
-  bool has_dim[3] = {
+  Bool3D has_dim{
       (ndims[0] == 1 && cdims[0] == 1) ? false : true,
       (ndims[1] == 1 && cdims[1] == 1) ? false : true,
       (ndims[2] == 1 && cdims[2] == 1) ? false : true,
   };
-  int dims[3]{
+  Dims3D dims{
       ndims[0] / cdims[0],
       ndims[1] / cdims[1],
       ndims[2] / cdims[2],
@@ -464,4 +464,3 @@ void Application::increment_time()
 }
 
 NIX_NAMESPACE_END
-

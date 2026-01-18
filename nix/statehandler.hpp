@@ -275,12 +275,12 @@ protected:
     buffer.resize(*std::max_element(size.begin(), size.end()));
 
     // local dimensions
-    bool has_dim[3] = {
+    Bool3D has_dim{
         (data.ndims[0] == 1 && data.cdims[0] == 1) ? false : true,
         (data.ndims[1] == 1 && data.cdims[1] == 1) ? false : true,
         (data.ndims[2] == 1 && data.cdims[2] == 1) ? false : true,
     };
-    int dims[3]{
+    Dims3D dims{
         data.ndims[0] / data.cdims[0],
         data.ndims[1] / data.cdims[1],
         data.ndims[2] / data.cdims[2],

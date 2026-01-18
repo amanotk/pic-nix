@@ -10,14 +10,12 @@ using namespace nix;
 class TestChunk : public Chunk
 {
 public:
-  static const bool* defaultHasDim()
+  static Bool3D defaultHasDim()
   {
-    static const bool has_dim[3] = {true, true, true};
-    return has_dim;
+    return Bool3D{true, true, true};
   }
 
-  TestChunk(const std::array<int, 3>& dims, int boundary_margin)
-      : Chunk(dims.data(), defaultHasDim(), 0)
+  TestChunk(Dims3D dims, int boundary_margin) : Chunk(dims, defaultHasDim(), 0)
   {
     set_boundary_margin(boundary_margin);
     const int offset[3] = {0, 0, 0};
@@ -50,7 +48,7 @@ void set_neighbor_ranks(TestChunk& chunk, int dirz, int diry, int dirx)
 
 TEST_CASE("XtensorHaloField3D pack/unpack +x")
 {
-  const std::array<int, 3> dims{4, 4, 4};
+  const Dims3D dims{4, 4, 4};
   const int                nb      = GENERATE(1, 2, 3);
   const int                ncomp   = 2;
   const float64            invalid = -1.0;
@@ -108,7 +106,7 @@ TEST_CASE("XtensorHaloField3D pack/unpack +x")
 
 TEST_CASE("XtensorHaloCurrent3D pack/unpack +x adds to boundary")
 {
-  const std::array<int, 3> dims{4, 4, 4};
+  const Dims3D dims{4, 4, 4};
   const int                nb       = GENERATE(1, 2, 3);
   const int                ncomp    = 3;
   const float64            halo_val = 2.5;
@@ -213,4 +211,3 @@ TEST_CASE("XtensorHaloParticle3D pack/unpack +x wraps particles")
   }
   REQUIRE(wrapped == 2);
 }
-

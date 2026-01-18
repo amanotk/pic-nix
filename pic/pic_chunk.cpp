@@ -2,7 +2,7 @@
 #include "pic_chunk.hpp"
 #include "pic_engine.hpp"
 
-PicChunk::PicChunk(const int dims[3], const bool has_dim[3], int id)
+PicChunk::PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id)
     : base_type(dims, has_dim, id), Ns(1)
 {
   // check dimension
@@ -32,6 +32,13 @@ PicChunk::PicChunk(const int dims[3], const bool has_dim[3], int id)
   // reset load
   this->load.resize(NumLoadMode);
   this->reset_load();
+}
+
+PicChunk::PicChunk(const int dims[3], const bool has_dim[3], int id)
+    : PicChunk(nix::Dims3D{dims[0], dims[1], dims[2]},
+               nix::Bool3D{has_dim[0], has_dim[1], has_dim[2]},
+               id)
+{
 }
 
 int64_t PicChunk::get_size_byte() const
@@ -548,4 +555,3 @@ void PicChunk::push_bfd(float64 delt)
   pic_engine::Maxwell<this_type> maxwell;
   maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
-

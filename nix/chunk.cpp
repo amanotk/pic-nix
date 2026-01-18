@@ -3,6 +3,10 @@
 
 NIX_NAMESPACE_BEGIN
 
+Chunk::Chunk(Dims3D dims, Bool3D has_dim, int id) : Chunk(dims.data(), has_dim.data(), id)
+{
+}
+
 Chunk::Chunk(const int dims[3], const bool has_dim[3], int id)
     : myid(id), delx(1.0), dely(1.0), delz(1.0), option({})
 {
@@ -452,4 +456,3 @@ int Chunk::MpiBuffer::unpack(void* buffer, int address)
 }
 
 NIX_NAMESPACE_END
-
