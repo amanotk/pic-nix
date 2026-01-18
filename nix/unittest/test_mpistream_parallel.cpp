@@ -4,8 +4,13 @@
 
 #include "catch.hpp"
 
-TEST_CASE("recursively_create_directory")
+bool require_mpi_size(int expected);
+
+TEST_CASE("recursively_create_directory", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   int thisrank = 0;
   int nprocess = 0;
 
@@ -26,10 +31,17 @@ TEST_CASE("recursively_create_directory")
 
     bool status = MpiStream::create_directory_tree("foo", thisrank, nprocess, 4);
 
-    REQUIRE(status == true);
-    for (int i = 0; i < dirnames.size(); i++) {
-      REQUIRE(std::filesystem::exists(dirnames[i]) == true);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    bool ok = status;
+    if (thisrank == 0) {
+      for (int i = 0; i < dirnames.size(); i++) {
+        ok = ok && std::filesystem::exists(dirnames[i]);
+      }
     }
+    int ok_int = ok ? 1 : 0;
+    MPI_Bcast(&ok_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    REQUIRE(ok_int == 1);
   }
 
   SECTION("two level2")
@@ -39,10 +51,17 @@ TEST_CASE("recursively_create_directory")
 
     bool status = MpiStream::create_directory_tree("foo", thisrank, nprocess, 2);
 
-    REQUIRE(status == true);
-    for (int i = 0; i < dirnames.size(); i++) {
-      REQUIRE(std::filesystem::exists(dirnames[i]) == true);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    bool ok = status;
+    if (thisrank == 0) {
+      for (int i = 0; i < dirnames.size(); i++) {
+        ok = ok && std::filesystem::exists(dirnames[i]);
+      }
     }
+    int ok_int = ok ? 1 : 0;
+    MPI_Bcast(&ok_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    REQUIRE(ok_int == 1);
   }
 
   // cleanup
@@ -51,4 +70,3 @@ TEST_CASE("recursively_create_directory")
   }
   MPI_Barrier(MPI_COMM_WORLD);
 }
-

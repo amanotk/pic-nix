@@ -7,6 +7,8 @@
 
 #include "catch.hpp"
 
+bool require_mpi_size(int expected);
+
 using namespace nix;
 
 class MockChunk;
@@ -263,8 +265,11 @@ public:
   }
 };
 
-TEST_CASE("test_uppdate_global_load")
+TEST_CASE("test_uppdate_global_load", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   const int        nchunk   = 32;
   std::vector<int> boundary = {0, 5, 9, 12, 15, 19, 25, 27, 32};
 
@@ -274,8 +279,11 @@ TEST_CASE("test_uppdate_global_load")
   balancer.test_upload_global_load(boundary);
 }
 
-TEST_CASE("test_sendrecv_chunk")
+TEST_CASE("test_sendrecv_chunk", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   const int        nchunk   = 32;
   std::vector<int> boundary = {0, 5, 9, 12, 15, 19, 25, 27, 32};
 

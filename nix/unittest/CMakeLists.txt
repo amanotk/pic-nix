@@ -75,17 +75,17 @@ foreach(target IN ITEMS ${PARALLEL_EXECS})
 endforeach()
 
 add_test(NAME test_nixio_parallel
-	COMMAND mpiexec -n 8 ./test_nixio_parallel -X 2 -Y 2 -Z 2
+	COMMAND mpiexec -n 8 ./test_nixio_parallel -X 2 -Y 2 -Z 2 "[np=8]"
 	)
 
 add_test(NAME test_balancer_parallel
-	COMMAND mpiexec -n 8 ./test_balancer_parallel
+	COMMAND mpiexec -n 8 ./test_balancer_parallel "[np=8]"
 	)
 
 add_test(NAME test_mpistream_parallel
-	COMMAND mpiexec -n 8 ./test_mpistream_parallel
+	COMMAND mpiexec -n 8 ./test_mpistream_parallel "[np=8]"
 	)
 
 add_test(NAME test_statehandler_parallel
-	COMMAND mpiexec -n 8 ./test_statehandler_parallel
+	COMMAND mpiexec -n 8 ./test_statehandler_parallel "[np=8]"
 	)

@@ -9,6 +9,23 @@
 // global variable for MPI
 int options_mpi_decomposition[3];
 
+int get_mpi_size()
+{
+  int nprocess = 0;
+  MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
+  return nprocess;
+}
+
+bool require_mpi_size(int expected)
+{
+  int nprocess = get_mpi_size();
+  if (nprocess != expected) {
+    SUCCEED("Skipping test because of incompatible MPI rank");
+    return false;
+  }
+  return true;
+}
+
 int main(int argc, char** argv)
 {
   using namespace Catch::clara;

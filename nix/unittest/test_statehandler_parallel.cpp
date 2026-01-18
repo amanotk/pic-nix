@@ -6,6 +6,8 @@
 
 #include "catch.hpp"
 
+bool require_mpi_size(int expected);
+
 using namespace nix;
 
 class MockChunk;
@@ -267,14 +269,20 @@ public:
   }
 };
 
-TEST_CASE("test_save_load_application")
+TEST_CASE("test_save_load_application", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   MockApplication app;
   app.test_save_load_application();
 }
 
-TEST_CASE("test_save_load_chunkvec")
+TEST_CASE("test_save_load_chunkvec", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   MockApplication app;
   app.test_save_load_chunkvec();
 }
