@@ -30,6 +30,10 @@ jobs:
             libopenmpi-dev
           sudo apt-get install -y libpetsc-real-dev || sudo apt-get install -y libpetsc-dev petsc-dev
 
+      - name: Install Catch2 v3
+        run: |
+          script/install_catch2v3.sh "$HOME/usr"
+
       - name: Build root
         run: |
           cmake -S . -B build -DCMAKE_CXX_COMPILER=mpicxx
@@ -37,14 +41,18 @@ jobs:
 
       - name: Build and test nix
         run: |
-          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
+          export PICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
+          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
+            -DPICNIX_CATCH2_CONFIG="$PICNIX_CATCH2_CONFIG"
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
         working-directory: nix
 
       - name: Build and test elliptic
         run: |
-          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
+          export PICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
+          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
+            -DPICNIX_CATCH2_CONFIG="$PICNIX_CATCH2_CONFIG"
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
         working-directory: elliptic

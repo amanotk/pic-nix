@@ -2,7 +2,7 @@
 
 #include "mpistream.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 bool require_mpi_size(int expected);
 

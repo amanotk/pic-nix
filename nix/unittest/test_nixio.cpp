@@ -2,7 +2,7 @@
 
 #include "nixio.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 static const auto json_to_check = R"(
 {

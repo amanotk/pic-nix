@@ -5,7 +5,7 @@
 #include "chunkmap.hpp"
 #include "diag.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 using namespace nix;
 

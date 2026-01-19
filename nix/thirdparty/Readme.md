@@ -50,8 +50,3 @@ This directory contains third-party header-only libraries.
 - URL: https://github.com/kokkos/mdspan
 - Version: 0.6
 - Description: Multidimensional array view (std::experimental::mdspan).
-
-## catch.hpp
-- URL: https://github.com/catchorg/Catch2
-- Version: 2.13.9
-- Description: Unit testing framework for C++.
