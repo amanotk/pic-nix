@@ -12,3 +12,8 @@ compiler.mk
 build
 __pycache__
 .vscode
+# Test golden data
+!pic/unittest/data/*.msgpack
+pic/unittest/data/pic_chunk_smoke_2d.msgpack
+# Local notes
+notes/
