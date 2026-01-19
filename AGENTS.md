@@ -46,4 +46,6 @@ See the instructions below for building and running tests.
   ```
   ctest --test-dir build --output-on-failure
   ```
+  When running MPI tests in a sandboxed environment, use escalated permissions;  
+  otherwise PMIx can fail with `socket()` errors.  
   For a focused test run, use the `-R` option followed by the test name pattern.

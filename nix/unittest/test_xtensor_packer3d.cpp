@@ -3,7 +3,8 @@
 #include "xtensor_packer3d.hpp"
 #include "xtensor_particle.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include <array>
 #include <cstdint>
@@ -142,7 +143,7 @@ TEST_CASE("XtensorPacker3D pack_field colocates 1D field components")
   auto  expected = gather_expected_4d(colocated, 1, 1, 3, 6);
   auto* out      = reinterpret_cast<float64*>(buffer.data());
   for (size_t i = 0; i < expected.size(); ++i) {
-    REQUIRE(out[i] == Approx(expected[i]));
+    REQUIRE(out[i] == Catch::Approx(expected[i]));
   }
 }
 
@@ -180,7 +181,7 @@ TEST_CASE("XtensorPacker3D pack_field colocates 2D field components")
   auto  expected = gather_expected_4d(colocated, 1, 2, 2, 6);
   auto* out      = reinterpret_cast<float64*>(buffer.data());
   for (size_t i = 0; i < expected.size(); ++i) {
-    REQUIRE(out[i] == Approx(expected[i]));
+    REQUIRE(out[i] == Catch::Approx(expected[i]));
   }
 }
 
@@ -224,7 +225,7 @@ TEST_CASE("XtensorPacker3D pack_field colocates 3D field components")
   auto  expected = gather_expected_4d(colocated, 2, 2, 2, 6);
   auto* out      = reinterpret_cast<float64*>(buffer.data());
   for (size_t i = 0; i < expected.size(); ++i) {
-    REQUIRE(out[i] == Approx(expected[i]));
+    REQUIRE(out[i] == Catch::Approx(expected[i]));
   }
 }
 
@@ -267,7 +268,7 @@ TEST_CASE("XtensorPacker3D pack_moment decimates by averaging blocks")
   auto  expected = gather_expected_4d(expected_view, 2, 2, 2, 1);
   auto* out      = reinterpret_cast<float64*>(buffer.data());
   for (size_t i = 0; i < expected.size(); ++i) {
-    REQUIRE(out[i] == Approx(expected[i]));
+    REQUIRE(out[i] == Catch::Approx(expected[i]));
   }
 }
 

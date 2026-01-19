@@ -3,7 +3,9 @@
 #include "chunk.hpp"
 #include "xtensor_halo3d.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using namespace nix;
 
@@ -152,7 +154,7 @@ TEST_CASE("XtensorHaloCurrent3D pack/unpack +x adds to boundary")
     for (int iy = Lby; iy <= Uby; ++iy) {
       for (int ix = Ubx - nb + 1; ix <= Ubx; ++ix) {
         for (int c = 0; c < ncomp; ++c) {
-          REQUIRE(current(iz, iy, ix, c) == Approx(halo_val));
+          REQUIRE(current(iz, iy, ix, c) == Catch::Approx(halo_val));
         }
       }
     }

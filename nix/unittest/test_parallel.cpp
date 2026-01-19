@@ -3,7 +3,8 @@
 #include <mpi.h>
 
 #define CATCH_CONFIG_RUNNER
-#include "catch.hpp"
+#include <catch2/catch_session.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 // global variable for MPI
 int options_mpi_decomposition[3];
@@ -27,7 +28,7 @@ bool require_mpi_size(int expected)
 
 int main(int argc, char** argv)
 {
-  using namespace Catch::clara;
+  using namespace Catch::Clara;
 
   MPI_Init(&argc, &argv);
 

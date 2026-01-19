@@ -2,11 +2,12 @@
 
 
 #define CATCH_CONFIG_RUNNER
-#include "catch.hpp"
+#include <catch2/catch_session.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 int main(int argc, char** argv)
 {
-  using namespace Catch::clara;
+  using namespace Catch::Clara;
 
   // catch
   Catch::Session session;

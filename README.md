@@ -7,6 +7,7 @@ A separate repository for `nix` can be found [here](https://github.com/amanotk/n
 - [Build](#build)  
   - [Clone](#clone)  
   - [Compile](#compile)  
+- [Tests](#tests)  
 - [Run](#run)  
 - [Post-processing](#post-processing)  
   - [Environment Variable](#environment-variable)  
@@ -44,6 +45,10 @@ Therefore, you will find executable files `main.out` in, e.g., `build/pic/exampl
 
 See [here](https://github.com/amanotk/pic-nix/wiki/BuildingCode) for details about build configuration.
 Please also refer to [CMake Reference Documentation](https://cmake.org/cmake/help/latest/).
+
+## Tests
+Tests use Catch2 v3. If Catch2 is installed, it will be used; otherwise CMake will download it during configure.  
+To point CMake at a local Catch2 install, set `-DPICNIX_CATCH2_CONFIG=/path/to/Catch2Config.cmake`.  
 
 ## Run
 You can now execute `main.out` using `mpiexec` (or `mpirun`).  

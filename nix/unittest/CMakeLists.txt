@@ -2,6 +2,8 @@
 set(PROJECT_NAME "unittest")
 project(${PROJECT_NAME} CXX)
 
+include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
+
 set(INCLUDE_DIRS
 	${CMAKE_BINARY_DIR}/nix
 	${CMAKE_BINARY_DIR}/nix/thirdparty
@@ -38,15 +40,19 @@ set(SERIAL_EXECS
 add_library(obj_serial OBJECT test_serial.cpp)
 target_include_directories(obj_serial PRIVATE ${INCLUDE_DIRS})
 target_link_directories(obj_serial PRIVATE ${LIBRARY_DIRS})
-target_link_libraries(obj_serial nix)
+target_link_libraries(obj_serial PRIVATE Catch2::Catch2)
+target_link_libraries(obj_serial PRIVATE nix)
 
 foreach(target IN ITEMS ${SERIAL_EXECS})
 	add_executable(${target} ${target}.cpp)
 	target_include_directories(${target} PRIVATE ${INCLUDE_DIRS})
 	target_link_directories(${target} PRIVATE ${LIBRARY_DIRS})
-	target_link_libraries(${target} obj_serial)
-	target_link_libraries(${target} nix)
-	target_link_libraries(${target} std::filesystem)
+	target_link_libraries(${target} PRIVATE
+		Catch2::Catch2
+		obj_serial
+		nix
+		std::filesystem
+	)
 	add_test(NAME ${target} COMMAND ${target})
 endforeach()
 
@@ -63,15 +69,19 @@ set(PARALLEL_EXECS
 add_library(obj_parallel OBJECT test_parallel.cpp)
 target_include_directories(obj_parallel PRIVATE ${INCLUDE_DIRS})
 target_link_directories(obj_parallel PRIVATE ${LIBRARY_DIRS})
-target_link_libraries(obj_parallel nix)
+target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
+target_link_libraries(obj_parallel PRIVATE nix)
 
 foreach(target IN ITEMS ${PARALLEL_EXECS})
 	add_executable(${target} ${target}.cpp)
 	target_include_directories(${target} PRIVATE ${INCLUDE_DIRS})
 	target_link_directories(${target} PRIVATE ${LIBRARY_DIRS})
-	target_link_libraries(${target} obj_parallel)
-	target_link_libraries(${target} nix)
-	target_link_libraries(${target} std::filesystem)
+	target_link_libraries(${target} PRIVATE
+		Catch2::Catch2
+		obj_parallel
+		nix
+		std::filesystem
+	)
 endforeach()
 
 add_test(NAME test_nixio_parallel

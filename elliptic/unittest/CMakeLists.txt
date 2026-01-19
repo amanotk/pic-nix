@@ -1,5 +1,7 @@
 enable_testing()
 
+include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
+
 set(UNITTEST_INCLUDE_DIRS
         ${NIX_DIR}
         ${NIX_DIR}/thirdparty
@@ -17,12 +19,14 @@ set(MPIEXEC mpiexec)
 
 add_library(obj_parallel OBJECT test_parallel.cpp)
 target_include_directories(obj_parallel PRIVATE ${UNITTEST_INCLUDE_DIRS})
+target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
 target_link_libraries(obj_parallel PRIVATE PkgConfig::PETSC)
 
 foreach(target IN ITEMS ${PARALLEL_EXECS})
         add_executable(${target} ${target}.cpp)
         target_include_directories(${target} PRIVATE ${UNITTEST_INCLUDE_DIRS})
         target_link_libraries(${target} PRIVATE
+                Catch2::Catch2
                 obj_parallel
                 elliptic
                 PkgConfig::PETSC
