@@ -1,4 +1,3 @@
-compiler.mk
 *.o
 *.d
 *.a
@@ -9,11 +8,10 @@ compiler.mk
 *.mp4
 *.stdout
 *.stderr
-build*
 __pycache__
+# typical build directories
+build*
+# VSCode settings
 .vscode
-# Test golden data
-!pic/unittest/testdata/*.msgpack
-pic/unittest/testdata/pic_chunk_smoke_2d.msgpack
 # Local notes
-notes/
+notes

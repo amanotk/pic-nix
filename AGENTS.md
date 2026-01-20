@@ -31,15 +31,24 @@ See the instructions below for building and running tests.
   ```
   cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
   ```
-  Of course, a different compiler can be specified.
+  Of course, a different compiler can be specified.  
+  On typical linux systems with GCC, use `cmake/linux-gcc.cmake` file for better optimization:
+  ```
+  cmake -S . -B build -DBUILD_TESTING=ON -C cmake/linux-gcc.cmake
+  ```
+  Configuration for Intel oneAPI compilers is also available via `cmake/linux-intel.cmake`.
 - Build  
   After configuration, build with:
   ```
   cmake --build build --parallel
   ```
-  For a clean build, you can add the `--clean-first` option.
+  For a clean build, you can add the `--clean-first` option.  
   ```
   cmake --build build --clean-first --parallel
+  ```
+  On some systems including WSL2, you may need to limit the number of parallel jobs for stability:
+  ```
+  cmake --build build --parallel 4
   ```
 - Test  
   After building, run the tests with:
