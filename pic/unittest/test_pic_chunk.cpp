@@ -180,13 +180,13 @@ SmokeParticleDiagnostics smoke_particle_from_json(const json& j)
 
 std::filesystem::path smoke_field_golden_path(const std::string& tag)
 {
-  return std::filesystem::path(__FILE__).parent_path() / "data" /
+  return std::filesystem::path(__FILE__).parent_path() / "testdata" /
          ("pic_chunk_smoke_" + tag + "_field.msgpack");
 }
 
 std::filesystem::path smoke_particle_golden_path(const std::string& tag)
 {
-  return std::filesystem::path(__FILE__).parent_path() / "data" /
+  return std::filesystem::path(__FILE__).parent_path() / "testdata" /
          ("pic_chunk_smoke_" + tag + "_particle.msgpack");
 }
 
