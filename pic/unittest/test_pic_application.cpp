@@ -315,6 +315,19 @@ std::filesystem::path write_config_for_size(int nprocess, int rank)
   return config_path;
 }
 
+void cleanup_tmpdir(int rank)
+{
+  const char* tmpdir_env = std::getenv("PICNIX_TMPDIR");
+  if (tmpdir_env == nullptr) {
+    return;
+  }
+
+  if (rank == 0) {
+    std::error_code ec;
+    std::filesystem::remove_all(tmpdir_env, ec);
+  }
+}
+
 TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
 {
   int nprocess = get_mpi_size();
@@ -346,4 +359,6 @@ TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
   if (rank == 0) {
     std::filesystem::remove(config_path);
   }
+  MPI_Barrier(MPI_COMM_WORLD);
+  cleanup_tmpdir(rank);
 }
