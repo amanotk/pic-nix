@@ -34,7 +34,7 @@ jobs:
         run: |
           script/install_catch2v3.sh "$HOME/usr"
 
-      - name: Build, and test
+      - name: Build and test
         run: |
           export PICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
           cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
