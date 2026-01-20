@@ -1,5 +1,7 @@
 // -*- C++ -*-
 
+#include "test_parallel.hpp"
+
 #include <mpi.h>
 
 #define CATCH_CONFIG_RUNNER
@@ -11,6 +13,13 @@ int get_mpi_size()
   int nprocess = 0;
   MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
   return nprocess;
+}
+
+int get_mpi_rank()
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  return rank;
 }
 
 bool require_mpi_size(int expected)
