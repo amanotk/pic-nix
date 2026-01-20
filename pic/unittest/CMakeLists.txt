@@ -57,7 +57,7 @@ add_test(NAME test_pic_application_np8_prepare
 add_test(NAME test_pic_application_np1
   COMMAND ${CMAKE_COMMAND} -E env PICNIX_TMPDIR=${PIC_TMPDIR_NP1}
     ${MPIEXEC} -n 1 $<TARGET_FILE:run_pic_application>
-    -c ${CMAKE_CURRENT_LIST_DIR}/config_np1.toml
+    -c ${CMAKE_CURRENT_LIST_DIR}/testdata/run_pic_application_np1.toml
     -t 0.5
 )
 set_tests_properties(test_pic_application_np1
@@ -66,7 +66,7 @@ set_tests_properties(test_pic_application_np1
 add_test(NAME test_pic_application_np8
   COMMAND ${CMAKE_COMMAND} -E env PICNIX_TMPDIR=${PIC_TMPDIR_NP8}
     ${MPIEXEC} -n 8 $<TARGET_FILE:run_pic_application>
-    -c ${CMAKE_CURRENT_LIST_DIR}/config_np8.toml
+    -c ${CMAKE_CURRENT_LIST_DIR}/testdata/run_pic_application_np8.toml
     -t 0.5
 )
 set_tests_properties(test_pic_application_np8

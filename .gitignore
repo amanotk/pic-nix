@@ -13,7 +13,7 @@ build*
 __pycache__
 .vscode
 # Test golden data
-!pic/unittest/data/*.msgpack
-pic/unittest/data/pic_chunk_smoke_2d.msgpack
+!pic/unittest/testdata/*.msgpack
+pic/unittest/testdata/pic_chunk_smoke_2d.msgpack
 # Local notes
 notes/
