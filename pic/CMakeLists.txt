@@ -1,26 +1,24 @@
+cmake_minimum_required(VERSION 3.14)
+
 # project (standalone build)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   project(pic CXX)
-cmake_minimum_required(VERSION 3.14)
-set(CMAKE_CXX_STANDARD 17)
-
-  if(NOT DEFINED PICNIX_DIR)
-    set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
-  endif()
-
-  set(BUILD_TESTING_PIC ${BUILD_TESTING})
-  set(BUILD_TESTING OFF)
-  set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests" FORCE)
-  add_subdirectory(${PICNIX_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
-  set(BUILD_TESTING ${BUILD_TESTING_PIC})
+  option(BUILD_TESTING "Build tests" OFF)
+  include(CTest)
 endif()
 
 if(NOT DEFINED CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
-option(BUILD_TESTING "Build tests" OFF)
-include(CTest)
+if(NOT DEFINED PICNIX_DIR)
+  set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
+endif()
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests" FORCE)
+  add_subdirectory(${PICNIX_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
+endif()
 
 # build static library
 add_library(pic STATIC pic_chunk.cpp pic_application.cpp)

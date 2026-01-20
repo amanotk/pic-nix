@@ -35,11 +35,11 @@ See the instructions below for building and running tests.
 - Build  
   After configuration, build with:
   ```
-  cmake --build build
+  cmake --build build --parallel
   ```
   For a clean build, you can add the `--clean-first` option.
   ```
-  cmake --build build --clean-first
+  cmake --build build --clean-first --parallel
   ```
 - Test  
   After building, run the tests with:
@@ -49,3 +49,12 @@ See the instructions below for building and running tests.
   When running MPI tests in a sandboxed environment, use escalated permissions;  
   otherwise PMIx can fail with `socket()` errors.  
   For a focused test run, use the `-R` option followed by the test name pattern.
+
+### PIC integration test
+The PIC integration test is `test_pic_application` (MPI/Catch2).  
+It runs with `np=1` and `np=8` and creates a temporary base directory under `PICNIX_TMPDIR`,  
+which it cleans up inside the test code after completion.  
+To run only these tests:
+```
+ctest --test-dir build -R test_pic_application --output-on-failure
+```

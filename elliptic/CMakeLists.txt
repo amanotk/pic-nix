@@ -17,8 +17,10 @@ if(NOT EXISTS "${NIX_DIR}/nix.hpp")
   message(FATAL_ERROR "NIX_DIR does not contain nix.hpp: ${NIX_DIR}")
 endif()
 
-option(BUILD_TESTING "Build tests" OFF)
-include(CTest)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  option(BUILD_TESTING "Build tests" OFF)
+  include(CTest)
+endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 
