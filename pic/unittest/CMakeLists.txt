@@ -11,8 +11,6 @@ set(INCLUDE_DIRS
   ${CMAKE_CURRENT_LIST_DIR}/../../nix/thirdparty
   )
 
-set(PIC_TESTDATA_DIR ${CMAKE_CURRENT_LIST_DIR}/testdata)
-
 # helpers
 function(add_mpi_test name target nproc tmpdir)
   add_test(NAME ${name}_prepare
@@ -75,34 +73,9 @@ target_link_libraries(test_pic_application PRIVATE
   nix
 )
 
-# executable
-add_executable(run_pic_application run_pic_application.cpp)
-target_include_directories(run_pic_application PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(run_pic_application pic nix)
-
-
 set(MPIEXEC mpiexec)
-set(PIC_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_np1)
-set(PIC_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_np8)
 set(PIC_IFACE_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np1)
 set(PIC_IFACE_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np8)
-add_mpi_test_with_cleanup(
-  run_pic_application_np1
-  run_pic_application
-  1
-  ${PIC_TMPDIR_NP1}
-  -c ${PIC_TESTDATA_DIR}/run_pic_application_np1.toml
-  -t 0.5
-)
-add_mpi_test_with_cleanup(
-  run_pic_application_np8
-  run_pic_application
-  8
-  ${PIC_TMPDIR_NP8}
-  -c ${PIC_TESTDATA_DIR}/run_pic_application_np8.toml
-  -t 0.5
-)
-
 add_mpi_test(
   test_pic_application_np1
   test_pic_application
