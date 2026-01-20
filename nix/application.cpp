@@ -134,15 +134,14 @@ void Application::initialize_mpi(int* argc, char*** argv)
 
     if (mpi_initialized == 0) {
       MPI_Init_thread(argc, argv, thread_required, &thread_provided);
-      mpi_initialized_by_app = true;
-      is_mpi_init_already_called = true;
+      is_mpi_init_called_by_me = true;
     } else {
       MPI_Query_thread(&thread_provided);
     }
 
     if (thread_provided < thread_required) {
       ERROR << tfm::format("Your MPI does not support required thread level!");
-      if (mpi_initialized_by_app) {
+      if (is_mpi_init_called_by_me) {
         MPI_Finalize();
       }
       exit(-1);
@@ -187,7 +186,7 @@ void Application::finalize_mpi()
   MpiStream::finalize();
   Diag::finalize();
 
-  if (mpi_initialized_by_app) {
+  if (is_mpi_init_called_by_me) {
     MPI_Finalize();
   }
 }

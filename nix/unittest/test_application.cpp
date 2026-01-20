@@ -57,8 +57,6 @@ class TestApplication : public Application
 public:
   TestApplication() : Application()
   {
-    is_mpi_init_already_called = true;
-
     std::ofstream ofs(config_filename);
     ofs << config_content;
 
