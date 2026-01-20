@@ -1,0 +1,32 @@
+[application]
+  [application.option]
+    seed_type = 'fixed'
+
+[parameter]
+  Nx = 4
+  Ny = 4
+  Nz = 4
+  Cx = 2
+  Cy = 2
+  Cz = 2
+  Ex = 0.0
+  Ey = 0.0
+  Ez = 0.0
+  Bx = 0.0
+  By = 0.0
+  Bz = 0.0
+  Ns = 1
+  cc = 1.0
+  delt = 0.1
+  delh = 1.0
+
+[[parameter.particle]]
+  np = 1
+  qm = -1.0
+  ro = 1.0
+  vt = 0.0
+
+[[diagnostic]]
+  name = 'history'
+  begin = 1
+  interval = 1000000

@@ -9,7 +9,7 @@ compiler.mk
 *.mp4
 *.stdout
 *.stderr
-build
+build*
 __pycache__
 .vscode
 # Test golden data
