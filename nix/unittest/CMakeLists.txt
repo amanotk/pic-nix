@@ -32,7 +32,6 @@ set(SERIAL_EXECS
 	test_mpistream
 	test_argparser
 	test_cfgparser
-	test_application
 	test_xtensor_halo3d
 	test_xtensor_packer3d
 	)
@@ -55,6 +54,19 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
 	)
 	add_test(NAME ${target} COMMAND ${target})
 endforeach()
+
+add_executable(test_application test_application.cpp)
+target_include_directories(test_application PRIVATE ${INCLUDE_DIRS})
+target_link_directories(test_application PRIVATE ${LIBRARY_DIRS})
+target_link_libraries(test_application PRIVATE
+	Catch2::Catch2
+	obj_serial
+	nix
+	std::filesystem
+)
+add_test(NAME test_application
+	COMMAND mpiexec -n 1 ./test_application
+	)
 
 #
 # parallel testing

@@ -74,10 +74,14 @@ public:
   void test_main()
   {
     std::vector<std::string> args = {"./a.out", "-c", "config.json", "--emax", "1"};
-    std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+    std::vector<char*> argv;
+    argv.reserve(args.size());
+    for (auto& arg : args) {
+      argv.push_back(arg.data());
+    }
 
     cl_argc = argv.size();
-    cl_argv = const_cast<char**>(&argv[0]);
+    cl_argv = argv.data();
 
     REQUIRE(main() == 0);
 
@@ -90,4 +94,3 @@ TEST_CASE_METHOD(TestApplication, "test_main")
 {
   test_main();
 }
-

@@ -7,13 +7,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-bool require_mpi_size(int expected);
+#include "test_parallel.hpp"
 
 using nixio::float32;
 using nixio::float64;
 
-// MPI option from command line
-extern int options_mpi_decomposition[];
 
 static const char          filename[] = "test_nixio_parallel_data.dat";
 static const size_t        Nx         = 4;
@@ -717,4 +715,3 @@ TEST_CASE("WriteSubarray", "[np=8]")
   }
   MPI_Barrier(MPI_COMM_WORLD);
 }
-

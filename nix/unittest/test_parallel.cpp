@@ -1,6 +1,11 @@
 // -*- C++ -*-
 
+#include "test_parallel.hpp"
+
+#include "nix.hpp"
+
 #include <mpi.h>
+#include <iostream>
 
 #define CATCH_CONFIG_RUNNER
 #include <catch2/catch_session.hpp>
@@ -14,6 +19,13 @@ int get_mpi_size()
   int nprocess = 0;
   MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
   return nprocess;
+}
+
+int get_mpi_rank()
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  return rank;
 }
 
 bool require_mpi_size(int expected)
@@ -30,7 +42,13 @@ int main(int argc, char** argv)
 {
   using namespace Catch::Clara;
 
-  MPI_Init(&argc, &argv);
+  int thread_provided = -1;
+  MPI_Init_thread(&argc, &argv, NIX_MPI_THREAD_LEVEL, &thread_provided);
+  if (thread_provided < NIX_MPI_THREAD_LEVEL) {
+    std::cerr << "MPI thread level is insufficient for tests." << std::endl;
+    MPI_Finalize();
+    return 1;
+  }
 
   // catch
   Catch::Session session;
@@ -46,6 +64,7 @@ int main(int argc, char** argv)
 
   int returnCode = session.applyCommandLine(argc, argv);
   if (returnCode != 0) {
+    MPI_Finalize();
     return returnCode;
   }
 

@@ -1,8 +1,6 @@
 // -*- C++ -*-
 
 #include "argparser.hpp"
-#include "diag.hpp"
-#include "mpistream.hpp"
 #include "nix/random.hpp"
 #include "pic_application.hpp"
 #include "pic_chunk.hpp"
@@ -26,91 +24,6 @@ public:
   using PicApplication::PicApplication;
 
 protected:
-  void initialize(int argc, char** argv) override
-  {
-    curstep = 0;
-    curtime = 0.0;
-
-    argparser = create_argparser();
-    argparser->parse_check(argc, argv);
-
-    cfgparser = create_cfgparser();
-    cfgparser->parse_file(argparser->get_config());
-
-    int mpi_initialized = 0;
-    MPI_Initialized(&mpi_initialized);
-    REQUIRE(mpi_initialized != 0);
-
-    nthread = nix::get_max_threads();
-
-    MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
-    MPI_Comm_rank(MPI_COMM_WORLD, &thisrank);
-
-    wclock = nix::wall_clock();
-    MPI_Bcast(&wclock, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    initialize_base_directory();
-
-    json        config            = cfgparser->get_application();
-    std::string path              = "";
-    int         max_files_per_dir = 1000;
-
-    if (config.contains("mpistream") == false) {
-      MpiStream::initialize(path, max_files_per_dir);
-    } else if (config["mpistream"].is_object() == true) {
-      namespace fs = std::filesystem;
-      config            = config["mpistream"];
-      path              = fs::path(get_basedir()) / config.value("path", path);
-      max_files_per_dir = config.value("max_files_per_dir", max_files_per_dir);
-      MpiStream::initialize(path, max_files_per_dir);
-    } else if (config["mpistream"] == false) {
-    } else {
-    }
-
-    statehandler = create_statehandler();
-    balancer     = create_balancer();
-    logger       = create_logger();
-    chunkmap     = create_chunkmap();
-
-    initialize_debugprinting();
-    initialize_dimensions();
-    initialize_domain();
-    initialize_diagnostic();
-
-    Ns = cfgparser->get_parameter()["Ns"];
-    for (int mode = 0; mode < NumBoundaryMode; mode++) {
-      for (int iz = 0; iz < 3; iz++) {
-        for (int iy = 0; iy < 3; iy++) {
-          for (int ix = 0; ix < 3; ix++) {
-            MPI_Comm_dup(MPI_COMM_WORLD, &mpicommvec(mode, iz, iy, ix));
-          }
-        }
-      }
-    }
-  }
-
-  void finalize() override
-  {
-    for (int mode = 0; mode < NumBoundaryMode; mode++) {
-      for (int iz = 0; iz < 3; iz++) {
-        for (int iy = 0; iy < 3; iy++) {
-          for (int ix = 0; ix < 3; ix++) {
-            MPI_Comm_free(&mpicommvec(mode, iz, iy, ix));
-          }
-        }
-      }
-    }
-
-    logger->flush();
-
-    if (argparser->get_save() != "") {
-      statehandler->save(get_interface(), argparser->get_save());
-    }
-
-    MpiStream::finalize();
-    nix::Diag::finalize();
-  }
-
   float64 get_available_etime() override
   {
     if (curstep >= 1) {
