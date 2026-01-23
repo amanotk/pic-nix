@@ -10,6 +10,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <vector>
 
 namespace
@@ -91,6 +92,23 @@ struct SmokeParticleDiagnostics {
 struct SmokeFieldDiagnostics {
   float64 e_energy;
   float64 b_energy;
+};
+
+struct SmokeDiagnostics {
+  SmokeFieldDiagnostics    field;
+  SmokeParticleDiagnostics particle;
+};
+
+struct SmokeState {
+  SmokeDiagnostics             diag;
+  std::vector<float64>         uf;
+  std::vector<float64>         uj;
+  std::vector<float64>         ff;
+  std::vector<std::vector<float64>> xu;
+  std::vector<std::vector<float64>> xv;
+  std::vector<std::vector<int32>>   gindex;
+  std::vector<std::vector<int32>>   pindex;
+  std::vector<std::vector<int32>>   pcount;
 };
 
 SmokeFieldDiagnostics compute_smoke_field(const PicChunk::DataContainer& data)
@@ -230,18 +248,54 @@ std::string smoke_tag_for_options(const SmokeOptions& options)
          "_" + options.interpolation;
 }
 
-void apply_uniform_field(PicChunk::DataContainer& data, const std::array<float64, 6>& field)
+float64 sinusoidal_mode1(float64 coord, float64 min, float64 length)
 {
+  if (length <= 0.0) {
+    return 0.0;
+  }
+  const float64 two_pi = 2.0 * std::acos(-1.0);
+  return std::sin(two_pi * (coord - min) / length);
+}
+
+void apply_sinusoidal_field(PicChunk::DataContainer& data, const nix::Bool3D& has_dim,
+                            const std::array<float64, 6>& field)
+{
+  const float64 ex = field[0];
+  const float64 ey = field[1];
+  const float64 ez = field[2];
+  const float64 bx_amp = field[3];
+  const float64 by_amp = field[4];
+  const float64 bz_amp = field[5];
+
+  const float64 xmin = data.xlim[0];
+  const float64 ymin = data.ylim[0];
+  const float64 zmin = data.zlim[0];
+  const float64 lx   = has_dim[2] ? data.xlim[1] - data.xlim[0] : 0.0;
+  const float64 ly   = has_dim[1] ? data.ylim[1] - data.ylim[0] : 0.0;
+  const float64 lz   = has_dim[0] ? data.zlim[1] - data.zlim[0] : 0.0;
+
   auto shape = data.uf.shape();
   for (size_t iz = 0; iz < shape[0]; iz++) {
     for (size_t iy = 0; iy < shape[1]; iy++) {
       for (size_t ix = 0; ix < shape[2]; ix++) {
-        data.uf(iz, iy, ix, 0) = field[0];
-        data.uf(iz, iy, ix, 1) = field[1];
-        data.uf(iz, iy, ix, 2) = field[2];
-        data.uf(iz, iy, ix, 3) = field[3];
-        data.uf(iz, iy, ix, 4) = field[4];
-        data.uf(iz, iy, ix, 5) = field[5];
+        const float64 x =
+            xmin + (static_cast<float64>(ix) - data.Lbx + 0.5) * data.delx;
+        const float64 y =
+            ymin + (static_cast<float64>(iy) - data.Lby + 0.5) * data.dely;
+        const float64 z =
+            zmin + (static_cast<float64>(iz) - data.Lbz + 0.5) * data.delz;
+        const float64 bx =
+            has_dim[2] ? bx_amp * sinusoidal_mode1(x, xmin, lx) : 0.0;
+        const float64 by =
+            has_dim[1] ? by_amp * sinusoidal_mode1(y, ymin, ly) : 0.0;
+        const float64 bz =
+            has_dim[0] ? bz_amp * sinusoidal_mode1(z, zmin, lz) : 0.0;
+        data.uf(iz, iy, ix, 0) = ex;
+        data.uf(iz, iy, ix, 1) = ey;
+        data.uf(iz, iy, ix, 2) = ez;
+        data.uf(iz, iy, ix, 3) = bx;
+        data.uf(iz, iy, ix, 4) = by;
+        data.uf(iz, iy, ix, 5) = bz;
       }
     }
   }
@@ -354,7 +408,71 @@ void compare_smoke(const std::string& case_tag, const std::string& option_tag,
   REQUIRE(particle_diag.sum_uz == approx(expected_particle.sum_uz));
 }
 
-void run_smoke_case(const SmokeCase& smoke_case, const SmokeOptions& options)
+void compare_smoke_diagnostics(const SmokeDiagnostics& actual, const SmokeDiagnostics& expected)
+{
+  auto approx = [](float64 value) { return Catch::Approx(value).epsilon(1.0e-12).margin(1.0e-14); };
+
+  REQUIRE(actual.field.e_energy == approx(expected.field.e_energy));
+  REQUIRE(actual.field.b_energy == approx(expected.field.b_energy));
+  REQUIRE(actual.particle.sum_rho == approx(expected.particle.sum_rho));
+  REQUIRE(actual.particle.sum_jx == approx(expected.particle.sum_jx));
+  REQUIRE(actual.particle.sum_jy == approx(expected.particle.sum_jy));
+  REQUIRE(actual.particle.sum_jz == approx(expected.particle.sum_jz));
+  REQUIRE(actual.particle.sum_x == approx(expected.particle.sum_x));
+  REQUIRE(actual.particle.sum_y == approx(expected.particle.sum_y));
+  REQUIRE(actual.particle.sum_z == approx(expected.particle.sum_z));
+  REQUIRE(actual.particle.sum_ux == approx(expected.particle.sum_ux));
+  REQUIRE(actual.particle.sum_uy == approx(expected.particle.sum_uy));
+  REQUIRE(actual.particle.sum_uz == approx(expected.particle.sum_uz));
+}
+
+template <typename T>
+std::vector<typename T::value_type> copy_flat(const T& array)
+{
+  return {array.data(), array.data() + array.size()};
+}
+
+SmokeState capture_smoke_state(const PicChunk::DataContainer& data)
+{
+  SmokeState state = {};
+  state.diag.field    = compute_smoke_field(data);
+  state.diag.particle = compute_smoke_particle(data);
+  state.uf            = copy_flat(data.uf);
+  state.uj            = copy_flat(data.uj);
+  state.ff            = copy_flat(data.ff);
+  state.xu.reserve(data.up.size());
+  state.xv.reserve(data.up.size());
+  state.gindex.reserve(data.up.size());
+  state.pindex.reserve(data.up.size());
+  state.pcount.reserve(data.up.size());
+  for (const auto& species : data.up) {
+    state.xu.push_back(copy_flat(species->xu));
+    state.xv.push_back(copy_flat(species->xv));
+    state.gindex.push_back(copy_flat(species->gindex));
+    state.pindex.push_back(copy_flat(species->pindex));
+    state.pcount.push_back(copy_flat(species->pcount));
+  }
+  return state;
+}
+
+void compare_smoke_state(const SmokeState& actual, const SmokeState& expected)
+{
+  compare_smoke_diagnostics(actual.diag, expected.diag);
+  require_allclose(actual.uf, expected.uf, 1.0e-12, 1.0e-14);
+  require_allclose(actual.uj, expected.uj, 1.0e-12, 1.0e-14);
+  require_allclose(actual.ff, expected.ff, 1.0e-12, 1.0e-14);
+  REQUIRE(actual.xu.size() == expected.xu.size());
+  for (size_t i = 0; i < actual.xu.size(); i++) {
+    require_allclose(actual.xu[i], expected.xu[i], 1.0e-12, 1.0e-14);
+    require_allclose(actual.xv[i], expected.xv[i], 1.0e-12, 1.0e-14);
+    require_allclose(actual.gindex[i], expected.gindex[i], 0.0, 0.0);
+    require_allclose(actual.pindex[i], expected.pindex[i], 0.0, 0.0);
+    require_allclose(actual.pcount[i], expected.pcount[i], 0.0, 0.0);
+  }
+}
+
+SmokeState run_smoke_case(const SmokeCase& smoke_case, const SmokeOptions& options,
+                          bool compare_golden)
 {
   PicChunk chunk(smoke_case.dims, smoke_case.has_dim, 0);
   setup_chunk(chunk, smoke_case.dims, options, 0.0);
@@ -366,14 +484,60 @@ void run_smoke_case(const SmokeCase& smoke_case, const SmokeOptions& options)
   data.uj.fill(0.0);
   data.ff.fill(0.0);
 
-  apply_uniform_field(data, smoke_case.field);
+  apply_sinusoidal_field(data, smoke_case.has_dim, smoke_case.field);
   init_particles(chunk, data, smoke_case.particles);
+  chunk.sort_particle(data.up);
 
   run_smoke_step(chunk, smoke_case.delt);
 
-  auto field_diag    = compute_smoke_field(data);
-  auto particle_diag = compute_smoke_particle(data);
-  compare_smoke(smoke_case.tag, smoke_tag_for_options(options), field_diag, particle_diag);
+  SmokeState state = capture_smoke_state(data);
+  if (compare_golden) {
+    compare_smoke(smoke_case.tag, smoke_tag_for_options(options), state.diag.field,
+                  state.diag.particle);
+  }
+  return state;
+}
+
+std::vector<SmokeOptions> make_smoke_options()
+{
+  std::vector<SmokeOptions> options;
+  for (const auto& vectorization : {"scalar", "vector"}) {
+    for (int order = 1; order <= 4; order++) {
+      for (const auto& pusher : {"Boris", "Vay", "HigueraCary"}) {
+        for (const auto& interpolation : {"MC", "WT"}) {
+          options.push_back({vectorization, order, pusher, interpolation});
+        }
+      }
+    }
+  }
+  return options;
+}
+
+void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
+{
+  const auto options = make_smoke_options();
+  std::map<std::string, SmokeState> scalar_results;
+  for (const auto& option : options) {
+    const std::string tag = smoke_tag_for_options(option);
+    INFO("options=" << smoke_tag_for_options(option));
+    const bool      compare_golden = option.vectorization == "scalar";
+    SmokeState diag                = run_smoke_case(smoke_case, option, compare_golden);
+    if (option.vectorization == "scalar") {
+      const std::string key = std::to_string(option.order) + "_" + option.pusher + "_" +
+                              option.interpolation;
+      scalar_results[key] = diag;
+      continue;
+    }
+    if (option.vectorization == "vector") {
+      const std::string key = std::to_string(option.order) + "_" + option.pusher + "_" +
+                              option.interpolation;
+      auto              it  = scalar_results.find(key);
+      if (it == scalar_results.end()) {
+        FAIL("Missing scalar reference for vectorization option: " + tag);
+      }
+      compare_smoke_state(diag, it->second);
+    }
+  }
 }
 } // namespace
 
@@ -433,30 +597,6 @@ TEST_CASE("PicChunk pack/unpack round-trip")
   require_allclose(udata.up[0]->gindex, data.up[0]->gindex, 0.0, 0.0);
   require_allclose(udata.up[0]->pindex, data.up[0]->pindex, 0.0, 0.0);
   require_allclose(udata.up[0]->pcount, data.up[0]->pcount, 0.0, 0.0);
-}
-
-std::vector<SmokeOptions> make_smoke_options()
-{
-  std::vector<SmokeOptions> options;
-  for (const auto& vectorization : {"scalar", "vector"}) {
-    for (int order = 1; order <= 4; order++) {
-      for (const auto& pusher : {"Boris", "Vay", "HigueraCary"}) {
-        for (const auto& interpolation : {"MC", "WT"}) {
-          options.push_back({vectorization, order, pusher, interpolation});
-        }
-      }
-    }
-  }
-  return options;
-}
-
-void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
-{
-  const auto options = make_smoke_options();
-  for (const auto& option : options) {
-    INFO("options=" << smoke_tag_for_options(option));
-    run_smoke_case(smoke_case, option);
-  }
 }
 
 TEST_CASE("PicChunk integration smoke 1D")
