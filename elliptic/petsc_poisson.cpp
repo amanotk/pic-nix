@@ -95,7 +95,7 @@ int PetscPoisson1D::set_matrix()
     col[ncols].c  = 0;
     vals[ncols++] = ofdx;
 
-    MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, INSERT_VALUES);
+    MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, ADD_VALUES);
   }
 
   MatAssemblyBegin(matrix, MAT_FINAL_ASSEMBLY);
@@ -166,7 +166,7 @@ int PetscPoisson2D::set_matrix()
       col[ncols].c  = 0;
       vals[ncols++] = ofdy;
 
-      MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, INSERT_VALUES);
+      MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, ADD_VALUES);
     }
   }
 
@@ -263,7 +263,7 @@ int PetscPoisson3D::set_matrix()
         vals[ncols]  = ofdz;
         ncols++;
 
-        MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, INSERT_VALUES);
+        MatSetValuesStencil(matrix, 1, &row, ncols, col, vals, ADD_VALUES);
       }
     }
   }

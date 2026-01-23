@@ -37,6 +37,7 @@ PicChunk::PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id)
 int64_t PicChunk::get_size_byte() const
 {
   int64_t size = 0;
+  size += phi.size() * sizeof(float64);
   size += uf.size() * sizeof(float64);
   size += uj.size() * sizeof(float64);
   size += um.size() * sizeof(float64);
@@ -67,6 +68,7 @@ int PicChunk::pack(void* buffer, int address)
   count += memcpy_count(buffer, &order, sizeof(int), count, 0);
   count += memcpy_count(buffer, &Ns, sizeof(int), count, 0);
   count += memcpy_count(buffer, &cc, sizeof(float64), count, 0);
+  count += memcpy_count(buffer, phi.data(), phi.size() * sizeof(float64), count, 0);
   count += memcpy_count(buffer, uf.data(), uf.size() * sizeof(float64), count, 0);
   count += memcpy_count(buffer, uj.data(), uj.size() * sizeof(float64), count, 0);
   count += memcpy_count(buffer, ff.data(), ff.size() * sizeof(float64), count, 0);
@@ -90,6 +92,7 @@ int PicChunk::unpack(void* buffer, int address)
   count += memcpy_count(&Ns, buffer, sizeof(int), 0, count);
   count += memcpy_count(&cc, buffer, sizeof(float64), 0, count);
   allocate(); // allocate memory for unpacking
+  count += memcpy_count(phi.data(), buffer, phi.size() * sizeof(float64), 0, count);
   count += memcpy_count(uf.data(), buffer, uf.size() * sizeof(float64), 0, count);
   count += memcpy_count(uj.data(), buffer, uj.size() * sizeof(float64), 0, count);
   count += memcpy_count(ff.data(), buffer, ff.size() * sizeof(float64), 0, count);
@@ -111,10 +114,12 @@ void PicChunk::allocate()
   size_t ns = Ns;
 
   // memory allocation
+  phi.resize({nz, ny, nx});
   uf.resize({nz, ny, nx, 6});
   uj.resize({nz, ny, nx, 4});
   um.resize({nz, ny, nx, ns, 14});
   ff.resize({nz, ny, nx, 3, 6});
+  phi.fill(0);
   uf.fill(0);
   uj.fill(0);
   um.fill(0);

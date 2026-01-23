@@ -21,13 +21,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 # build static library
-add_library(pic STATIC pic_chunk.cpp pic_application.cpp)
+add_library(pic STATIC pic_chunk.cpp pic_application.cpp pic_poisson.cpp)
 
 # include directory
 target_include_directories(pic PRIVATE ${PICNIX_DIR})
 target_include_directories(pic PRIVATE ${PICNIX_DIR}/nix)
 target_include_directories(pic PRIVATE ${PICNIX_DIR}/nix/thirdparty)
 target_include_directories(pic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(pic PUBLIC elliptic)
 
 if(BUILD_TESTING)
   add_subdirectory(unittest)

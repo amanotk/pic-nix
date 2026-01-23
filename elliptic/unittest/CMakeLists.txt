@@ -17,17 +17,17 @@ set(PARALLEL_EXECS
 
 set(MPIEXEC mpiexec)
 
-add_library(obj_parallel OBJECT test_parallel.cpp)
-target_include_directories(obj_parallel PRIVATE ${UNITTEST_INCLUDE_DIRS})
-target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
-target_link_libraries(obj_parallel PRIVATE PkgConfig::PETSC)
+add_library(elliptic_obj_parallel OBJECT test_parallel.cpp)
+target_include_directories(elliptic_obj_parallel PRIVATE ${UNITTEST_INCLUDE_DIRS})
+target_link_libraries(elliptic_obj_parallel PRIVATE Catch2::Catch2)
+target_link_libraries(elliptic_obj_parallel PRIVATE PkgConfig::PETSC)
 
 foreach(target IN ITEMS ${PARALLEL_EXECS})
         add_executable(${target} ${target}.cpp)
         target_include_directories(${target} PRIVATE ${UNITTEST_INCLUDE_DIRS})
         target_link_libraries(${target} PRIVATE
                 Catch2::Catch2
-                obj_parallel
+                elliptic_obj_parallel
                 elliptic
                 PkgConfig::PETSC
         )
