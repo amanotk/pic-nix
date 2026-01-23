@@ -7,8 +7,8 @@
 #include "nix/chunkvector.hpp"
 
 #include <catch2/catch_approx.hpp>
-#include <catch2/generators/catch_generators.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <mpi.h>
 
@@ -33,7 +33,7 @@ struct TestGrid {
   nix::Dims3D        gdims;
   nix::Bool3D        has_dim;
   std::array<int, 3> cdims;
-  int               mpi_size;
+  int                mpi_size;
 };
 
 json make_boundary_config(int order)
@@ -99,20 +99,20 @@ ExchangeContext build_exchange_context(const std::array<int, 3>& cdims, const ni
 
   nix::Dims3D dims = {gdims[0] / cdims[0], gdims[1] / cdims[1], gdims[2] / cdims[2]};
 
-  auto chunkmap = std::make_unique<nix::ChunkMap>(cdims[0], cdims[1], cdims[2]);
+  auto             chunkmap = std::make_unique<nix::ChunkMap>(cdims[0], cdims[1], cdims[2]);
   std::vector<int> boundary(nproc + 1);
   for (int i = 0; i <= nproc; i++) {
     boundary[i] = i;
   }
   chunkmap->set_rank_boundary(boundary);
 
-  int id = boundary[rank];
-  auto chunk = std::make_shared<PicChunk>(dims, has_dim, id);
+  int                                         id    = boundary[rank];
+  auto                                        chunk = std::make_shared<PicChunk>(dims, has_dim, id);
   nix::ChunkVector<std::shared_ptr<PicChunk>> chunkvec;
   chunkvec.push_back(chunk);
   chunkvec.set_neighbors(chunkmap);
 
-  auto [cz, cy, cx] = chunkmap->get_coordinate(id);
+  auto [cz, cy, cx]         = chunkmap->get_coordinate(id);
   std::array<int, 3> coord  = {cz, cy, cx};
   std::array<int, 3> offset = {cz * dims[0], cy * dims[1], cx * dims[2]};
   chunk->set_global_context(offset.data(), gdims.data());
@@ -123,14 +123,7 @@ ExchangeContext build_exchange_context(const std::array<int, 3>& cdims, const ni
   setup_mpi_communicators(*chunk);
   setup_mpi_buffers(*chunk);
 
-  return {chunk,
-          gdims,
-          has_dim,
-          dims,
-          cdims,
-          coord,
-          offset,
-          chunk->get_boundary_margin()};
+  return {chunk, gdims, has_dim, dims, cdims, coord, offset, chunk->get_boundary_margin()};
 }
 
 int wrap_index(int value, int size)
@@ -208,9 +201,9 @@ int source_index_current(int index, int lb, int ub, int margin, int dir)
 }
 
 struct ExpectedValues {
-  const ExchangeContext&        ctx;
+  const ExchangeContext&         ctx;
   const PicChunk::DataContainer& data;
-  float64                       base;
+  float64                        base;
 
   float64 direct(int iz, int iy, int ix, int comp, const std::array<int, 3>& offset) const
   {
@@ -232,14 +225,11 @@ struct ExpectedValues {
     const int src_cx = neighbor_coord(ctx.coord[2], dirx, 2, ctx.cdims);
 
     const int src_iz =
-        ctx.has_dim[0] ? source_index(iz, data.Lbz, data.Ubz, ctx.boundary_margin, dirz)
-                       : data.Lbz;
+        ctx.has_dim[0] ? source_index(iz, data.Lbz, data.Ubz, ctx.boundary_margin, dirz) : data.Lbz;
     const int src_iy =
-        ctx.has_dim[1] ? source_index(iy, data.Lby, data.Uby, ctx.boundary_margin, diry)
-                       : data.Lby;
+        ctx.has_dim[1] ? source_index(iy, data.Lby, data.Uby, ctx.boundary_margin, diry) : data.Lby;
     const int src_ix =
-        ctx.has_dim[2] ? source_index(ix, data.Lbx, data.Ubx, ctx.boundary_margin, dirx)
-                       : data.Lbx;
+        ctx.has_dim[2] ? source_index(ix, data.Lbx, data.Ubx, ctx.boundary_margin, dirx) : data.Lbx;
 
     const std::array<int, 3> offset = {
         src_cz * ctx.local_dims[0],
@@ -333,10 +323,10 @@ void fill_all(Array& array, const ExchangeContext& ctx, const PicChunk::DataCont
               float64 base, int ncomp)
 {
   ExpectedValues expected{ctx, data, base};
-  auto shape = array.shape();
-  const int nz = static_cast<int>(shape[0]);
-  const int ny = static_cast<int>(shape[1]);
-  const int nx = static_cast<int>(shape[2]);
+  auto           shape = array.shape();
+  const int      nz    = static_cast<int>(shape[0]);
+  const int      ny    = static_cast<int>(shape[1]);
+  const int      nx    = static_cast<int>(shape[2]);
 
   int z_begin = ctx.has_dim[0] ? 0 : data.Lbz;
   int z_end   = ctx.has_dim[0] ? nz - 1 : data.Ubz;
@@ -363,10 +353,10 @@ void verify_exchange(const Array& array, const ExchangeContext& ctx,
   ExpectedValues expected{ctx, data, base};
   auto approx = [](float64 value) { return Catch::Approx(value).epsilon(1.0e-12).margin(1.0e-14); };
 
-  auto shape = array.shape();
-  const int nz = static_cast<int>(shape[0]);
-  const int ny = static_cast<int>(shape[1]);
-  const int nx = static_cast<int>(shape[2]);
+  auto      shape = array.shape();
+  const int nz    = static_cast<int>(shape[0]);
+  const int ny    = static_cast<int>(shape[1]);
+  const int nx    = static_cast<int>(shape[2]);
 
   int z_begin = ctx.has_dim[0] ? 0 : data.Lbz;
   int z_end   = ctx.has_dim[0] ? nz - 1 : data.Ubz;
@@ -395,10 +385,10 @@ void verify_current_exchange(const Array& array, const ExchangeContext& ctx,
   ExpectedValues expected{ctx, data, base};
   auto approx = [](float64 value) { return Catch::Approx(value).epsilon(1.0e-12).margin(1.0e-14); };
 
-  auto shape = array.shape();
-  const int nz = static_cast<int>(shape[0]);
-  const int ny = static_cast<int>(shape[1]);
-  const int nx = static_cast<int>(shape[2]);
+  auto      shape = array.shape();
+  const int nz    = static_cast<int>(shape[0]);
+  const int ny    = static_cast<int>(shape[1]);
+  const int nx    = static_cast<int>(shape[2]);
 
   int z_begin = ctx.has_dim[0] ? 0 : data.Lbz;
   int z_end   = ctx.has_dim[0] ? nz - 1 : data.Ubz;
@@ -455,6 +445,16 @@ void run_particle_exchange_test(const std::array<int, 3>& cdims, const nix::Dims
   auto [ymin, ymax] = ctx.chunk->get_yrange();
   auto [zmin, zmax] = ctx.chunk->get_zrange();
   const int rank    = get_mpi_rank();
+
+  //
+  // Test Scenario
+  // Keep one particle in-bounds and send one slightly out-of-bounds.
+  // Direction is encoded by dir (z,y,x): each component is -1, 0, or +1.
+  // Midpoints avoid accidental edge/corner sends when a dimension is inactive.
+  // This exercises face and limited edge/corner cases without exploding combinations.
+  // Particle IDs live in xu(:,6) and are used only for identity checks after sorting.
+  //
+
   const float64 ymid = ctx.has_dim[1] ? 0.5 * (ymin + ymax) : 0.0;
   const float64 zmid = ctx.has_dim[0] ? 0.5 * (zmin + zmax) : 0.0;
 
@@ -463,15 +463,11 @@ void run_particle_exchange_test(const std::array<int, 3>& cdims, const nix::Dims
   data.up[0]->xu(0, 2) = zmid;
   data.up[0]->xu(0, 6) = static_cast<float64>(rank * 10 + 1);
 
-  data.up[0]->xu(1, 0) = (dir[2] > 0) ? xmax + 0.1
-                        : (dir[2] < 0) ? xmin - 0.1
-                                       : xmin + 0.75 * (xmax - xmin);
-  data.up[0]->xu(1, 1) = (dir[1] > 0) ? ymax + 0.1
-                        : (dir[1] < 0) ? ymin - 0.1
-                                       : ymid;
-  data.up[0]->xu(1, 2) = (dir[0] > 0) ? zmax + 0.1
-                        : (dir[0] < 0) ? zmin - 0.1
-                                       : zmid;
+  data.up[0]->xu(1, 0) = (dir[2] > 0)   ? xmax + 0.1
+                         : (dir[2] < 0) ? xmin - 0.1
+                                        : xmin + 0.75 * (xmax - xmin);
+  data.up[0]->xu(1, 1) = (dir[1] > 0) ? ymax + 0.1 : (dir[1] < 0) ? ymin - 0.1 : ymid;
+  data.up[0]->xu(1, 2) = (dir[0] > 0) ? zmax + 0.1 : (dir[0] < 0) ? zmin - 0.1 : zmid;
   data.up[0]->xu(1, 6) = static_cast<float64>(rank * 10 + 2);
 
   data.up[0]->count(0, data.up[0]->Np - 1, true, order);
@@ -485,17 +481,17 @@ void run_particle_exchange_test(const std::array<int, 3>& cdims, const nix::Dims
     ids.push_back(static_cast<int64_t>(data.up[0]->xu(ip, 6)));
   }
   std::sort(ids.begin(), ids.end());
-  nix::ChunkMap chunkmap(cdims[0], cdims[1], cdims[2]);
+  nix::ChunkMap    chunkmap(cdims[0], cdims[1], cdims[2]);
   std::vector<int> boundary(get_mpi_size() + 1);
   for (int i = 0; i <= get_mpi_size(); i++) {
     boundary[i] = i;
   }
   chunkmap.set_rank_boundary(boundary);
-  const int nb_cz = chunkmap.get_neighbor_coord(ctx.coord[0], -dir[0], 0);
-  const int nb_cy = chunkmap.get_neighbor_coord(ctx.coord[1], -dir[1], 1);
-  const int nb_cx = chunkmap.get_neighbor_coord(ctx.coord[2], -dir[2], 2);
-  const int nb_id = chunkmap.get_chunkid(nb_cz, nb_cy, nb_cx);
-  const int neighbor = chunkmap.get_rank(nb_id);
+  const int            nb_cz    = chunkmap.get_neighbor_coord(ctx.coord[0], -dir[0], 0);
+  const int            nb_cy    = chunkmap.get_neighbor_coord(ctx.coord[1], -dir[1], 1);
+  const int            nb_cx    = chunkmap.get_neighbor_coord(ctx.coord[2], -dir[2], 2);
+  const int            nb_id    = chunkmap.get_chunkid(nb_cz, nb_cy, nb_cx);
+  const int            neighbor = chunkmap.get_rank(nb_id);
   std::vector<int64_t> expected = {rank * 10 + 1, neighbor * 10 + 2};
   std::sort(expected.begin(), expected.end());
   REQUIRE(ids == expected);
@@ -539,9 +535,9 @@ TEST_CASE("PicChunk particle boundary exchange 1D")
   if (!require_mpi_size(grid.mpi_size)) {
     return;
   }
-  const int order = GENERATE(1, 2, 3, 4);
-  const std::array<int, 3> dir = GENERATE(std::array<int, 3>{0, 0, 1},
-                                          std::array<int, 3>{0, 0, -1});
+  const int                order = GENERATE(1, 2, 3, 4);
+  const std::array<int, 3> dir =
+      GENERATE(std::array<int, 3>{0, 0, 1}, std::array<int, 3>{0, 0, -1});
   run_particle_exchange_test(grid.cdims, grid.gdims, grid.has_dim, order, dir);
 }
 
@@ -551,10 +547,9 @@ TEST_CASE("PicChunk particle boundary exchange 2D")
   if (!require_mpi_size(grid.mpi_size)) {
     return;
   }
-  const int order = GENERATE(1, 2, 3, 4);
-  const std::array<int, 3> dir =
-      GENERATE(std::array<int, 3>{0, 0, 1}, std::array<int, 3>{0, 1, 0},
-               std::array<int, 3>{0, 1, 1});
+  const int                order = GENERATE(1, 2, 3, 4);
+  const std::array<int, 3> dir = GENERATE(std::array<int, 3>{0, 0, 1}, std::array<int, 3>{0, 1, 0},
+                                          std::array<int, 3>{0, 1, 1});
   run_particle_exchange_test(grid.cdims, grid.gdims, grid.has_dim, order, dir);
 }
 
@@ -564,9 +559,8 @@ TEST_CASE("PicChunk particle boundary exchange 3D")
   if (!require_mpi_size(grid.mpi_size)) {
     return;
   }
-  const int order = GENERATE(1, 2, 3, 4);
-  const std::array<int, 3> dir =
-      GENERATE(std::array<int, 3>{0, 0, 1}, std::array<int, 3>{0, 1, 0},
-               std::array<int, 3>{1, 0, 0}, std::array<int, 3>{1, 1, 1});
+  const int                order = GENERATE(1, 2, 3, 4);
+  const std::array<int, 3> dir = GENERATE(std::array<int, 3>{0, 0, 1}, std::array<int, 3>{0, 1, 0},
+                                          std::array<int, 3>{1, 0, 0}, std::array<int, 3>{1, 1, 1});
   run_particle_exchange_test(grid.cdims, grid.gdims, grid.has_dim, order, dir);
 }

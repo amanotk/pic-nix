@@ -3,6 +3,7 @@
 ## Coding Style
 ### C++
 The style should follow that specified by .clang-format file in the root directory. The code has to be formatted via the `clang-format` command before making a commit.
+Before any commit, explicitly run `clang-format` on the modified C++ files and mention it in your response.
 
 ### Python
 The code should be formatted via the `ruff` command before making a commit.

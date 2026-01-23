@@ -29,6 +29,14 @@ Each msgpack file stores a map keyed by option tags (e.g.,
 Regenerate the data by setting `PICNIX_UPDATE_GOLDEN=1` when running  
 `test_pic_chunk`.  
   
+## Git Hooks  
+Install the local pre-commit hook (clang-format on staged C/C++) after  
+cloning:  
+  
+```sh
+script/git-hooks/install.sh
+```
+  
 ## CI Notes  
 The GitHub Actions workflow installs Catch2 v3 externally and sets  
 `PICNIX_CATCH2_CONFIG` for the test builds.  
