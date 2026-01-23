@@ -42,6 +42,12 @@ target_link_directories(obj_serial PRIVATE ${LIBRARY_DIRS})
 target_link_libraries(obj_serial PRIVATE Catch2::Catch2)
 target_link_libraries(obj_serial PRIVATE nix)
 
+add_library(obj_parallel OBJECT test_parallel.cpp)
+target_include_directories(obj_parallel PRIVATE ${INCLUDE_DIRS})
+target_link_directories(obj_parallel PRIVATE ${LIBRARY_DIRS})
+target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
+target_link_libraries(obj_parallel PRIVATE nix)
+
 foreach(target IN ITEMS ${SERIAL_EXECS})
 	add_executable(${target} ${target}.cpp)
 	target_include_directories(${target} PRIVATE ${INCLUDE_DIRS})
@@ -60,7 +66,7 @@ target_include_directories(test_application PRIVATE ${INCLUDE_DIRS})
 target_link_directories(test_application PRIVATE ${LIBRARY_DIRS})
 target_link_libraries(test_application PRIVATE
 	Catch2::Catch2
-	obj_serial
+	obj_parallel
 	nix
 	std::filesystem
 )
@@ -77,12 +83,6 @@ set(PARALLEL_EXECS
 	test_mpistream_parallel
 	test_statehandler_parallel
 	)
-
-add_library(obj_parallel OBJECT test_parallel.cpp)
-target_include_directories(obj_parallel PRIVATE ${INCLUDE_DIRS})
-target_link_directories(obj_parallel PRIVATE ${LIBRARY_DIRS})
-target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
-target_link_libraries(obj_parallel PRIVATE nix)
 
 foreach(target IN ITEMS ${PARALLEL_EXECS})
 	add_executable(${target} ${target}.cpp)

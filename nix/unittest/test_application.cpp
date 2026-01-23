@@ -1,15 +1,19 @@
 // -*- C++ -*-
 
 #include "application.hpp"
+#include "argparser.hpp"
 #include "chunk.hpp"
 #include "chunkmap.hpp"
 #include "diag.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace nix;
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <vector>
 
-class TestApplication;
+using namespace nix;
 
 const std::string config_filename = "config.json";
 const std::string config_content  = R"(
@@ -55,40 +59,35 @@ const std::string config_content  = R"(
 class TestApplication : public Application
 {
 public:
-  TestApplication() : Application()
+  using Interface    = Application::Interface;
+  using PtrInterface = Application::PtrInterface;
+
+  TestApplication(int argc, char** argv, PtrInterface interface)
+      : Application(argc, argv, interface)
   {
     std::ofstream ofs(config_filename);
     ofs << config_content;
-
-    interface = std::make_shared<Interface>();
-    interface->set_application(this);
   }
 
   ~TestApplication()
   {
     std::filesystem::remove(config_filename);
   }
-
-  void test_main()
-  {
-    std::vector<std::string> args = {"./a.out", "-c", "config.json", "--emax", "1"};
-    std::vector<char*> argv;
-    argv.reserve(args.size());
-    for (auto& arg : args) {
-      argv.push_back(arg.data());
-    }
-
-    cl_argc = argv.size();
-    cl_argv = argv.data();
-
-    REQUIRE(main() == 0);
-
-    std::filesystem::remove("profile.msgpack");
-    std::filesystem::remove("log.msgpack");
-  }
 };
 
-TEST_CASE_METHOD(TestApplication, "test_main")
+TEST_CASE("test_main")
 {
-  test_main();
+  std::vector<std::string> args = {"./test_application", "-c", config_filename, "--emax", "1"};
+  std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+
+  int    argc      = static_cast<int>(argv.size());
+  char** cargv     = const_cast<char**>(argv.data());
+  auto   interface = std::make_shared<TestApplication::Interface>();
+
+  TestApplication app(argc, cargv, interface);
+
+  REQUIRE(app.main() == 0);
+
+  std::filesystem::remove("profile.msgpack");
+  std::filesystem::remove("log.msgpack");
 }
