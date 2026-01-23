@@ -22,6 +22,79 @@ struct SmokeOptions {
   std::string interpolation;
 };
 
+struct SmokeCase {
+  std::string                                         tag;
+  nix::Dims3D                                         dims;
+  nix::Bool3D                                         has_dim;
+  std::array<float64, 6>                              field;
+  std::vector<std::array<float64, nix::Particle::Nc>> particles;
+  float64                                             delt;
+};
+
+struct SmokeParticleDiagnostics {
+  float64 sum_rho;
+  float64 sum_jx;
+  float64 sum_jy;
+  float64 sum_jz;
+  float64 sum_x;
+  float64 sum_y;
+  float64 sum_z;
+  float64 sum_ux;
+  float64 sum_uy;
+  float64 sum_uz;
+};
+
+struct SmokeFieldDiagnostics {
+  float64 e_energy;
+  float64 b_energy;
+};
+
+struct SmokeDiagnostics {
+  SmokeFieldDiagnostics    field;
+  SmokeParticleDiagnostics particle;
+};
+
+struct SmokeState {
+  SmokeDiagnostics                  diag;
+  std::vector<float64>              uf;
+  std::vector<float64>              uj;
+  std::vector<float64>              ff;
+  std::vector<std::vector<float64>> xu;
+  std::vector<std::vector<float64>> xv;
+  std::vector<std::vector<int32>>   gindex;
+  std::vector<std::vector<int32>>   pindex;
+  std::vector<std::vector<int32>>   pcount;
+};
+
+template <typename T>
+void fill_sequence(T& array, typename T::value_type base, typename T::value_type step)
+{
+  auto* ptr = array.data();
+  for (size_t i = 0; i < array.size(); i++) {
+    ptr[i] = base + step * static_cast<typename T::value_type>(i);
+  }
+}
+
+template <typename T>
+void require_allclose(const T& actual, const T& expected, float64 rtol, float64 atol)
+{
+  REQUIRE(actual.size() == expected.size());
+  auto* a = actual.data();
+  auto* b = expected.data();
+  for (size_t i = 0; i < actual.size(); i++) {
+    const float64 diff = std::abs(static_cast<float64>(a[i]) - static_cast<float64>(b[i]));
+    const float64 tol  = atol + rtol * std::abs(static_cast<float64>(b[i]));
+    INFO("index " << i);
+    REQUIRE(diff <= tol);
+  }
+}
+
+template <typename T>
+std::vector<typename T::value_type> copy_flat(const T& array)
+{
+  return {array.data(), array.data() + array.size()};
+}
+
 json make_config(const SmokeOptions& options, float64 friedman)
 {
   json config;
@@ -53,63 +126,93 @@ void setup_chunk(PicChunk& chunk, const nix::Dims3D& dims, const SmokeOptions& o
   data.cc   = 1.0;
 }
 
-template <typename T>
-void fill_sequence(T& array, typename T::value_type base, typename T::value_type step)
+std::string smoke_tag_for_options(const SmokeOptions& options)
 {
-  auto* ptr = array.data();
-  for (size_t i = 0; i < array.size(); i++) {
-    ptr[i] = base + step * static_cast<typename T::value_type>(i);
+  return options.vectorization + "_o" + std::to_string(options.order) + "_" + options.pusher +
+         "_" + options.interpolation;
+}
+
+std::vector<SmokeOptions> make_smoke_options()
+{
+  std::vector<SmokeOptions> options;
+  for (const auto& vectorization : {"scalar", "vector"}) {
+    for (int order = 1; order <= 4; order++) {
+      for (const auto& pusher : {"Boris", "Vay", "HigueraCary"}) {
+        for (const auto& interpolation : {"MC", "WT"}) {
+          options.push_back({vectorization, order, pusher, interpolation});
+        }
+      }
+    }
+  }
+  return options;
+}
+
+float64 sinusoidal_mode1(float64 coord, float64 min, float64 length)
+{
+  if (length <= 0.0) {
+    return 0.0;
+  }
+  const float64 two_pi = 2.0 * std::acos(-1.0);
+  return std::sin(two_pi * (coord - min) / length);
+}
+
+void apply_sinusoidal_field(PicChunk::DataContainer& data, const nix::Bool3D& has_dim,
+                            const std::array<float64, 6>& field)
+{
+  const float64 ex = field[0];
+  const float64 ey = field[1];
+  const float64 ez = field[2];
+  const float64 bx_amp = field[3];
+  const float64 by_amp = field[4];
+  const float64 bz_amp = field[5];
+
+  const float64 xmin = data.xlim[0];
+  const float64 ymin = data.ylim[0];
+  const float64 zmin = data.zlim[0];
+  const float64 lx   = has_dim[2] ? data.xlim[1] - data.xlim[0] : 0.0;
+  const float64 ly   = has_dim[1] ? data.ylim[1] - data.ylim[0] : 0.0;
+  const float64 lz   = has_dim[0] ? data.zlim[1] - data.zlim[0] : 0.0;
+
+  auto shape = data.uf.shape();
+  for (size_t iz = 0; iz < shape[0]; iz++) {
+    for (size_t iy = 0; iy < shape[1]; iy++) {
+      for (size_t ix = 0; ix < shape[2]; ix++) {
+        const float64 x =
+            xmin + (static_cast<float64>(ix) - data.Lbx + 0.5) * data.delx;
+        const float64 y =
+            ymin + (static_cast<float64>(iy) - data.Lby + 0.5) * data.dely;
+        const float64 z =
+            zmin + (static_cast<float64>(iz) - data.Lbz + 0.5) * data.delz;
+        const float64 bx = has_dim[2] ? bx_amp * sinusoidal_mode1(x, xmin, lx) : 0.0;
+        const float64 by = has_dim[1] ? by_amp * sinusoidal_mode1(y, ymin, ly) : 0.0;
+        const float64 bz = has_dim[0] ? bz_amp * sinusoidal_mode1(z, zmin, lz) : 0.0;
+        data.uf(iz, iy, ix, 0) = ex;
+        data.uf(iz, iy, ix, 1) = ey;
+        data.uf(iz, iy, ix, 2) = ez;
+        data.uf(iz, iy, ix, 3) = bx;
+        data.uf(iz, iy, ix, 4) = by;
+        data.uf(iz, iy, ix, 5) = bz;
+      }
+    }
   }
 }
 
-template <typename T>
-void require_allclose(const T& actual, const T& expected, float64 rtol, float64 atol)
+void init_particles(PicChunk& chunk, PicChunk::DataContainer& data,
+                    const std::vector<std::array<float64, nix::Particle::Nc>>& particles)
 {
-  REQUIRE(actual.size() == expected.size());
-  auto* a = actual.data();
-  auto* b = expected.data();
-  for (size_t i = 0; i < actual.size(); i++) {
-    const float64 diff = std::abs(static_cast<float64>(a[i]) - static_cast<float64>(b[i]));
-    const float64 tol  = atol + rtol * std::abs(static_cast<float64>(b[i]));
-    INFO("index " << i);
-    REQUIRE(diff <= tol);
+  data.up.resize(1);
+  data.up[0]     = std::make_shared<ParticleType>(static_cast<int>(particles.size()), chunk);
+  data.up[0]->q  = 1.0;
+  data.up[0]->m  = 1.0;
+  data.up[0]->Np = static_cast<int>(particles.size());
+
+  for (int ip = 0; ip < data.up[0]->Np; ip++) {
+    for (int c = 0; c < nix::Particle::Nc; c++) {
+      data.up[0]->xu(ip, c) = particles[ip][c];
+      data.up[0]->xv(ip, c) = particles[ip][c];
+    }
   }
 }
-
-struct SmokeParticleDiagnostics {
-  float64 sum_rho;
-  float64 sum_jx;
-  float64 sum_jy;
-  float64 sum_jz;
-  float64 sum_x;
-  float64 sum_y;
-  float64 sum_z;
-  float64 sum_ux;
-  float64 sum_uy;
-  float64 sum_uz;
-};
-
-struct SmokeFieldDiagnostics {
-  float64 e_energy;
-  float64 b_energy;
-};
-
-struct SmokeDiagnostics {
-  SmokeFieldDiagnostics    field;
-  SmokeParticleDiagnostics particle;
-};
-
-struct SmokeState {
-  SmokeDiagnostics             diag;
-  std::vector<float64>         uf;
-  std::vector<float64>         uj;
-  std::vector<float64>         ff;
-  std::vector<std::vector<float64>> xu;
-  std::vector<std::vector<float64>> xv;
-  std::vector<std::vector<int32>>   gindex;
-  std::vector<std::vector<int32>>   pindex;
-  std::vector<std::vector<int32>>   pcount;
-};
 
 SmokeFieldDiagnostics compute_smoke_field(const PicChunk::DataContainer& data)
 {
@@ -233,91 +336,6 @@ void write_smoke_payload(const std::filesystem::path& path, const json& payload)
             static_cast<std::streamsize>(msgpack.size()));
 }
 
-struct SmokeCase {
-  std::string                                         tag;
-  nix::Dims3D                                         dims;
-  nix::Bool3D                                         has_dim;
-  std::array<float64, 6>                              field;
-  std::vector<std::array<float64, nix::Particle::Nc>> particles;
-  float64                                             delt;
-};
-
-std::string smoke_tag_for_options(const SmokeOptions& options)
-{
-  return options.vectorization + "_o" + std::to_string(options.order) + "_" + options.pusher +
-         "_" + options.interpolation;
-}
-
-float64 sinusoidal_mode1(float64 coord, float64 min, float64 length)
-{
-  if (length <= 0.0) {
-    return 0.0;
-  }
-  const float64 two_pi = 2.0 * std::acos(-1.0);
-  return std::sin(two_pi * (coord - min) / length);
-}
-
-void apply_sinusoidal_field(PicChunk::DataContainer& data, const nix::Bool3D& has_dim,
-                            const std::array<float64, 6>& field)
-{
-  const float64 ex = field[0];
-  const float64 ey = field[1];
-  const float64 ez = field[2];
-  const float64 bx_amp = field[3];
-  const float64 by_amp = field[4];
-  const float64 bz_amp = field[5];
-
-  const float64 xmin = data.xlim[0];
-  const float64 ymin = data.ylim[0];
-  const float64 zmin = data.zlim[0];
-  const float64 lx   = has_dim[2] ? data.xlim[1] - data.xlim[0] : 0.0;
-  const float64 ly   = has_dim[1] ? data.ylim[1] - data.ylim[0] : 0.0;
-  const float64 lz   = has_dim[0] ? data.zlim[1] - data.zlim[0] : 0.0;
-
-  auto shape = data.uf.shape();
-  for (size_t iz = 0; iz < shape[0]; iz++) {
-    for (size_t iy = 0; iy < shape[1]; iy++) {
-      for (size_t ix = 0; ix < shape[2]; ix++) {
-        const float64 x =
-            xmin + (static_cast<float64>(ix) - data.Lbx + 0.5) * data.delx;
-        const float64 y =
-            ymin + (static_cast<float64>(iy) - data.Lby + 0.5) * data.dely;
-        const float64 z =
-            zmin + (static_cast<float64>(iz) - data.Lbz + 0.5) * data.delz;
-        const float64 bx =
-            has_dim[2] ? bx_amp * sinusoidal_mode1(x, xmin, lx) : 0.0;
-        const float64 by =
-            has_dim[1] ? by_amp * sinusoidal_mode1(y, ymin, ly) : 0.0;
-        const float64 bz =
-            has_dim[0] ? bz_amp * sinusoidal_mode1(z, zmin, lz) : 0.0;
-        data.uf(iz, iy, ix, 0) = ex;
-        data.uf(iz, iy, ix, 1) = ey;
-        data.uf(iz, iy, ix, 2) = ez;
-        data.uf(iz, iy, ix, 3) = bx;
-        data.uf(iz, iy, ix, 4) = by;
-        data.uf(iz, iy, ix, 5) = bz;
-      }
-    }
-  }
-}
-
-void init_particles(PicChunk& chunk, PicChunk::DataContainer& data,
-                    const std::vector<std::array<float64, nix::Particle::Nc>>& particles)
-{
-  data.up.resize(1);
-  data.up[0]     = std::make_shared<ParticleType>(static_cast<int>(particles.size()), chunk);
-  data.up[0]->q  = 1.0;
-  data.up[0]->m  = 1.0;
-  data.up[0]->Np = static_cast<int>(particles.size());
-
-  for (int ip = 0; ip < data.up[0]->Np; ip++) {
-    for (int c = 0; c < nix::Particle::Nc; c++) {
-      data.up[0]->xu(ip, c) = particles[ip][c];
-      data.up[0]->xv(ip, c) = particles[ip][c];
-    }
-  }
-}
-
 void run_smoke_step(PicChunk& chunk, float64 delt)
 {
   chunk.push_velocity(delt);
@@ -426,12 +444,6 @@ void compare_smoke_diagnostics(const SmokeDiagnostics& actual, const SmokeDiagno
   REQUIRE(actual.particle.sum_uz == approx(expected.particle.sum_uz));
 }
 
-template <typename T>
-std::vector<typename T::value_type> copy_flat(const T& array)
-{
-  return {array.data(), array.data() + array.size()};
-}
-
 SmokeState capture_smoke_state(const PicChunk::DataContainer& data)
 {
   SmokeState state = {};
@@ -498,21 +510,6 @@ SmokeState run_smoke_case(const SmokeCase& smoke_case, const SmokeOptions& optio
   return state;
 }
 
-std::vector<SmokeOptions> make_smoke_options()
-{
-  std::vector<SmokeOptions> options;
-  for (const auto& vectorization : {"scalar", "vector"}) {
-    for (int order = 1; order <= 4; order++) {
-      for (const auto& pusher : {"Boris", "Vay", "HigueraCary"}) {
-        for (const auto& interpolation : {"MC", "WT"}) {
-          options.push_back({vectorization, order, pusher, interpolation});
-        }
-      }
-    }
-  }
-  return options;
-}
-
 void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
 {
   const auto options = make_smoke_options();
@@ -520,8 +517,8 @@ void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
   for (const auto& option : options) {
     const std::string tag = smoke_tag_for_options(option);
     INFO("options=" << smoke_tag_for_options(option));
-    const bool      compare_golden = option.vectorization == "scalar";
-    SmokeState diag                = run_smoke_case(smoke_case, option, compare_golden);
+    const bool compare_golden = option.vectorization == "scalar";
+    SmokeState diag           = run_smoke_case(smoke_case, option, compare_golden);
     if (option.vectorization == "scalar") {
       const std::string key = std::to_string(option.order) + "_" + option.pusher + "_" +
                               option.interpolation;
