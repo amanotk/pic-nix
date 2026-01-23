@@ -14,14 +14,21 @@
 
 namespace
 {
-json make_config(int order, float64 friedman)
+struct SmokeOptions {
+  std::string vectorization;
+  int         order;
+  std::string pusher;
+  std::string interpolation;
+};
+
+json make_config(const SmokeOptions& options, float64 friedman)
 {
   json config;
   config["option"]                  = json::object();
-  config["option"]["vectorization"] = "scalar";
-  config["option"]["order"]         = order;
-  config["option"]["pusher"]        = "Boris";
-  config["option"]["interpolation"] = "MC";
+  config["option"]["vectorization"] = options.vectorization;
+  config["option"]["order"]         = options.order;
+  config["option"]["pusher"]        = options.pusher;
+  config["option"]["interpolation"] = options.interpolation;
   config["option"]["seed_type"]     = "fixed";
   config["option"]["friedman"]      = friedman;
   config["option"]["cell_load"]     = 1.0;
@@ -29,14 +36,15 @@ json make_config(int order, float64 friedman)
   return config;
 }
 
-void setup_chunk(PicChunk& chunk, const nix::Dims3D& dims, int order, float64 friedman)
+void setup_chunk(PicChunk& chunk, const nix::Dims3D& dims, const SmokeOptions& options,
+                 float64 friedman)
 {
   int offset[3] = {0, 0, 0};
   int gdims[3]  = {dims[0], dims[1], dims[2]};
 
   chunk.set_global_context(offset, gdims);
   chunk.set_coordinate(1.0, 1.0, 1.0);
-  auto config = make_config(order, friedman);
+  auto config = make_config(options, friedman);
   chunk.setup(config);
   chunk.allocate();
 
@@ -190,43 +198,21 @@ std::filesystem::path smoke_particle_golden_path(const std::string& tag)
          ("pic_chunk_smoke_" + tag + "_particle.msgpack");
 }
 
-void write_smoke_field_golden(const std::filesystem::path& path, const SmokeFieldDiagnostics& diag)
-{
-  std::filesystem::create_directories(path.parent_path());
-  json                 payload = smoke_field_to_json(diag);
-  std::vector<uint8_t> msgpack = json::to_msgpack(payload);
-  std::ofstream        ofs(path, std::ios::binary);
-  ofs.write(reinterpret_cast<const char*>(msgpack.data()),
-            static_cast<std::streamsize>(msgpack.size()));
-}
-
-void write_smoke_particle_golden(const std::filesystem::path&    path,
-                                 const SmokeParticleDiagnostics& diag)
-{
-  std::filesystem::create_directories(path.parent_path());
-  json                 payload = smoke_particle_to_json(diag);
-  std::vector<uint8_t> msgpack = json::to_msgpack(payload);
-  std::ofstream        ofs(path, std::ios::binary);
-  ofs.write(reinterpret_cast<const char*>(msgpack.data()),
-            static_cast<std::streamsize>(msgpack.size()));
-}
-
-SmokeFieldDiagnostics read_smoke_field_golden(const std::filesystem::path& path)
+json read_smoke_payload(const std::filesystem::path& path)
 {
   std::ifstream        ifs(path, std::ios::binary);
   std::vector<uint8_t> buffer((std::istreambuf_iterator<char>(ifs)),
                               std::istreambuf_iterator<char>());
-  json                 payload = json::from_msgpack(buffer);
-  return smoke_field_from_json(payload);
+  return json::from_msgpack(buffer);
 }
 
-SmokeParticleDiagnostics read_smoke_particle_golden(const std::filesystem::path& path)
+void write_smoke_payload(const std::filesystem::path& path, const json& payload)
 {
-  std::ifstream        ifs(path, std::ios::binary);
-  std::vector<uint8_t> buffer((std::istreambuf_iterator<char>(ifs)),
-                              std::istreambuf_iterator<char>());
-  json                 payload = json::from_msgpack(buffer);
-  return smoke_particle_from_json(payload);
+  std::filesystem::create_directories(path.parent_path());
+  std::vector<uint8_t> msgpack = json::to_msgpack(payload);
+  std::ofstream        ofs(path, std::ios::binary);
+  ofs.write(reinterpret_cast<const char*>(msgpack.data()),
+            static_cast<std::streamsize>(msgpack.size()));
 }
 
 struct SmokeCase {
@@ -237,6 +223,12 @@ struct SmokeCase {
   std::vector<std::array<float64, nix::Particle::Nc>> particles;
   float64                                             delt;
 };
+
+std::string smoke_tag_for_options(const SmokeOptions& options)
+{
+  return options.vectorization + "_o" + std::to_string(options.order) + "_" + options.pusher +
+         "_" + options.interpolation;
+}
 
 void apply_uniform_field(PicChunk::DataContainer& data, const std::array<float64, 6>& field)
 {
@@ -281,16 +273,33 @@ void run_smoke_step(PicChunk& chunk, float64 delt)
   chunk.push_bfd(delt);
 }
 
-void compare_smoke(const std::string& tag, const SmokeFieldDiagnostics& field_diag,
+void compare_smoke(const std::string& case_tag, const std::string& option_tag,
+                   const SmokeFieldDiagnostics& field_diag,
                    const SmokeParticleDiagnostics& particle_diag)
 {
-  const auto field_golden_path    = smoke_field_golden_path(tag);
-  const auto particle_golden_path = smoke_particle_golden_path(tag);
+  const auto field_golden_path    = smoke_field_golden_path(case_tag);
+  const auto particle_golden_path = smoke_particle_golden_path(case_tag);
   const bool update_golden        = std::getenv("PICNIX_UPDATE_GOLDEN") != nullptr;
   if (update_golden) {
-    write_smoke_field_golden(field_golden_path, field_diag);
-    write_smoke_particle_golden(particle_golden_path, particle_diag);
-    SUCCEED("Updated smoke golden data");
+    json field_payload    = json::object();
+    json particle_payload = json::object();
+    if (std::filesystem::exists(field_golden_path)) {
+      field_payload = read_smoke_payload(field_golden_path);
+      if (!field_payload.is_object()) {
+        field_payload = json::object();
+      }
+    }
+    if (std::filesystem::exists(particle_golden_path)) {
+      particle_payload = read_smoke_payload(particle_golden_path);
+      if (!particle_payload.is_object()) {
+        particle_payload = json::object();
+      }
+    }
+    field_payload[option_tag]    = smoke_field_to_json(field_diag);
+    particle_payload[option_tag] = smoke_particle_to_json(particle_diag);
+    write_smoke_payload(field_golden_path, field_payload);
+    write_smoke_payload(particle_golden_path, particle_payload);
+    SUCCEED("Updated smoke golden data for " << option_tag);
     return;
   }
 
@@ -301,10 +310,21 @@ void compare_smoke(const std::string& tag, const SmokeFieldDiagnostics& field_di
     FAIL("Missing particle smoke golden data; set PICNIX_UPDATE_GOLDEN=1 to generate it");
   }
 
-  const SmokeFieldDiagnostics    expected_field = read_smoke_field_golden(field_golden_path);
-  const SmokeParticleDiagnostics expected_particle =
-      read_smoke_particle_golden(particle_golden_path);
+  const json field_payload    = read_smoke_payload(field_golden_path);
+  const json particle_payload = read_smoke_payload(particle_golden_path);
+  if (!field_payload.is_object() || !particle_payload.is_object()) {
+    FAIL("Smoke golden payload format has changed; set PICNIX_UPDATE_GOLDEN=1 to regenerate it");
+  }
+  if (!field_payload.contains(option_tag) || !particle_payload.contains(option_tag)) {
+    FAIL("Missing smoke golden data for options; set PICNIX_UPDATE_GOLDEN=1 to generate it");
+  }
 
+  const SmokeFieldDiagnostics    expected_field =
+      smoke_field_from_json(field_payload.at(option_tag));
+  const SmokeParticleDiagnostics expected_particle =
+      smoke_particle_from_json(particle_payload.at(option_tag));
+
+  INFO("options=" << option_tag);
   INFO("sum_rho=" << particle_diag.sum_rho);
   INFO("sum_jx=" << particle_diag.sum_jx);
   INFO("sum_jy=" << particle_diag.sum_jy);
@@ -334,10 +354,10 @@ void compare_smoke(const std::string& tag, const SmokeFieldDiagnostics& field_di
   REQUIRE(particle_diag.sum_uz == approx(expected_particle.sum_uz));
 }
 
-void run_smoke_case(const SmokeCase& smoke_case)
+void run_smoke_case(const SmokeCase& smoke_case, const SmokeOptions& options)
 {
   PicChunk chunk(smoke_case.dims, smoke_case.has_dim, 0);
-  setup_chunk(chunk, smoke_case.dims, 1, 0.0);
+  setup_chunk(chunk, smoke_case.dims, options, 0.0);
 
   auto data = chunk.get_internal_data();
   data.cc   = 1.0;
@@ -353,7 +373,7 @@ void run_smoke_case(const SmokeCase& smoke_case)
 
   auto field_diag    = compute_smoke_field(data);
   auto particle_diag = compute_smoke_particle(data);
-  compare_smoke(smoke_case.tag, field_diag, particle_diag);
+  compare_smoke(smoke_case.tag, smoke_tag_for_options(options), field_diag, particle_diag);
 }
 } // namespace
 
@@ -362,8 +382,9 @@ TEST_CASE("PicChunk pack/unpack round-trip")
   nix::Dims3D dims    = {1, 1, 8};
   nix::Bool3D has_dim = {false, false, true};
 
+  const SmokeOptions options = {"scalar", 1, "Boris", "MC"};
   PicChunk chunk(dims, has_dim, 0);
-  setup_chunk(chunk, dims, 1, 0.0);
+  setup_chunk(chunk, dims, options, 0.0);
 
   auto data = chunk.get_internal_data();
   data.cc   = 2.0;
@@ -414,6 +435,30 @@ TEST_CASE("PicChunk pack/unpack round-trip")
   require_allclose(udata.up[0]->pcount, data.up[0]->pcount, 0.0, 0.0);
 }
 
+std::vector<SmokeOptions> make_smoke_options()
+{
+  std::vector<SmokeOptions> options;
+  for (const auto& vectorization : {"scalar", "vector"}) {
+    for (int order = 1; order <= 4; order++) {
+      for (const auto& pusher : {"Boris", "Vay", "HigueraCary"}) {
+        for (const auto& interpolation : {"MC", "WT"}) {
+          options.push_back({vectorization, order, pusher, interpolation});
+        }
+      }
+    }
+  }
+  return options;
+}
+
+void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
+{
+  const auto options = make_smoke_options();
+  for (const auto& option : options) {
+    INFO("options=" << smoke_tag_for_options(option));
+    run_smoke_case(smoke_case, option);
+  }
+}
+
 TEST_CASE("PicChunk integration smoke 1D")
 {
   nix::Dims3D dims    = {1, 1, 8};
@@ -425,7 +470,7 @@ TEST_CASE("PicChunk integration smoke 1D")
       {5.4, 0.0, 0.0, -0.03, 0.01, 0.0, -2.0},
   };
 
-  run_smoke_case({"1d", dims, has_dim, field, particles, 0.1});
+  run_smoke_case_full_sweep({"1d", dims, has_dim, field, particles, 0.1});
 }
 
 TEST_CASE("PicChunk integration smoke 2D")
@@ -439,7 +484,7 @@ TEST_CASE("PicChunk integration smoke 2D")
       {2.7, 0.8, 0.0, -0.03, 0.06, 0.0, -2.0},
   };
 
-  run_smoke_case({"2d", dims, has_dim, field, particles, 0.1});
+  run_smoke_case_full_sweep({"2d", dims, has_dim, field, particles, 0.1});
 }
 
 TEST_CASE("PicChunk integration smoke 3D")
@@ -453,5 +498,5 @@ TEST_CASE("PicChunk integration smoke 3D")
       {1.7, 0.4, 2.1, -0.03, 0.04, -0.02, -2.0},
   };
 
-  run_smoke_case({"3d", dims, has_dim, field, particles, 0.1});
+  run_smoke_case_full_sweep({"3d", dims, has_dim, field, particles, 0.1});
 }

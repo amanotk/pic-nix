@@ -21,6 +21,14 @@ cmake -S . -B build \
   -DPICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
 ```
   
+## Smoke Test Golden Data  
+`pic/unittest/test_pic_chunk.cpp` writes smoke test golden data to  
+`pic/unittest/testdata/pic_chunk_smoke_*_{field,particle}.msgpack`.  
+Each msgpack file stores a map keyed by option tags (e.g.,  
+`vector_o3_Vay_WT`) so multiple option sweeps live in one file.  
+Regenerate the data by setting `PICNIX_UPDATE_GOLDEN=1` when running  
+`test_pic_chunk`.  
+  
 ## CI Notes  
 The GitHub Actions workflow installs Catch2 v3 externally and sets  
 `PICNIX_CATCH2_CONFIG` for the test builds.  
