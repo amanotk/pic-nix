@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run clang-format on staged C/C++ sources and re-stage them.
+files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(c|cc|cxx|cpp|h|hh|hpp)$' || true)
+if [[ -z "${files}" ]]; then
+  exit 0
+fi
+
+clang-format -i ${files}
+
+git add ${files}

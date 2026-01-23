@@ -88,3 +88,35 @@ add_mpi_test(
   8
   ${PIC_IFACE_TMPDIR_NP8}
 )
+
+# boundary exchange tests (Catch2, MPI)
+add_executable(test_pic_boundary test_pic_boundary.cpp)
+target_include_directories(test_pic_boundary PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(test_pic_boundary PRIVATE
+  Catch2::Catch2
+  pic_obj_parallel
+  pic
+  nix
+)
+
+set(PIC_BOUNDARY_TMPDIR_NP2 ${CMAKE_CURRENT_BINARY_DIR}/tmp_boundary_np2)
+set(PIC_BOUNDARY_TMPDIR_NP4 ${CMAKE_CURRENT_BINARY_DIR}/tmp_boundary_np4)
+set(PIC_BOUNDARY_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_boundary_np8)
+add_mpi_test(
+  test_pic_boundary_np2
+  test_pic_boundary
+  2
+  ${PIC_BOUNDARY_TMPDIR_NP2}
+)
+add_mpi_test(
+  test_pic_boundary_np4
+  test_pic_boundary
+  4
+  ${PIC_BOUNDARY_TMPDIR_NP4}
+)
+add_mpi_test(
+  test_pic_boundary_np8
+  test_pic_boundary
+  8
+  ${PIC_BOUNDARY_TMPDIR_NP8}
+)
