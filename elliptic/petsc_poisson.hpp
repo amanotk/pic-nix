@@ -16,8 +16,6 @@ public:
   virtual int solve() override;
   virtual int solve(ChunkAccessor& accessor) override;
 
-  float64 get_residual_norm();
-
 protected:
   float64 delx;
   float64 dely;

@@ -12,57 +12,14 @@
 using namespace nix::typedefs;
 
 PicPoisson::PicPoisson(const nix::Dims3D& global_dims, float64 delh)
-    : PetscInterface(global_dims), global_dims_(global_dims), accessor_(), delx(delh), dely(delh),
-      delz(delh)
+    : PetscInterface(global_dims), global_dims_(global_dims), delx(delh), dely(delh), delz(delh)
 {
   setup();
 }
 
-int PicPoisson::update_mapping(const ChunkVec& chunks)
+int PicPoisson::set_option(const json& config)
 {
-  accessor_.set_chunks(chunks);
-  return PetscInterface::update_mapping(accessor_);
-}
-
-int PicPoisson::scatter_rhs(const ChunkVec& chunks)
-{
-  update_mapping(chunks);
-  copy_chunk_to_src(accessor_);
-  scatter_forward_begin();
-  scatter_forward_end();
-  return 0;
-}
-
-int PicPoisson::copy_rhs_to_solution()
-{
-  return VecCopy(vector_src_g, vector_sol_g);
-}
-
-int PicPoisson::scatter_solution_to_chunks(const ChunkVec& chunks)
-{
-  update_mapping(chunks);
-  scatter_reverse_begin();
-  scatter_reverse_end();
-  copy_sol_to_chunk(accessor_);
-  return 0;
-}
-
-int PicPoisson::solve(const ChunkVec& chunks)
-{
-  update_mapping(chunks);
-  copy_chunk_to_src(accessor_);
-  scatter_forward_begin();
-  scatter_forward_end();
-  const int status = solve();
-  scatter_reverse_begin();
-  scatter_reverse_end();
-  copy_sol_to_chunk(accessor_);
-  return status;
-}
-
-int PicPoisson::solve(elliptic::ChunkAccessor& accessor)
-{
-  return solve();
+  return PetscInterface::set_option(config);
 }
 
 int PicPoisson::solve()
@@ -74,25 +31,9 @@ int PicPoisson::solve()
   return ierr;
 }
 
-int PicPoisson::set_option(const json& config)
+int PicPoisson::solve(elliptic::ChunkAccessor& accessor)
 {
-  return PetscInterface::set_option(config);
-}
-
-float64 PicPoisson::get_residual_norm()
-{
-  Vec       vector_res_g;
-  PetscReal res_norm;
-  PetscReal src_norm;
-
-  VecDuplicate(vector_src_g, &vector_res_g);
-  MatMult(matrix, vector_sol_g, vector_res_g);
-  VecAYPX(vector_res_g, -1.0, vector_src_g);
-  VecNorm(vector_res_g, NORM_2, &res_norm);
-  VecNorm(vector_src_g, NORM_2, &src_norm);
-  VecDestroy(&vector_res_g);
-
-  return static_cast<float64>(res_norm / (src_norm + 1.0e-32));
+  return solve();
 }
 
 int PicPoisson::set_matrix()
@@ -110,11 +51,6 @@ int PicPoisson::set_matrix()
   const float64 diag_2d = +2.0 * dx2_inv + 2.0 * dy2_inv;
   const float64 diag_3d = +2.0 * dx2_inv + 2.0 * dy2_inv + 2.0 * dz2_inv;
 
-  if (matrix != nullptr) {
-    MatDestroy(&matrix);
-  }
-  DMCreateMatrix(dm_obj, &matrix);
-
   if (is_1d) {
     elliptic::build_poisson_matrix_1d(matrix, dm_obj, diag_1d, ofdx);
   } else if (is_2d) {
@@ -127,7 +63,6 @@ int PicPoisson::set_matrix()
     MPI_Abort(MPI_COMM_WORLD, -1);
   }
 
-  set_nullspace();
   return 0;
 }
 
@@ -139,16 +74,12 @@ void PicPoisson::set_nullspace()
   MatNullSpaceDestroy(&ns);
 }
 
-void PicPoisson::PicChunkAccessor::set_chunks(const ChunkVec& chunks)
+PicPoisson::PicChunkAccessor::PicChunkAccessor(const ChunkVec& chunks)
+    : chunks_(chunks), chunk_dims_{0, 0, 0}, chunk_size_(0)
 {
-  chunks_ = chunks;
-
   if (chunks_.empty()) {
-    chunk_dims_ = {0, 0, 0};
-    chunk_size_ = 0;
     return;
   }
-
   auto dims   = chunks_.front()->get_dims();
   chunk_dims_ = {dims[0], dims[1], dims[2]};
   chunk_size_ = chunk_dims_[0] * chunk_dims_[1] * chunk_dims_[2];

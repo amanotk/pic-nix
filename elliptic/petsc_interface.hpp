@@ -5,6 +5,7 @@
 #include <memory>
 #include <petscdm.h>
 #include <petscksp.h>
+#include <petscmat.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -41,6 +42,7 @@ public:
   virtual int set_option(const nlohmann::json& config) override;
   virtual int solve() override               = 0;
   virtual int solve(ChunkAccessor& accessor) = 0;
+  float64     get_residual_norm();
 
 protected:
   Dims3D               dims;
@@ -70,6 +72,7 @@ protected:
   virtual void create_dm3d(Dims3D dims);
   virtual void setup();
   virtual int  set_matrix() = 0;
+  virtual void set_nullspace();
 };
 
 } // namespace elliptic

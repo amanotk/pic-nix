@@ -15,6 +15,7 @@
 
 #include <petscao.h>
 #include <petscdmda.h>
+#include <petscmat.h>
 #include <petscsys.h>
 #include <petscvec.h>
 

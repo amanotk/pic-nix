@@ -233,6 +233,22 @@ int PetscInterface::set_option(const nlohmann::json& config)
   return 0;
 }
 
+float64 PetscInterface::get_residual_norm()
+{
+  Vec       vector_res_g;
+  PetscReal res_norm;
+  PetscReal src_norm;
+
+  VecDuplicate(vector_src_g, &vector_res_g);
+  MatMult(matrix, vector_sol_g, vector_res_g);
+  VecAYPX(vector_res_g, -1.0, vector_src_g);
+  VecNorm(vector_res_g, NORM_2, &res_norm);
+  VecNorm(vector_src_g, NORM_2, &src_norm);
+  VecDestroy(&vector_res_g);
+
+  return static_cast<float64>(res_norm / (src_norm + 1.0e-32));
+}
+
 void PetscInterface::create_dm(Dims3D dims)
 {
   assert(dims.size() == 3);
@@ -292,6 +308,7 @@ void PetscInterface::setup()
   DMCreateGlobalVector(dm_obj, &vector_sol_g);
 
   // create matrix
+  DMCreateMatrix(dm_obj, &matrix);
   set_matrix();
 
   // create KSP solver
@@ -301,6 +318,12 @@ void PetscInterface::setup()
 
   // scatter object
   scatter = std::make_unique<PetscScatter>(&dm_obj, dims);
+
+  set_nullspace();
+}
+
+void PetscInterface::set_nullspace()
+{
 }
 
 } // namespace elliptic
