@@ -22,18 +22,13 @@ int PicPoisson::set_option(const json& config)
   return PetscInterface::set_option(config);
 }
 
-int PicPoisson::solve()
+int PicPoisson::solve(elliptic::ChunkAccessor& accessor)
 {
   PetscErrorCode ierr = KSPSolve(ksp_obj, vector_src_g, vector_sol_g);
   if (ierr != 0) {
     ERROR << "KSPSolve failed with error code: " << ierr << std::endl;
   }
   return ierr;
-}
-
-int PicPoisson::solve(elliptic::ChunkAccessor& accessor)
-{
-  return solve();
 }
 
 int PicPoisson::set_matrix()

@@ -21,13 +21,12 @@ Markdown documents should be human-friendly (i.e., not only for AIs) with proper
 The code under `nix/thirdparty/` should not be modified unless explicitly instructed.  
 
 ## Testing
-Tests are in the `unittest` directory of the `nix` and `elliptic` modules.  
-When running test of these modules, always run configure/build/test from the module subdirectory, not the root directory.  
+Tests are in the `unittest` directory of the `nix` and `elliptic` modules, but configure/build/test commands should always run from the repository root so they share the top-level build directory.  
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  
 See the instructions below for building and running tests.
 
 - Configure  
-  From the module subdirectory, configure with MPI compiler and enable tests as follows:
+  From the repository root, configure with MPI compiler and enable tests as follows:
   ```
   cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
   ```

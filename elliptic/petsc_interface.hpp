@@ -40,7 +40,6 @@ public:
   virtual int scatter_reverse_begin();
   virtual int scatter_reverse_end();
   virtual int set_option(const nlohmann::json& config) override;
-  virtual int solve() override               = 0;
   virtual int solve(ChunkAccessor& accessor) = 0;
   float64     get_residual_norm();
 

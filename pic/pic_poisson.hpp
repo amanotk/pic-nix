@@ -35,7 +35,6 @@ public:
     int             chunk_size_;
   };
   int set_option(const json& config);
-  int solve() override;
   int solve(elliptic::ChunkAccessor& accessor) override;
 
 protected:

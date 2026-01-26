@@ -133,6 +133,22 @@ class TestPicPoisson : public PicPoisson
 public:
   using PicPoisson::PicPoisson;
 
+  virtual int copy_chunk_to_src(elliptic::ChunkAccessor& accessor) override
+  {
+    int count = PicPoisson::copy_chunk_to_src(accessor);
+    scatter_forward_begin();
+    scatter_forward_end();
+    return count;
+  }
+
+  virtual int copy_sol_to_chunk(elliptic::ChunkAccessor& accessor) override
+  {
+    scatter_reverse_begin();
+    scatter_reverse_end();
+    int count = PicPoisson::copy_sol_to_chunk(accessor);
+    return count;
+  }
+
   void copy_rhs_to_solution()
   {
     VecCopy(vector_src_g, vector_sol_g);
@@ -210,13 +226,8 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
   TestPicPoisson               poisson(global_dims, 1.0);
   PicPoisson::PicChunkAccessor accessor(storage);
   poisson.update_mapping(accessor);
-  poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
-  poisson.scatter_forward_begin();
-  poisson.scatter_forward_end();
   poisson.copy_rhs_to_solution();
-  poisson.scatter_reverse_begin();
-  poisson.scatter_reverse_end();
   poisson.copy_sol_to_chunk(accessor);
 
   auto data = storage[0]->get_internal_data();
@@ -235,8 +246,8 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=2]")
     return;
   }
 
-  const nix::Dims3D                      global_dims = {2, 2, 4};
-  const nix::Dims3D                      chunk_dims  = {2, 2, 2};
+  const nix::Dims3D                      global_dims = {16, 16, 16};
+  const nix::Dims3D                      chunk_dims  = {16, 16, 8};
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> storage;
 
@@ -256,12 +267,7 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=2]")
   PicPoisson::PicChunkAccessor accessor(storage);
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
-  poisson.scatter_forward_begin();
-  poisson.scatter_forward_end();
-  poisson.copy_rhs_to_solution();
-  REQUIRE(poisson.solve() == 0);
-  poisson.scatter_reverse_begin();
-  poisson.scatter_reverse_end();
+  REQUIRE(poisson.solve(accessor) == 0);
   poisson.copy_sol_to_chunk(accessor);
 
   auto phi_sol = gather_phi(storage, global_dims);

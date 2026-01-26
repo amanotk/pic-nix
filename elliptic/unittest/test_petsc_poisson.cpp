@@ -28,7 +28,7 @@ void run_copy_solve_copy(SolverT& solver, MockChunkAccessor& accessor)
   solver.update_mapping(accessor);
   REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
   solver.scatter_forward();
-  REQUIRE(solver.solve() == 0);
+  REQUIRE(solver.solve(accessor) == 0);
   solver.scatter_reverse();
   REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
 }
