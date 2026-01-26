@@ -34,6 +34,10 @@ public:
   virtual int update_mapping(ChunkAccessor& accessor) override;
   virtual int copy_chunk_to_src(ChunkAccessor& accessor) override;
   virtual int copy_sol_to_chunk(ChunkAccessor& accessor) override;
+  virtual int scatter_forward_begin();
+  virtual int scatter_forward_end();
+  virtual int scatter_reverse_begin();
+  virtual int scatter_reverse_end();
   virtual int set_option(const nlohmann::json& config) override;
   virtual int solve() override               = 0;
   virtual int solve(ChunkAccessor& accessor) = 0;
@@ -60,10 +64,6 @@ protected:
   static OptionVec   make_petsc_option(const toml::value& config);
   void               destroy_petsc_objects();
 
-  virtual int  scatter_forward_begin();
-  virtual int  scatter_forward_end();
-  virtual int  scatter_reverse_begin();
-  virtual int  scatter_reverse_end();
   virtual void create_dm(Dims3D dims);
   virtual void create_dm1d(Dims3D dims);
   virtual void create_dm2d(Dims3D dims);

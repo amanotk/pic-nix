@@ -176,6 +176,22 @@ PetscInterface::OptionVec PetscInterface::make_petsc_option(const toml::value& c
   return option;
 }
 
+int PetscInterface::update_mapping(ChunkAccessor& accessor)
+{
+  scatter->setup_scatter(accessor, src_buf, sol_buf, vector_src_l, vector_sol_l, vector_src_g);
+  return 0;
+}
+
+int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
+{
+  return accessor.pack(src_buf.data(), static_cast<int>(src_buf.size()));
+}
+
+int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
+{
+  return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
+}
+
 int PetscInterface::scatter_forward_begin()
 {
   scatter->scatter_forward_begin(vector_src_l, vector_src_g);
@@ -198,22 +214,6 @@ int PetscInterface::scatter_reverse_end()
 {
   scatter->scatter_reverse_end(vector_sol_l, vector_sol_g);
   return 0;
-}
-
-int PetscInterface::update_mapping(ChunkAccessor& accessor)
-{
-  scatter->setup_scatter(accessor, src_buf, sol_buf, vector_src_l, vector_sol_l, vector_src_g);
-  return 0;
-}
-
-int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
-{
-  return accessor.pack(src_buf.data(), static_cast<int>(src_buf.size()));
-}
-
-int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
-{
-  return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
 }
 
 int PetscInterface::set_option(const nlohmann::json& config)
