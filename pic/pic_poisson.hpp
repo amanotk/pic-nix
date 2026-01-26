@@ -7,12 +7,13 @@
 
 #include "elliptic/chunk_accessor.hpp"
 #include "elliptic/petsc_interface.hpp"
+#include <memory>
 #include <petscvec.h>
 
 class PicPoisson : public elliptic::PetscInterface
 {
 public:
-  using ChunkVec = std::vector<PicChunk*>;
+  using ChunkVec = std::vector<std::unique_ptr<PicChunk>>;
 
   PicPoisson(const nix::Dims3D& global_dims, float64 delh);
 
@@ -33,9 +34,9 @@ public:
     nix::Dims3D     chunk_dims_;
     int             chunk_size_;
   };
-  int     set_option(const json& config);
-  int     solve() override;
-  int     solve(elliptic::ChunkAccessor& accessor) override;
+  int set_option(const json& config);
+  int solve() override;
+  int solve(elliptic::ChunkAccessor& accessor) override;
 
 protected:
   int set_matrix() override;

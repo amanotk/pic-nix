@@ -196,24 +196,19 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
     return;
   }
 
-  const nix::Dims3D global_dims = {2, 2, 4};
-  const nix::Dims3D chunk_dims  = {2, 2, 2};
-  const nix::Bool3D has_dim     = {true, true, true};
-
+  const nix::Dims3D                      global_dims = {2, 2, 4};
+  const nix::Dims3D                      chunk_dims  = {2, 2, 2};
+  const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> storage;
-  std::vector<PicChunk*>                 chunks;
 
   const int         rank   = get_mpi_rank();
   const nix::Dims3D offset = {0, 0, chunk_dims[2] * rank};
   storage.push_back(make_chunk(chunk_dims, has_dim, global_dims, offset, rank));
-  for (auto& ptr : storage) {
-    chunks.push_back(ptr.get());
-  }
 
   fill_rho_sequence(*storage[0], global_dims);
 
   TestPicPoisson               poisson(global_dims, 1.0);
-  PicPoisson::PicChunkAccessor accessor(chunks);
+  PicPoisson::PicChunkAccessor accessor(storage);
   poisson.update_mapping(accessor);
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
@@ -240,19 +235,14 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=2]")
     return;
   }
 
-  const nix::Dims3D global_dims = {2, 2, 4};
-  const nix::Dims3D chunk_dims  = {2, 2, 2};
-  const nix::Bool3D has_dim     = {true, true, true};
-
+  const nix::Dims3D                      global_dims = {2, 2, 4};
+  const nix::Dims3D                      chunk_dims  = {2, 2, 2};
+  const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> storage;
-  std::vector<PicChunk*>                 chunks;
 
   const int         rank   = get_mpi_rank();
   const nix::Dims3D offset = {0, 0, chunk_dims[2] * rank};
   storage.push_back(make_chunk(chunk_dims, has_dim, global_dims, offset, rank));
-  for (auto& ptr : storage) {
-    chunks.push_back(ptr.get());
-  }
 
   auto phi_ref = make_reference_potential(global_dims);
   auto rhs     = make_rhs_from_potential(phi_ref, global_dims);
@@ -263,7 +253,7 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=2]")
   opts["petsc"] = {{"ksp_type", "cg"}, {"pc_type", "none"}, {"ksp_rtol", 1.0e-12}};
   poisson.set_option(opts);
 
-  PicPoisson::PicChunkAccessor accessor(chunks);
+  PicPoisson::PicChunkAccessor accessor(storage);
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
   poisson.scatter_forward_begin();
