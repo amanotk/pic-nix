@@ -290,20 +290,23 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
   }
 }
 
-TEST_CASE("PicPoisson solves periodic Poisson", "[np=2]")
+TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
 {
-  if (!require_mpi_size(2)) {
+  if (!require_mpi_size(8)) {
     return;
   }
 
   const nix::Dims3D                      global_dims = {16, 16, 16};
-  const nix::Dims3D                      chunk_dims  = {16, 16, 8};
+  const nix::Dims3D                      chunk_dims  = {8, 8, 8};
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> storage;
   std::vector<MockPicChunk*>              mock_chunks;
 
   const int         rank   = get_mpi_rank();
-  const nix::Dims3D offset = {0, 0, chunk_dims[2] * rank};
+  const int         px     = rank % 2;
+  const int         py     = (rank / 2) % 2;
+  const int         pz     = rank / 4;
+  const nix::Dims3D offset = {px * chunk_dims[0], py * chunk_dims[1], pz * chunk_dims[2]};
   auto chunk = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
   mock_chunks.push_back(chunk.get());
   storage.push_back(std::move(chunk));
