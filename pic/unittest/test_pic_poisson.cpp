@@ -20,6 +20,7 @@ namespace
 float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum, float64 z,
                           float64 y, float64 x);
 float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y, float64 x);
+float64 compute_kappa_component(float64 k, float64 h);
 
 template <typename ChunkT>
 std::unique_ptr<ChunkT> make_chunk_impl(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
@@ -285,23 +286,23 @@ void require_rms_error_below(const std::vector<std::unique_ptr<PicChunk>>& chunk
 
 } // namespace
 
-TEST_CASE("PicPoisson scatter", "[np=2]")
+TEST_CASE("PicPoisson solves 1D periodic Poisson", "[np=8]")
 {
-  if (!require_mpi_size(2)) {
+  if (!require_mpi_size(8)) {
     return;
   }
 
-  const float64     tol             = 1.0e-15;
-  const int         rank            = get_mpi_rank();
-  const int         mz              = 1;
-  const int         my              = 1;
-  const int         mx              = 1;
-  const nix::Dims3D global_dims     = {16, 16, 16};
-  const nix::Dims3D chunk_dims      = {4, 4, 4};
-  const nix::Bool3D has_dim         = {true, true, true};
-  const auto        proc_dims       = std::array<int, 3>{1, 1, 2};
+  const float64     tol             = 1.0e-12;
+  const int         mz              = 0;
+  const int         my              = 0;
+  const int         mx              = 3;
+  const nix::Dims3D global_dims     = {1, 1, 64};
+  const nix::Dims3D chunk_dims      = {1, 1, 8};
+  const nix::Bool3D has_dim         = {false, false, true};
+  const auto        proc_dims       = std::array<int, 3>{2, 2, 2};
   const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
   const json        config          = make_default_config();
+  const json        option          = make_default_option();
 
   REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
   REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
@@ -309,21 +310,61 @@ TEST_CASE("PicPoisson scatter", "[np=2]")
 
   // create chunks
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
-  initialize_chunkvec(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
-                      config);
+  initialize_chunkvec(chunkvec, get_mpi_rank(), proc_dims, global_dims, chunk_dims, has_dim, mz, my,
+                      mx, config);
 
   TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
 
+  poisson.set_option(option);
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
-  poisson.copy_src_to_sol();
+  REQUIRE(poisson.solve(accessor) == 0);
   poisson.copy_sol_to_chunk(accessor);
 
-  require_src_equals_sol(chunkvec, tol);
+  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
 }
 
-TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
+TEST_CASE("PicPoisson solves 2D periodic Poisson", "[np=8]")
+{
+  if (!require_mpi_size(8)) {
+    return;
+  }
+
+  const float64     tol             = 1.0e-12;
+  const int         mz              = 0;
+  const int         my              = 2;
+  const int         mx              = 3;
+  const nix::Dims3D global_dims     = {1, 32, 24};
+  const nix::Dims3D chunk_dims      = {1, 8, 12};
+  const nix::Bool3D has_dim         = {false, true, true};
+  const auto        proc_dims       = std::array<int, 3>{2, 2, 2};
+  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  const json        config          = make_default_config();
+  const json        option          = make_default_option();
+
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
+
+  // create chunks
+  std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  initialize_chunkvec(chunkvec, get_mpi_rank(), proc_dims, global_dims, chunk_dims, has_dim, mz, my,
+                      mx, config);
+
+  TestPicPoisson poisson(global_dims, 1.0);
+  auto           accessor = poisson.get_accessor(chunkvec);
+
+  poisson.set_option(option);
+  poisson.update_mapping(accessor);
+  poisson.copy_chunk_to_src(accessor);
+  REQUIRE(poisson.solve(accessor) == 0);
+  poisson.copy_sol_to_chunk(accessor);
+
+  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
+}
+
+TEST_CASE("PicPoisson solves 3D periodic Poisson", "[np=8]")
 {
   if (!require_mpi_size(8)) {
     return;
@@ -363,78 +404,40 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
 }
 
-TEST_CASE("PicPoisson solves 1D periodic Poisson", "[np=2]")
+TEST_CASE("PicPoisson scatter", "[np=2]")
 {
   if (!require_mpi_size(2)) {
     return;
   }
 
-  const float64     tol             = 1.0e-12;
-  const int         mz              = 0;
-  const int         my              = 0;
-  const int         mx              = 3;
-  const nix::Dims3D global_dims     = {1, 1, 64};
-  const nix::Dims3D chunk_dims      = {1, 1, 32};
-  const nix::Bool3D has_dim         = {false, false, true};
+  const float64     tol             = 1.0e-15;
+  const int         rank            = get_mpi_rank();
+  const int         mz              = 1;
+  const int         my              = 1;
+  const int         mx              = 1;
+  const nix::Dims3D global_dims     = {16, 16, 16};
+  const nix::Dims3D chunk_dims      = {4, 4, 4};
+  const nix::Bool3D has_dim         = {true, true, true};
   const auto        proc_dims       = std::array<int, 3>{1, 1, 2};
   const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
   const json        config          = make_default_config();
-  const json        option          = make_default_option();
 
   REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
   REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
   REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
 
+  // create chunks
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
-  initialize_chunkvec(chunkvec, get_mpi_rank(), proc_dims, global_dims, chunk_dims, has_dim, mz, my,
-                      mx, config);
+  initialize_chunkvec(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
+                      config);
 
   TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
 
-  poisson.set_option(option);
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
-  REQUIRE(poisson.solve(accessor) == 0);
+  poisson.copy_src_to_sol();
   poisson.copy_sol_to_chunk(accessor);
 
-  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
-}
-
-TEST_CASE("PicPoisson solves 2D periodic Poisson", "[np=4]")
-{
-  if (!require_mpi_size(4)) {
-    return;
-  }
-
-  const float64     tol             = 1.0e-12;
-  const int         mz              = 0;
-  const int         my              = 2;
-  const int         mx              = 3;
-  const nix::Dims3D global_dims     = {1, 32, 24};
-  const nix::Dims3D chunk_dims      = {1, 16, 12};
-  const nix::Bool3D has_dim         = {false, true, true};
-  const auto        proc_dims       = std::array<int, 3>{1, 2, 2};
-  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
-  const json        config          = make_default_config();
-  const json        option          = make_default_option();
-
-  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
-  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
-  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
-
-  std::vector<std::unique_ptr<PicChunk>> chunkvec;
-  initialize_chunkvec(chunkvec, get_mpi_rank(), proc_dims, global_dims, chunk_dims, has_dim, mz, my,
-                      mx, config);
-
-  TestPicPoisson poisson(global_dims, 1.0);
-  auto           accessor = poisson.get_accessor(chunkvec);
-
-  poisson.set_option(option);
-  poisson.update_mapping(accessor);
-  poisson.copy_chunk_to_src(accessor);
-  REQUIRE(poisson.solve(accessor) == 0);
-  poisson.copy_sol_to_chunk(accessor);
-
-  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
+  require_src_equals_sol(chunkvec, tol);
 }

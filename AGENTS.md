@@ -10,6 +10,9 @@ The code should be formatted via the `ruff` command before making a commit.
 ### Markdown
 Markdown documents should be human-friendly (i.e., not only for AIs) with proper indentation and line breaks. The line breaks should be placed by double spaces `  ` at the end of the line.
   
+## Git Workflow
+- Do not create commits unless the user explicitly asks you to.  
+
 ## Directory Structure
 - `nix/` : Module for dynamic load balancing  
 - `pic/` : Module for Particle-in-Cell simulation  
