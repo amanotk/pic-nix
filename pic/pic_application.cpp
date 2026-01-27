@@ -13,15 +13,6 @@
 
 #include <taskflow/taskflow.hpp>
 
-PicApplication::PtrPoissonSolver PicApplication::create_poisson_solver()
-{
-  nix::Dims3D global_dims = {ndims[0], ndims[1], ndims[2]};
-  float64     delh        = cfgparser->get_delx();
-
-  auto poisson = std::make_shared<PicPoisson>(global_dims, delh);
-  return std::make_unique<elliptic::Solver>(poisson);
-}
-
 PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
 {
   nix::Dims3D dims = {ndims[0], ndims[1], ndims[2]};
@@ -87,7 +78,9 @@ void PicApplication::initialize(int argc, char** argv)
 
   // initialize Poisson solver
   {
-    solver = create_poisson_solver();
+    auto poisson = create_poisson_interface();
+    solver       = std::make_unique<elliptic::Solver>(poisson);
+
     if (solver != nullptr) {
       solver->set_option(cfgparser->get_application());
     }

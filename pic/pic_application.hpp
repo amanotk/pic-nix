@@ -53,8 +53,6 @@ protected:
   MpiCommVec       mpicommvec; ///< MPI Communicators
   PtrPoissonSolver solver;     ///< Poisson solver
 
-  virtual PtrPoissonSolver create_poisson_solver();
-
   virtual PtrPoissonInterface create_poisson_interface();
 
   virtual int get_num_species() const;
