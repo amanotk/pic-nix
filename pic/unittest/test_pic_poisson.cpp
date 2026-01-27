@@ -77,8 +77,6 @@ float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y
   return std::sin(kx * x) * std::sin(ky * y) * std::sin(kz * z);
 }
 
-constexpr nix::Dims3D poisson_global_dims = {16, 16, 16};
-
 std::array<int, 3> make_proc_dims(const nix::Dims3D& global_dims, const nix::Dims3D& chunk_dims)
 {
   return {global_dims[0] / chunk_dims[0], global_dims[1] / chunk_dims[1],
@@ -135,32 +133,6 @@ public:
     }
   }
 
-  void fill_reference(std::vector<float64>& phi_ref, const nix::Dims3D& dims) const
-  {
-    auto offset = get_offset();
-    auto data   = const_cast<TestPicChunk*>(this)->get_internal_data();
-
-    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          const int gz  = offset[0] + (iz - data.Lbz);
-          const int gy  = offset[1] + (iy - data.Lby);
-          const int gx  = offset[2] + (ix - data.Lbx);
-          const int idx = elliptic::ChunkAccessor::flatten_index(gz, gy, gx, dims);
-          phi_ref[idx]  = evaluate_reference(gz, gy, gx, dims);
-        }
-      }
-    }
-  }
-
-  static float64 evaluate_reference(int gz, int gy, int gx, const nix::Dims3D& dims)
-  {
-    const float64 argx = static_cast<float64>(gx) / static_cast<float64>(dims[2]) * nix::math::pi2;
-    const float64 argy = static_cast<float64>(gy) / static_cast<float64>(dims[1]) * nix::math::pi2;
-    const float64 argz = static_cast<float64>(gz) / static_cast<float64>(dims[0]) * nix::math::pi2;
-    return std::cos(argx) + 0.25 * std::cos(argy) + 0.125 * std::cos(argz);
-  }
-
   std::array<float64, 3> get_coordinates(int iz, int iy, int ix) const
   {
     auto data = const_cast<TestPicChunk*>(this)->get_internal_data();
@@ -173,14 +145,14 @@ public:
 
   int get_owned_cell_count() const
   {
-    auto data   = const_cast<TestPicChunk*>(this)->get_internal_data();
-    const int nz = data.Ubz - data.Lbz + 1;
-    const int ny = data.Uby - data.Lby + 1;
-    const int nx = data.Ubx - data.Lbx + 1;
+    auto      data = const_cast<TestPicChunk*>(this)->get_internal_data();
+    const int nz   = data.Ubz - data.Lbz + 1;
+    const int ny   = data.Uby - data.Lby + 1;
+    const int nx   = data.Ubx - data.Lbx + 1;
     return nz * ny * nx;
   }
 
-  void populate_rhs_from_source(int mz, int my, int mx, const nix::Dims3D& global_dims)
+  void populate_source(int mz, int my, int mx, const nix::Dims3D& global_dims)
   {
     auto          data = const_cast<TestPicChunk*>(this)->get_internal_data();
     const float64 lx   = static_cast<float64>(global_dims[2]) * data.delx;
@@ -238,8 +210,8 @@ public:
   }
 };
 
-float64 compute_global_mse(const std::vector<std::unique_ptr<PicChunk>>& chunks, int mz, int my,
-                           int mx)
+float64 compute_error(const std::vector<std::unique_ptr<PicChunk>>& chunks, int mz, int my, int mx,
+                      const nix::Dims3D& global_dims)
 {
   float64 local_sum   = 0.0;
   int     local_count = 0;
@@ -247,7 +219,7 @@ float64 compute_global_mse(const std::vector<std::unique_ptr<PicChunk>>& chunks,
     auto* test_chunk = dynamic_cast<TestPicChunk*>(base_chunk.get());
     REQUIRE(test_chunk != nullptr);
     const int     count = test_chunk->get_owned_cell_count();
-    const float64 mse = test_chunk->compute_solution_error(mz, my, mx, poisson_global_dims);
+    const float64 mse   = test_chunk->compute_solution_error(mz, my, mx, global_dims);
     local_sum += mse * static_cast<float64>(count);
     local_count += count;
   }
@@ -256,63 +228,8 @@ float64 compute_global_mse(const std::vector<std::unique_ptr<PicChunk>>& chunks,
   int     global_count = 0;
   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  return global_sum / static_cast<float64>(global_count);
-}
 
-std::vector<float64> make_rhs_from_potential(const std::vector<float64>& phi_ref,
-                                             const nix::Dims3D&          dims)
-{
-  const int nglobal = dims[0] * dims[1] * dims[2];
-  auto      index   = [dims](int gz, int gy, int gx) {
-    const int z = (gz + dims[0]) % dims[0];
-    const int y = (gy + dims[1]) % dims[1];
-    const int x = (gx + dims[2]) % dims[2];
-    return flatten_global(z, y, x, dims);
-  };
-
-  std::vector<float64> rhs(nglobal, 0.0);
-  for (int gz = 0; gz < dims[0]; ++gz) {
-    for (int gy = 0; gy < dims[1]; ++gy) {
-      for (int gx = 0; gx < dims[2]; ++gx) {
-        const int     idx = flatten_global(gz, gy, gx, dims);
-        const float64 lapx =
-            phi_ref[index(gz, gy, gx + 1)] + phi_ref[index(gz, gy, gx - 1)] - 2.0 * phi_ref[idx];
-        const float64 lapy =
-            phi_ref[index(gz, gy + 1, gx)] + phi_ref[index(gz, gy - 1, gx)] - 2.0 * phi_ref[idx];
-        const float64 lapz =
-            phi_ref[index(gz + 1, gy, gx)] + phi_ref[index(gz - 1, gy, gx)] - 2.0 * phi_ref[idx];
-
-        rhs[idx] = -(lapx + lapy + lapz);
-      }
-    }
-  }
-
-  return rhs;
-}
-
-void distribute_rhs_from_vector(const std::vector<TestPicChunk*>& chunks,
-                                const std::vector<float64>& rhs, const nix::Dims3D& dims)
-{
-  for (auto* chunk : chunks) {
-    chunk->fill_rhs_from_vector(rhs, dims);
-  }
-}
-
-std::vector<float64> make_reference_potential(const nix::Dims3D& dims)
-{
-  const int            nglobal = dims[0] * dims[1] * dims[2];
-  std::vector<float64> phi_ref(nglobal, 0.0);
-
-  for (int gz = 0; gz < dims[0]; ++gz) {
-    for (int gy = 0; gy < dims[1]; ++gy) {
-      for (int gx = 0; gx < dims[2]; ++gx) {
-        const int idx = flatten_global(gz, gy, gx, dims);
-        phi_ref[idx]  = TestPicChunk::evaluate_reference(gz, gy, gx, dims);
-      }
-    }
-  }
-
-  return phi_ref;
+  return std::sqrt(global_sum / static_cast<float64>(global_count));
 }
 
 std::unique_ptr<TestPicChunk> make_mock_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
@@ -392,22 +309,23 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
     return;
   }
 
+  const nix::Dims3D                      global_dims = {16, 16, 16};
   const nix::Dims3D                      chunk_dims  = {8, 8, 8};
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
 
-  const int         rank   = get_mpi_rank();
-  const nix::Dims3D offset = make_chunk_offset(rank, chunk_dims, poisson_global_dims);
-  auto              chunk  = make_mock_chunk(chunk_dims, has_dim, poisson_global_dims, offset, rank);
+  const int         rank      = get_mpi_rank();
+  const nix::Dims3D offset    = make_chunk_offset(rank, chunk_dims, global_dims);
+  auto              chunk     = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
   auto*             chunk_ptr = chunk.get();
   chunkvec.push_back(std::move(chunk));
 
   const int mz = 3;
   const int my = 4;
   const int mx = 5;
-  chunk_ptr->populate_rhs_from_source(mz, my, mx, poisson_global_dims);
+  chunk_ptr->populate_source(mz, my, mx, global_dims);
 
-  TestPicPoisson poisson(poisson_global_dims, 1.0);
+  TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
   json           opts = {{"petsc", {"ksp_type", "cg"}, {"pc_type", "none"}, {"ksp_rtol", 1.0e-12}}};
 
@@ -417,7 +335,6 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   REQUIRE(poisson.solve(accessor) == 0);
   poisson.copy_sol_to_chunk(accessor);
 
-  const float64 global_mse = compute_global_mse(chunkvec, mz, my, mx);
-  const float64 rms_err    = std::sqrt(global_mse);
+  const float64 rms_err = compute_error(chunkvec, mz, my, mx, global_dims);
   REQUIRE(rms_err < 1.0e-10);
 }
