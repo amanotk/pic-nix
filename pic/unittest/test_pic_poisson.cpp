@@ -113,7 +113,7 @@ std::vector<float64> make_rhs_from_potential(const std::vector<float64>& phi_ref
   return rhs;
 }
 
-class MockPicChunk : public PicChunk
+class TestPicChunk : public PicChunk
 {
 public:
   using PicChunk::PicChunk;
@@ -121,15 +121,15 @@ public:
   void fill_rhs_from_vector(const std::vector<float64>& rhs, const nix::Dims3D& global_dims)
   {
     auto offset = get_offset();
-    auto data   = const_cast<MockPicChunk*>(this)->get_internal_data();
+    auto data   = const_cast<TestPicChunk*>(this)->get_internal_data();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
       for (int iy = data.Lby; iy <= data.Uby; ++iy) {
         for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          const int gz  = offset[0] + (iz - data.Lbz);
-          const int gy  = offset[1] + (iy - data.Lby);
-          const int gx  = offset[2] + (ix - data.Lbx);
-          const int idx = elliptic::ChunkAccessor::flatten_index(gz, gy, gx, global_dims);
+          const int gz           = offset[0] + (iz - data.Lbz);
+          const int gy           = offset[1] + (iy - data.Lby);
+          const int gx           = offset[2] + (ix - data.Lbx);
+          const int idx          = elliptic::ChunkAccessor::flatten_index(gz, gy, gx, global_dims);
           data.uj(iz, iy, ix, 0) = rhs[idx];
         }
       }
@@ -139,7 +139,7 @@ public:
   void fill_reference(std::vector<float64>& phi_ref, const nix::Dims3D& dims) const
   {
     auto offset = get_offset();
-    auto data   = const_cast<MockPicChunk*>(this)->get_internal_data();
+    auto data   = const_cast<TestPicChunk*>(this)->get_internal_data();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
       for (int iy = data.Lby; iy <= data.Uby; ++iy) {
@@ -156,19 +156,15 @@ public:
 
   static float64 evaluate_reference(int gz, int gy, int gx, const nix::Dims3D& dims)
   {
-    const float64 argx =
-        static_cast<float64>(gx) / static_cast<float64>(dims[2]) * nix::math::pi2;
-    const float64 argy =
-        static_cast<float64>(gy) / static_cast<float64>(dims[1]) * nix::math::pi2;
-    const float64 argz =
-        static_cast<float64>(gz) / static_cast<float64>(dims[0]) * nix::math::pi2;
+    const float64 argx = static_cast<float64>(gx) / static_cast<float64>(dims[2]) * nix::math::pi2;
+    const float64 argy = static_cast<float64>(gy) / static_cast<float64>(dims[1]) * nix::math::pi2;
+    const float64 argz = static_cast<float64>(gz) / static_cast<float64>(dims[0]) * nix::math::pi2;
     return std::cos(argx) + 0.25 * std::cos(argy) + 0.125 * std::cos(argz);
   }
 };
 
-void distribute_rhs_from_vector(const std::vector<MockPicChunk*>& chunks,
-                                const std::vector<float64>&        rhs,
-                                const nix::Dims3D&                 dims)
+void distribute_rhs_from_vector(const std::vector<TestPicChunk*>& chunks,
+                                const std::vector<float64>& rhs, const nix::Dims3D& dims)
 {
   for (auto* chunk : chunks) {
     chunk->fill_rhs_from_vector(rhs, dims);
@@ -183,8 +179,8 @@ std::vector<float64> make_reference_potential(const nix::Dims3D& dims)
   for (int gz = 0; gz < dims[0]; ++gz) {
     for (int gy = 0; gy < dims[1]; ++gy) {
       for (int gx = 0; gx < dims[2]; ++gx) {
-        const int     idx       = flatten_global(gz, gy, gx, dims);
-        phi_ref[idx] = MockPicChunk::evaluate_reference(gz, gy, gx, dims);
+        const int idx = flatten_global(gz, gy, gx, dims);
+        phi_ref[idx]  = TestPicChunk::evaluate_reference(gz, gy, gx, dims);
       }
     }
   }
@@ -192,11 +188,11 @@ std::vector<float64> make_reference_potential(const nix::Dims3D& dims)
   return phi_ref;
 }
 
-std::unique_ptr<MockPicChunk> make_mock_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
-                                             const nix::Dims3D& global_dims, const nix::Dims3D& offset,
-                                             int id)
+std::unique_ptr<TestPicChunk> make_mock_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
+                                              const nix::Dims3D& global_dims,
+                                              const nix::Dims3D& offset, int id)
 {
-  return make_chunk_impl<MockPicChunk>(dims, has_dim, global_dims, offset, id);
+  return make_chunk_impl<TestPicChunk>(dims, has_dim, global_dims, offset, id);
 }
 
 class TestPicPoisson : public PicPoisson
@@ -273,8 +269,9 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
 
   fill_rho_sequence(*storage[0], global_dims);
 
-  TestPicPoisson               poisson(global_dims, 1.0);
-  PicPoisson::PicChunkAccessor accessor(storage);
+  TestPicPoisson poisson(global_dims, 1.0);
+  auto           accessor = poisson.get_accessor(storage);
+
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
   poisson.copy_rhs_to_solution();
@@ -300,14 +297,14 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   const nix::Dims3D                      chunk_dims  = {8, 8, 8};
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> storage;
-  std::vector<MockPicChunk*>              mock_chunks;
+  std::vector<TestPicChunk*>             mock_chunks;
 
   const int         rank   = get_mpi_rank();
   const int         px     = rank % 2;
   const int         py     = (rank / 2) % 2;
   const int         pz     = rank / 4;
   const nix::Dims3D offset = {px * chunk_dims[0], py * chunk_dims[1], pz * chunk_dims[2]};
-  auto chunk = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
+  auto              chunk  = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
   mock_chunks.push_back(chunk.get());
   storage.push_back(std::move(chunk));
 
@@ -316,11 +313,10 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   distribute_rhs_from_vector(mock_chunks, rhs, global_dims);
 
   TestPicPoisson poisson(global_dims, 1.0);
-  json           opts;
-  opts["petsc"] = {{"ksp_type", "cg"}, {"pc_type", "none"}, {"ksp_rtol", 1.0e-12}};
-  poisson.set_option(opts);
+  auto           accessor = poisson.get_accessor(storage);
+  json           opts = {{"petsc", {"ksp_type", "cg"}, {"pc_type", "none"}, {"ksp_rtol", 1.0e-12}}};
 
-  PicPoisson::PicChunkAccessor accessor(storage);
+  poisson.set_option(opts);
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
   REQUIRE(poisson.solve(accessor) == 0);

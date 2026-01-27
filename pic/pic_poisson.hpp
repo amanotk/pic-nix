@@ -15,8 +15,6 @@ class PicPoisson : public elliptic::PetscInterface
 public:
   using ChunkVec = std::vector<std::unique_ptr<PicChunk>>;
 
-  PicPoisson(const nix::Dims3D& global_dims, float64 delh);
-
   class PicChunkAccessor : public elliptic::ChunkAccessor
   {
   public:
@@ -34,8 +32,12 @@ public:
     nix::Dims3D     chunk_dims_;
     int             chunk_size_;
   };
+
+  PicPoisson(const nix::Dims3D& global_dims, float64 delh);
+
   int set_option(const json& config);
   int solve(elliptic::ChunkAccessor& accessor) override;
+  PicChunkAccessor get_accessor(ChunkVec& chunkvec);
 
 protected:
   int set_matrix() override;

@@ -31,6 +31,11 @@ int PicPoisson::solve(elliptic::ChunkAccessor& accessor)
   return ierr;
 }
 
+PicPoisson::PicChunkAccessor PicPoisson::get_accessor(ChunkVec& chunkvec)
+{
+  return PicChunkAccessor(chunkvec);
+}
+
 int PicPoisson::set_matrix()
 {
   const bool    is_1d   = (global_dims_[0] == 1) && (global_dims_[1] == 1);
