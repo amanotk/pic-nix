@@ -85,24 +85,6 @@ class TestPicChunk : public PicChunk
 public:
   using PicChunk::PicChunk;
 
-  void fill_rhs_from_vector(const std::vector<float64>& rhs, const nix::Dims3D& global_dims)
-  {
-    auto offset = get_offset();
-    auto data   = const_cast<TestPicChunk*>(this)->get_internal_data();
-
-    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          const int gz           = offset[0] + (iz - data.Lbz);
-          const int gy           = offset[1] + (iy - data.Lby);
-          const int gx           = offset[2] + (ix - data.Lbx);
-          const int idx          = elliptic::ChunkAccessor::flatten_index(gz, gy, gx, global_dims);
-          data.uj(iz, iy, ix, 0) = rhs[idx];
-        }
-      }
-    }
-  }
-
   std::array<float64, 3> get_coordinates(int iz, int iy, int ix) const
   {
     auto data = const_cast<TestPicChunk*>(this)->get_internal_data();
@@ -113,7 +95,7 @@ public:
             static_cast<float64>(gx) * data.delx};
   }
 
-  int get_owned_cell_count() const
+  int get_cell_count() const
   {
     auto      data = const_cast<TestPicChunk*>(this)->get_internal_data();
     const int nz   = data.Ubz - data.Lbz + 1;
@@ -136,10 +118,10 @@ public:
       for (int iy = data.Lby; iy <= data.Uby; ++iy) {
         for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
           auto          coords   = get_coordinates(iz, iy, ix);
-          const float64 gzcoord  = coords[0];
-          const float64 gycoord  = coords[1];
-          const float64 gxcoord  = coords[2];
-          data.uj(iz, iy, ix, 0) = analytic_source(kz, ky, kx, gzcoord, gycoord, gxcoord);
+          const float64 z        = coords[0];
+          const float64 y        = coords[1];
+          const float64 x        = coords[2];
+          data.uj(iz, iy, ix, 0) = analytic_source(kz, ky, kx, z, y, x);
         }
       }
     }
@@ -161,16 +143,16 @@ public:
     const float64 kappaz = std::sin(0.5 * kz * data.delz) / (0.5 * data.delz);
     const float64 kappa2_sum =
         kappax * kappax + kappay * kappay + kappaz * kappaz + static_cast<float64>(1.0e-32);
+
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
       for (int iy = data.Lby; iy <= data.Uby; ++iy) {
         for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          auto          coords  = get_coordinates(iz, iy, ix);
-          const float64 gzcoord = coords[0];
-          const float64 gycoord = coords[1];
-          const float64 gxcoord = coords[2];
-          const float64 expected =
-              analytic_solution(kz, ky, kx, kappa2_sum, gzcoord, gycoord, gxcoord);
-          const float64 diff = data.phi(iz, iy, ix) - expected;
+          auto          coords   = get_coordinates(iz, iy, ix);
+          const float64 z        = coords[0];
+          const float64 y        = coords[1];
+          const float64 x        = coords[2];
+          const float64 expected = analytic_solution(kz, ky, kx, kappa2_sum, z, y, x);
+          const float64 diff     = data.phi(iz, iy, ix) - expected;
           sum += diff * diff;
           ++count;
         }
@@ -198,24 +180,24 @@ void require_src_equals_sol(const std::vector<std::unique_ptr<PicChunk>>& chunks
 void require_rms_error_below(const std::vector<std::unique_ptr<PicChunk>>& chunks, int mz, int my,
                              int mx, const nix::Dims3D& global_dims, float64 tol)
 {
-  float64 local_sum   = 0.0;
-  int     local_count = 0;
+  float64 local_sum = 0.0;
+  int     local_cnt = 0;
   for (const auto& base_chunk : chunks) {
-    auto* test_chunk = dynamic_cast<TestPicChunk*>(base_chunk.get());
-    REQUIRE(test_chunk != nullptr);
-    const int     count = test_chunk->get_owned_cell_count();
-    const float64 mse   = test_chunk->compute_solution_error(mz, my, mx, global_dims);
-    local_sum += mse * static_cast<float64>(count);
-    local_count += count;
+    auto* chunk = dynamic_cast<TestPicChunk*>(base_chunk.get());
+    REQUIRE(chunk != nullptr);
+    const int     cnt = chunk->get_cell_count();
+    const float64 mse = chunk->compute_solution_error(mz, my, mx, global_dims);
+    local_sum += mse * static_cast<float64>(cnt);
+    local_cnt += cnt;
   }
 
-  float64 global_sum   = 0.0;
-  int     global_count = 0;
+  float64 global_sum = 0.0;
+  int     global_cnt = 0;
   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_cnt, &global_cnt, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-  const float64 rms_err = std::sqrt(global_sum / static_cast<float64>(global_count));
-  REQUIRE(rms_err < tol);
+  const float64 err = std::sqrt(global_sum / static_cast<float64>(global_cnt));
+  REQUIRE(err < tol);
 }
 
 std::unique_ptr<TestPicChunk> make_mock_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
@@ -246,7 +228,7 @@ public:
     return count;
   }
 
-  void copy_rhs_to_solution()
+  void copy_src_to_sol()
   {
     VecCopy(vector_src_g, vector_sol_g);
   }
@@ -260,6 +242,10 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
     return;
   }
 
+  const float64                          tol         = 1.0e-15;
+  const int                              mz          = 1;
+  const int                              my          = 1;
+  const int                              mx          = 1;
   const nix::Dims3D                      global_dims = {2, 2, 4};
   const nix::Dims3D                      chunk_dims  = {2, 2, 2};
   const nix::Bool3D                      has_dim     = {true, true, true};
@@ -271,9 +257,6 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
   auto*             chunk_ptr = chunk.get();
   chunkvec.push_back(std::move(chunk));
 
-  const int mz = 1;
-  const int my = 1;
-  const int mx = 1;
   chunk_ptr->populate_source(mz, my, mx, global_dims);
 
   TestPicPoisson poisson(global_dims, 1.0);
@@ -281,10 +264,10 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
 
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
-  poisson.copy_rhs_to_solution();
+  poisson.copy_src_to_sol();
   poisson.copy_sol_to_chunk(accessor);
 
-  require_src_equals_sol(chunkvec, 1.0e-12);
+  require_src_equals_sol(chunkvec, tol);
 }
 
 TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
@@ -293,6 +276,10 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
     return;
   }
 
+  const float64                          tol         = 1.0e-12;
+  const int                              mz          = 2;
+  const int                              my          = 3;
+  const int                              mx          = 4;
   const nix::Dims3D                      global_dims = {16, 16, 16};
   const nix::Dims3D                      chunk_dims  = {8, 8, 8};
   const nix::Bool3D                      has_dim     = {true, true, true};
@@ -304,9 +291,6 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   auto*             chunk_ptr = chunk.get();
   chunkvec.push_back(std::move(chunk));
 
-  const int mz = 3;
-  const int my = 4;
-  const int mx = 5;
   chunk_ptr->populate_source(mz, my, mx, global_dims);
 
   TestPicPoisson poisson(global_dims, 1.0);
@@ -319,5 +303,5 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   REQUIRE(poisson.solve(accessor) == 0);
   poisson.copy_sol_to_chunk(accessor);
 
-  require_rms_error_below(chunkvec, mz, my, mx, global_dims, 1.0e-10);
+  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
 }
