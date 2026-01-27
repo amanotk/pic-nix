@@ -280,29 +280,32 @@ void require_rms_error_below(const std::vector<std::unique_ptr<PicChunk>>& chunk
 
 } // namespace
 
-TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
+TEST_CASE("PicPoisson scatter", "[np=2]")
 {
   if (!require_mpi_size(2)) {
     return;
   }
 
-  const float64                          tol         = 1.0e-15;
-  const int                              mz          = 1;
-  const int                              my          = 1;
-  const int                              mx          = 1;
-  const nix::Dims3D                      global_dims = {2, 2, 4};
-  const nix::Dims3D                      chunk_dims  = {2, 2, 2};
-  const nix::Bool3D                      has_dim     = {true, true, true};
+  const float64     tol             = 1.0e-15;
+  const int         rank            = get_mpi_rank();
+  const int         mz              = 1;
+  const int         my              = 1;
+  const int         mx              = 1;
+  const nix::Dims3D global_dims     = {16, 16, 16};
+  const nix::Dims3D chunk_dims      = {4, 4, 4};
+  const nix::Bool3D has_dim         = {true, true, true};
+  const auto        proc_dims       = std::array<int, 3>{1, 1, 2};
+  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  const json        config          = make_default_config();
+
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
+
+  // create chunks
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
-  const json                             config = make_default_config();
-
-  const int         rank   = get_mpi_rank();
-  const nix::Dims3D offset = {0, 0, chunk_dims[2] * rank};
-  auto              chunk = make_test_chunk(chunk_dims, has_dim, global_dims, offset, rank, config);
-  auto*             chunk_ptr = chunk.get();
-  chunkvec.push_back(std::move(chunk));
-
-  chunk_ptr->populate_source(mz, my, mx, global_dims);
+  initialize_chunkvec(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
+                      config);
 
   TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
