@@ -17,25 +17,14 @@
 
 namespace
 {
-json make_config()
-{
-  json config;
-  config["option"]                  = json::object();
-  config["option"]["vectorization"] = "scalar";
-  config["option"]["order"]         = 2;
-  config["option"]["pusher"]        = "Boris";
-  config["option"]["interpolation"] = "MC";
-  config["option"]["seed_type"]     = "fixed";
-  config["option"]["friedman"]      = 0.0;
-  config["option"]["cell_load"]     = 1.0;
-  config["option"]["buffer_ratio"]  = 0.2;
-  return config;
-}
+float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum, float64 z,
+                          float64 y, float64 x);
+float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y, float64 x);
 
 template <typename ChunkT>
 std::unique_ptr<ChunkT> make_chunk_impl(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
                                         const nix::Dims3D& global_dims, const nix::Dims3D& offset,
-                                        int id)
+                                        int id, json config)
 {
   auto chunk = std::make_unique<ChunkT>(dims, has_dim, id);
   int  o[3]  = {offset[0], offset[1], offset[2]};
@@ -43,7 +32,6 @@ std::unique_ptr<ChunkT> make_chunk_impl(const nix::Dims3D& dims, const nix::Bool
 
   chunk->set_global_context(o, g);
   chunk->set_coordinate(1.0, 1.0, 1.0);
-  auto config = make_config();
   chunk->setup(config);
   chunk->allocate();
 
@@ -53,32 +41,32 @@ std::unique_ptr<ChunkT> make_chunk_impl(const nix::Dims3D& dims, const nix::Bool
   return chunk;
 }
 
-float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum, float64 z,
-                          float64 y, float64 x)
+class TestPicPoisson : public PicPoisson
 {
-  return std::sin(kx * x) * std::sin(ky * y) * std::sin(kz * z) / kappa2_sum;
-}
+public:
+  using PicPoisson::PicPoisson;
 
-float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y, float64 x)
-{
-  return std::sin(kx * x) * std::sin(ky * y) * std::sin(kz * z);
-}
+  virtual int copy_chunk_to_src(elliptic::ChunkAccessor& accessor) override
+  {
+    int count = PicPoisson::copy_chunk_to_src(accessor);
+    scatter_forward_begin();
+    scatter_forward_end();
+    return count;
+  }
 
-std::array<int, 3> make_proc_dims(const nix::Dims3D& global_dims, const nix::Dims3D& chunk_dims)
-{
-  return {global_dims[0] / chunk_dims[0], global_dims[1] / chunk_dims[1],
-          global_dims[2] / chunk_dims[2]};
-}
+  virtual int copy_sol_to_chunk(elliptic::ChunkAccessor& accessor) override
+  {
+    scatter_reverse_begin();
+    scatter_reverse_end();
+    int count = PicPoisson::copy_sol_to_chunk(accessor);
+    return count;
+  }
 
-nix::Dims3D make_chunk_offset(int rank, const nix::Dims3D& chunk_dims,
-                              const nix::Dims3D& global_dims)
-{
-  const auto procs = make_proc_dims(global_dims, chunk_dims);
-  const int  px    = rank % procs[0];
-  const int  py    = (rank / procs[0]) % procs[1];
-  const int  pz    = rank / (procs[0] * procs[1]);
-  return {px * chunk_dims[0], py * chunk_dims[1], pz * chunk_dims[2]};
-}
+  void copy_src_to_sol()
+  {
+    VecCopy(vector_src_g, vector_sol_g);
+  }
+};
 
 class TestPicChunk : public PicChunk
 {
@@ -162,6 +150,86 @@ public:
   }
 };
 
+json make_default_config()
+{
+  json config;
+  config["option"]                  = json::object();
+  config["option"]["vectorization"] = "scalar";
+  config["option"]["order"]         = 2;
+  config["option"]["pusher"]        = "Boris";
+  config["option"]["interpolation"] = "MC";
+  config["option"]["seed_type"]     = "fixed";
+  config["option"]["friedman"]      = 0.0;
+  config["option"]["cell_load"]     = 1.0;
+  config["option"]["buffer_ratio"]  = 0.2;
+  return config;
+}
+
+float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum, float64 z,
+                          float64 y, float64 x)
+{
+  return std::sin(kx * x) * std::sin(ky * y) * std::sin(kz * z) / kappa2_sum;
+}
+
+float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y, float64 x)
+{
+  return std::sin(kx * x) * std::sin(ky * y) * std::sin(kz * z);
+}
+
+nix::Dims3D make_chunk_grid_dims(const nix::Dims3D& global_dims, const nix::Dims3D& chunk_dims)
+{
+  return {global_dims[0] / chunk_dims[0], global_dims[1] / chunk_dims[1],
+          global_dims[2] / chunk_dims[2]};
+}
+
+std::array<int, 3> make_rank_coords(int rank, const std::array<int, 3>& proc_dims)
+{
+  const int p0 = rank % proc_dims[0];
+  const int p1 = (rank / proc_dims[0]) % proc_dims[1];
+  const int p2 = rank / (proc_dims[0] * proc_dims[1]);
+  return {p0, p1, p2};
+}
+
+int flatten_chunk_index(int cz, int cy, int cx, const nix::Dims3D& chunk_grid_dims)
+{
+  return elliptic::ChunkAccessor::flatten_index(cz, cy, cx, chunk_grid_dims);
+}
+
+std::unique_ptr<TestPicChunk> make_test_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
+                                              const nix::Dims3D& global_dims,
+                                              const nix::Dims3D& offset, int id, json config)
+{
+  return make_chunk_impl<TestPicChunk>(dims, has_dim, global_dims, offset, id, config);
+}
+
+void append_local_chunks(std::vector<std::unique_ptr<PicChunk>>& chunkvec, int rank,
+                         const std::array<int, 3>& proc_dims, const nix::Dims3D& global_dims,
+                         const nix::Dims3D& chunk_dims, const nix::Bool3D& has_dim, int mz, int my,
+                         int mx, json config)
+{
+  const nix::Dims3D chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  const auto        rank_coords     = make_rank_coords(rank, proc_dims);
+  const nix::Dims3D block_chunks    = {chunk_grid_dims[0] / proc_dims[0],
+                                       chunk_grid_dims[1] / proc_dims[1],
+                                       chunk_grid_dims[2] / proc_dims[2]};
+
+  for (int lz = 0; lz < block_chunks[0]; ++lz) {
+    for (int ly = 0; ly < block_chunks[1]; ++ly) {
+      for (int lx = 0; lx < block_chunks[2]; ++lx) {
+        const int         cz       = rank_coords[0] * block_chunks[0] + lz;
+        const int         cy       = rank_coords[1] * block_chunks[1] + ly;
+        const int         cx       = rank_coords[2] * block_chunks[2] + lx;
+        const nix::Dims3D offset   = {cz * chunk_dims[0], cy * chunk_dims[1], cx * chunk_dims[2]};
+        const int         chunk_id = flatten_chunk_index(cz, cy, cx, chunk_grid_dims);
+        auto  chunk = make_test_chunk(chunk_dims, has_dim, global_dims, offset, chunk_id, config);
+        auto* chunk_ptr = chunk.get();
+        chunkvec.push_back(std::move(chunk));
+        chunk_ptr->populate_source(mz, my, mx, global_dims);
+      }
+    }
+  }
+}
+
 void require_src_equals_sol(const std::vector<std::unique_ptr<PicChunk>>& chunks, float64 tol)
 {
   for (const auto& chunk : chunks) {
@@ -200,40 +268,6 @@ void require_rms_error_below(const std::vector<std::unique_ptr<PicChunk>>& chunk
   REQUIRE(err < tol);
 }
 
-std::unique_ptr<TestPicChunk> make_mock_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
-                                              const nix::Dims3D& global_dims,
-                                              const nix::Dims3D& offset, int id)
-{
-  return make_chunk_impl<TestPicChunk>(dims, has_dim, global_dims, offset, id);
-}
-
-class TestPicPoisson : public PicPoisson
-{
-public:
-  using PicPoisson::PicPoisson;
-
-  virtual int copy_chunk_to_src(elliptic::ChunkAccessor& accessor) override
-  {
-    int count = PicPoisson::copy_chunk_to_src(accessor);
-    scatter_forward_begin();
-    scatter_forward_end();
-    return count;
-  }
-
-  virtual int copy_sol_to_chunk(elliptic::ChunkAccessor& accessor) override
-  {
-    scatter_reverse_begin();
-    scatter_reverse_end();
-    int count = PicPoisson::copy_sol_to_chunk(accessor);
-    return count;
-  }
-
-  void copy_src_to_sol()
-  {
-    VecCopy(vector_src_g, vector_sol_g);
-  }
-};
-
 } // namespace
 
 TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
@@ -250,10 +284,11 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
   const nix::Dims3D                      chunk_dims  = {2, 2, 2};
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  const json                             config = make_default_config();
 
-  const int         rank      = get_mpi_rank();
-  const nix::Dims3D offset    = {0, 0, chunk_dims[2] * rank};
-  auto              chunk     = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
+  const int         rank   = get_mpi_rank();
+  const nix::Dims3D offset = {0, 0, chunk_dims[2] * rank};
+  auto              chunk = make_test_chunk(chunk_dims, has_dim, global_dims, offset, rank, config);
   auto*             chunk_ptr = chunk.get();
   chunkvec.push_back(std::move(chunk));
 
@@ -280,18 +315,21 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   const int                              mz          = 2;
   const int                              my          = 3;
   const int                              mx          = 4;
-  const nix::Dims3D                      global_dims = {16, 16, 16};
+  const nix::Dims3D                      global_dims = {32, 32, 32};
   const nix::Dims3D                      chunk_dims  = {8, 8, 8};
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  const json                             config = make_default_config();
 
-  const int         rank      = get_mpi_rank();
-  const nix::Dims3D offset    = make_chunk_offset(rank, chunk_dims, global_dims);
-  auto              chunk     = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
-  auto*             chunk_ptr = chunk.get();
-  chunkvec.push_back(std::move(chunk));
+  const auto proc_dims       = std::array<int, 3>{2, 2, 2};
+  const auto chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
 
-  chunk_ptr->populate_source(mz, my, mx, global_dims);
+  const int rank = get_mpi_rank();
+  append_local_chunks(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
+                      config);
 
   TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
