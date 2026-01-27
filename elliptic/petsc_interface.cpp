@@ -192,6 +192,20 @@ int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
   return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
 }
 
+int PetscInterface::scatter_forward()
+{
+  int status = scatter_forward_begin();
+  status |= scatter_forward_end();
+  return status;
+}
+
+int PetscInterface::scatter_reverse()
+{
+  int status = scatter_reverse_begin();
+  status |= scatter_reverse_end();
+  return status;
+}
+
 int PetscInterface::scatter_forward_begin()
 {
   scatter->scatter_forward_begin(vector_src_l, vector_src_g);

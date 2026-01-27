@@ -113,16 +113,18 @@ public:
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
 
-  void scatter_forward()
+  int scatter_forward()
   {
     scatter_forward_begin();
     scatter_forward_end();
+    return 0;
   }
 
-  void scatter_reverse()
+  int scatter_reverse()
   {
     scatter_reverse_begin();
     scatter_reverse_end();
+    return 0;
   }
 };
 
@@ -215,16 +217,18 @@ public:
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
 
-  void scatter_forward()
+  int scatter_forward()
   {
     scatter_forward_begin();
     scatter_forward_end();
+    return 0;
   }
 
-  void scatter_reverse()
+  int scatter_reverse()
   {
     scatter_reverse_begin();
     scatter_reverse_end();
+    return 0;
   }
 };
 
@@ -325,16 +329,18 @@ public:
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
 
-  void scatter_forward()
+  int scatter_forward()
   {
     scatter_forward_begin();
     scatter_forward_end();
+    return 0;
   }
 
-  void scatter_reverse()
+  int scatter_reverse()
   {
     scatter_reverse_begin();
     scatter_reverse_end();
+    return 0;
   }
 };
 

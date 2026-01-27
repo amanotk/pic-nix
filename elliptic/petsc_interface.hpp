@@ -35,6 +35,8 @@ public:
   virtual int update_mapping(ChunkAccessor& accessor) override;
   virtual int copy_chunk_to_src(ChunkAccessor& accessor) override;
   virtual int copy_sol_to_chunk(ChunkAccessor& accessor) override;
+  virtual int scatter_forward() override;
+  virtual int scatter_reverse() override;
   virtual int scatter_forward_begin();
   virtual int scatter_forward_end();
   virtual int scatter_reverse_begin();

@@ -544,15 +544,10 @@ void PicApplication::solve_poisson()
     MPI_Abort(MPI_COMM_WORLD, -1);
   }
 
+  // bind chunks to poisson solver and get its accessor
   poisson->bind_chunks(chunkvec);
   auto accessor = poisson->get_accessor();
 
-  solver->update_mapping(accessor);
-  solver->copy_chunk_to_src(accessor);
-  poisson->scatter_forward_begin();
-  poisson->scatter_forward_end();
+  // solve Poisson equation
   solver->solve(accessor);
-  poisson->scatter_reverse_begin();
-  poisson->scatter_reverse_end();
-  solver->copy_sol_to_chunk(accessor);
 }
