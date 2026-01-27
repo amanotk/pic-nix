@@ -87,8 +87,10 @@ void PicApplication::initialize(int argc, char** argv)
 
   // initialize Poisson solver
   {
-    auto interface = create_poisson_interface();
-    solver         = std::make_unique<elliptic::Solver>(std::move(interface));
+    solver = create_poisson_solver();
+    if (solver != nullptr) {
+      solver->set_option(cfgparser->get_application());
+    }
   }
 }
 
@@ -532,4 +534,25 @@ void PicApplication::calculate_moment_taskflow()
 
 void PicApplication::solve_poisson()
 {
+  if (solver == nullptr) {
+    return;
+  }
+
+  auto poisson = std::dynamic_pointer_cast<PicPoisson>(solver->get_interface());
+  if (poisson == nullptr) {
+    ERROR << "PicApplication requires PicPoisson solver interface." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
+  poisson->bind_chunks(chunkvec);
+  auto accessor = poisson->get_accessor();
+
+  solver->update_mapping(accessor);
+  solver->copy_chunk_to_src(accessor);
+  poisson->scatter_forward_begin();
+  poisson->scatter_forward_end();
+  solver->solve(accessor);
+  poisson->scatter_reverse_begin();
+  poisson->scatter_reverse_end();
+  solver->copy_sol_to_chunk(accessor);
 }

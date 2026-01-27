@@ -12,7 +12,8 @@
 using namespace nix::typedefs;
 
 PicPoisson::PicPoisson(const nix::Dims3D& global_dims, float64 delh)
-    : PetscInterface(global_dims), global_dims(global_dims), delx(delh), dely(delh), delz(delh)
+    : PetscInterface(global_dims), global_dims(global_dims), delx(delh), dely(delh), delz(delh),
+      chunk_views(), chunk_dims{0, 0, 0}
 {
   setup();
 }
@@ -31,9 +32,19 @@ int PicPoisson::solve(elliptic::ChunkAccessor& accessor)
   return ierr;
 }
 
-PicPoisson::PicChunkAccessor PicPoisson::get_accessor(ChunkVec& chunkvec)
+void PicPoisson::bind_chunks(AppChunkVec& chunkvec)
 {
-  return PicChunkAccessor(chunkvec);
+  bind_chunks_impl(chunkvec);
+}
+
+void PicPoisson::bind_chunks(PicChunkVec& chunkvec)
+{
+  bind_chunks_impl(chunkvec);
+}
+
+PicPoisson::PicChunkAccessor PicPoisson::get_accessor()
+{
+  return PicChunkAccessor(chunk_views, chunk_dims);
 }
 
 int PicPoisson::set_matrix()
@@ -74,15 +85,9 @@ void PicPoisson::set_nullspace()
   MatNullSpaceDestroy(&ns);
 }
 
-PicPoisson::PicChunkAccessor::PicChunkAccessor(const ChunkVec& chunks)
-    : chunkvec(chunks), chunk_dims{0, 0, 0}
+PicPoisson::PicChunkAccessor::PicChunkAccessor(const ChunkViewVec& chunks, nix::Dims3D chunk_dims)
+    : chunkvec(chunks), chunk_dims(chunk_dims)
 {
-  if (chunkvec.empty()) {
-    return;
-  }
-  const auto& first_chunk = chunkvec.front();
-  auto        dims        = first_chunk->get_dims();
-  chunk_dims              = {dims[0], dims[1], dims[2]};
 }
 
 void PicPoisson::PicChunkAccessor::build_global_index(std::vector<int>& index,
@@ -91,7 +96,7 @@ void PicPoisson::PicChunkAccessor::build_global_index(std::vector<int>& index,
   assert(static_cast<int>(index.size()) >= get_num_grids_total());
 
   for (int i = 0; i < get_num_chunks(); ++i) {
-    auto chunk   = chunkvec[i].get();
+    auto chunk   = chunkvec[i];
     auto offset  = chunk->get_offset();
     auto data    = chunk->get_internal_data();
     auto lstride = std::array<int, 3>{chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
@@ -124,7 +129,7 @@ int PicPoisson::PicChunkAccessor::pack(float64* buffer, int size)
   int  csize   = get_num_grids_per_chunk();
 
   for (int i = 0; i < get_num_chunks(); ++i) {
-    auto chunk = chunkvec[i].get();
+    auto chunk = chunkvec[i];
     auto data  = chunk->get_internal_data();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
@@ -154,7 +159,7 @@ int PicPoisson::PicChunkAccessor::unpack(float64* buffer, int size)
   int  csize   = get_num_grids_per_chunk();
 
   for (int i = 0; i < get_num_chunks(); ++i) {
-    auto chunk = chunkvec[i].get();
+    auto chunk = chunkvec[i];
     auto data  = chunk->get_internal_data();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {

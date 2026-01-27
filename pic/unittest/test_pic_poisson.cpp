@@ -314,7 +314,8 @@ TEST_CASE("PicPoisson solves 1D periodic Poisson", "[np=8]")
                       mx, config);
 
   TestPicPoisson poisson(global_dims, 1.0);
-  auto           accessor = poisson.get_accessor(chunkvec);
+  poisson.bind_chunks(chunkvec);
+  auto accessor = poisson.get_accessor();
 
   poisson.set_option(option);
   poisson.update_mapping(accessor);
@@ -353,7 +354,8 @@ TEST_CASE("PicPoisson solves 2D periodic Poisson", "[np=8]")
                       mx, config);
 
   TestPicPoisson poisson(global_dims, 1.0);
-  auto           accessor = poisson.get_accessor(chunkvec);
+  poisson.bind_chunks(chunkvec);
+  auto accessor = poisson.get_accessor();
 
   poisson.set_option(option);
   poisson.update_mapping(accessor);
@@ -393,7 +395,8 @@ TEST_CASE("PicPoisson solves 3D periodic Poisson", "[np=8]")
                       config);
 
   TestPicPoisson poisson(global_dims, 1.0);
-  auto           accessor = poisson.get_accessor(chunkvec);
+  poisson.bind_chunks(chunkvec);
+  auto accessor = poisson.get_accessor();
 
   poisson.set_option(option);
   poisson.update_mapping(accessor);
@@ -432,7 +435,8 @@ TEST_CASE("PicPoisson scatter", "[np=2]")
                       config);
 
   TestPicPoisson poisson(global_dims, 1.0);
-  auto           accessor = poisson.get_accessor(chunkvec);
+  poisson.bind_chunks(chunkvec);
+  auto accessor = poisson.get_accessor();
 
   poisson.update_mapping(accessor);
   poisson.copy_chunk_to_src(accessor);
