@@ -9,7 +9,6 @@
 #include <array>
 #include <cmath>
 #include <memory>
-#include <numeric>
 #include <vector>
 
 #include <petscvec.h>
@@ -54,18 +53,6 @@ std::unique_ptr<ChunkT> make_chunk_impl(const nix::Dims3D& dims, const nix::Bool
   return chunk;
 }
 
-std::unique_ptr<PicChunk> make_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
-                                     const nix::Dims3D& global_dims, const nix::Dims3D& offset,
-                                     int id)
-{
-  return make_chunk_impl<PicChunk>(dims, has_dim, global_dims, offset, id);
-}
-
-int flatten_global(int gz, int gy, int gx, const nix::Dims3D& dims)
-{
-  return elliptic::ChunkAccessor::flatten_index(gz, gy, gx, dims);
-}
-
 float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum, float64 z,
                           float64 y, float64 x)
 {
@@ -91,23 +78,6 @@ nix::Dims3D make_chunk_offset(int rank, const nix::Dims3D& chunk_dims,
   const int  py    = (rank / procs[0]) % procs[1];
   const int  pz    = rank / (procs[0] * procs[1]);
   return {px * chunk_dims[0], py * chunk_dims[1], pz * chunk_dims[2]};
-}
-
-void fill_rho_sequence(PicChunk& chunk, const nix::Dims3D& global_dims)
-{
-  auto offset = chunk.get_offset();
-  auto data   = chunk.get_internal_data();
-
-  for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-    for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-      for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-        const int gz           = offset[0] + (iz - data.Lbz);
-        const int gy           = offset[1] + (iy - data.Lby);
-        const int gx           = offset[2] + (ix - data.Lbx);
-        data.uj(iz, iy, ix, 0) = static_cast<float64>(flatten_global(gz, gy, gx, global_dims) + 1);
-      }
-    }
-  }
 }
 
 class TestPicChunk : public PicChunk
@@ -210,8 +180,23 @@ public:
   }
 };
 
-float64 compute_error(const std::vector<std::unique_ptr<PicChunk>>& chunks, int mz, int my, int mx,
-                      const nix::Dims3D& global_dims)
+void require_src_equals_sol(const std::vector<std::unique_ptr<PicChunk>>& chunks, float64 tol)
+{
+  for (const auto& chunk : chunks) {
+    auto data = chunk->get_internal_data();
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          const float64 diff = std::abs(data.phi(iz, iy, ix) - data.uj(iz, iy, ix, 0));
+          REQUIRE(diff < tol);
+        }
+      }
+    }
+  }
+}
+
+void require_rms_error_below(const std::vector<std::unique_ptr<PicChunk>>& chunks, int mz, int my,
+                             int mx, const nix::Dims3D& global_dims, float64 tol)
 {
   float64 local_sum   = 0.0;
   int     local_count = 0;
@@ -229,7 +214,8 @@ float64 compute_error(const std::vector<std::unique_ptr<PicChunk>>& chunks, int 
   MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-  return std::sqrt(global_sum / static_cast<float64>(global_count));
+  const float64 rms_err = std::sqrt(global_sum / static_cast<float64>(global_count));
+  REQUIRE(rms_err < tol);
 }
 
 std::unique_ptr<TestPicChunk> make_mock_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
@@ -279,11 +265,16 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
   const nix::Bool3D                      has_dim     = {true, true, true};
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
 
-  const int         rank   = get_mpi_rank();
-  const nix::Dims3D offset = {0, 0, chunk_dims[2] * rank};
-  chunkvec.push_back(make_chunk(chunk_dims, has_dim, global_dims, offset, rank));
+  const int         rank      = get_mpi_rank();
+  const nix::Dims3D offset    = {0, 0, chunk_dims[2] * rank};
+  auto              chunk     = make_mock_chunk(chunk_dims, has_dim, global_dims, offset, rank);
+  auto*             chunk_ptr = chunk.get();
+  chunkvec.push_back(std::move(chunk));
 
-  fill_rho_sequence(*chunkvec[0], global_dims);
+  const int mz = 1;
+  const int my = 1;
+  const int mx = 1;
+  chunk_ptr->populate_source(mz, my, mx, global_dims);
 
   TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
@@ -293,14 +284,7 @@ TEST_CASE("PicPoisson gather/scatter copies rho to phi", "[np=2]")
   poisson.copy_rhs_to_solution();
   poisson.copy_sol_to_chunk(accessor);
 
-  auto data = chunkvec[0]->get_internal_data();
-  for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-    for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-      for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-        REQUIRE(data.phi(iz, iy, ix) == data.uj(iz, iy, ix, 0));
-      }
-    }
-  }
+  require_src_equals_sol(chunkvec, 1.0e-12);
 }
 
 TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
@@ -335,6 +319,5 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   REQUIRE(poisson.solve(accessor) == 0);
   poisson.copy_sol_to_chunk(accessor);
 
-  const float64 rms_err = compute_error(chunkvec, mz, my, mx, global_dims);
-  REQUIRE(rms_err < 1.0e-10);
+  require_rms_error_below(chunkvec, mz, my, mx, global_dims, 1.0e-10);
 }
