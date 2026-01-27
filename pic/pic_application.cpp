@@ -2,6 +2,7 @@
 #include "pic_application.hpp"
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
+#include "pic_poisson.hpp"
 
 #include "diag/field.hpp"
 #include "diag/history.hpp"
@@ -11,6 +12,14 @@
 #include "diag/tracer.hpp"
 
 #include <taskflow/taskflow.hpp>
+
+PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
+{
+  nix::Dims3D dims = {ndims[0], ndims[1], ndims[2]};
+  float64     delh = cfgparser->get_delx();
+
+  return std::make_unique<PicPoisson>(dims, delh);
+}
 
 int PicApplicationInterface::get_num_species()
 {
@@ -65,6 +74,12 @@ void PicApplication::initialize(int argc, char** argv)
         }
       }
     }
+  }
+
+  // initialize Poisson solver
+  {
+    auto interface = create_poisson_interface();
+    solver         = std::make_unique<elliptic::Solver>(std::move(interface));
   }
 }
 
@@ -506,3 +521,6 @@ void PicApplication::calculate_moment_taskflow()
   executor.run(taskflow).wait();
 }
 
+void PicApplication::solve_poisson()
+{
+}

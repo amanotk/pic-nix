@@ -30,8 +30,8 @@ public:
   using Interface    = SolverInterface;
   using PtrInterface = std::unique_ptr<Interface>;
 
-  Solver(Dims3D dims, PtrInterface interface = nullptr)
-      : dims(dims), interface(std::move(interface))
+  Solver(PtrInterface interface = nullptr)
+      : interface(std::move(interface))
   {
   }
 
@@ -76,7 +76,6 @@ public:
   }
 
 protected:
-  Dims3D       dims;
   PtrInterface interface;
 };
 
