@@ -126,9 +126,9 @@ public:
     const float64 kx     = static_cast<float64>(mx) * nix::math::pi2 / lx;
     const float64 ky     = static_cast<float64>(my) * nix::math::pi2 / ly;
     const float64 kz     = static_cast<float64>(mz) * nix::math::pi2 / lz;
-    const float64 kappax = std::sin(0.5 * kx * data.delx) / (0.5 * data.delx);
-    const float64 kappay = std::sin(0.5 * ky * data.dely) / (0.5 * data.dely);
-    const float64 kappaz = std::sin(0.5 * kz * data.delz) / (0.5 * data.delz);
+    const float64 kappax = compute_kappa_component(kx, data.delx);
+    const float64 kappay = compute_kappa_component(ky, data.dely);
+    const float64 kappaz = compute_kappa_component(kz, data.delz);
     const float64 kappa2_sum =
         kappax * kappax + kappay * kappay + kappaz * kappaz + static_cast<float64>(1.0e-32);
 
@@ -184,6 +184,11 @@ float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum
 float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y, float64 x)
 {
   return std::sin(kx * x) * std::sin(ky * y) * std::sin(kz * z);
+}
+
+inline float64 compute_kappa_component(float64 k, float64 h)
+{
+  return (k == 0.0) ? 0.0 : std::sin(0.5 * k * h) / (0.5 * h);
 }
 
 nix::Dims3D make_chunk_grid_dims(const nix::Dims3D& global_dims, const nix::Dims3D& chunk_dims)
@@ -345,6 +350,82 @@ TEST_CASE("PicPoisson solves periodic Poisson", "[np=8]")
   std::vector<std::unique_ptr<PicChunk>> chunkvec;
   initialize_chunkvec(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
                       config);
+
+  TestPicPoisson poisson(global_dims, 1.0);
+  auto           accessor = poisson.get_accessor(chunkvec);
+
+  poisson.set_option(option);
+  poisson.update_mapping(accessor);
+  poisson.copy_chunk_to_src(accessor);
+  REQUIRE(poisson.solve(accessor) == 0);
+  poisson.copy_sol_to_chunk(accessor);
+
+  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
+}
+
+TEST_CASE("PicPoisson solves 1D periodic Poisson", "[np=2]")
+{
+  if (!require_mpi_size(2)) {
+    return;
+  }
+
+  const float64     tol             = 1.0e-12;
+  const int         mz              = 0;
+  const int         my              = 0;
+  const int         mx              = 3;
+  const nix::Dims3D global_dims     = {1, 1, 64};
+  const nix::Dims3D chunk_dims      = {1, 1, 32};
+  const nix::Bool3D has_dim         = {false, false, true};
+  const auto        proc_dims       = std::array<int, 3>{1, 1, 2};
+  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  const json        config          = make_default_config();
+  const json        option          = make_default_option();
+
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
+
+  std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  initialize_chunkvec(chunkvec, get_mpi_rank(), proc_dims, global_dims, chunk_dims, has_dim, mz, my,
+                      mx, config);
+
+  TestPicPoisson poisson(global_dims, 1.0);
+  auto           accessor = poisson.get_accessor(chunkvec);
+
+  poisson.set_option(option);
+  poisson.update_mapping(accessor);
+  poisson.copy_chunk_to_src(accessor);
+  REQUIRE(poisson.solve(accessor) == 0);
+  poisson.copy_sol_to_chunk(accessor);
+
+  require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
+}
+
+TEST_CASE("PicPoisson solves 2D periodic Poisson", "[np=4]")
+{
+  if (!require_mpi_size(4)) {
+    return;
+  }
+
+  const float64     tol             = 1.0e-12;
+  const int         mz              = 0;
+  const int         my              = 2;
+  const int         mx              = 3;
+  const nix::Dims3D global_dims     = {1, 32, 24};
+  const nix::Dims3D chunk_dims      = {1, 16, 12};
+  const nix::Bool3D has_dim         = {false, true, true};
+  const auto        proc_dims       = std::array<int, 3>{1, 2, 2};
+  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  const json        config          = make_default_config();
+  const json        option          = make_default_option();
+
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
+
+  std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  initialize_chunkvec(chunkvec, get_mpi_rank(), proc_dims, global_dims, chunk_dims, has_dim, mz, my,
+                      mx, config);
 
   TestPicPoisson poisson(global_dims, 1.0);
   auto           accessor = poisson.get_accessor(chunkvec);
