@@ -28,26 +28,22 @@ public:
     virtual int  get_num_grids_total() const override;
 
   private:
-    const ChunkVec& chunks_;
-    nix::Dims3D     chunk_dims_;
-    int             chunk_size_;
+    const ChunkVec& chunkvec;
+    nix::Dims3D     chunk_dims;
   };
 
   PicPoisson(const nix::Dims3D& global_dims, float64 delh);
-
-  int set_option(const json& config);
-  int solve(elliptic::ChunkAccessor& accessor) override;
+  int              set_option(const json& config);
+  int              solve(elliptic::ChunkAccessor& accessor) override;
   PicChunkAccessor get_accessor(ChunkVec& chunkvec);
 
 protected:
-  int set_matrix() override;
-
-private:
   nix::Dims3D global_dims_;
   float64     delx;
   float64     dely;
   float64     delz;
-  void        set_nullspace();
+  void        set_nullspace() override;
+  int         set_matrix() override;
 };
 
 #endif //_PIC_POISSON_HPP_

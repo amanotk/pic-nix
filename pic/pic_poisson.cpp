@@ -75,27 +75,27 @@ void PicPoisson::set_nullspace()
 }
 
 PicPoisson::PicChunkAccessor::PicChunkAccessor(const ChunkVec& chunks)
-    : chunks_(chunks), chunk_dims_{0, 0, 0}, chunk_size_(0)
+    : chunkvec(chunks), chunk_dims{0, 0, 0}
 {
-  if (chunks_.empty()) {
+  if (chunkvec.empty()) {
     return;
   }
-  const auto& first_chunk = chunks_.front();
+  const auto& first_chunk = chunkvec.front();
   auto        dims        = first_chunk->get_dims();
-  chunk_dims_             = {dims[0], dims[1], dims[2]};
-  chunk_size_             = chunk_dims_[0] * chunk_dims_[1] * chunk_dims_[2];
+  chunk_dims              = {dims[0], dims[1], dims[2]};
 }
 
 void PicPoisson::PicChunkAccessor::build_global_index(std::vector<int>& index,
-                                                      nix::Dims3D       dims) const
+                                                      nix::Dims3D       global_dims) const
 {
   assert(static_cast<int>(index.size()) >= get_num_grids_total());
 
   for (int i = 0; i < get_num_chunks(); ++i) {
-    auto chunk   = chunks_[i].get();
+    auto chunk   = chunkvec[i].get();
     auto offset  = chunk->get_offset();
     auto data    = chunk->get_internal_data();
-    auto lstride = std::array<int, 3>{chunk_dims_[1] * chunk_dims_[2], chunk_dims_[2], 1};
+    auto lstride = std::array<int, 3>{chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
+    auto csize   = get_num_grids_per_chunk();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
       for (int iy = data.Lby; iy <= data.Uby; ++iy) {
@@ -104,11 +104,11 @@ void PicPoisson::PicChunkAccessor::build_global_index(std::vector<int>& index,
           const int local_y = iy - data.Lby;
           const int local_x = ix - data.Lbx;
           const int jj =
-              local_z * lstride[0] + local_y * lstride[1] + local_x * lstride[2] + i * chunk_size_;
+              local_z * lstride[0] + local_y * lstride[1] + local_x * lstride[2] + i * csize;
           const int gz = offset[0] + local_z;
           const int gy = offset[1] + local_y;
           const int gx = offset[2] + local_x;
-          index[jj]    = flatten_index(gz, gy, gx, dims);
+          index[jj]    = flatten_index(gz, gy, gx, global_dims);
         }
       }
     }
@@ -119,11 +119,12 @@ int PicPoisson::PicChunkAccessor::pack(float64* buffer, int size)
 {
   assert(size >= get_num_grids_total());
 
-  auto lstride = std::array<int, 3>{chunk_dims_[1] * chunk_dims_[2], chunk_dims_[2], 1};
+  auto lstride = std::array<int, 3>{chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
   int  count   = 0;
+  int  csize   = get_num_grids_per_chunk();
 
   for (int i = 0; i < get_num_chunks(); ++i) {
-    auto chunk = chunks_[i].get();
+    auto chunk = chunkvec[i].get();
     auto data  = chunk->get_internal_data();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
@@ -132,7 +133,7 @@ int PicPoisson::PicChunkAccessor::pack(float64* buffer, int size)
           const int jz = iz - data.Lbz;
           const int jy = iy - data.Lby;
           const int jx = ix - data.Lbx;
-          const int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size_;
+          const int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * csize;
 
           buffer[jj] = data.uj(iz, iy, ix, 0);
           ++count;
@@ -148,11 +149,12 @@ int PicPoisson::PicChunkAccessor::unpack(float64* buffer, int size)
 {
   assert(size >= get_num_grids_total());
 
-  auto lstride = std::array<int, 3>{chunk_dims_[1] * chunk_dims_[2], chunk_dims_[2], 1};
+  auto lstride = std::array<int, 3>{chunk_dims[1] * chunk_dims[2], chunk_dims[2], 1};
   int  count   = 0;
+  int  csize   = get_num_grids_per_chunk();
 
   for (int i = 0; i < get_num_chunks(); ++i) {
-    auto chunk = chunks_[i].get();
+    auto chunk = chunkvec[i].get();
     auto data  = chunk->get_internal_data();
 
     for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
@@ -161,7 +163,7 @@ int PicPoisson::PicChunkAccessor::unpack(float64* buffer, int size)
           const int jz = iz - data.Lbz;
           const int jy = iy - data.Lby;
           const int jx = ix - data.Lbx;
-          const int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * chunk_size_;
+          const int jj = jz * lstride[0] + jy * lstride[1] + jx * lstride[2] + i * csize;
 
           data.phi(iz, iy, ix) = buffer[jj];
           ++count;
@@ -175,15 +177,15 @@ int PicPoisson::PicChunkAccessor::unpack(float64* buffer, int size)
 
 int PicPoisson::PicChunkAccessor::get_num_chunks() const
 {
-  return static_cast<int>(chunks_.size());
+  return static_cast<int>(chunkvec.size());
 }
 
 int PicPoisson::PicChunkAccessor::get_num_grids_per_chunk() const
 {
-  return chunk_size_;
+  return chunk_dims[0] * chunk_dims[1] * chunk_dims[2];
 }
 
 int PicPoisson::PicChunkAccessor::get_num_grids_total() const
 {
-  return get_num_chunks() * chunk_size_;
+  return get_num_chunks() * get_num_grids_per_chunk();
 }
