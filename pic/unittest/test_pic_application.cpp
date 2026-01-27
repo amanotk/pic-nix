@@ -17,7 +17,37 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <system_error>
 #include <vector>
+
+float64 compute_kappa_component(float64 k, float64 h);
+float64 analytic_source(float64 kz, float64 ky, float64 kx, float64 z, float64 y, float64 x);
+float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum, float64 z,
+                          float64 y, float64 x);
+
+struct GridConfig {
+  int nx;
+  int ny;
+  int nz;
+  int cx;
+  int cy;
+  int cz;
+};
+
+struct CliArgs {
+  std::vector<std::string> args;
+  std::vector<const char*> argv;
+
+  int argc() const
+  {
+    return static_cast<int>(argv.size());
+  }
+
+  char** cargv()
+  {
+    return const_cast<char**>(argv.data());
+  }
+};
 
 class TestApplication : public PicApplication
 {
@@ -30,9 +60,22 @@ public:
     PicApplication::setup_chunks();
   }
 
-  void solve_poisson_for_test()
+  void solve_poisson_for_test(int mz, int my, int mx)
   {
+    auto              app_data    = PicApplication::get_internal_data();
+    const nix::Dims3D global_dims = {app_data.ndims[0], app_data.ndims[1], app_data.ndims[2]};
+    for (auto& chunk : app_data.chunkvec) {
+      auto* pic_chunk = dynamic_cast<PicChunk*>(chunk.get());
+      REQUIRE(pic_chunk != nullptr);
+      populate_chunk_source(*pic_chunk, global_dims, mz, my, mx);
+    }
     PicApplication::solve_poisson();
+  }
+
+  void require_rms_error_below(int mz, int my, int mx, float64 tol)
+  {
+    const float64 rms_err = compute_global_rms_error(mz, my, mx);
+    REQUIRE(rms_err < tol);
   }
 
   void finalize_for_test()
@@ -47,6 +90,88 @@ protected:
       return -1.0;
     }
     return std::numeric_limits<float64>::max();
+  }
+
+private:
+  void populate_chunk_source(PicChunk& chunk, const nix::Dims3D& global_dims, int mz, int my,
+                             int mx)
+  {
+    auto data   = chunk.get_internal_data();
+    auto offset = chunk.get_offset();
+
+    const float64 lx = static_cast<float64>(global_dims[2]) * data.delx;
+    const float64 ly = static_cast<float64>(global_dims[1]) * data.dely;
+    const float64 lz = static_cast<float64>(global_dims[0]) * data.delz;
+    const float64 kz = static_cast<float64>(mz) * nix::math::pi2 / lz;
+    const float64 ky = static_cast<float64>(my) * nix::math::pi2 / ly;
+    const float64 kx = static_cast<float64>(mx) * nix::math::pi2 / lx;
+
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          const int     gz       = offset[0] + (iz - data.Lbz);
+          const int     gy       = offset[1] + (iy - data.Lby);
+          const int     gx       = offset[2] + (ix - data.Lbx);
+          const float64 z        = static_cast<float64>(gz) * data.delz;
+          const float64 y        = static_cast<float64>(gy) * data.dely;
+          const float64 x        = static_cast<float64>(gx) * data.delx;
+          data.uj(iz, iy, ix, 0) = analytic_source(kz, ky, kx, z, y, x);
+          data.phi(iz, iy, ix)   = 0.0;
+        }
+      }
+    }
+  }
+
+  float64 compute_global_rms_error(int mz, int my, int mx)
+  {
+    auto              app_data    = PicApplication::get_internal_data();
+    const nix::Dims3D global_dims = {app_data.ndims[0], app_data.ndims[1], app_data.ndims[2]};
+
+    float64 local_sum = 0.0;
+    int     local_cnt = 0;
+
+    for (auto& base_chunk : app_data.chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(base_chunk.get());
+      REQUIRE(chunk != nullptr);
+      auto data   = chunk->get_internal_data();
+      auto offset = chunk->get_offset();
+
+      const float64 lx     = static_cast<float64>(global_dims[2]) * data.delx;
+      const float64 ly     = static_cast<float64>(global_dims[1]) * data.dely;
+      const float64 lz     = static_cast<float64>(global_dims[0]) * data.delz;
+      const float64 kz     = static_cast<float64>(mz) * nix::math::pi2 / lz;
+      const float64 ky     = static_cast<float64>(my) * nix::math::pi2 / ly;
+      const float64 kx     = static_cast<float64>(mx) * nix::math::pi2 / lx;
+      const float64 kappax = compute_kappa_component(kx, data.delx);
+      const float64 kappay = compute_kappa_component(ky, data.dely);
+      const float64 kappaz = compute_kappa_component(kz, data.delz);
+      const float64 kappa2_sum =
+          kappax * kappax + kappay * kappay + kappaz * kappaz + static_cast<float64>(1.0e-32);
+
+      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+            const int     gz       = offset[0] + (iz - data.Lbz);
+            const int     gy       = offset[1] + (iy - data.Lby);
+            const int     gx       = offset[2] + (ix - data.Lbx);
+            const float64 z        = static_cast<float64>(gz) * data.delz;
+            const float64 y        = static_cast<float64>(gy) * data.dely;
+            const float64 x        = static_cast<float64>(gx) * data.delx;
+            const float64 expected = analytic_solution(kz, ky, kx, kappa2_sum, z, y, x);
+            const float64 diff     = data.phi(iz, iy, ix) - expected;
+            local_sum += diff * diff;
+            ++local_cnt;
+          }
+        }
+      }
+    }
+
+    float64 global_sum = 0.0;
+    int     global_cnt = 0;
+    MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_cnt, &global_cnt, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    return std::sqrt(global_sum / static_cast<float64>(global_cnt));
   }
 };
 
@@ -171,7 +296,7 @@ std::string replace_all(std::string text, const std::string& needle, const std::
   return text;
 }
 
-std::filesystem::path write_config_for_size(int nprocess, int rank)
+std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
 {
   const char*           tmpdir_env = std::getenv("PICNIX_TMPDIR");
   std::filesystem::path base       = tmpdir_env != nullptr ? tmpdir_env : ".";
@@ -219,29 +344,14 @@ std::filesystem::path write_config_for_size(int nprocess, int rank)
   interval = 1000000
 )TOML";
 
-  int nx = 4;
-  int ny = 4;
-  int nz = 4;
-  int cx = 1;
-  int cy = 1;
-  int cz = 1;
-  if (nprocess == 8) {
-    nx = 8;
-    ny = 8;
-    nz = 8;
-    cx = 2;
-    cy = 2;
-    cz = 2;
-  }
-
   if (rank == 0) {
     std::string config = config_template;
-    config             = replace_all(config, "@NX@", std::to_string(nx));
-    config             = replace_all(config, "@NY@", std::to_string(ny));
-    config             = replace_all(config, "@NZ@", std::to_string(nz));
-    config             = replace_all(config, "@CX@", std::to_string(cx));
-    config             = replace_all(config, "@CY@", std::to_string(cy));
-    config             = replace_all(config, "@CZ@", std::to_string(cz));
+    config             = replace_all(config, "@NX@", std::to_string(cfg.nx));
+    config             = replace_all(config, "@NY@", std::to_string(cfg.ny));
+    config             = replace_all(config, "@NZ@", std::to_string(cfg.nz));
+    config             = replace_all(config, "@CX@", std::to_string(cfg.cx));
+    config             = replace_all(config, "@CY@", std::to_string(cfg.cy));
+    config             = replace_all(config, "@CZ@", std::to_string(cfg.cz));
 
     std::ofstream ofs(config_path);
     ofs << config;
@@ -263,6 +373,28 @@ void cleanup_tmpdir(int rank)
   }
 }
 
+void cleanup_config_and_tmpdir(const std::filesystem::path& config_path, int rank)
+{
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (rank == 0) {
+    std::filesystem::remove(config_path);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+  cleanup_tmpdir(rank);
+}
+
+CliArgs make_cli_args(const std::filesystem::path& config_path)
+{
+  CliArgs cli;
+  cli.args = {
+      "./test_pic_application",
+      "-c",
+      config_path.string(),
+  };
+  cli.argv = nix::ArgParser::convert_to_clargs(cli.args);
+  return cli;
+}
+
 float64 compute_kappa_component(float64 k, float64 h)
 {
   return (k == 0.0) ? 0.0 : std::sin(0.5 * k * h) / (0.5 * h);
@@ -279,84 +411,6 @@ float64 analytic_solution(float64 kz, float64 ky, float64 kx, float64 kappa2_sum
   return analytic_source(kz, ky, kx, z, y, x) / kappa2_sum;
 }
 
-void populate_chunk_source(PicChunk& chunk, const nix::Dims3D& global_dims, int mz, int my, int mx)
-{
-  auto data   = chunk.get_internal_data();
-  auto offset = chunk.get_offset();
-
-  const float64 lx = static_cast<float64>(global_dims[2]) * data.delx;
-  const float64 ly = static_cast<float64>(global_dims[1]) * data.dely;
-  const float64 lz = static_cast<float64>(global_dims[0]) * data.delz;
-  const float64 kx = static_cast<float64>(mx) * nix::math::pi2 / lx;
-  const float64 ky = static_cast<float64>(my) * nix::math::pi2 / ly;
-  const float64 kz = static_cast<float64>(mz) * nix::math::pi2 / lz;
-
-  for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-    for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-      for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-        const int     gz       = offset[0] + (iz - data.Lbz);
-        const int     gy       = offset[1] + (iy - data.Lby);
-        const int     gx       = offset[2] + (ix - data.Lbx);
-        const float64 z        = static_cast<float64>(gz) * data.delz;
-        const float64 y        = static_cast<float64>(gy) * data.dely;
-        const float64 x        = static_cast<float64>(gx) * data.delx;
-        data.uj(iz, iy, ix, 0) = analytic_source(kz, ky, kx, z, y, x);
-        data.phi(iz, iy, ix)   = 0.0;
-      }
-    }
-  }
-}
-
-float64 compute_global_rms_error(nix::Application::ChunkVec& chunkvec,
-                                 const nix::Dims3D& global_dims, int mz, int my, int mx)
-{
-  float64 local_sum = 0.0;
-  int     local_cnt = 0;
-
-  for (auto& base_chunk : chunkvec) {
-    auto* chunk = dynamic_cast<PicChunk*>(base_chunk.get());
-    REQUIRE(chunk != nullptr);
-    auto data   = chunk->get_internal_data();
-    auto offset = chunk->get_offset();
-
-    const float64 lx     = static_cast<float64>(global_dims[2]) * data.delx;
-    const float64 ly     = static_cast<float64>(global_dims[1]) * data.dely;
-    const float64 lz     = static_cast<float64>(global_dims[0]) * data.delz;
-    const float64 kx     = static_cast<float64>(mx) * nix::math::pi2 / lx;
-    const float64 ky     = static_cast<float64>(my) * nix::math::pi2 / ly;
-    const float64 kz     = static_cast<float64>(mz) * nix::math::pi2 / lz;
-    const float64 kappax = compute_kappa_component(kx, data.delx);
-    const float64 kappay = compute_kappa_component(ky, data.dely);
-    const float64 kappaz = compute_kappa_component(kz, data.delz);
-    const float64 kappa2_sum =
-        kappax * kappax + kappay * kappay + kappaz * kappaz + static_cast<float64>(1.0e-32);
-
-    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          const int     gz       = offset[0] + (iz - data.Lbz);
-          const int     gy       = offset[1] + (iy - data.Lby);
-          const int     gx       = offset[2] + (ix - data.Lbx);
-          const float64 z        = static_cast<float64>(gz) * data.delz;
-          const float64 y        = static_cast<float64>(gy) * data.dely;
-          const float64 x        = static_cast<float64>(gx) * data.delx;
-          const float64 expected = analytic_solution(kz, ky, kx, kappa2_sum, z, y, x);
-          const float64 diff     = data.phi(iz, iy, ix) - expected;
-          local_sum += diff * diff;
-          ++local_cnt;
-        }
-      }
-    }
-  }
-
-  float64 global_sum = 0.0;
-  int     global_cnt = 0;
-  MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&local_cnt, &global_cnt, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-  return std::sqrt(global_sum / static_cast<float64>(global_cnt));
-}
-
 TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
 {
   int nprocess = get_mpi_size();
@@ -367,29 +421,18 @@ TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
     return;
   }
 
-  std::filesystem::path config_path = write_config_for_size(nprocess, rank);
+  const GridConfig      grid_config = GridConfig{8, 8, 8, 2, 2, 2};
+  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
+
   MPI_Barrier(MPI_COMM_WORLD);
 
-  std::vector<std::string> args = {
-      "./test_pic_application",
-      "-c",
-      config_path.string(),
-  };
-  std::vector<const char*> argv = nix::ArgParser::convert_to_clargs(args);
-
-  int             argc      = static_cast<int>(argv.size());
-  char**          cargv     = const_cast<char**>(&argv[0]);
+  CliArgs         cli       = make_cli_args(config_path);
   auto            interface = std::make_shared<TestInterface>();
-  TestApplication app(argc, cargv, interface);
+  TestApplication app(cli.argc(), cli.cargv(), interface);
 
   REQUIRE(app.main() == 0);
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  if (rank == 0) {
-    std::filesystem::remove(config_path);
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
-  cleanup_tmpdir(rank);
+  cleanup_config_and_tmpdir(config_path, rank);
 }
 
 TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
@@ -402,45 +445,21 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
   const int     mz   = 1;
   const int     my   = 2;
   const int     mx   = 3;
-  const float64 tol  = 1.0e-10;
+  const float64 tol  = 1.0e-12;
 
-  std::filesystem::path config_path = write_config_for_size(get_mpi_size(), rank);
+  const GridConfig      grid_config = {32, 32, 32, 4, 4, 4};
+  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
+
   MPI_Barrier(MPI_COMM_WORLD);
 
-  std::vector<std::string> args = {
-      "./test_pic_application",
-      "-c",
-      config_path.string(),
-  };
-  std::vector<const char*> argv = nix::ArgParser::convert_to_clargs(args);
-
-  int             argc      = static_cast<int>(argv.size());
-  char**          cargv     = const_cast<char**>(&argv[0]);
+  CliArgs         cli       = make_cli_args(config_path);
   auto            interface = std::make_shared<TestInterface>();
-  TestApplication app(argc, cargv, interface);
+  TestApplication app(cli.argc(), cli.cargv(), interface);
 
-  app.initialize_for_test(argc, cargv);
-
-  auto              app_data    = app.get_internal_data();
-  const nix::Dims3D global_dims = {app_data.ndims[0], app_data.ndims[1], app_data.ndims[2]};
-
-  for (auto& chunk : app_data.chunkvec) {
-    auto* pic_chunk = dynamic_cast<PicChunk*>(chunk.get());
-    REQUIRE(pic_chunk != nullptr);
-    populate_chunk_source(*pic_chunk, global_dims, mz, my, mx);
-  }
-
-  app.solve_poisson_for_test();
-
-  const float64 rms_err = compute_global_rms_error(app_data.chunkvec, global_dims, mz, my, mx);
-  REQUIRE(rms_err < tol);
-
+  app.initialize_for_test(cli.argc(), cli.cargv());
+  app.solve_poisson_for_test(mz, my, mx);
+  app.require_rms_error_below(mz, my, mx, tol);
   app.finalize_for_test();
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  if (rank == 0) {
-    std::filesystem::remove(config_path);
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
-  cleanup_tmpdir(rank);
+  cleanup_config_and_tmpdir(config_path, rank);
 }
