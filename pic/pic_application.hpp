@@ -39,7 +39,7 @@ public:
   using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
   using PtrPoissonSolver    = std::unique_ptr<elliptic::Solver>;
-  using PtrPoissonInterface = std::unique_ptr<elliptic::SolverInterface>;
+  using PtrPoissonInterface = std::shared_ptr<elliptic::SolverInterface>;
 
   PicApplication(int argc, char** argv, PtrInterface interface);
 
@@ -52,6 +52,8 @@ protected:
   int              momstep;    ///< step at which moment quantities are cached
   MpiCommVec       mpicommvec; ///< MPI Communicators
   PtrPoissonSolver solver;     ///< Poisson solver
+
+  virtual PtrPoissonSolver create_poisson_solver();
 
   virtual PtrPoissonInterface create_poisson_interface();
 

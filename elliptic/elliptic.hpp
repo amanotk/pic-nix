@@ -28,12 +28,9 @@ class Solver
 {
 public:
   using Interface    = SolverInterface;
-  using PtrInterface = std::unique_ptr<Interface>;
+  using PtrInterface = std::shared_ptr<Interface>;
 
-  Solver(PtrInterface interface = nullptr)
-      : interface(std::move(interface))
-  {
-  }
+  Solver(PtrInterface interface = nullptr) : interface(std::move(interface)) {}
 
   void set_interface(PtrInterface interface)
   {
@@ -73,6 +70,16 @@ public:
     if (interface == nullptr)
       return 1;
     return interface->solve(accessor);
+  }
+
+  PtrInterface get_interface()
+  {
+    return interface;
+  }
+
+  std::shared_ptr<const Interface> get_interface() const
+  {
+    return interface;
   }
 
 protected:
