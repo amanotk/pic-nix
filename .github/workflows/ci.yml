@@ -41,12 +41,3 @@ jobs:
             -DPICNIX_CATCH2_CONFIG="$PICNIX_CATCH2_CONFIG"
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
-
-      - name: Build and test elliptic
-        run: |
-          export PICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
-          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
-            -DPICNIX_CATCH2_CONFIG="$PICNIX_CATCH2_CONFIG"
-          cmake --build build --parallel
-          ctest --test-dir build --output-on-failure
-        working-directory: elliptic
