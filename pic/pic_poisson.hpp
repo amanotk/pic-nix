@@ -38,7 +38,7 @@ public:
   PicChunkAccessor get_accessor(ChunkVec& chunkvec);
 
 protected:
-  nix::Dims3D global_dims_;
+  nix::Dims3D global_dims;
   float64     delx;
   float64     dely;
   float64     delz;

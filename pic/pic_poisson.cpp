@@ -12,7 +12,7 @@
 using namespace nix::typedefs;
 
 PicPoisson::PicPoisson(const nix::Dims3D& global_dims, float64 delh)
-    : PetscInterface(global_dims), global_dims_(global_dims), delx(delh), dely(delh), delz(delh)
+    : PetscInterface(global_dims), global_dims(global_dims), delx(delh), dely(delh), delz(delh)
 {
   setup();
 }
@@ -38,9 +38,9 @@ PicPoisson::PicChunkAccessor PicPoisson::get_accessor(ChunkVec& chunkvec)
 
 int PicPoisson::set_matrix()
 {
-  const bool    is_1d   = (global_dims_[0] == 1) && (global_dims_[1] == 1);
-  const bool    is_2d   = (global_dims_[0] == 1) && (global_dims_[1] > 1);
-  const bool    is_3d   = (global_dims_[0] > 1) && (global_dims_[1] > 1);
+  const bool    is_1d   = (global_dims[0] == 1) && (global_dims[1] == 1);
+  const bool    is_2d   = (global_dims[0] == 1) && (global_dims[1] > 1);
+  const bool    is_3d   = (global_dims[0] > 1) && (global_dims[1] > 1);
   const float64 dx2_inv = 1.0 / (delx * delx);
   const float64 dy2_inv = 1.0 / (dely * dely);
   const float64 dz2_inv = 1.0 / (delz * delz);
@@ -58,8 +58,8 @@ int PicPoisson::set_matrix()
   } else if (is_3d) {
     elliptic::build_poisson_matrix_3d(matrix, dm_obj, diag_3d, ofdx, ofdy, ofdz);
   } else {
-    ERROR << tfm::format("Invalid global dimensions for PicPoisson: %d %d %d", global_dims_[0],
-                         global_dims_[1], global_dims_[2]);
+    ERROR << tfm::format("Invalid global dimensions for PicPoisson: %d %d %d", global_dims[0],
+                         global_dims[1], global_dims[2]);
     MPI_Abort(MPI_COMM_WORLD, -1);
   }
 
