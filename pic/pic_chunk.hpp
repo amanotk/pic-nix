@@ -104,8 +104,9 @@ public:
 
   virtual void allocate();
 
-  virtual void reset_load() override;
+  virtual void allocate_mpi_buffers();
 
+  virtual void reset_load() override;
   virtual void setup(json& config) override;
 
   virtual void init_friedman();

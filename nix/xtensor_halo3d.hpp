@@ -187,6 +187,64 @@ public:
 };
 
 ///
+/// @brief Boundary Halo3D class for electrostatic potential
+///
+template <typename Chunk>
+class XtensorHaloPotential3D : public Halo3D<xt::xtensor<float64, 3>, Chunk, true>
+{
+public:
+  using Base = Halo3D<xt::xtensor<float64, 3>, Chunk, true>;
+  using Base::Base; // constructor
+  using Base::data;
+  using Base::chunk;
+
+  template <typename BufferPtr>
+  bool pack(BufferPtr& mpibuf, int iz, int iy, int ix, int send_bound[3][2], int recv_bound[3][2])
+  {
+    // skip
+    if (iz == 1 && iy == 1 && ix == 1)
+      return false;
+
+    // packing
+    auto Iz   = xt::range(send_bound[0][0], send_bound[0][1] + 1);
+    auto Iy   = xt::range(send_bound[1][0], send_bound[1][1] + 1);
+    auto Ix   = xt::range(send_bound[2][0], send_bound[2][1] + 1);
+    auto view = xt::strided_view(*data, {Iz, Iy, Ix});
+
+    float64* ptr = static_cast<float64*>(mpibuf->get_send_buffer(iz, iy, ix));
+    std::copy(view.begin(), view.end(), ptr);
+
+    // datatype
+    mpibuf->sendtype(iz, iy, ix) = MPI_BYTE;
+    mpibuf->recvtype(iz, iy, ix) = MPI_BYTE;
+
+    return true;
+  }
+
+  template <typename BufferPtr>
+  bool unpack(BufferPtr& mpibuf, int iz, int iy, int ix, int send_bound[3][2], int recv_bound[3][2])
+  {
+    // skip
+    if (iz == 1 && iy == 1 && ix == 1)
+      return false;
+
+    if (chunk->get_nb_rank(iz - 1, iy - 1, ix - 1) == MPI_PROC_NULL)
+      return false;
+
+    // unpacking
+    auto Iz   = xt::range(recv_bound[0][0], recv_bound[0][1] + 1);
+    auto Iy   = xt::range(recv_bound[1][0], recv_bound[1][1] + 1);
+    auto Ix   = xt::range(recv_bound[2][0], recv_bound[2][1] + 1);
+    auto view = xt::strided_view(*data, {Iz, Iy, Ix});
+
+    float64* ptr = static_cast<float64*>(mpibuf->get_recv_buffer(iz, iy, ix));
+    std::copy(ptr, ptr + view.size(), view.begin());
+
+    return true;
+  }
+};
+
+///
 /// @brief Boundary Halo3D class for particle
 ///
 template <typename Chunk>

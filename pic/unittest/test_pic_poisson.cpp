@@ -215,7 +215,9 @@ std::unique_ptr<TestPicChunk> make_test_chunk(const nix::Dims3D& dims, const nix
                                               const nix::Dims3D& global_dims,
                                               const nix::Dims3D& offset, int id, json config)
 {
-  return make_chunk_impl<TestPicChunk>(dims, has_dim, global_dims, offset, id, config);
+  auto chunk = make_chunk_impl<TestPicChunk>(dims, has_dim, global_dims, offset, id, config);
+  chunk->allocate_mpi_buffers();
+  return chunk;
 }
 
 void initialize_chunkvec(std::vector<std::unique_ptr<PicChunk>>& chunkvec, int rank,
@@ -444,4 +446,88 @@ TEST_CASE("PicPoisson scatter", "[np=2]")
   poisson.copy_sol_to_chunk(accessor);
 
   require_src_equals_sol(chunkvec, tol);
+}
+
+TEST_CASE("PicPoisson phi ghost exchange", "[np=2]")
+{
+  if (!require_mpi_size(2)) {
+    return;
+  }
+
+  const float64     tol             = 1.0e-12;
+  const int         rank            = get_mpi_rank();
+  const int         mz              = 0;
+  const int         my              = 0;
+  const int         mx              = 2;
+  const nix::Dims3D global_dims     = {1, 1, 16};
+  const nix::Dims3D chunk_dims      = {1, 1, 4};
+  const nix::Bool3D has_dim         = {false, false, true};
+  const auto        proc_dims       = std::array<int, 3>{1, 1, 2};
+  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  const json        config          = make_default_config();
+  const json        option          = make_default_option();
+
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
+
+  // create chunks
+  std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  initialize_chunkvec(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
+                      config);
+
+  TestPicPoisson poisson(global_dims, 1.0);
+  poisson.bind_chunks(chunkvec);
+  auto accessor = poisson.get_accessor();
+
+  poisson.set_option(option);
+  poisson.update_mapping(accessor);
+  poisson.copy_chunk_to_src(accessor);
+  REQUIRE(poisson.solve(accessor) == 0);
+  poisson.copy_sol_to_chunk(accessor);
+
+  for (auto& chunk : chunkvec) {
+    chunk->set_boundary_pack(BoundaryPhi);
+    chunk->set_boundary_begin(BoundaryPhi);
+  }
+  for (auto& chunk : chunkvec) {
+    chunk->set_boundary_end(BoundaryPhi);
+    chunk->set_boundary_unpack(BoundaryPhi);
+  }
+
+  for (const auto& base_chunk : chunkvec) {
+    auto* chunk = dynamic_cast<TestPicChunk*>(base_chunk.get());
+    REQUIRE(chunk != nullptr);
+    auto          data   = chunk->get_internal_data();
+    const float64 lx     = static_cast<float64>(global_dims[2]) * data.delx;
+    const float64 ly     = static_cast<float64>(global_dims[1]) * data.dely;
+    const float64 lz     = static_cast<float64>(global_dims[0]) * data.delz;
+    const float64 kx     = static_cast<float64>(mx) * nix::math::pi2 / lx;
+    const float64 ky     = static_cast<float64>(my) * nix::math::pi2 / ly;
+    const float64 kz     = static_cast<float64>(mz) * nix::math::pi2 / lz;
+    const float64 kappax = compute_kappa_component(kx, data.delx);
+    const float64 kappay = compute_kappa_component(ky, data.dely);
+    const float64 kappaz = compute_kappa_component(kz, data.delz);
+    const float64 kappa2_sum =
+        kappax * kappax + kappay * kappay + kappaz * kappaz + static_cast<float64>(1.0e-32);
+
+    for (int ix = 0; ix < data.Lbx; ++ix) {
+      auto          coords   = chunk->get_coordinates(0, 0, ix);
+      const float64 x        = coords[2];
+      const float64 y        = coords[1];
+      const float64 z        = coords[0];
+      const float64 expected = analytic_solution(kz, ky, kx, kappa2_sum, z, y, x);
+      const float64 diff     = std::abs(data.phi(0, 0, ix) - expected);
+      REQUIRE(diff < tol);
+    }
+    for (int ix = data.Ubx + 1; ix <= data.Ubx + data.boundary_margin; ++ix) {
+      auto          coords   = chunk->get_coordinates(0, 0, ix);
+      const float64 x        = coords[2];
+      const float64 y        = coords[1];
+      const float64 z        = coords[0];
+      const float64 expected = analytic_solution(kz, ky, kx, kappa2_sum, z, y, x);
+      const float64 diff     = std::abs(data.phi(0, 0, ix) - expected);
+      REQUIRE(diff < tol);
+    }
+  }
 }

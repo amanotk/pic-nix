@@ -137,6 +137,14 @@ void PicChunk::reset_load()
   }
 }
 
+void PicChunk::allocate_mpi_buffers()
+{
+  this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, 0, sizeof(float64) * 6);
+  this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, 0, sizeof(float64) * 4);
+  this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
+  this->set_mpi_buffer(mpibufvec[BoundaryPhi], 0, 0, sizeof(float64) * 1);
+}
+
 void PicChunk::setup(json& config)
 {
   auto opt = config["option"];
@@ -313,6 +321,11 @@ void PicChunk::set_boundary_pack(int mode)
     this->pack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
+  case BoundaryPhi: {
+    auto halo = nix::XtensorHaloPotential3D<this_type>(phi, *this);
+    this->pack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
   default:
     ERROR << tfm::format("No such boundary mode exists!");
     break;
@@ -339,6 +352,11 @@ void PicChunk::set_boundary_unpack(int mode)
   }
   case BoundaryParticle: {
     auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
+    this->unpack_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryPhi: {
+    auto halo = nix::XtensorHaloPotential3D<this_type>(phi, *this);
     this->unpack_bc_exchange(mpibufvec[mode], halo);
     break;
   }
@@ -374,6 +392,11 @@ void PicChunk::set_boundary_begin(int mode)
     this->begin_bc_exchange(mpibufvec[mode], halo);
     break;
   }
+  case BoundaryPhi: {
+    auto halo = nix::XtensorHaloPotential3D<this_type>(phi, *this);
+    this->begin_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
   default:
     ERROR << tfm::format("No such boundary mode exists!");
     break;
@@ -400,6 +423,11 @@ void PicChunk::set_boundary_end(int mode)
   }
   case BoundaryParticle: {
     auto halo = nix::XtensorHaloParticle3D<this_type>(up, *this);
+    this->end_bc_exchange(mpibufvec[mode], halo);
+    break;
+  }
+  case BoundaryPhi: {
+    auto halo = nix::XtensorHaloPotential3D<this_type>(phi, *this);
     this->end_bc_exchange(mpibufvec[mode], halo);
     break;
   }
