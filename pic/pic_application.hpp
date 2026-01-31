@@ -92,8 +92,6 @@ protected:
   virtual void exchange_phi_boundaries();
 
   virtual void exchange_emf_boundaries();
-
-  virtual void compute_efield_from_potential();
 };
 
 #endif
