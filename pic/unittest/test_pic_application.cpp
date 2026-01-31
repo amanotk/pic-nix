@@ -79,6 +79,12 @@ public:
     PicApplication::solve_poisson();
   }
 
+  void solve_poisson_from_push()
+  {
+    PicApplication::push();
+    PicApplication::solve_poisson();
+  }
+
   void require_rms_error_below(int mz, int my, int mx, float64 tol)
   {
     const float64 rms_err = compute_global_rms_error(mz, my, mx);
@@ -609,8 +615,7 @@ TEST_CASE("PicApplication preserves Gauss law after particle push", "[np=8]")
   TestApplication app(cli.argc(), cli.cargv(), interface);
 
   app.initialize_for_test(cli.argc(), cli.cargv());
-  app.push_particles_for_test();
-  app.solve_poisson_after_push();
+  app.solve_poisson_from_push();
 
   const float64 tol = 1.0e-7;
   app.require_divergence_rms_below(tol);
