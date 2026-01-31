@@ -75,32 +75,32 @@ public:
   void solve_poisson_from_particle()
   {
     PicApplication::calculate_moment();
-    populate_charge_density_from_moment();
+    populate_rho_from_moment();
     PicApplication::solve_poisson();
+    compute_efield_from_potential();
   }
 
-  void solve_poisson_from_push()
+  void push()
   {
     PicApplication::push();
-    PicApplication::solve_poisson();
   }
 
-  void require_rms_error_below(int mz, int my, int mx, float64 tol)
+  void require_poisson_error_below(int mz, int my, int mx, float64 tol)
   {
-    const float64 rms_err = compute_global_rms_error(mz, my, mx);
+    const float64 rms_err = compute_poisson_error(mz, my, mx);
     REQUIRE(rms_err < tol);
+  }
+
+  void require_divergence_error_below(float64 tol)
+  {
+    const float64 err = compute_divergence_error();
+    std::cout << "Divergence error (RMS of div(E)): " << err << std::endl;
+    REQUIRE(err < tol);
   }
 
   void finalize_for_test()
   {
     PicApplication::finalize();
-  }
-
-  void require_divergence_rms_below(float64 tol)
-  {
-    exchange_phi_boundaries();
-    const float64 rms_diff = compute_divergence_rms();
-    REQUIRE(rms_diff < tol);
   }
 
 protected:
@@ -130,78 +130,94 @@ private:
     }
   }
 
-  float64 compute_global_charge_mean()
+  void exchange_emf_boundaries()
   {
-    const auto& chunkvec    = this->get_internal_data().chunkvec;
-    float64     local_sum   = 0.0;
-    int         local_count = 0;
+    const auto& chunkvec = this->get_internal_data().chunkvec;
+    for (auto& chunk_ptr : chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      chunk->set_boundary_pack(BoundaryEmf);
+      chunk->set_boundary_begin(BoundaryEmf);
+    }
+    for (auto& chunk_ptr : chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      chunk->set_boundary_end(BoundaryEmf);
+      chunk->set_boundary_unpack(BoundaryEmf);
+    }
+  }
+
+  float64 compute_divergence_error()
+  {
+    const auto& chunkvec  = this->get_internal_data().chunkvec;
+    float64     local_efd = 0.0;
+    float64     local_bfd = 0.0;
+    int         local_cnt = 0;
+
     for (auto& chunk_ptr : chunkvec) {
       auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
       REQUIRE(chunk != nullptr);
       auto data = chunk->get_internal_data();
-      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-            local_sum += data.uj(iz, iy, ix, 0);
-            ++local_count;
-          }
-        }
-      }
+
+      float64 efd = 0.0;
+      float64 bfd = 0.0;
+      chunk->get_diverror(efd, bfd);
+      local_efd += efd;
+      local_bfd += bfd;
+
+      // count interior cells
+      auto dims = chunk->get_dims();
+      local_cnt += dims[0] * dims[1] * dims[2];
     }
 
-    float64 global_sum   = 0.0;
-    int     global_count = 0;
-    MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    float64 global_efd = 0.0;
+    float64 global_bfd = 0.0;
+    int     global_cnt = 0;
+    MPI_Allreduce(&local_efd, &global_efd, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_bfd, &global_bfd, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_cnt, &global_cnt, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    return global_count == 0 ? 0.0 : global_sum / static_cast<float64>(global_count);
+    float64 rms_efd = std::sqrt(global_efd / static_cast<float64>(global_cnt));
+    float64 rms_bfd = std::sqrt(global_bfd / static_cast<float64>(global_cnt));
+
+    // check only div(E) error here
+    REQUIRE(global_cnt > 0);
+    return rms_efd;
   }
 
-  float64 compute_divergence_rms()
+  void compute_efield_from_potential()
   {
-    const float64 rho_mean    = compute_global_charge_mean();
-    const auto&   chunkvec    = this->get_internal_data().chunkvec;
-    float64       local_err   = 0.0;
-    int           local_count = 0;
+    const auto& chunkvec = this->get_internal_data().chunkvec;
+
+    // exchange phi boundaries to ensure proper stencil
+    exchange_phi_boundaries();
 
     for (auto& chunk_ptr : chunkvec) {
       auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
       REQUIRE(chunk != nullptr);
-      auto          data    = chunk->get_internal_data();
-      const float64 inv_dx2 = 1.0 / (data.delx * data.delx);
-      const float64 inv_dy2 = 1.0 / (data.dely * data.dely);
-      const float64 inv_dz2 = 1.0 / (data.delz * data.delz);
+      auto data = chunk->get_internal_data();
 
-      for (int iz = data.Lbz + 1; iz <= data.Ubz - 1; ++iz) {
-        for (int iy = data.Lby + 1; iy <= data.Uby - 1; ++iy) {
-          for (int ix = data.Lbx + 1; ix <= data.Ubx - 1; ++ix) {
-            const float64 rho    = data.uj(iz, iy, ix, 0) - rho_mean;
-            const float64 center = data.phi(iz, iy, ix);
-            const float64 lap_x =
-                (data.phi(iz, iy, ix + 1) - 2.0 * center + data.phi(iz, iy, ix - 1)) * inv_dx2;
-            const float64 lap_y =
-                (data.phi(iz, iy + 1, ix) - 2.0 * center + data.phi(iz, iy - 1, ix)) * inv_dy2;
-            const float64 lap_z =
-                (data.phi(iz + 1, iy, ix) - 2.0 * center + data.phi(iz - 1, iy, ix)) * inv_dz2;
-            const float64 div_e = -(lap_x + lap_y + lap_z);
-            const float64 diff  = div_e - rho;
-            local_err += diff * diff;
-            ++local_count;
+      const float64 rdx = 1.0 / data.delx;
+      const float64 rdy = 1.0 / data.dely;
+      const float64 rdz = 1.0 / data.delz;
+
+      // Calculate E = -grad(phi)
+      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+            data.uf(iz, iy, ix, 0) = -(data.phi(iz, iy, ix) - data.phi(iz, iy, ix - 1)) * rdx;
+            data.uf(iz, iy, ix, 1) = -(data.phi(iz, iy, ix) - data.phi(iz, iy - 1, ix)) * rdy;
+            data.uf(iz, iy, ix, 2) = -(data.phi(iz, iy, ix) - data.phi(iz - 1, iy, ix)) * rdz;
           }
         }
       }
     }
 
-    float64 global_error = 0.0;
-    int     global_count = 0;
-    MPI_Allreduce(&local_err, &global_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-    REQUIRE(global_count > 0);
-    return std::sqrt(global_error / static_cast<float64>(global_count));
+    // exchange E field boundaries
+    exchange_emf_boundaries();
   }
 
-  void populate_charge_density_from_moment()
+  void populate_rho_from_moment()
   {
     auto app_data = this->get_internal_data();
     for (auto& chunk_ptr : app_data.chunkvec) {
@@ -224,6 +240,7 @@ private:
       }
     }
   }
+
   void populate_chunk_source(PicChunk& chunk, const nix::Dims3D& global_dims, int mz, int my,
                              int mx)
   {
@@ -253,7 +270,7 @@ private:
     }
   }
 
-  float64 compute_global_rms_error(int mz, int my, int mx)
+  float64 compute_poisson_error(int mz, int my, int mx)
   {
     auto              app_data    = PicApplication::get_internal_data();
     const nix::Dims3D global_dims = {app_data.ndims[0], app_data.ndims[1], app_data.ndims[2]};
@@ -439,7 +456,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
     seed_type = 'fixed'
   [application.petsc]
     ksp_type = 'cg'
-    pc_type = 'jacobi'
+    pc_type = 'gamg'
     ksp_rtol = 1.0e-14
 
 [parameter]
@@ -452,25 +469,25 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   Ex = 0.0
   Ey = 0.0
   Ez = 0.0
-  Bx = 0.0
-  By = 0.0
-  Bz = 0.0
+  Bx = 0.05
+  By = 0.10
+  Bz = 0.15
   Ns = 2
   cc = 1.0
   delt = 0.1
   delh = 1.0
 
 [[parameter.particle]]
-  np = 1
+  np = 5
   qm = 1.0
   ro = 1.0
-  vt = 0.0
+  vt = 1.0
 
 [[parameter.particle]]
-  np = 1
+  np = 5
   qm = -1.0
   ro = 1.0
-  vt = 0.0
+  vt = 1.0
 
 [[diagnostic]]
   name = 'history'
@@ -575,11 +592,11 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
     return;
   }
 
+  const float64 tol  = 1.0e-12;
   const int     rank = get_mpi_rank();
   const int     mz   = 1;
   const int     my   = 2;
   const int     mx   = 3;
-  const float64 tol  = 1.0e-12;
 
   const GridConfig      grid_config = {32, 32, 32, 4, 4, 4};
   std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
@@ -592,18 +609,19 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
 
   app.initialize_for_test(cli.argc(), cli.cargv());
   app.solve_poisson_from_analytic(mz, my, mx);
-  app.require_rms_error_below(mz, my, mx, tol);
+  app.require_poisson_error_below(mz, my, mx, tol);
   app.finalize_for_test();
 
   cleanup_config_and_tmpdir(config_path, rank);
 }
 
-TEST_CASE("PicApplication preserves Gauss law after particle push", "[np=8]")
+TEST_CASE("PicApplication preserves Gauss's law", "[np=8]")
 {
   if (!require_mpi_size(8)) {
     return;
   }
 
+  const float64         tol         = 1.0e-12;
   const int             rank        = get_mpi_rank();
   const GridConfig      grid_config = GridConfig{32, 32, 32, 4, 4, 4};
   std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
@@ -615,37 +633,16 @@ TEST_CASE("PicApplication preserves Gauss law after particle push", "[np=8]")
   TestApplication app(cli.argc(), cli.cargv(), interface);
 
   app.initialize_for_test(cli.argc(), cli.cargv());
-  app.solve_poisson_from_push();
 
-  const float64 tol = 1.0e-7;
-  app.require_divergence_rms_below(tol);
-
-  app.finalize_for_test();
-  cleanup_config_and_tmpdir(config_path, rank);
-}
-
-TEST_CASE("PicApplication preserves Gauss law before particle push", "[np=8]")
-{
-  if (!require_mpi_size(8)) {
-    return;
-  }
-
-  const int             rank        = get_mpi_rank();
-  const GridConfig      grid_config = GridConfig{32, 32, 32, 4, 4, 4};
-  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
-
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  CliArgs         cli       = make_cli_args(config_path);
-  auto            interface = std::make_shared<TestInterface>();
-  TestApplication app(cli.argc(), cli.cargv(), interface);
-
-  app.initialize_for_test(cli.argc(), cli.cargv());
+  // check Gauss's law before particle push
   app.solve_poisson_from_particle();
+  app.require_divergence_error_below(tol);
 
-  const float64 tol = 1.0e-7;
-  app.require_divergence_rms_below(tol);
+  // check Gauss's law after particle push
+  app.push();
+  app.require_divergence_error_below(tol);
 
   app.finalize_for_test();
+
   cleanup_config_and_tmpdir(config_path, rank);
 }

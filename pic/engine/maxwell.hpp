@@ -76,9 +76,11 @@ public:
 
     for (int ix = lbx; ix <= ubx; ix++) {
       // div(E) - rho
-      efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
+      float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
+      efd += div_e * div_e;
       // div(B)
-      bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
+      float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
+      bfd += div_b * div_b;
     }
   }
 
@@ -219,11 +221,13 @@ public:
     for (int iy = lby; iy <= uby; iy++) {
       for (int ix = lbx; ix <= ubx; ix++) {
         // div(E) - rho
-        efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-               (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
+        float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                        (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
+        efd += div_e * div_e;
         // div(B)
-        bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-               (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
+        float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                        (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
+        bfd += div_b * div_b;
       }
     }
   }
@@ -368,13 +372,15 @@ public:
       for (int iy = lby; iy <= uby; iy++) {
         for (int ix = lbx; ix <= ubx; ix++) {
           // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
-                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                          (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
+                          (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          efd += div_e * div_e;
           // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
-                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+          float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                          (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
+                          (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+          bfd += div_b * div_b;
         }
       }
     }
