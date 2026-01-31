@@ -82,6 +82,11 @@ public:
     PicApplication::solve_poisson();
   }
 
+  void calculate_moment_for_test()
+  {
+    PicApplication::calculate_moment();
+  }
+
   void require_rms_error_below(int mz, int my, int mx, float64 tol)
   {
     const float64 rms_err = compute_global_rms_error(mz, my, mx);
@@ -91,6 +96,117 @@ public:
   void finalize_for_test()
   {
     PicApplication::finalize();
+  }
+
+  void exchange_phi_boundaries()
+  {
+    const auto& chunkvec = this->get_internal_data().chunkvec;
+    for (auto& chunk_ptr : chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      chunk->set_boundary_pack(BoundaryPhi);
+      chunk->set_boundary_begin(BoundaryPhi);
+    }
+    for (auto& chunk_ptr : chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      chunk->set_boundary_end(BoundaryPhi);
+      chunk->set_boundary_unpack(BoundaryPhi);
+    }
+  }
+
+  float64 compute_global_charge_mean()
+  {
+    const auto& chunkvec    = this->get_internal_data().chunkvec;
+    float64     local_sum   = 0.0;
+    int         local_count = 0;
+    for (auto& chunk_ptr : chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      auto data = chunk->get_internal_data();
+      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+            local_sum += data.uj(iz, iy, ix, 0);
+            ++local_count;
+          }
+        }
+      }
+    }
+
+    float64 global_sum   = 0.0;
+    int     global_count = 0;
+    MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    return global_count == 0 ? 0.0 : global_sum / static_cast<float64>(global_count);
+  }
+
+  float64 compute_divergence_rms(float64 rho_mean)
+  {
+    const auto& chunkvec    = this->get_internal_data().chunkvec;
+    float64     local_error = 0.0;
+    int         local_count = 0;
+
+    for (auto& chunk_ptr : chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      auto          data    = chunk->get_internal_data();
+      const float64 inv_dx2 = 1.0 / (data.delx * data.delx);
+      const float64 inv_dy2 = 1.0 / (data.dely * data.dely);
+      const float64 inv_dz2 = 1.0 / (data.delz * data.delz);
+
+      for (int iz = data.Lbz + 1; iz <= data.Ubz - 1; ++iz) {
+        for (int iy = data.Lby + 1; iy <= data.Uby - 1; ++iy) {
+          for (int ix = data.Lbx + 1; ix <= data.Ubx - 1; ++ix) {
+            const float64 rho    = data.uj(iz, iy, ix, 0) - rho_mean;
+            const float64 center = data.phi(iz, iy, ix);
+            const float64 lap_x =
+                (data.phi(iz, iy, ix + 1) - 2.0 * center + data.phi(iz, iy, ix - 1)) * inv_dx2;
+            const float64 lap_y =
+                (data.phi(iz, iy + 1, ix) - 2.0 * center + data.phi(iz, iy - 1, ix)) * inv_dy2;
+            const float64 lap_z =
+                (data.phi(iz + 1, iy, ix) - 2.0 * center + data.phi(iz - 1, iy, ix)) * inv_dz2;
+            const float64 div_e = -(lap_x + lap_y + lap_z);
+            const float64 diff  = div_e - rho;
+            local_error += diff * diff;
+            ++local_count;
+          }
+        }
+      }
+    }
+
+    float64 global_error = 0.0;
+    int     global_count = 0;
+    MPI_Allreduce(&local_error, &global_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    REQUIRE(global_count > 0);
+    return std::sqrt(global_error / static_cast<float64>(global_count));
+  }
+
+  void populate_charge_density_from_moment()
+  {
+    auto app_data = this->get_internal_data();
+    for (auto& chunk_ptr : app_data.chunkvec) {
+      auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+      REQUIRE(chunk != nullptr);
+      auto data = chunk->get_internal_data();
+
+      data.uj.fill(0.0);
+      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+            float64 rho = 0.0;
+            for (int is = 0; is < data.Ns; ++is) {
+              const float64 q_over_m = data.up[is]->q / data.up[is]->m;
+              rho += data.um(iz, iy, ix, is, 0) * q_over_m;
+            }
+            data.uj(iz, iy, ix, 0) = rho;
+          }
+        }
+      }
+    }
   }
 
 protected:
@@ -184,96 +300,6 @@ private:
     return std::sqrt(global_sum / static_cast<float64>(global_cnt));
   }
 };
-
-namespace
-{
-void exchange_phi_boundaries(TestApplication& app)
-{
-  const auto& chunkvec = app.get_internal_data().chunkvec;
-  for (auto& chunk_ptr : chunkvec) {
-    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
-    REQUIRE(chunk != nullptr);
-    chunk->set_boundary_pack(BoundaryPhi);
-    chunk->set_boundary_begin(BoundaryPhi);
-  }
-  for (auto& chunk_ptr : chunkvec) {
-    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
-    REQUIRE(chunk != nullptr);
-    chunk->set_boundary_end(BoundaryPhi);
-    chunk->set_boundary_unpack(BoundaryPhi);
-  }
-}
-
-template <typename ChunkVec>
-float64 compute_global_charge_mean(const ChunkVec& chunkvec)
-{
-  float64 local_sum   = 0.0;
-  int     local_count = 0;
-  for (auto& chunk_ptr : chunkvec) {
-    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
-    REQUIRE(chunk != nullptr);
-    auto data = chunk->get_internal_data();
-    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          local_sum += data.uj(iz, iy, ix, 0);
-          ++local_count;
-        }
-      }
-    }
-  }
-
-  float64 global_sum   = 0.0;
-  int     global_count = 0;
-  MPI_Allreduce(&local_sum, &global_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-  return global_count == 0 ? 0.0 : global_sum / static_cast<float64>(global_count);
-}
-
-template <typename ChunkVec>
-float64 compute_divergence_rms(const ChunkVec& chunkvec, float64 rho_mean)
-{
-  float64 local_error = 0.0;
-  int     local_count = 0;
-
-  for (auto& chunk_ptr : chunkvec) {
-    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
-    REQUIRE(chunk != nullptr);
-    auto          data    = chunk->get_internal_data();
-    const float64 inv_dx2 = 1.0 / (data.delx * data.delx);
-    const float64 inv_dy2 = 1.0 / (data.dely * data.dely);
-    const float64 inv_dz2 = 1.0 / (data.delz * data.delz);
-
-    for (int iz = data.Lbz + 1; iz <= data.Ubz - 1; ++iz) {
-      for (int iy = data.Lby + 1; iy <= data.Uby - 1; ++iy) {
-        for (int ix = data.Lbx + 1; ix <= data.Ubx - 1; ++ix) {
-          const float64 rho    = data.uj(iz, iy, ix, 0) - rho_mean;
-          const float64 center = data.phi(iz, iy, ix);
-          const float64 lap_x =
-              (data.phi(iz, iy, ix + 1) - 2.0 * center + data.phi(iz, iy, ix - 1)) * inv_dx2;
-          const float64 lap_y =
-              (data.phi(iz, iy + 1, ix) - 2.0 * center + data.phi(iz, iy - 1, ix)) * inv_dy2;
-          const float64 lap_z =
-              (data.phi(iz + 1, iy, ix) - 2.0 * center + data.phi(iz - 1, iy, ix)) * inv_dz2;
-          const float64 div_e = -(lap_x + lap_y + lap_z);
-          const float64 diff  = div_e - rho;
-          local_error += diff * diff;
-          ++local_count;
-        }
-      }
-    }
-  }
-
-  float64 global_error = 0.0;
-  int     global_count = 0;
-  MPI_Allreduce(&local_error, &global_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-  REQUIRE(global_count > 0);
-  return std::sqrt(global_error / static_cast<float64>(global_count));
-}
-} // namespace
 
 class TestChunk : public PicChunk
 {
@@ -581,10 +607,41 @@ TEST_CASE("PicApplication preserves Gauss law after particle push", "[np=8]")
   app.push_particles_for_test();
   app.solve_poisson_after_push();
 
-  exchange_phi_boundaries(app);
-  const auto&   chunkvec = app.get_internal_data().chunkvec;
-  const float64 rho_mean = compute_global_charge_mean(chunkvec);
-  const float64 rms_diff = compute_divergence_rms(chunkvec, rho_mean);
+  app.exchange_phi_boundaries();
+  const float64 rho_mean = app.compute_global_charge_mean();
+  const float64 rms_diff = app.compute_divergence_rms(rho_mean);
+
+  const float64 tol = 1.0e-7;
+  REQUIRE(rms_diff < tol);
+
+  app.finalize_for_test();
+  cleanup_config_and_tmpdir(config_path, rank);
+}
+
+TEST_CASE("PicApplication preserves Gauss law before particle push", "[np=8]")
+{
+  if (!require_mpi_size(8)) {
+    return;
+  }
+
+  const int             rank        = get_mpi_rank();
+  const GridConfig      grid_config = GridConfig{32, 32, 32, 4, 4, 4};
+  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  CliArgs         cli       = make_cli_args(config_path);
+  auto            interface = std::make_shared<TestInterface>();
+  TestApplication app(cli.argc(), cli.cargv(), interface);
+
+  app.initialize_for_test(cli.argc(), cli.cargv());
+  app.calculate_moment_for_test();
+  app.populate_charge_density_from_moment();
+  app.solve_poisson_after_push();
+
+  app.exchange_phi_boundaries();
+  const float64 rho_mean = app.compute_global_charge_mean();
+  const float64 rms_diff = app.compute_divergence_rms(rho_mean);
 
   const float64 tol = 1.0e-7;
   REQUIRE(rms_diff < tol);
