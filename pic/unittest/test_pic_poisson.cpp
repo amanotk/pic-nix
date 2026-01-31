@@ -171,7 +171,7 @@ json make_default_option()
   json option;
   option["petsc"]             = json::object();
   option["petsc"]["ksp_type"] = "cg";
-  option["petsc"]["pc_type"]  = "amg";
+  option["petsc"]["pc_type"]  = "jacobi";
   option["petsc"]["ksp_rtol"] = 1.0e-14;
   return option;
 }
