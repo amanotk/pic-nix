@@ -353,8 +353,7 @@ public:
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
 
-        mtp.seed(random_seed + is * 2 + 1);
-        mtv.seed(random_seed + is * 3 + 2);
+        mtp.seed(random_seed); // for charge neutrality
         for (int ip = 0; ip < up[is]->Np; ip++) {
           float64* ptcl = &up[is]->xu(ip, 0);
           int64*   id64 = reinterpret_cast<int64*>(ptcl);
@@ -407,7 +406,6 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
 [application]
   [application.option]
     seed_type = 'fixed'
-    random_seed = 0
   [application.petsc]
     ksp_type = 'cg'
     pc_type = 'jacobi'
@@ -426,7 +424,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   Bx = 0.0
   By = 0.0
   Bz = 0.0
-  Ns = 2
+  Ns = 1
   cc = 1.0
   delt = 0.1
   delh = 1.0
@@ -434,12 +432,6 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
 [[parameter.particle]]
   np = 1
   qm = -1.0
-  ro = 1.0
-  vt = 0.0
-
-[[parameter.particle]]
-  np = 1
-  qm = 1.0
   ro = 1.0
   vt = 0.0
 
