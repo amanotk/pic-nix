@@ -69,3 +69,12 @@ To run only these tests:
 ```
 ctest --test-dir build -R test_pic_application --output-on-failure
 ```
+
+## Language Server
+- Generate the compilation database whenever you configure so `clangd`/your LSP can resolve MPI headers and `nix/thirdparty` includes. Run
+  ```
+  cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -C cmake/linux-gcc.cmake
+  ```
+  (or pass `-DCMAKE_CXX_COMPILER=mpicxx` manually) so `build/compile_commands.json` mirrors the compiler’s include paths.
+- Point your editor’s LSP to the `build/` directory (e.g. `clangd.arguments: ["--compile-commands-dir=build"]`).
+- Anytime `build/` is deleted or rerun, repeat the configuration command above before restarting the language server so its cache stays in sync.
