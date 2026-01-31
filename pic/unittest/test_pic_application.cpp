@@ -60,7 +60,7 @@ public:
     PicApplication::setup_chunks();
   }
 
-  void solve_poisson_for_test(int mz, int my, int mx)
+  void solve_poisson_from_analytic(int mz, int my, int mx)
   {
     auto              app_data    = PicApplication::get_internal_data();
     const nix::Dims3D global_dims = {app_data.ndims[0], app_data.ndims[1], app_data.ndims[2]};
@@ -72,19 +72,11 @@ public:
     PicApplication::solve_poisson();
   }
 
-  void push_particles_for_test()
-  {
-    PicApplication::push();
-  }
-
-  void solve_poisson_after_push()
-  {
-    PicApplication::solve_poisson();
-  }
-
-  void calculate_moment_for_test()
+  void solve_poisson_from_particle()
   {
     PicApplication::calculate_moment();
+    populate_charge_density_from_moment();
+    PicApplication::solve_poisson();
   }
 
   void require_rms_error_below(int mz, int my, int mx, float64 tol)
@@ -98,6 +90,23 @@ public:
     PicApplication::finalize();
   }
 
+  void require_divergence_rms_below(float64 tol)
+  {
+    exchange_phi_boundaries();
+    const float64 rms_diff = compute_divergence_rms();
+    REQUIRE(rms_diff < tol);
+  }
+
+protected:
+  float64 get_available_etime() override
+  {
+    if (curstep >= 1) {
+      return -1.0;
+    }
+    return std::numeric_limits<float64>::max();
+  }
+
+private:
   void exchange_phi_boundaries()
   {
     const auto& chunkvec = this->get_internal_data().chunkvec;
@@ -142,11 +151,12 @@ public:
     return global_count == 0 ? 0.0 : global_sum / static_cast<float64>(global_count);
   }
 
-  float64 compute_divergence_rms(float64 rho_mean)
+  float64 compute_divergence_rms()
   {
-    const auto& chunkvec    = this->get_internal_data().chunkvec;
-    float64     local_error = 0.0;
-    int         local_count = 0;
+    const float64 rho_mean    = compute_global_charge_mean();
+    const auto&   chunkvec    = this->get_internal_data().chunkvec;
+    float64       local_err   = 0.0;
+    int           local_count = 0;
 
     for (auto& chunk_ptr : chunkvec) {
       auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
@@ -169,7 +179,7 @@ public:
                 (data.phi(iz + 1, iy, ix) - 2.0 * center + data.phi(iz - 1, iy, ix)) * inv_dz2;
             const float64 div_e = -(lap_x + lap_y + lap_z);
             const float64 diff  = div_e - rho;
-            local_error += diff * diff;
+            local_err += diff * diff;
             ++local_count;
           }
         }
@@ -178,7 +188,7 @@ public:
 
     float64 global_error = 0.0;
     int     global_count = 0;
-    MPI_Allreduce(&local_error, &global_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_err, &global_error, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
     REQUIRE(global_count > 0);
@@ -208,17 +218,6 @@ public:
       }
     }
   }
-
-protected:
-  float64 get_available_etime() override
-  {
-    if (curstep >= 1) {
-      return -1.0;
-    }
-    return std::numeric_limits<float64>::max();
-  }
-
-private:
   void populate_chunk_source(PicChunk& chunk, const nix::Dims3D& global_dims, int mz, int my,
                              int mx)
   {
@@ -379,7 +378,7 @@ public:
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
 
-        mtp.seed(random_seed); // for charge neutrality
+        mtp.seed(random_seed + is);
         for (int ip = 0; ip < up[is]->Np; ip++) {
           float64* ptcl = &up[is]->xu(ip, 0);
           int64*   id64 = reinterpret_cast<int64*>(ptcl);
@@ -450,10 +449,16 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   Bx = 0.0
   By = 0.0
   Bz = 0.0
-  Ns = 1
+  Ns = 2
   cc = 1.0
   delt = 0.1
   delh = 1.0
+
+[[parameter.particle]]
+  np = 1
+  qm = 1.0
+  ro = 1.0
+  vt = 0.0
 
 [[parameter.particle]]
   np = 1
@@ -580,7 +585,7 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
   TestApplication app(cli.argc(), cli.cargv(), interface);
 
   app.initialize_for_test(cli.argc(), cli.cargv());
-  app.solve_poisson_for_test(mz, my, mx);
+  app.solve_poisson_from_analytic(mz, my, mx);
   app.require_rms_error_below(mz, my, mx, tol);
   app.finalize_for_test();
 
@@ -607,12 +612,8 @@ TEST_CASE("PicApplication preserves Gauss law after particle push", "[np=8]")
   app.push_particles_for_test();
   app.solve_poisson_after_push();
 
-  app.exchange_phi_boundaries();
-  const float64 rho_mean = app.compute_global_charge_mean();
-  const float64 rms_diff = app.compute_divergence_rms(rho_mean);
-
   const float64 tol = 1.0e-7;
-  REQUIRE(rms_diff < tol);
+  app.require_divergence_rms_below(tol);
 
   app.finalize_for_test();
   cleanup_config_and_tmpdir(config_path, rank);
@@ -635,16 +636,10 @@ TEST_CASE("PicApplication preserves Gauss law before particle push", "[np=8]")
   TestApplication app(cli.argc(), cli.cargv(), interface);
 
   app.initialize_for_test(cli.argc(), cli.cargv());
-  app.calculate_moment_for_test();
-  app.populate_charge_density_from_moment();
-  app.solve_poisson_after_push();
-
-  app.exchange_phi_boundaries();
-  const float64 rho_mean = app.compute_global_charge_mean();
-  const float64 rms_diff = app.compute_divergence_rms(rho_mean);
+  app.solve_poisson_from_particle();
 
   const float64 tol = 1.0e-7;
-  REQUIRE(rms_diff < tol);
+  app.require_divergence_rms_below(tol);
 
   app.finalize_for_test();
   cleanup_config_and_tmpdir(config_path, rank);
