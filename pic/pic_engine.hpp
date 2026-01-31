@@ -121,6 +121,26 @@ public:
       maxwell.push_bfd_3d(data.uf, data.uj, data.ff, delt, data.option);
     }
   }
+
+  void compute_efield_poisson(int dimension, T_chunk& chunk, const T_data& data) const
+  {
+    BaseMaxwell maxwell(data);
+    float64     rdx = 1.0 / data.delx;
+    float64     rdy = 1.0 / data.dely;
+    float64     rdz = 1.0 / data.delz;
+
+    if (dimension == 1) {
+      maxwell.compute_efield_from_potential_1d(data.uf, data.phi, rdx);
+    }
+
+    if (dimension == 2) {
+      maxwell.compute_efield_from_potential_2d(data.uf, data.phi, rdx, rdy);
+    }
+
+    if (dimension == 3) {
+      maxwell.compute_efield_from_potential_3d(data.uf, data.phi, rdx, rdy, rdz);
+    }
+  }
 };
 
 template <typename T_chunk>

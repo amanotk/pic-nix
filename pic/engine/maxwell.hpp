@@ -500,6 +500,57 @@ public:
       }
     }
   }
+
+  template <typename T_field, typename T_potential>
+  void compute_efield_from_potential_1d(T_field& uf, T_potential& phi, float64 rdx)
+  {
+    const int iz = this->lbz;
+    const int iy = this->lby;
+
+    for (int ix = this->lbx; ix <= this->ubx; ++ix) {
+      // Ex
+      uf(iz, iy, ix, 0) = -(phi(iz, iy, ix) - phi(iz, iy, ix - 1)) * rdx;
+      // Ey = 0 in 1D
+      uf(iz, iy, ix, 1) = 0.0;
+      // Ez = 0 in 1D
+      uf(iz, iy, ix, 2) = 0.0;
+    }
+  }
+
+  template <typename T_field, typename T_potential>
+  void compute_efield_from_potential_2d(T_field& uf, T_potential& phi, float64 rdx, float64 rdy)
+  {
+    const int iz = this->lbz;
+
+    for (int iy = this->lby; iy <= this->uby; ++iy) {
+      for (int ix = this->lbx; ix <= this->ubx; ++ix) {
+        // Ex
+        uf(iz, iy, ix, 0) = -(phi(iz, iy, ix) - phi(iz, iy, ix - 1)) * rdx;
+        // Ey
+        uf(iz, iy, ix, 1) = -(phi(iz, iy, ix) - phi(iz, iy - 1, ix)) * rdy;
+        // Ez = 0 in 2D
+        uf(iz, iy, ix, 2) = 0.0;
+      }
+    }
+  }
+
+  template <typename T_field, typename T_potential>
+  void compute_efield_from_potential_3d(T_field& uf, T_potential& phi, float64 rdx, float64 rdy,
+                                        float64 rdz)
+  {
+    for (int iz = this->lbz; iz <= this->ubz; ++iz) {
+      for (int iy = this->lby; iy <= this->uby; ++iy) {
+        for (int ix = this->lbx; ix <= this->ubx; ++ix) {
+          // Ex
+          uf(iz, iy, ix, 0) = -(phi(iz, iy, ix) - phi(iz, iy, ix - 1)) * rdx;
+          // Ey
+          uf(iz, iy, ix, 1) = -(phi(iz, iy, ix) - phi(iz, iy - 1, ix)) * rdy;
+          // Ez
+          uf(iz, iy, ix, 2) = -(phi(iz, iy, ix) - phi(iz - 1, iy, ix)) * rdz;
+        }
+      }
+    }
+  }
 };
 
 } // namespace pic_engine

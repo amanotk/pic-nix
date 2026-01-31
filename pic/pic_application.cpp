@@ -544,9 +544,14 @@ void PicApplication::update_poisson_efield()
   // solve Poisson equation
   solver->solve(accessor);
 
-  // Compute E-field from potential
+  // compute E-field from potential
   exchange_phi_boundaries();
-  compute_efield_from_potential();
+
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->compute_efield_poisson();
+  }
+
   exchange_emf_boundaries();
 }
 
@@ -575,49 +580,5 @@ void PicApplication::exchange_emf_boundaries()
     auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
     chunk->set_boundary_end(BoundaryEmf);
     chunk->set_boundary_unpack(BoundaryEmf);
-  }
-}
-
-void PicApplication::compute_efield_from_potential()
-{
-  for (auto& chunk_ptr : chunkvec) {
-    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
-    auto  data  = chunk->get_internal_data();
-
-    const float64 rdx = 1.0 / data.delx;
-    const float64 rdy = 1.0 / data.dely;
-    const float64 rdz = 1.0 / data.delz;
-
-    // Check which dimensions are enabled
-    const bool has_x = chunk->has_xdim();
-    const bool has_y = chunk->has_ydim();
-    const bool has_z = chunk->has_zdim();
-
-    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-          // Ex: only compute if x dimension is enabled
-          if (has_x) {
-            data.uf(iz, iy, ix, 0) = -(data.phi(iz, iy, ix) - data.phi(iz, iy, ix - 1)) * rdx;
-          } else {
-            data.uf(iz, iy, ix, 0) = 0.0;
-          }
-
-          // Ey: only compute if y dimension is enabled
-          if (has_y) {
-            data.uf(iz, iy, ix, 1) = -(data.phi(iz, iy, ix) - data.phi(iz, iy - 1, ix)) * rdy;
-          } else {
-            data.uf(iz, iy, ix, 1) = 0.0;
-          }
-
-          // Ez: only compute if z dimension is enabled
-          if (has_z) {
-            data.uf(iz, iy, ix, 2) = -(data.phi(iz, iy, ix) - data.phi(iz - 1, iy, ix)) * rdz;
-          } else {
-            data.uf(iz, iy, ix, 2) = 0.0;
-          }
-        }
-      }
-    }
   }
 }

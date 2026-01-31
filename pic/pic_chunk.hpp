@@ -144,6 +144,8 @@ public:
   virtual void push_efd(float64 delt);
 
   virtual void push_bfd(float64 delt);
+
+  virtual void compute_efield_poisson();
 };
 
 #endif

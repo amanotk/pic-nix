@@ -581,3 +581,11 @@ void PicChunk::push_bfd(float64 delt)
   pic_engine::Maxwell<this_type> maxwell;
   maxwell.push_bfd(D, *this, get_internal_data(), delt);
 }
+
+void PicChunk::compute_efield_poisson()
+{
+  const int D = dimension;
+
+  pic_engine::Maxwell<this_type> maxwell;
+  maxwell.compute_efield_poisson(D, *this, get_internal_data());
+}
