@@ -29,6 +29,10 @@ if(PICNIX_BUILD_PIC AND NOT PICNIX_BUILD_NIX)
   set(PICNIX_BUILD_NIX ON CACHE BOOL "Build nix module" FORCE)
 endif()
 
+if(PICNIX_BUILD_PIC AND NOT PICNIX_BUILD_ELLIPTIC)
+  set(PICNIX_BUILD_ELLIPTIC ON CACHE BOOL "Build elliptic module" FORCE)
+endif()
+
 if(PICNIX_BUILD_NIX)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
 endif()
@@ -37,14 +41,14 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/nix")
 find_package(Filesystem REQUIRED)
 
-# explicit PIC library
-if(PICNIX_BUILD_PIC)
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/pic ${CMAKE_CURRENT_BINARY_DIR}/pic)
-endif()
-
 # elliptic (optional)
 if(PICNIX_BUILD_ELLIPTIC)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/elliptic ${CMAKE_CURRENT_BINARY_DIR}/elliptic)
+endif()
+
+# explicit PIC library
+if(PICNIX_BUILD_PIC)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/pic ${CMAKE_CURRENT_BINARY_DIR}/pic)
 endif()
 
 # build all executables in pic/example directory

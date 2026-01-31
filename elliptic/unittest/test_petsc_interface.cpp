@@ -15,6 +15,7 @@
 
 #include <petscao.h>
 #include <petscdmda.h>
+#include <petscmat.h>
 #include <petscsys.h>
 #include <petscvec.h>
 
@@ -40,11 +41,6 @@ struct PetscInterfaceTest final : public PetscInterface {
   }
 
   int solve(ChunkAccessor& accessor) override
-  {
-    return 0;
-  }
-
-  int solve() override
   {
     return 0;
   }

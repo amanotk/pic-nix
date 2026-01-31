@@ -28,7 +28,7 @@ void run_copy_solve_copy(SolverT& solver, MockChunkAccessor& accessor)
   solver.update_mapping(accessor);
   REQUIRE(solver.copy_chunk_to_src(accessor) == accessor.get_num_grids_total());
   solver.scatter_forward();
-  REQUIRE(solver.solve() == 0);
+  REQUIRE(solver.solve(accessor) == 0);
   solver.scatter_reverse();
   REQUIRE(solver.copy_sol_to_chunk(accessor) == accessor.get_num_grids_total());
 }
@@ -113,16 +113,18 @@ public:
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
 
-  void scatter_forward()
+  int scatter_forward()
   {
     scatter_forward_begin();
     scatter_forward_end();
+    return 0;
   }
 
-  void scatter_reverse()
+  int scatter_reverse()
   {
     scatter_reverse_begin();
     scatter_reverse_end();
+    return 0;
   }
 };
 
@@ -215,16 +217,18 @@ public:
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
 
-  void scatter_forward()
+  int scatter_forward()
   {
     scatter_forward_begin();
     scatter_forward_end();
+    return 0;
   }
 
-  void scatter_reverse()
+  int scatter_reverse()
   {
     scatter_reverse_begin();
     scatter_reverse_end();
+    return 0;
   }
 };
 
@@ -325,16 +329,18 @@ public:
     return static_cast<float64>(err_norm / (sol_norm + 1.0e-32));
   }
 
-  void scatter_forward()
+  int scatter_forward()
   {
     scatter_forward_begin();
     scatter_forward_end();
+    return 0;
   }
 
-  void scatter_reverse()
+  int scatter_reverse()
   {
     scatter_reverse_begin();
     scatter_reverse_end();
+    return 0;
   }
 };
 

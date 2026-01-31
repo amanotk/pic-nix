@@ -120,3 +120,21 @@ add_mpi_test(
   8
   ${PIC_BOUNDARY_TMPDIR_NP8}
 )
+
+# PicPoisson MPI tests (Catch2, MPI)
+add_executable(test_pic_poisson test_pic_poisson.cpp)
+target_include_directories(test_pic_poisson PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(test_pic_poisson PRIVATE
+  Catch2::Catch2
+  pic_obj_parallel
+  pic
+  nix
+)
+
+set(PIC_POISSON_TMPDIR_NP2 ${CMAKE_CURRENT_BINARY_DIR}/tmp_pic_poisson_np2)
+add_mpi_test(
+  test_pic_poisson_np2
+  test_pic_poisson
+  2
+  ${PIC_POISSON_TMPDIR_NP2}
+)

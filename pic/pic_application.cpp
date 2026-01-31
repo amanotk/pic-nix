@@ -2,6 +2,7 @@
 #include "pic_application.hpp"
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
+#include "pic_poisson.hpp"
 
 #include "diag/field.hpp"
 #include "diag/history.hpp"
@@ -11,6 +12,14 @@
 #include "diag/tracer.hpp"
 
 #include <taskflow/taskflow.hpp>
+
+PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
+{
+  nix::Dims3D dims = {ndims[0], ndims[1], ndims[2]};
+  float64     delh = cfgparser->get_delx();
+
+  return std::make_shared<PicPoisson>(dims, delh);
+}
 
 int PicApplicationInterface::get_num_species()
 {
@@ -64,6 +73,16 @@ void PicApplication::initialize(int argc, char** argv)
           MPI_Comm_dup(MPI_COMM_WORLD, &mpicommvec(mode, iz, iy, ix));
         }
       }
+    }
+  }
+
+  // initialize Poisson solver
+  {
+    auto poisson = create_poisson_interface();
+    solver       = std::make_unique<elliptic::Solver>(poisson);
+
+    if (solver != nullptr) {
+      solver->set_option(cfgparser->get_application());
     }
   }
 }
@@ -506,3 +525,99 @@ void PicApplication::calculate_moment_taskflow()
   executor.run(taskflow).wait();
 }
 
+void PicApplication::update_poisson_efield()
+{
+  if (solver == nullptr) {
+    return;
+  }
+
+  auto poisson = std::dynamic_pointer_cast<PicPoisson>(solver->get_interface());
+  if (poisson == nullptr) {
+    ERROR << "PicApplication requires PicPoisson solver interface." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
+  // bind chunks to poisson solver and get its accessor
+  poisson->bind_chunks(chunkvec);
+  auto accessor = poisson->get_accessor();
+
+  // solve Poisson equation
+  solver->solve(accessor);
+
+  // Compute E-field from potential
+  exchange_phi_boundaries();
+  compute_efield_from_potential();
+  exchange_emf_boundaries();
+}
+
+void PicApplication::exchange_phi_boundaries()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_pack(BoundaryPhi);
+    chunk->set_boundary_begin(BoundaryPhi);
+  }
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_end(BoundaryPhi);
+    chunk->set_boundary_unpack(BoundaryPhi);
+  }
+}
+
+void PicApplication::exchange_emf_boundaries()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_pack(BoundaryEmf);
+    chunk->set_boundary_begin(BoundaryEmf);
+  }
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_end(BoundaryEmf);
+    chunk->set_boundary_unpack(BoundaryEmf);
+  }
+}
+
+void PicApplication::compute_efield_from_potential()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    auto  data  = chunk->get_internal_data();
+
+    const float64 rdx = 1.0 / data.delx;
+    const float64 rdy = 1.0 / data.dely;
+    const float64 rdz = 1.0 / data.delz;
+
+    // Check which dimensions are enabled
+    const bool has_x = chunk->has_xdim();
+    const bool has_y = chunk->has_ydim();
+    const bool has_z = chunk->has_zdim();
+
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          // Ex: only compute if x dimension is enabled
+          if (has_x) {
+            data.uf(iz, iy, ix, 0) = -(data.phi(iz, iy, ix) - data.phi(iz, iy, ix - 1)) * rdx;
+          } else {
+            data.uf(iz, iy, ix, 0) = 0.0;
+          }
+
+          // Ey: only compute if y dimension is enabled
+          if (has_y) {
+            data.uf(iz, iy, ix, 1) = -(data.phi(iz, iy, ix) - data.phi(iz, iy - 1, ix)) * rdy;
+          } else {
+            data.uf(iz, iy, ix, 1) = 0.0;
+          }
+
+          // Ez: only compute if z dimension is enabled
+          if (has_z) {
+            data.uf(iz, iy, ix, 2) = -(data.phi(iz, iy, ix) - data.phi(iz - 1, iy, ix)) * rdz;
+          } else {
+            data.uf(iz, iy, ix, 2) = 0.0;
+          }
+        }
+      }
+    }
+  }
+}

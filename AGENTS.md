@@ -11,6 +11,9 @@ The code should be formatted via the `ruff` command before making a commit.
 ### Markdown
 Markdown documents should be human-friendly (i.e., not only for AIs) with proper indentation and line breaks. The line breaks should be placed by double spaces `  ` at the end of the line.
   
+## Git Workflow
+- Do not create commits unless the user explicitly asks you to.  
+
 ## Directory Structure
 - `nix/` : Module for dynamic load balancing  
 - `pic/` : Module for Particle-in-Cell simulation  
@@ -22,13 +25,12 @@ Markdown documents should be human-friendly (i.e., not only for AIs) with proper
 The code under `nix/thirdparty/` should not be modified unless explicitly instructed.  
 
 ## Testing
-Tests are in the `unittest` directory of the `nix` and `elliptic` modules.  
-When running test of these modules, always run configure/build/test from the module subdirectory, not the root directory.  
+Tests are in the `unittest` directory of the `nix` and `elliptic` modules, but configure/build/test commands should always run from the repository root so they share the top-level build directory.  
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  
 See the instructions below for building and running tests.
 
 - Configure  
-  From the module subdirectory, configure with MPI compiler and enable tests as follows:
+  From the repository root, configure with MPI compiler and enable tests as follows:
   ```
   cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx
   ```
@@ -68,3 +70,12 @@ To run only these tests:
 ```
 ctest --test-dir build -R test_pic_application --output-on-failure
 ```
+
+## Language Server
+- Generate the compilation database whenever you configure so `clangd`/your LSP can resolve MPI headers and `nix/thirdparty` includes. Run
+  ```
+  cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -C cmake/linux-gcc.cmake
+  ```
+  (or pass `-DCMAKE_CXX_COMPILER=mpicxx` manually) so `build/compile_commands.json` mirrors the compiler’s include paths.
+- Point your editor’s LSP to the `build/` directory (e.g. `clangd.arguments: ["--compile-commands-dir=build"]`).
+- Anytime `build/` is deleted or rerun, repeat the configuration command above before restarting the language server so its cache stays in sync.

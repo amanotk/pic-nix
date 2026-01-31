@@ -4,8 +4,9 @@
 
 #include "nix.hpp"
 
-#include <mpi.h>
 #include <iostream>
+#include <mpi.h>
+#include <petsc.h>
 
 #define CATCH_CONFIG_RUNNER
 #include <catch2/catch_session.hpp>
@@ -47,15 +48,19 @@ int main(int argc, char** argv)
     return 1;
   }
 
+  PetscInitialize(&argc, &argv, nullptr, nullptr);
+
   Catch::Session session;
   int            returnCode = session.applyCommandLine(argc, argv);
   if (returnCode != 0) {
+    PetscFinalize();
     MPI_Finalize();
     return returnCode;
   }
 
   int result = session.run();
 
+  PetscFinalize();
   MPI_Finalize();
   return result;
 }

@@ -176,6 +176,36 @@ PetscInterface::OptionVec PetscInterface::make_petsc_option(const toml::value& c
   return option;
 }
 
+int PetscInterface::update_mapping(ChunkAccessor& accessor)
+{
+  scatter->setup_scatter(accessor, src_buf, sol_buf, vector_src_l, vector_sol_l, vector_src_g);
+  return 0;
+}
+
+int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
+{
+  return accessor.pack(src_buf.data(), static_cast<int>(src_buf.size()));
+}
+
+int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
+{
+  return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
+}
+
+int PetscInterface::scatter_forward()
+{
+  int status = scatter_forward_begin();
+  status |= scatter_forward_end();
+  return status;
+}
+
+int PetscInterface::scatter_reverse()
+{
+  int status = scatter_reverse_begin();
+  status |= scatter_reverse_end();
+  return status;
+}
+
 int PetscInterface::scatter_forward_begin()
 {
   scatter->scatter_forward_begin(vector_src_l, vector_src_g);
@@ -200,22 +230,6 @@ int PetscInterface::scatter_reverse_end()
   return 0;
 }
 
-int PetscInterface::update_mapping(ChunkAccessor& accessor)
-{
-  scatter->setup_scatter(accessor, src_buf, sol_buf, vector_src_l, vector_sol_l, vector_src_g);
-  return 0;
-}
-
-int PetscInterface::copy_chunk_to_src(ChunkAccessor& accessor)
-{
-  return accessor.pack(src_buf.data(), static_cast<int>(src_buf.size()));
-}
-
-int PetscInterface::copy_sol_to_chunk(ChunkAccessor& accessor)
-{
-  return accessor.unpack(sol_buf.data(), static_cast<int>(sol_buf.size()));
-}
-
 int PetscInterface::set_option(const nlohmann::json& config)
 {
   auto it = config.find("petsc");
@@ -231,6 +245,22 @@ int PetscInterface::set_option(const nlohmann::json& config)
     KSPSetFromOptions(ksp_obj);
   }
   return 0;
+}
+
+float64 PetscInterface::get_residual_norm()
+{
+  Vec       vector_res_g;
+  PetscReal res_norm;
+  PetscReal src_norm;
+
+  VecDuplicate(vector_src_g, &vector_res_g);
+  MatMult(matrix, vector_sol_g, vector_res_g);
+  VecAYPX(vector_res_g, -1.0, vector_src_g);
+  VecNorm(vector_res_g, NORM_2, &res_norm);
+  VecNorm(vector_src_g, NORM_2, &src_norm);
+  VecDestroy(&vector_res_g);
+
+  return static_cast<float64>(res_norm / (src_norm + 1.0e-32));
 }
 
 void PetscInterface::create_dm(Dims3D dims)
@@ -292,6 +322,7 @@ void PetscInterface::setup()
   DMCreateGlobalVector(dm_obj, &vector_sol_g);
 
   // create matrix
+  DMCreateMatrix(dm_obj, &matrix);
   set_matrix();
 
   // create KSP solver
@@ -301,6 +332,12 @@ void PetscInterface::setup()
 
   // scatter object
   scatter = std::make_unique<PetscScatter>(&dm_obj, dims);
+
+  set_nullspace();
+}
+
+void PetscInterface::set_nullspace()
+{
 }
 
 } // namespace elliptic

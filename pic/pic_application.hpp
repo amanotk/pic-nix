@@ -6,6 +6,15 @@
 
 #include "pic.hpp"
 
+#include "elliptic/elliptic.hpp"
+
+#include <memory>
+
+namespace elliptic
+{
+class Solver;
+} // namespace elliptic
+
 ///
 /// @brief PIC Application Interface
 ///
@@ -29,6 +38,9 @@ public:
   using base_type  = nix::Application;
   using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
+  using PtrPoissonSolver    = std::unique_ptr<elliptic::Solver>;
+  using PtrPoissonInterface = std::shared_ptr<elliptic::SolverInterface>;
+
   PicApplication(int argc, char** argv, PtrInterface interface);
 
   virtual ~PicApplication() override = default;
@@ -36,9 +48,12 @@ public:
 protected:
   friend class PicApplicationInterface;
 
-  int        Ns;         ///< number of species
-  int        momstep;    ///< step at which moment quantities are cached
-  MpiCommVec mpicommvec; ///< MPI Communicators
+  int              Ns;         ///< number of species
+  int              momstep;    ///< step at which moment quantities are cached
+  MpiCommVec       mpicommvec; ///< MPI Communicators
+  PtrPoissonSolver solver;     ///< Poisson solver
+
+  virtual PtrPoissonInterface create_poisson_interface();
 
   virtual int get_num_species() const;
 
@@ -71,6 +86,14 @@ protected:
   virtual void push_taskflow();
 
   virtual void calculate_moment_taskflow();
+
+  virtual void update_poisson_efield();
+
+  virtual void exchange_phi_boundaries();
+
+  virtual void exchange_emf_boundaries();
+
+  virtual void compute_efield_from_potential();
 };
 
 #endif
