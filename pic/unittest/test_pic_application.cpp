@@ -60,7 +60,7 @@ public:
     PicApplication::setup_chunks();
   }
 
-  void solve_poisson_from_analytic(int mz, int my, int mx)
+  void update_poisson_efield_from_analytic(int mz, int my, int mx)
   {
     auto              app_data    = PicApplication::get_internal_data();
     const nix::Dims3D global_dims = {app_data.ndims[0], app_data.ndims[1], app_data.ndims[2]};
@@ -69,15 +69,14 @@ public:
       REQUIRE(pic_chunk != nullptr);
       populate_chunk_source(*pic_chunk, global_dims, mz, my, mx);
     }
-    PicApplication::solve_poisson();
+    PicApplication::update_poisson_efield();
   }
 
-  void solve_poisson_from_particle()
+  void update_poisson_efield_from_particle()
   {
     PicApplication::calculate_moment();
     populate_rho_from_moment();
-    PicApplication::solve_poisson();
-    compute_efield_from_potential();
+    PicApplication::update_poisson_efield();
   }
 
   void push()
@@ -608,7 +607,7 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
   TestApplication app(cli.argc(), cli.cargv(), interface);
 
   app.initialize_for_test(cli.argc(), cli.cargv());
-  app.solve_poisson_from_analytic(mz, my, mx);
+  app.update_poisson_efield_from_analytic(mz, my, mx);
   app.require_poisson_error_below(mz, my, mx, tol);
   app.finalize_for_test();
 
@@ -635,7 +634,7 @@ TEST_CASE("PicApplication preserves Gauss's law", "[np=8]")
   app.initialize_for_test(cli.argc(), cli.cargv());
 
   // check Gauss's law before particle push
-  app.solve_poisson_from_particle();
+  app.update_poisson_efield_from_particle();
   app.require_divergence_error_below(tol);
 
   // check Gauss's law after particle push

@@ -87,7 +87,13 @@ protected:
 
   virtual void calculate_moment_taskflow();
 
-  virtual void solve_poisson();
+  virtual void update_poisson_efield();
+
+  virtual void exchange_phi_boundaries();
+
+  virtual void exchange_emf_boundaries();
+
+  virtual void compute_efield_from_potential();
 };
 
 #endif

@@ -525,7 +525,7 @@ void PicApplication::calculate_moment_taskflow()
   executor.run(taskflow).wait();
 }
 
-void PicApplication::solve_poisson()
+void PicApplication::update_poisson_efield()
 {
   if (solver == nullptr) {
     return;
@@ -543,4 +543,59 @@ void PicApplication::solve_poisson()
 
   // solve Poisson equation
   solver->solve(accessor);
+
+  // Compute E-field from potential
+  exchange_phi_boundaries();
+  compute_efield_from_potential();
+  exchange_emf_boundaries();
+}
+
+void PicApplication::exchange_phi_boundaries()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_pack(BoundaryPhi);
+    chunk->set_boundary_begin(BoundaryPhi);
+  }
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_end(BoundaryPhi);
+    chunk->set_boundary_unpack(BoundaryPhi);
+  }
+}
+
+void PicApplication::exchange_emf_boundaries()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_pack(BoundaryEmf);
+    chunk->set_boundary_begin(BoundaryEmf);
+  }
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_end(BoundaryEmf);
+    chunk->set_boundary_unpack(BoundaryEmf);
+  }
+}
+
+void PicApplication::compute_efield_from_potential()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    auto  data  = chunk->get_internal_data();
+
+    const float64 rdx = 1.0 / data.delx;
+    const float64 rdy = 1.0 / data.dely;
+    const float64 rdz = 1.0 / data.delz;
+
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          data.uf(iz, iy, ix, 0) = -(data.phi(iz, iy, ix) - data.phi(iz, iy, ix - 1)) * rdx;
+          data.uf(iz, iy, ix, 1) = -(data.phi(iz, iy, ix) - data.phi(iz, iy - 1, ix)) * rdy;
+          data.uf(iz, iy, ix, 2) = -(data.phi(iz, iy, ix) - data.phi(iz - 1, iy, ix)) * rdz;
+        }
+      }
+    }
+  }
 }
