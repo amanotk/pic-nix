@@ -171,7 +171,7 @@ json make_default_option()
   json option;
   option["petsc"]             = json::object();
   option["petsc"]["ksp_type"] = "cg";
-  option["petsc"]["pc_type"]  = "amg";
+  option["petsc"]["pc_type"]  = "gamg";
   option["petsc"]["ksp_rtol"] = 1.0e-14;
   return option;
 }
@@ -211,6 +211,72 @@ int flatten_chunk_index(int cz, int cy, int cx, const nix::Dims3D& chunk_grid_di
   return elliptic::ChunkAccessor::flatten_index(cz, cy, cx, chunk_grid_dims);
 }
 
+std::array<int, 3> unflatten_chunk_index(int id, const nix::Dims3D& chunk_grid_dims)
+{
+  const int stride_z = chunk_grid_dims[1] * chunk_grid_dims[2];
+  const int stride_y = chunk_grid_dims[2];
+  const int cz       = id / stride_z;
+  const int rem      = id % stride_z;
+  const int cy       = rem / stride_y;
+  const int cx       = rem % stride_y;
+  return {cz, cy, cx};
+}
+
+int wrap_index(int index, int size)
+{
+  return (index % size + size) % size;
+}
+
+int compute_rank_from_chunk_coords(const std::array<int, 3>& chunk_coords,
+                                   const std::array<int, 3>& proc_dims,
+                                   const nix::Dims3D&        chunk_grid_dims)
+{
+  const nix::Dims3D block_chunks = {chunk_grid_dims[0] / proc_dims[0],
+                                    chunk_grid_dims[1] / proc_dims[1],
+                                    chunk_grid_dims[2] / proc_dims[2]};
+  const int         p0           = chunk_coords[0] / block_chunks[0];
+  const int         p1           = chunk_coords[1] / block_chunks[1];
+  const int         p2           = chunk_coords[2] / block_chunks[2];
+  return p0 + proc_dims[0] * (p1 + proc_dims[1] * p2);
+}
+
+void set_chunk_neighbors_and_comm(std::vector<std::unique_ptr<PicChunk>>& chunkvec,
+                                  const nix::Dims3D&                      chunk_grid_dims,
+                                  const std::array<int, 3>&               proc_dims)
+{
+  MPI_Comm comm = MPI_COMM_WORLD;
+  for (auto& chunk : chunkvec) {
+    const int                id    = chunk->get_id();
+    const auto               coord = unflatten_chunk_index(id, chunk_grid_dims);
+    const std::array<int, 3> xyz   = {coord[0], coord[1], coord[2]};
+
+    for (int dz = -1; dz <= 1; ++dz) {
+      for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+          const int ncz  = wrap_index(xyz[0] + dz, chunk_grid_dims[0]);
+          const int ncy  = wrap_index(xyz[1] + dy, chunk_grid_dims[1]);
+          const int ncx  = wrap_index(xyz[2] + dx, chunk_grid_dims[2]);
+          const int nbid = flatten_chunk_index(ncz, ncy, ncx, chunk_grid_dims);
+          const int nbrank =
+              compute_rank_from_chunk_coords({ncz, ncy, ncx}, proc_dims, chunk_grid_dims);
+          chunk->set_nb_id(dz, dy, dx, nbid);
+          chunk->set_nb_rank(dz, dy, dx, nbrank);
+        }
+      }
+    }
+
+    for (int mode = 0; mode < NumBoundaryMode; ++mode) {
+      for (int iz = 0; iz < 3; ++iz) {
+        for (int iy = 0; iy < 3; ++iy) {
+          for (int ix = 0; ix < 3; ++ix) {
+            chunk->set_mpi_communicator(mode, iz, iy, ix, comm);
+          }
+        }
+      }
+    }
+  }
+}
+
 std::unique_ptr<TestPicChunk> make_test_chunk(const nix::Dims3D& dims, const nix::Bool3D& has_dim,
                                               const nix::Dims3D& global_dims,
                                               const nix::Dims3D& offset, int id, json config)
@@ -246,6 +312,8 @@ void initialize_chunkvec(std::vector<std::unique_ptr<PicChunk>>& chunkvec, int r
       }
     }
   }
+
+  set_chunk_neighbors_and_comm(chunkvec, chunk_grid_dims, proc_dims);
 }
 
 void require_src_equals_sol(const std::vector<std::unique_ptr<PicChunk>>& chunks, float64 tol)
