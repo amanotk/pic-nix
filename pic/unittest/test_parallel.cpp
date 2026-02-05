@@ -6,7 +6,9 @@
 
 #include <iostream>
 #include <mpi.h>
+#if PICNIX_ENABLE_PETSC
 #include <petsc.h>
+#endif
 
 #define CATCH_CONFIG_RUNNER
 #include <catch2/catch_session.hpp>
@@ -48,19 +50,25 @@ int main(int argc, char** argv)
     return 1;
   }
 
+#if PICNIX_ENABLE_PETSC
   PetscInitialize(&argc, &argv, nullptr, nullptr);
+#endif
 
   Catch::Session session;
   int            returnCode = session.applyCommandLine(argc, argv);
   if (returnCode != 0) {
+#if PICNIX_ENABLE_PETSC
     PetscFinalize();
+#endif
     MPI_Finalize();
     return returnCode;
   }
 
   int result = session.run();
 
+#if PICNIX_ENABLE_PETSC
   PetscFinalize();
+#endif
   MPI_Finalize();
   return result;
 }

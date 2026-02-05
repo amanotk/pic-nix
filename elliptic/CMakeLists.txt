@@ -21,8 +21,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   option(BUILD_TESTING "Build tests" OFF)
   include(CTest)
 endif()
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
+
+if(NOT DEFINED PICNIX_ENABLE_PETSC)
+  option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" ON)
+endif()
+
+if(PICNIX_ENABLE_PETSC)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
+endif()
 
 set(ELLIPTIC_INCLUDE_DIRS
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -30,15 +37,30 @@ set(ELLIPTIC_INCLUDE_DIRS
   ${NIX_DIR}/thirdparty
 )
 
-add_library(elliptic STATIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/petsc_interface.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/petsc_scatter.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/petsc_matrix_helpers.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/petsc_poisson.cpp
+set(ELLIPTIC_SOURCES
+  ${CMAKE_CURRENT_SOURCE_DIR}/elliptic_solver.cpp
 )
+
+if(PICNIX_ENABLE_PETSC)
+  list(APPEND ELLIPTIC_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/petsc_interface.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/petsc_scatter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/petsc_matrix_helpers.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/petsc_poisson.cpp
+  )
+endif()
+
+add_library(elliptic STATIC ${ELLIPTIC_SOURCES})
 target_include_directories(elliptic PUBLIC ${ELLIPTIC_INCLUDE_DIRS})
-target_link_libraries(elliptic PUBLIC PkgConfig::PETSC)
+if(PICNIX_ENABLE_PETSC)
+  target_link_libraries(elliptic PUBLIC PkgConfig::PETSC)
+endif()
+target_compile_definitions(elliptic PUBLIC PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
 if(BUILD_TESTING)
-  add_subdirectory(unittest)
+  if(PICNIX_ENABLE_PETSC)
+    add_subdirectory(unittest)
+  else()
+    message(STATUS "Skipping elliptic tests: PICNIX_ENABLE_PETSC=OFF")
+  endif()
 endif()

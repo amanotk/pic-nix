@@ -8,11 +8,12 @@
 #include "nix/application.hpp"
 
 #include "elliptic/chunk_accessor.hpp"
-#include "elliptic/petsc_interface.hpp"
-#include <memory>
-#include <petscvec.h>
+#include "elliptic/elliptic.hpp"
 
-class PicPoisson : public elliptic::PetscInterface
+#include <memory>
+#include <vector>
+
+class PicPoisson : public elliptic::SolverInterface
 {
 public:
   using AppChunkVec  = nix::Application::ChunkVec;
@@ -31,17 +32,25 @@ public:
     virtual int  get_num_grids_per_chunk() const override;
     virtual int  get_num_grids_total() const override;
 
+    const ChunkViewVec& get_chunks() const;
+
   private:
     const ChunkViewVec& chunkvec;
     nix::Dims3D         chunk_dims;
   };
 
   PicPoisson(const nix::Dims3D& global_dims, float64 delh);
-  int              set_option(const json& config);
-  int              solve(elliptic::ChunkAccessor& accessor) override;
-  void             bind_chunks(AppChunkVec& chunkvec);
-  void             bind_chunks(PicChunkVec& chunkvec);
-  PicChunkAccessor get_accessor();
+  virtual ~PicPoisson() override = default;
+
+  virtual int update_mapping(elliptic::ChunkAccessor& accessor) override    = 0;
+  virtual int copy_chunk_to_src(elliptic::ChunkAccessor& accessor) override = 0;
+  virtual int copy_sol_to_chunk(elliptic::ChunkAccessor& accessor) override = 0;
+  virtual int set_option(const nlohmann::json& config) override             = 0;
+  virtual int solve(elliptic::ChunkAccessor& accessor) override             = 0;
+
+  virtual void             bind_chunks(AppChunkVec& chunkvec);
+  virtual void             bind_chunks(PicChunkVec& chunkvec);
+  virtual PicChunkAccessor get_accessor();
 
 protected:
   template <typename ChunkContainer>
@@ -53,8 +62,6 @@ protected:
   float64      delz;
   ChunkViewVec chunk_views;
   nix::Dims3D  chunk_dims;
-  void         set_nullspace() override;
-  int          set_matrix() override;
 };
 
 template <typename ChunkContainer>

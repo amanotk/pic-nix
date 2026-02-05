@@ -55,7 +55,6 @@ void PetscInterface::initialize()
 
 void PetscInterface::finalize()
 {
-  PetscFinalize();
 }
 
 std::string PetscInterface::bool_to_string(bool x)
@@ -232,12 +231,11 @@ int PetscInterface::scatter_reverse_end()
 
 int PetscInterface::set_option(const nlohmann::json& config)
 {
-  auto it = config.find("petsc");
-  if (it == config.end() || !it->is_object()) {
+  if (!config.is_object()) {
     return 0;
   }
 
-  const int status = apply_petsc_option(make_petsc_option(*it));
+  const int status = apply_petsc_option(make_petsc_option(config));
   if (status != 0) {
     return status;
   }

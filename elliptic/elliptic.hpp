@@ -38,87 +38,28 @@ public:
   using Interface    = SolverInterface;
   using PtrInterface = std::shared_ptr<Interface>;
 
-  Solver(PtrInterface interface = nullptr) : interface(std::move(interface))
-  {
-  }
+  Solver(PtrInterface interface = nullptr);
 
-  void set_interface(PtrInterface interface)
-  {
-    this->interface = std::move(interface);
-  }
+  void set_interface(PtrInterface interface);
 
-  int update_mapping(ChunkAccessor& accessor)
-  {
-    if (interface == nullptr)
-      return 1;
-    return interface->update_mapping(accessor);
-  }
+  static int initialize();
+  static int finalize();
 
-  int copy_chunk_to_src(ChunkAccessor& accessor)
-  {
-    if (interface == nullptr)
-      return 1;
-    return interface->copy_chunk_to_src(accessor);
-  }
+  int update_mapping(ChunkAccessor& accessor);
+  int copy_chunk_to_src(ChunkAccessor& accessor);
+  int copy_sol_to_chunk(ChunkAccessor& accessor);
+  int set_option(const nlohmann::json& config);
+  int solve(ChunkAccessor& accessor);
+  int scatter_forward();
+  int scatter_reverse();
 
-  int copy_sol_to_chunk(ChunkAccessor& accessor)
-  {
-    if (interface == nullptr)
-      return 1;
-    return interface->copy_sol_to_chunk(accessor);
-  }
-
-  int set_option(const nlohmann::json& config)
-  {
-    if (interface == nullptr)
-      return 1;
-    return interface->set_option(config);
-  }
-
-  int solve(ChunkAccessor& accessor)
-  {
-    if (interface == nullptr)
-      return 1;
-
-    const int expected = accessor.get_num_grids_total();
-
-    int       status = update_mapping(accessor);
-    const int packed = copy_chunk_to_src(accessor);
-    status |= (packed == expected) ? 0 : 1;
-    status |= scatter_forward();
-    status |= interface->solve(accessor);
-    status |= scatter_reverse();
-    const int unpacked = copy_sol_to_chunk(accessor);
-    status |= (unpacked == expected) ? 0 : 1;
-    return status;
-  }
-
-  int scatter_forward()
-  {
-    if (interface == nullptr)
-      return 1;
-    return interface->scatter_forward();
-  }
-
-  int scatter_reverse()
-  {
-    if (interface == nullptr)
-      return 1;
-    return interface->scatter_reverse();
-  }
-
-  PtrInterface get_interface()
-  {
-    return interface;
-  }
-
-  std::shared_ptr<const Interface> get_interface() const
-  {
-    return interface;
-  }
+  PtrInterface                     get_interface();
+  std::shared_ptr<const Interface> get_interface() const;
 
 protected:
-  PtrInterface interface;
+  PtrInterface       interface;
+  inline static bool is_initialized = false;
+  inline static bool is_finalized   = false;
 };
 
 } // namespace elliptic

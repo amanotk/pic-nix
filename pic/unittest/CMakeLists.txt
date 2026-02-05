@@ -45,6 +45,7 @@ add_library(pic_obj_parallel OBJECT test_parallel.cpp)
 target_include_directories(pic_obj_parallel PRIVATE ${INCLUDE_DIRS})
 target_link_libraries(pic_obj_parallel PRIVATE Catch2::Catch2)
 target_link_libraries(pic_obj_parallel PRIVATE pic nix)
+target_compile_definitions(pic_obj_parallel PRIVATE PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
 # serial tests
 set(SERIAL_EXECS
@@ -63,31 +64,34 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
   add_test(NAME ${target} COMMAND ${target})
 endforeach()
 
-# PicApplicationInterface smoke test (Catch2, MPI)
-add_executable(test_pic_application test_pic_application.cpp)
-target_include_directories(test_pic_application PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(test_pic_application PRIVATE
-  Catch2::Catch2
-  pic_obj_parallel
-  pic
-  nix
-)
-
 set(MPIEXEC mpiexec)
-set(PIC_IFACE_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np1)
-set(PIC_IFACE_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np8)
-add_mpi_test(
-  test_pic_application_np1
-  test_pic_application
-  1
-  ${PIC_IFACE_TMPDIR_NP1}
-)
-add_mpi_test(
-  test_pic_application_np8
-  test_pic_application
-  8
-  ${PIC_IFACE_TMPDIR_NP8}
-)
+
+if(PICNIX_ENABLE_PETSC)
+  # PicApplicationInterface smoke test (Catch2, MPI)
+  add_executable(test_pic_application test_pic_application.cpp)
+  target_include_directories(test_pic_application PRIVATE ${INCLUDE_DIRS})
+  target_link_libraries(test_pic_application PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel
+    pic
+    nix
+  )
+
+  set(PIC_IFACE_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np1)
+  set(PIC_IFACE_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np8)
+  add_mpi_test(
+    test_pic_application_np1
+    test_pic_application
+    1
+    ${PIC_IFACE_TMPDIR_NP1}
+  )
+  add_mpi_test(
+    test_pic_application_np8
+    test_pic_application
+    8
+    ${PIC_IFACE_TMPDIR_NP8}
+  )
+endif()
 
 # boundary exchange tests (Catch2, MPI)
 add_executable(test_pic_boundary test_pic_boundary.cpp)
@@ -121,20 +125,56 @@ add_mpi_test(
   ${PIC_BOUNDARY_TMPDIR_NP8}
 )
 
-# PicPoisson MPI tests (Catch2, MPI)
-add_executable(test_pic_poisson test_pic_poisson.cpp)
-target_include_directories(test_pic_poisson PRIVATE ${INCLUDE_DIRS})
-target_link_libraries(test_pic_poisson PRIVATE
+# Basic PicPoisson (fallback) MPI tests always build/run
+add_executable(test_pic_poisson_basic test_pic_poisson_basic.cpp)
+target_include_directories(test_pic_poisson_basic PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(test_pic_poisson_basic PRIVATE
   Catch2::Catch2
   pic_obj_parallel
   pic
   nix
 )
 
-set(PIC_POISSON_TMPDIR_NP2 ${CMAKE_CURRENT_BINARY_DIR}/tmp_pic_poisson_np2)
+set(PIC_POISSON_BASIC_TMPDIR_NP2 ${CMAKE_CURRENT_BINARY_DIR}/tmp_pic_poisson_basic_np2)
 add_mpi_test(
-  test_pic_poisson_np2
-  test_pic_poisson
+  test_pic_poisson_basic_np2
+  test_pic_poisson_basic
   2
-  ${PIC_POISSON_TMPDIR_NP2}
+  ${PIC_POISSON_BASIC_TMPDIR_NP2}
 )
+
+set(PIC_POISSON_BASIC_TMPDIR_NP4 ${CMAKE_CURRENT_BINARY_DIR}/tmp_pic_poisson_basic_np4)
+add_mpi_test(
+  test_pic_poisson_basic_np4
+  test_pic_poisson_basic
+  4
+  ${PIC_POISSON_BASIC_TMPDIR_NP4}
+)
+
+set(PIC_POISSON_BASIC_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_pic_poisson_basic_np8)
+add_mpi_test(
+  test_pic_poisson_basic_np8
+  test_pic_poisson_basic
+  8
+  ${PIC_POISSON_BASIC_TMPDIR_NP8}
+)
+
+# PicPoisson MPI tests (Catch2, MPI)
+if(PICNIX_ENABLE_PETSC)
+  add_executable(test_pic_poisson test_pic_poisson_petsc.cpp)
+  target_include_directories(test_pic_poisson PRIVATE ${INCLUDE_DIRS})
+  target_link_libraries(test_pic_poisson PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel
+    pic
+    nix
+  )
+
+  set(PIC_POISSON_TMPDIR_NP2 ${CMAKE_CURRENT_BINARY_DIR}/tmp_pic_poisson_np2)
+  add_mpi_test(
+    test_pic_poisson_np2
+    test_pic_poisson
+    2
+    ${PIC_POISSON_TMPDIR_NP2}
+  )
+endif()

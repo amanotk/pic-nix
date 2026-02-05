@@ -131,26 +131,24 @@ TEST_CASE("PetscInterface::json_options", "[np=1]")
   REQUIRE(PetscInterfaceTest::apply_petsc_option(option) == 0);
 }
 
-TEST_CASE("PetscInterface::set_option ignores missing petsc section", "[np=1]")
+TEST_CASE("PetscInterface::set_option ignores non-object config", "[np=1]")
 {
   PetscInterfaceTest solver;
   nlohmann::json     config = {{"dummy", 1}};
   REQUIRE(solver.set_option(config) == 0);
 }
 
-TEST_CASE("PetscInterface::set_option handles empty petsc object", "[np=1]")
+TEST_CASE("PetscInterface::set_option handles empty object", "[np=1]")
 {
   PetscInterfaceTest solver;
-  nlohmann::json     config = {{"petsc", nlohmann::json::object()}};
+  nlohmann::json     config = nlohmann::json::object();
   REQUIRE(solver.set_option(config) == 0);
 }
 
 TEST_CASE("PetscInterface::set_option applies ksp and pc options", "[np=1]")
 {
   PetscInterfaceTest solver;
-  nlohmann::json     config = {
-          {"petsc", {{"ksp_type", "cg"}, {"pc_type", "none"}}},
-  };
+  nlohmann::json     config = {{"ksp_type", "cg"}, {"pc_type", "none"}};
 
   REQUIRE(PetscOptionsClear(nullptr) == 0);
   REQUIRE(solver.set_option(config) == 0);

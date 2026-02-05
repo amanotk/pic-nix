@@ -3,6 +3,7 @@
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
 #include "pic_poisson.hpp"
+#include "pic_poisson_factory.hpp"
 
 #include "diag/field.hpp"
 #include "diag/history.hpp"
@@ -18,7 +19,7 @@ PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
   nix::Dims3D dims = {ndims[0], ndims[1], ndims[2]};
   float64     delh = cfgparser->get_delx();
 
-  return std::make_shared<PicPoisson>(dims, delh);
+  return std::static_pointer_cast<elliptic::SolverInterface>(make_poisson_solver(dims, delh));
 }
 
 int PicApplicationInterface::get_num_species()
@@ -61,6 +62,8 @@ void PicApplication::calculate_moment()
 void PicApplication::initialize(int argc, char** argv)
 {
   base_type::initialize(argc, argv);
+
+  elliptic::Solver::initialize();
 
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
@@ -172,6 +175,7 @@ void PicApplication::finalize()
   }
 
   // finalize
+  elliptic::Solver::finalize();
   base_type::finalize();
 }
 
