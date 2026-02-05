@@ -450,10 +450,10 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   std::filesystem::path config_path = base / "test_pic_application.toml";
 
   const char* config_template = R"TOML(
-[application]
-  [application.option]
-    seed_type = 'fixed'
-  [application.petsc]
+ [application]
+   [application.option]
+     seed_type = 'fixed'
+   [application.poisson_petsc]
     ksp_type = 'cg'
     pc_type = 'gamg'
     ksp_rtol = 1.0e-14
