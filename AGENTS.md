@@ -11,8 +11,38 @@ The code should be formatted via the `ruff` command before making a commit.
 ### Markdown
 Markdown documents should be human-friendly (i.e., not only for AIs) with proper indentation and line breaks. The line breaks should be placed by double spaces `  ` at the end of the line.
   
-## Git Workflow
+## Git Workflow & Branching Policy
+Follow these rules for any Git-related operations.  
+The human user primarily manages branch switching, but these rules apply when you are asked to perform Git tasks.  
+
+### 0. General Rule
 - Do not create commits unless the user explicitly asks you to.  
+
+### 1. Branch Structure
+- `main`: Stable production branch. Never commit directly.  
+- `develop`: Integration branch for the next release.  
+- `feature/*`: For specific features or fixes. Must branch off from the latest `develop`.  
+- `experimental/*`: For research, validation, or risky changes.  
+
+### 2. Workflow & PR (Mandatory)
+- Direct local merging is prohibited unless explicitly instructed by the user.  
+- When a task is complete, push the working branch and create a Pull Request from `feature/*` to `develop`.  
+- In the PR description, include:  
+  1. What was changed.  
+  2. Why the changes were made.  
+  3. Manual tests/checks performed.  
+
+### 3. Merging Policy (GitHub UI)
+- `feature/*` -> `develop`: Use **Squash and Merge**. Keep the resulting commit message clean and descriptive.  
+- `develop` -> `main`: Use a regular merge commit (**Create a merge commit**).  
+
+### 4. Safety & Responsibilities
+- Check the current branch (`git branch --show-current`) before starting work.  
+- If on the wrong branch (especially `main`), stop and notify the user before making changes.  
+- Never push directly to `main` or `develop` unless explicitly instructed.  
+- Never force-push to `main` or `develop`. Avoid force-push entirely unless explicitly instructed.  
+- Do not rebase or rewrite published history unless explicitly instructed.  
+- If the local branch is behind its remote, prefer fast-forward updates (`git pull --ff-only`) unless the user asks for another strategy.  
 
 ## Directory Structure
 - `nix/` : Module for dynamic load balancing  
@@ -79,5 +109,7 @@ ctest --test-dir build -R test_pic_application --output-on-failure
   cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -C cmake/linux-gcc.cmake
   ```
   (or pass `-DCMAKE_CXX_COMPILER=mpicxx` manually) so `build/compile_commands.json` mirrors the compiler’s include paths.
+- Ensure your editor points `clangd` at `build/` (for example, `--compile-commands-dir=build`).  
+- If your MPI compiler wrapper is not under a default system path, set `clangd` query-driver to include it (for example, `--query-driver=/path/to/spack/**/bin/mpicxx,/usr/bin/mpicxx,/usr/bin/mpic++`) so headers like `mpi.h` are resolved correctly.  
 - Point your editor’s LSP to the `build/` directory (e.g. `clangd.arguments: ["--compile-commands-dir=build"]`).
 - Anytime `build/` is deleted or rerun, repeat the configuration command above before restarting the language server so its cache stays in sync.
