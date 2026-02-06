@@ -40,6 +40,13 @@ $ cmake -S . -B build \
 $ cmake --build build
 ```
 
+PETSc-based solvers are optional and disabled by default.  
+By default, configure/build will not search for PETSc.  
+Enable PETSc explicitly only when needed:  
+```
+$ cmake -S . -B build -DPICNIX_ENABLE_PETSC=ON
+```
+
 Note that this is the so-called out-of-source build, which produces compiled binaries in the `build` directory (in this particular case).
 Therefore, you will find executable files `main.out` in, e.g., `build/pic/example/beam`.
 
