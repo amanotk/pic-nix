@@ -1,5 +1,6 @@
 // -*- C++ -*-
 #include "pic_poisson_basic.hpp"
+#include "pic_poisson_basic_primitives.hpp"
 
 #include <algorithm>
 #include <array>
@@ -435,78 +436,36 @@ struct PicPoissonBasic::Impl {
   void apply_operator_1d(std::vector<float64> ChunkWork::*src, std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& in       = cw.*src;
-      auto& out      = cw.*dst;
-      auto  in_view  = make_view(in, cw.nz, cw.ny, cw.nx);
-      auto  out_view = make_view(out, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 ofdx = -dx2;
-
-      for (int iz = cw.Lbz; iz <= cw.Ubz; ++iz) {
-        for (int iy = cw.Lby; iy <= cw.Uby; ++iy) {
-          for (int ix = cw.Lbx; ix <= cw.Ubx; ++ix) {
-            const float64 diag   = 2.0 * dx2;
-            const float64 sum    = ofdx * (in_view(iz, iy, ix - 1) + in_view(iz, iy, ix + 1));
-            out_view(iz, iy, ix) = diag * in_view(iz, iy, ix) + sum;
-          }
-        }
-      }
+      auto&                                           in  = cw.*src;
+      auto&                                           out = cw.*dst;
+      pic_poisson_basic_primitives::OperatorChunkData primitive{
+          in.data(), out.data(), cw.nz,  cw.ny,  cw.nx,   cw.Lbx,  cw.Ubx,
+          cw.Lby,    cw.Uby,     cw.Lbz, cw.Ubz, cw.delx, cw.dely, cw.delz};
+      pic_poisson_basic_primitives::apply_operator_1d_primitive(primitive);
     }
   }
 
   void apply_operator_2d(std::vector<float64> ChunkWork::*src, std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& in       = cw.*src;
-      auto& out      = cw.*dst;
-      auto  in_view  = make_view(in, cw.nz, cw.ny, cw.nx);
-      auto  out_view = make_view(out, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 dy2  = 1.0 / (cw.dely * cw.dely);
-      const float64 ofdx = -dx2;
-      const float64 ofdy = -dy2;
-
-      for (int iz = cw.Lbz; iz <= cw.Ubz; ++iz) {
-        for (int iy = cw.Lby; iy <= cw.Uby; ++iy) {
-          for (int ix = cw.Lbx; ix <= cw.Ubx; ++ix) {
-            const float64 diag = 2.0 * dx2 + 2.0 * dy2;
-            const float64 sum  = ofdx * (in_view(iz, iy, ix - 1) + in_view(iz, iy, ix + 1)) +
-                                ofdy * (in_view(iz, iy - 1, ix) + in_view(iz, iy + 1, ix));
-            out_view(iz, iy, ix) = diag * in_view(iz, iy, ix) + sum;
-          }
-        }
-      }
+      auto&                                           in  = cw.*src;
+      auto&                                           out = cw.*dst;
+      pic_poisson_basic_primitives::OperatorChunkData primitive{
+          in.data(), out.data(), cw.nz,  cw.ny,  cw.nx,   cw.Lbx,  cw.Ubx,
+          cw.Lby,    cw.Uby,     cw.Lbz, cw.Ubz, cw.delx, cw.dely, cw.delz};
+      pic_poisson_basic_primitives::apply_operator_2d_primitive(primitive);
     }
   }
 
   void apply_operator_3d(std::vector<float64> ChunkWork::*src, std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& in       = cw.*src;
-      auto& out      = cw.*dst;
-      auto  in_view  = make_view(in, cw.nz, cw.ny, cw.nx);
-      auto  out_view = make_view(out, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 dy2  = 1.0 / (cw.dely * cw.dely);
-      const float64 dz2  = 1.0 / (cw.delz * cw.delz);
-      const float64 ofdx = -dx2;
-      const float64 ofdy = -dy2;
-      const float64 ofdz = -dz2;
-
-      for (int iz = cw.Lbz; iz <= cw.Ubz; ++iz) {
-        for (int iy = cw.Lby; iy <= cw.Uby; ++iy) {
-          for (int ix = cw.Lbx; ix <= cw.Ubx; ++ix) {
-            const float64 diag = 2.0 * dx2 + 2.0 * dy2 + 2.0 * dz2;
-            const float64 sum  = ofdx * (in_view(iz, iy, ix - 1) + in_view(iz, iy, ix + 1)) +
-                                ofdy * (in_view(iz, iy - 1, ix) + in_view(iz, iy + 1, ix)) +
-                                ofdz * (in_view(iz - 1, iy, ix) + in_view(iz + 1, iy, ix));
-            out_view(iz, iy, ix) = diag * in_view(iz, iy, ix) + sum;
-          }
-        }
-      }
+      auto&                                           in  = cw.*src;
+      auto&                                           out = cw.*dst;
+      pic_poisson_basic_primitives::OperatorChunkData primitive{
+          in.data(), out.data(), cw.nz,  cw.ny,  cw.nx,   cw.Lbx,  cw.Ubx,
+          cw.Lby,    cw.Uby,     cw.Lbz, cw.Ubz, cw.delx, cw.dely, cw.delz};
+      pic_poisson_basic_primitives::apply_operator_3d_primitive(primitive);
     }
   }
 
@@ -514,25 +473,12 @@ struct PicPoissonBasic::Impl {
                                  std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& r      = cw.*src;
-      auto& z      = cw.*dst;
-      auto  r_view = make_view(r, cw.nz, cw.ny, cw.nx);
-      auto  z_view = make_view(z, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 ofdx = -dx2;
-
-      for (int iz = cw.Lbz; iz <= cw.Ubz; ++iz) {
-        for (int iy = cw.Lby; iy <= cw.Uby; ++iy) {
-          for (int ix = cw.Lbx; ix <= cw.Ubx; ++ix) {
-            const float64 diag = 2.0 * dx2;
-            float64       sum  = r_view(iz, iy, ix);
-            sum -= ofdx * (z_view(iz, iy, ix - 1) + z_view(iz, iy, ix + 1));
-            float64 z_new      = (diag > 0.0) ? sum / diag : r_view(iz, iy, ix);
-            z_view(iz, iy, ix) = (1.0 - omega) * z_view(iz, iy, ix) + omega * z_new;
-          }
-        }
-      }
+      auto&                                                 in_r = cw.*src;
+      auto&                                                 in_z = cw.*dst;
+      pic_poisson_basic_primitives::PreconditionerChunkData primitive{
+          in_r.data(), in_z.data(), cw.nz,  cw.ny,   cw.nx,   cw.Lbx,  cw.Ubx, cw.Lby,
+          cw.Uby,      cw.Lbz,      cw.Ubz, cw.delx, cw.dely, cw.delz, omega};
+      pic_poisson_basic_primitives::preconditioner_forward_1d_primitive(primitive);
     }
   }
 
@@ -540,28 +486,12 @@ struct PicPoissonBasic::Impl {
                                  std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& r      = cw.*src;
-      auto& z      = cw.*dst;
-      auto  r_view = make_view(r, cw.nz, cw.ny, cw.nx);
-      auto  z_view = make_view(z, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 dy2  = 1.0 / (cw.dely * cw.dely);
-      const float64 ofdx = -dx2;
-      const float64 ofdy = -dy2;
-
-      for (int iz = cw.Lbz; iz <= cw.Ubz; ++iz) {
-        for (int iy = cw.Lby; iy <= cw.Uby; ++iy) {
-          for (int ix = cw.Lbx; ix <= cw.Ubx; ++ix) {
-            const float64 diag = 2.0 * dx2 + 2.0 * dy2;
-            float64       sum  = r_view(iz, iy, ix);
-            sum -= ofdx * (z_view(iz, iy, ix - 1) + z_view(iz, iy, ix + 1));
-            sum -= ofdy * (z_view(iz, iy - 1, ix) + z_view(iz, iy + 1, ix));
-            float64 z_new      = (diag > 0.0) ? sum / diag : r_view(iz, iy, ix);
-            z_view(iz, iy, ix) = (1.0 - omega) * z_view(iz, iy, ix) + omega * z_new;
-          }
-        }
-      }
+      auto&                                                 in_r = cw.*src;
+      auto&                                                 in_z = cw.*dst;
+      pic_poisson_basic_primitives::PreconditionerChunkData primitive{
+          in_r.data(), in_z.data(), cw.nz,  cw.ny,   cw.nx,   cw.Lbx,  cw.Ubx, cw.Lby,
+          cw.Uby,      cw.Lbz,      cw.Ubz, cw.delx, cw.dely, cw.delz, omega};
+      pic_poisson_basic_primitives::preconditioner_forward_2d_primitive(primitive);
     }
   }
 
@@ -569,31 +499,12 @@ struct PicPoissonBasic::Impl {
                                  std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& r      = cw.*src;
-      auto& z      = cw.*dst;
-      auto  r_view = make_view(r, cw.nz, cw.ny, cw.nx);
-      auto  z_view = make_view(z, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 dy2  = 1.0 / (cw.dely * cw.dely);
-      const float64 dz2  = 1.0 / (cw.delz * cw.delz);
-      const float64 ofdx = -dx2;
-      const float64 ofdy = -dy2;
-      const float64 ofdz = -dz2;
-
-      for (int iz = cw.Lbz; iz <= cw.Ubz; ++iz) {
-        for (int iy = cw.Lby; iy <= cw.Uby; ++iy) {
-          for (int ix = cw.Lbx; ix <= cw.Ubx; ++ix) {
-            const float64 diag = 2.0 * dx2 + 2.0 * dy2 + 2.0 * dz2;
-            float64       sum  = r_view(iz, iy, ix);
-            sum -= ofdx * (z_view(iz, iy, ix - 1) + z_view(iz, iy, ix + 1));
-            sum -= ofdy * (z_view(iz, iy - 1, ix) + z_view(iz, iy + 1, ix));
-            sum -= ofdz * (z_view(iz - 1, iy, ix) + z_view(iz + 1, iy, ix));
-            float64 z_new      = (diag > 0.0) ? sum / diag : r_view(iz, iy, ix);
-            z_view(iz, iy, ix) = (1.0 - omega) * z_view(iz, iy, ix) + omega * z_new;
-          }
-        }
-      }
+      auto&                                                 in_r = cw.*src;
+      auto&                                                 in_z = cw.*dst;
+      pic_poisson_basic_primitives::PreconditionerChunkData primitive{
+          in_r.data(), in_z.data(), cw.nz,  cw.ny,   cw.nx,   cw.Lbx,  cw.Ubx, cw.Lby,
+          cw.Uby,      cw.Lbz,      cw.Ubz, cw.delx, cw.dely, cw.delz, omega};
+      pic_poisson_basic_primitives::preconditioner_forward_3d_primitive(primitive);
     }
   }
 
@@ -601,25 +512,12 @@ struct PicPoissonBasic::Impl {
                                   std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& r      = cw.*src;
-      auto& z      = cw.*dst;
-      auto  r_view = make_view(r, cw.nz, cw.ny, cw.nx);
-      auto  z_view = make_view(z, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 ofdx = -dx2;
-
-      for (int iz = cw.Ubz; iz >= cw.Lbz; --iz) {
-        for (int iy = cw.Uby; iy >= cw.Lby; --iy) {
-          for (int ix = cw.Ubx; ix >= cw.Lbx; --ix) {
-            const float64 diag = 2.0 * dx2;
-            float64       sum  = r_view(iz, iy, ix);
-            sum -= ofdx * (z_view(iz, iy, ix - 1) + z_view(iz, iy, ix + 1));
-            float64 z_new      = (diag > 0.0) ? sum / diag : r_view(iz, iy, ix);
-            z_view(iz, iy, ix) = (1.0 - omega) * z_view(iz, iy, ix) + omega * z_new;
-          }
-        }
-      }
+      auto&                                                 in_r = cw.*src;
+      auto&                                                 in_z = cw.*dst;
+      pic_poisson_basic_primitives::PreconditionerChunkData primitive{
+          in_r.data(), in_z.data(), cw.nz,  cw.ny,   cw.nx,   cw.Lbx,  cw.Ubx, cw.Lby,
+          cw.Uby,      cw.Lbz,      cw.Ubz, cw.delx, cw.dely, cw.delz, omega};
+      pic_poisson_basic_primitives::preconditioner_backward_1d_primitive(primitive);
     }
   }
 
@@ -627,28 +525,12 @@ struct PicPoissonBasic::Impl {
                                   std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& r      = cw.*src;
-      auto& z      = cw.*dst;
-      auto  r_view = make_view(r, cw.nz, cw.ny, cw.nx);
-      auto  z_view = make_view(z, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 dy2  = 1.0 / (cw.dely * cw.dely);
-      const float64 ofdx = -dx2;
-      const float64 ofdy = -dy2;
-
-      for (int iz = cw.Ubz; iz >= cw.Lbz; --iz) {
-        for (int iy = cw.Uby; iy >= cw.Lby; --iy) {
-          for (int ix = cw.Ubx; ix >= cw.Lbx; --ix) {
-            const float64 diag = 2.0 * dx2 + 2.0 * dy2;
-            float64       sum  = r_view(iz, iy, ix);
-            sum -= ofdx * (z_view(iz, iy, ix - 1) + z_view(iz, iy, ix + 1));
-            sum -= ofdy * (z_view(iz, iy - 1, ix) + z_view(iz, iy + 1, ix));
-            float64 z_new      = (diag > 0.0) ? sum / diag : r_view(iz, iy, ix);
-            z_view(iz, iy, ix) = (1.0 - omega) * z_view(iz, iy, ix) + omega * z_new;
-          }
-        }
-      }
+      auto&                                                 in_r = cw.*src;
+      auto&                                                 in_z = cw.*dst;
+      pic_poisson_basic_primitives::PreconditionerChunkData primitive{
+          in_r.data(), in_z.data(), cw.nz,  cw.ny,   cw.nx,   cw.Lbx,  cw.Ubx, cw.Lby,
+          cw.Uby,      cw.Lbz,      cw.Ubz, cw.delx, cw.dely, cw.delz, omega};
+      pic_poisson_basic_primitives::preconditioner_backward_2d_primitive(primitive);
     }
   }
 
@@ -656,31 +538,12 @@ struct PicPoissonBasic::Impl {
                                   std::vector<float64> ChunkWork::*dst)
   {
     for (auto& cw : chunk_work) {
-      auto& r      = cw.*src;
-      auto& z      = cw.*dst;
-      auto  r_view = make_view(r, cw.nz, cw.ny, cw.nx);
-      auto  z_view = make_view(z, cw.nz, cw.ny, cw.nx);
-
-      const float64 dx2  = 1.0 / (cw.delx * cw.delx);
-      const float64 dy2  = 1.0 / (cw.dely * cw.dely);
-      const float64 dz2  = 1.0 / (cw.delz * cw.delz);
-      const float64 ofdx = -dx2;
-      const float64 ofdy = -dy2;
-      const float64 ofdz = -dz2;
-
-      for (int iz = cw.Ubz; iz >= cw.Lbz; --iz) {
-        for (int iy = cw.Uby; iy >= cw.Lby; --iy) {
-          for (int ix = cw.Ubx; ix >= cw.Lbx; --ix) {
-            const float64 diag = 2.0 * dx2 + 2.0 * dy2 + 2.0 * dz2;
-            float64       sum  = r_view(iz, iy, ix);
-            sum -= ofdx * (z_view(iz, iy, ix - 1) + z_view(iz, iy, ix + 1));
-            sum -= ofdy * (z_view(iz, iy - 1, ix) + z_view(iz, iy + 1, ix));
-            sum -= ofdz * (z_view(iz - 1, iy, ix) + z_view(iz + 1, iy, ix));
-            float64 z_new      = (diag > 0.0) ? sum / diag : r_view(iz, iy, ix);
-            z_view(iz, iy, ix) = (1.0 - omega) * z_view(iz, iy, ix) + omega * z_new;
-          }
-        }
-      }
+      auto&                                                 in_r = cw.*src;
+      auto&                                                 in_z = cw.*dst;
+      pic_poisson_basic_primitives::PreconditionerChunkData primitive{
+          in_r.data(), in_z.data(), cw.nz,  cw.ny,   cw.nx,   cw.Lbx,  cw.Ubx, cw.Lby,
+          cw.Uby,      cw.Lbz,      cw.Ubz, cw.delx, cw.dely, cw.delz, omega};
+      pic_poisson_basic_primitives::preconditioner_backward_3d_primitive(primitive);
     }
   }
 };
