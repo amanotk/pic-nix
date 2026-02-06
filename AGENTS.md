@@ -27,6 +27,7 @@ The code under `nix/thirdparty/` should not be modified unless explicitly instru
 ## Testing
 Tests are in the `unittest` directory of the `nix` and `elliptic` modules, but configure/build/test commands should always run from the repository root so they share the top-level build directory.  
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  
+PETSc support is opt-in; default configuration should not search for or link PETSc unless explicitly requested with `-DPICNIX_ENABLE_PETSC=ON`.  
 See the instructions below for building and running tests.
 
 - Configure  
@@ -39,6 +40,7 @@ See the instructions below for building and running tests.
   ```
   cmake -S . -B build -DBUILD_TESTING=ON -C cmake/linux-gcc.cmake
   ```
+  To build with PETSc explicitly enabled, add `-DPICNIX_ENABLE_PETSC=ON` (otherwise PETSc stays disabled by default).  
   Configuration for Intel oneAPI compilers is also available via `cmake/linux-intel.cmake`.
 - Build  
   After configuration, build with:

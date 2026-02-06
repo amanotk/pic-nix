@@ -13,6 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         ubuntu: ["22.04", "24.04"]
+        petsc: ["OFF", "ON"]
     env:
       OMPI_MCA_rmaps_base_oversubscribe: "1"
     steps:
@@ -28,7 +29,9 @@ jobs:
             pkg-config \
             openmpi-bin \
             libopenmpi-dev
-          sudo apt-get install -y libpetsc-real-dev || sudo apt-get install -y libpetsc-dev petsc-dev
+          if [ "${{ matrix.petsc }}" = "ON" ]; then
+            sudo apt-get install -y libpetsc-real-dev || sudo apt-get install -y libpetsc-dev petsc-dev
+          fi
 
       - name: Install Catch2 v3
         run: |
@@ -38,6 +41,7 @@ jobs:
         run: |
           export PICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
           cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
+            -DPICNIX_ENABLE_PETSC=${{ matrix.petsc }} \
             -DPICNIX_CATCH2_CONFIG="$PICNIX_CATCH2_CONFIG"
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure

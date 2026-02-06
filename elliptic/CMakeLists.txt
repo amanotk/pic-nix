@@ -23,7 +23,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 if(NOT DEFINED PICNIX_ENABLE_PETSC)
-  option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" ON)
+  option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" OFF)
 endif()
 
 if(PICNIX_ENABLE_PETSC)
