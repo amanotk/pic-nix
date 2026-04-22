@@ -67,7 +67,8 @@ public:
     {
       float64           target      = 1 + this->get_buffer_ratio();
       int               random_seed = option["random_seed"].get<int>();
-      std::mt19937_64   mtp(random_seed);
+      std::mt19937_64   mtp_pos(random_seed);
+      std::mt19937_64   mtp_neg(random_seed);
       std::mt19937_64   mtv(random_seed);
       nix::rand_uniform uniform(0.0, 1.0);
       nix::rand_normal  normal(0.0, 1.0);
@@ -93,7 +94,7 @@ public:
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
 
-        mtp.seed(random_seed); // for charge neutrality
+        auto& mtp = up[is]->q > 0.0 ? mtp_pos : mtp_neg;
         for (int ip = 0; ip < up[is]->Np; ip++) {
           float64* ptcl = &up[is]->xu(ip, 0);
           int64*   id64 = reinterpret_cast<int64*>(ptcl);

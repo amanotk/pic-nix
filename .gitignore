@@ -15,3 +15,7 @@ build*
 .vscode
 # Local notes
 notes
+TODO.md
+
+# Manual integration run output
+run-integration-pic/
