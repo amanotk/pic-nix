@@ -468,6 +468,63 @@ TEST_CASE("PicPoissonBasic solves 1D periodic Poisson", "[np=2]")
   require_rms_error_below(chunkvec, mz, my, mx, global_dims, tol);
 }
 
+TEST_CASE("PicPoissonBasic preserves phi on non-convergence", "[np=2]")
+{
+  if (!require_mpi_size(2)) {
+    return;
+  }
+
+  const int         rank            = get_mpi_rank();
+  const int         mz              = 0;
+  const int         my              = 0;
+  const int         mx              = 3;
+  const nix::Dims3D global_dims     = {1, 1, 16};
+  const nix::Dims3D chunk_dims      = {1, 1, 8};
+  const nix::Bool3D has_dim         = {false, false, true};
+  const auto        proc_dims       = std::array<int, 3>{1, 1, 2};
+  const auto        chunk_grid_dims = make_chunk_grid_dims(global_dims, chunk_dims);
+  nix::json         config          = make_default_config();
+
+  REQUIRE(chunk_grid_dims[0] % proc_dims[0] == 0);
+  REQUIRE(chunk_grid_dims[1] % proc_dims[1] == 0);
+  REQUIRE(chunk_grid_dims[2] % proc_dims[2] == 0);
+
+  std::vector<std::unique_ptr<PicChunk>> chunkvec;
+  initialize_chunkvec(chunkvec, rank, proc_dims, global_dims, chunk_dims, has_dim, mz, my, mx,
+                      config);
+
+  std::vector<std::vector<float64>> phi_before;
+  phi_before.reserve(chunkvec.size());
+  for (size_t ichunk = 0; ichunk < chunkvec.size(); ++ichunk) {
+    auto data = chunkvec[ichunk]->get_internal_data();
+    for (size_t i = 0; i < data.phi.size(); ++i) {
+      data.phi.data()[i] = 10.0 * static_cast<float64>(rank + 1) +
+                           static_cast<float64>(ichunk + 1) + 0.01 * static_cast<float64>(i + 1);
+    }
+    phi_before.emplace_back(data.phi.data(), data.phi.data() + data.phi.size());
+  }
+
+  nix::json option;
+  option["poisson_basic"]["max_iter"] = 0;
+
+  PicPoissonBasic poisson(global_dims, 1.0);
+  poisson.set_option(option);
+  poisson.bind_chunks(chunkvec);
+  auto accessor = poisson.get_accessor();
+
+  poisson.update_mapping(accessor);
+  poisson.copy_chunk_to_src(accessor);
+  REQUIRE(poisson.solve(accessor) != 0);
+
+  for (size_t ichunk = 0; ichunk < chunkvec.size(); ++ichunk) {
+    auto data = chunkvec[ichunk]->get_internal_data();
+    REQUIRE(phi_before[ichunk].size() == data.phi.size());
+    for (size_t i = 0; i < data.phi.size(); ++i) {
+      REQUIRE(data.phi.data()[i] == phi_before[ichunk][i]);
+    }
+  }
+}
+
 TEST_CASE("PicPoissonBasic solves 2D periodic Poisson", "[np=4]")
 {
   if (!require_mpi_size(4)) {

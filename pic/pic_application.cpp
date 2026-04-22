@@ -63,7 +63,10 @@ void PicApplication::initialize(int argc, char** argv)
 {
   base_type::initialize(argc, argv);
 
-  elliptic::Solver::initialize();
+  if (elliptic::Solver::initialize(&argc, &argv) != 0) {
+    ERROR << "Failed to initialize elliptic solver backend." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
 
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
@@ -175,7 +178,13 @@ void PicApplication::finalize()
   }
 
   // finalize
-  elliptic::Solver::finalize();
+  solver.reset();
+
+  if (elliptic::Solver::finalize() != 0) {
+    ERROR << "Failed to finalize elliptic solver backend." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
   base_type::finalize();
 }
 
@@ -546,7 +555,11 @@ void PicApplication::update_poisson_efield()
   auto accessor = poisson->get_accessor();
 
   // solve Poisson equation
-  solver->solve(accessor);
+  const int status = solver->solve(accessor);
+  if (status != 0) {
+    ERROR << "Poisson solve failed with status: " << status << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
 
   // compute E-field from potential
   exchange_phi_boundaries();

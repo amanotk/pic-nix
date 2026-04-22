@@ -47,6 +47,12 @@ target_link_libraries(pic_obj_parallel PRIVATE Catch2::Catch2)
 target_link_libraries(pic_obj_parallel PRIVATE pic nix)
 target_compile_definitions(pic_obj_parallel PRIVATE PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
+add_library(pic_obj_parallel_mpi_only OBJECT test_parallel_mpi_only.cpp)
+target_include_directories(pic_obj_parallel_mpi_only PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(pic_obj_parallel_mpi_only PRIVATE Catch2::Catch2)
+target_link_libraries(pic_obj_parallel_mpi_only PRIVATE pic nix)
+target_compile_definitions(pic_obj_parallel_mpi_only PRIVATE PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
+
 # serial tests
 set(SERIAL_EXECS
   test_pic_chunk
@@ -66,30 +72,49 @@ endforeach()
 
 set(MPIEXEC mpiexec)
 
-if(PICNIX_ENABLE_PETSC)
-  # PicApplicationInterface smoke test (Catch2, MPI)
-  add_executable(test_pic_application test_pic_application.cpp)
-  target_include_directories(test_pic_application PRIVATE ${INCLUDE_DIRS})
-  target_link_libraries(test_pic_application PRIVATE
-    Catch2::Catch2
-    pic_obj_parallel
-    pic
-    nix
-  )
+# PicApplicationInterface smoke / application tests (Catch2, MPI)
+add_executable(test_pic_application test_pic_application.cpp)
+target_include_directories(test_pic_application PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(test_pic_application PRIVATE
+  Catch2::Catch2
+  pic_obj_parallel
+  pic
+  nix
+)
 
+set(PIC_IFACE_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np8)
+add_mpi_test(
+  test_pic_application_np8
+  test_pic_application
+  8
+  ${PIC_IFACE_TMPDIR_NP8}
+)
+
+if(PICNIX_ENABLE_PETSC)
   set(PIC_IFACE_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np1)
-  set(PIC_IFACE_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np8)
   add_mpi_test(
     test_pic_application_np1
     test_pic_application
     1
     ${PIC_IFACE_TMPDIR_NP1}
   )
+
+  add_executable(test_pic_application_mpi_only test_pic_application.cpp)
+  target_include_directories(test_pic_application_mpi_only PRIVATE ${INCLUDE_DIRS})
+  target_link_libraries(test_pic_application_mpi_only PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel_mpi_only
+    pic
+    nix
+  )
+
+  set(PIC_IFACE_MPI_ONLY_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_mpi_only_np1)
   add_mpi_test(
-    test_pic_application_np8
-    test_pic_application
-    8
-    ${PIC_IFACE_TMPDIR_NP8}
+    test_pic_application_mpi_only_np1
+    test_pic_application_mpi_only
+    1
+    ${PIC_IFACE_MPI_ONLY_TMPDIR_NP1}
+    pic_application_interface_smoke
   )
 endif()
 

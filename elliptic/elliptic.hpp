@@ -42,7 +42,7 @@ public:
 
   void set_interface(PtrInterface interface);
 
-  static int initialize();
+  static int initialize(int* argc, char*** argv);
   static int finalize();
 
   int update_mapping(ChunkAccessor& accessor);
@@ -58,8 +58,7 @@ public:
 
 protected:
   PtrInterface       interface;
-  inline static bool is_initialized = false;
-  inline static bool is_finalized   = false;
+  inline static bool petsc_initialized_by_us = false;
 };
 
 } // namespace elliptic

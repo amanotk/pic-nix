@@ -308,6 +308,13 @@ void PetscInterface::create_dm3d(Dims3D dims)
 
 void PetscInterface::setup()
 {
+  PetscBool      petsc_initialized = PETSC_FALSE;
+  PetscErrorCode ierr              = PetscInitialized(&petsc_initialized);
+  if (ierr != 0 || !petsc_initialized) {
+    ERROR << "PETSc must be initialized before elliptic::PetscInterface::setup()." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
   destroy_petsc_objects();
   create_dm(dims);
 

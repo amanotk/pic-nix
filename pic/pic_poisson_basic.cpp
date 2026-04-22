@@ -87,6 +87,16 @@ struct PicPoissonBasic::Impl {
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
 
+    if (tol <= 0.0) {
+      ERROR << "tol must be greater than 0 for PicPoissonBasic" << std::endl;
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    if (max_iter < 0) {
+      ERROR << "max_iter must be nonnegative for PicPoissonBasic" << std::endl;
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
     return 0;
   }
 
@@ -113,7 +123,9 @@ struct PicPoissonBasic::Impl {
       norm_b = 1.0;
     }
 
-    if (std::sqrt(norm_r / norm_b) < tol) {
+    double rel_residual = std::sqrt(norm_r / norm_b);
+
+    if (rel_residual < tol) {
       copy_solution_back();
       return 0;
     }
@@ -131,8 +143,9 @@ struct PicPoissonBasic::Impl {
       axpy(alpha, &ChunkWork::p, &ChunkWork::x);
       axpy(-alpha, &ChunkWork::Ap, &ChunkWork::r);
 
-      norm_r = dot_global(&ChunkWork::r, &ChunkWork::r);
-      if (std::sqrt(norm_r / norm_b) < tol) {
+      norm_r       = dot_global(&ChunkWork::r, &ChunkWork::r);
+      rel_residual = std::sqrt(norm_r / norm_b);
+      if (rel_residual < tol) {
         copy_solution_back();
         return 0;
       }
@@ -147,8 +160,9 @@ struct PicPoissonBasic::Impl {
       }
     }
 
-    copy_solution_back();
-    return 0;
+    ERROR << "PicPoissonBasic failed to converge: residual=" << rel_residual << ", tol=" << tol
+          << ", iterations=" << max_iter << std::endl;
+    return 1;
   }
 
   int scatter_forward()

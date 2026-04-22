@@ -449,10 +449,11 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
 
   std::filesystem::path config_path = base / "test_pic_application.toml";
 
+#if PICNIX_ENABLE_PETSC
   const char* config_template = R"TOML(
  [application]
    [application.option]
-     seed_type = 'fixed'
+      seed_type = 'fixed'
    [application.poisson_petsc]
     ksp_type = 'cg'
     pc_type = 'gamg'
@@ -493,6 +494,51 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   begin = 1
   interval = 1000000
 )TOML";
+#else
+  const char* config_template = R"TOML(
+ [application]
+   [application.option]
+     seed_type = 'fixed'
+   [application.poisson_basic]
+     max_iter = 2000
+     tol = 1.0e-12
+
+[parameter]
+  Nx = @NX@
+  Ny = @NY@
+  Nz = @NZ@
+  Cx = @CX@
+  Cy = @CY@
+  Cz = @CZ@
+  Ex = 0.0
+  Ey = 0.0
+  Ez = 0.0
+  Bx = 0.05
+  By = 0.10
+  Bz = 0.15
+  Ns = 2
+  cc = 1.0
+  delt = 0.1
+  delh = 1.0
+
+[[parameter.particle]]
+  np = 5
+  qm = 1.0
+  ro = 1.0
+  vt = 1.0
+
+[[parameter.particle]]
+  np = 5
+  qm = -1.0
+  ro = 1.0
+  vt = 1.0
+
+[[diagnostic]]
+  name = 'history'
+  begin = 1
+  interval = 1000000
+)TOML";
+#endif
 
   if (rank == 0) {
     std::string config = config_template;
