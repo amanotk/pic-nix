@@ -127,12 +127,7 @@ def cmd_analyze(args):
     case = _resolve_case(args.case)
     summary = analyze_run(case.run_dir, case.Ns)
 
-    out = args.output
-    if out is None:
-        json.dump(_ndarray_to_list(summary), sys.stdout, indent=2)
-        print()
-        return
-
+    out = args.output or str(case.run_dir / "summary.json")
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
