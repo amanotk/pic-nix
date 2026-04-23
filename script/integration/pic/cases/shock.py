@@ -20,9 +20,9 @@ CASE = IntegrationCase(
     golden_dir=SCRIPT_DIR / "golden" / "shock",
     run_dir=REPO_ROOT / "run-integration-pic" / "shock",
     Ns=2,
-    tmax=50.0,
+    tmax=160.0,
     nproc=8,
-    snapshot_times=(20.0, 35.0, 50.0),
+    snapshot_times=(40.0, 80.0, 120.0, 160.0),
     config_overrides={
         "application": {
             "option": {"seed_type": "fixed"},
