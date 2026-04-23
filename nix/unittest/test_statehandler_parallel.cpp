@@ -2,9 +2,10 @@
 
 #include "statehandler.hpp"
 
-#include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+
+bool require_mpi_size(int expected);
 
 using namespace nix;
 
@@ -38,7 +39,7 @@ private:
 public:
   std::vector<float64> x;
 
-  MockChunk(const int dims[3], const bool has_dim[3], int id) : myid(id)
+  MockChunk(Dims3D dims, Bool3D has_dim, int id) : myid(id)
   {
     x.resize(ndata);
     std::fill(x.begin(), x.end(), 0.0);
@@ -90,7 +91,7 @@ public:
   }
 
   // create chunk
-  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id)
+  virtual PtrChunk create_chunk(Dims3D dims, Bool3D has_dim, int id)
   {
     return std::make_unique<MockChunk>(dims, has_dim, id);
   }
@@ -185,14 +186,15 @@ public:
 
   void prepare_chunkvec(int numchunk)
   {
-    bool has_dim[3] = {true, true, true};
+    Bool3D has_dim{true, true, true};
+    Dims3D dims{ndims[0], ndims[1], ndims[2]};
 
     chunkvec.resize(0);
     chunkvec.shrink_to_fit();
 
     for (int i = 0; i < numchunk; i++) {
       int id = i + thisrank * numchunk;
-      chunkvec.push_back(get_interface()->create_chunk(ndims, has_dim, id));
+      chunkvec.push_back(get_interface()->create_chunk(dims, has_dim, id));
 
       // fill data
       for (int j = 0; j < ndata; j++) {
@@ -267,19 +269,20 @@ public:
   }
 };
 
-TEST_CASE("test_save_load_application")
+TEST_CASE("test_save_load_application", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   MockApplication app;
   app.test_save_load_application();
 }
 
-TEST_CASE("test_save_load_chunkvec")
+TEST_CASE("test_save_load_chunkvec", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   MockApplication app;
   app.test_save_load_chunkvec();
 }
-
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

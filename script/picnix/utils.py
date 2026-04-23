@@ -226,7 +226,7 @@ def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
     yy[cx] = rank
     ix = np.argwhere(yy[+1:] - yy[:-1] != 0)[:, 0]
     for i in ix:
-        ax.axvline(delx * i, color=colors, lw=0.5)
+        ax.axvline(delx * (i + 1), color=colors, lw=0.5)
 
 
 def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w", width=1):

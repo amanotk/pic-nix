@@ -76,8 +76,4 @@ bool check_locality3d(array2d& coord, const int distmax2 = 1);
 
 } // namespace sfc
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

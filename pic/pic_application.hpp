@@ -6,13 +6,22 @@
 
 #include "pic.hpp"
 
+#include "elliptic/elliptic.hpp"
+
+#include <memory>
+
+namespace elliptic
+{
+class Solver;
+} // namespace elliptic
+
 ///
 /// @brief PIC Application Interface
 ///
 class PicApplicationInterface : public nix::Application::Interface
 {
 public:
-  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id) = 0;
+  virtual PtrChunk create_chunk(nix::Dims3D dims, nix::Bool3D has_dim, int id) = 0;
 
   virtual int get_num_species();
 
@@ -29,6 +38,9 @@ public:
   using base_type  = nix::Application;
   using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
 
+  using PtrPoissonSolver    = std::unique_ptr<elliptic::Solver>;
+  using PtrPoissonInterface = std::shared_ptr<elliptic::SolverInterface>;
+
   PicApplication(int argc, char** argv, PtrInterface interface);
 
   virtual ~PicApplication() override = default;
@@ -36,9 +48,12 @@ public:
 protected:
   friend class PicApplicationInterface;
 
-  int        Ns;         ///< number of species
-  int        momstep;    ///< step at which moment quantities are cached
-  MpiCommVec mpicommvec; ///< MPI Communicators
+  int              Ns;         ///< number of species
+  int              momstep;    ///< step at which moment quantities are cached
+  MpiCommVec       mpicommvec; ///< MPI Communicators
+  PtrPoissonSolver solver;     ///< Poisson solver
+
+  virtual PtrPoissonInterface create_poisson_interface();
 
   virtual int get_num_species() const;
 
@@ -71,10 +86,12 @@ protected:
   virtual void push_taskflow();
 
   virtual void calculate_moment_taskflow();
+
+  virtual void update_poisson_efield();
+
+  virtual void exchange_phi_boundaries();
+
+  virtual void exchange_emf_boundaries();
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

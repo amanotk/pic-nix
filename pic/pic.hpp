@@ -42,11 +42,8 @@ enum BoundaryMode {
   BoundaryCur      = 1,
   BoundaryMom      = 2,
   BoundaryParticle = 3,
-  NumBoundaryMode  = 4, // number of mode
+  BoundaryPhi      = 4,
+  NumBoundaryMode  = 5, // number of mode
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

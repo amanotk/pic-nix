@@ -76,9 +76,11 @@ public:
 
     for (int ix = lbx; ix <= ubx; ix++) {
       // div(E) - rho
-      efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
+      float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
+      efd += div_e * div_e;
       // div(B)
-      bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
+      float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
+      bfd += div_b * div_b;
     }
   }
 
@@ -219,11 +221,13 @@ public:
     for (int iy = lby; iy <= uby; iy++) {
       for (int ix = lbx; ix <= ubx; ix++) {
         // div(E) - rho
-        efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-               (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
+        float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                        (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
+        efd += div_e * div_e;
         // div(B)
-        bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-               (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
+        float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                        (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
+        bfd += div_b * div_b;
       }
     }
   }
@@ -368,13 +372,15 @@ public:
       for (int iy = lby; iy <= uby; iy++) {
         for (int ix = lbx; ix <= ubx; ix++) {
           // div(E) - rho
-          efd += (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
-                 (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
-                 (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
+                          (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
+                          (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
+          efd += div_e * div_e;
           // div(B)
-          bfd += (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
-                 (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
-                 (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+          float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
+                          (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
+                          (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
+          bfd += div_b * div_b;
         }
       }
     }
@@ -494,12 +500,59 @@ public:
       }
     }
   }
+
+  template <typename T_field, typename T_potential>
+  void compute_efield_from_potential_1d(T_field& uf, T_potential& phi, float64 rdx)
+  {
+    const int iz = this->lbz;
+    const int iy = this->lby;
+
+    for (int ix = this->lbx; ix <= this->ubx; ++ix) {
+      // Ex
+      uf(iz, iy, ix, 0) = -(phi(iz, iy, ix) - phi(iz, iy, ix - 1)) * rdx;
+      // Ey = 0 in 1D
+      uf(iz, iy, ix, 1) = 0.0;
+      // Ez = 0 in 1D
+      uf(iz, iy, ix, 2) = 0.0;
+    }
+  }
+
+  template <typename T_field, typename T_potential>
+  void compute_efield_from_potential_2d(T_field& uf, T_potential& phi, float64 rdx, float64 rdy)
+  {
+    const int iz = this->lbz;
+
+    for (int iy = this->lby; iy <= this->uby; ++iy) {
+      for (int ix = this->lbx; ix <= this->ubx; ++ix) {
+        // Ex
+        uf(iz, iy, ix, 0) = -(phi(iz, iy, ix) - phi(iz, iy, ix - 1)) * rdx;
+        // Ey
+        uf(iz, iy, ix, 1) = -(phi(iz, iy, ix) - phi(iz, iy - 1, ix)) * rdy;
+        // Ez = 0 in 2D
+        uf(iz, iy, ix, 2) = 0.0;
+      }
+    }
+  }
+
+  template <typename T_field, typename T_potential>
+  void compute_efield_from_potential_3d(T_field& uf, T_potential& phi, float64 rdx, float64 rdy,
+                                        float64 rdz)
+  {
+    for (int iz = this->lbz; iz <= this->ubz; ++iz) {
+      for (int iy = this->lby; iy <= this->uby; ++iy) {
+        for (int ix = this->lbx; ix <= this->ubx; ++ix) {
+          // Ex
+          uf(iz, iy, ix, 0) = -(phi(iz, iy, ix) - phi(iz, iy, ix - 1)) * rdx;
+          // Ey
+          uf(iz, iy, ix, 1) = -(phi(iz, iy, ix) - phi(iz, iy - 1, ix)) * rdy;
+          // Ez
+          uf(iz, iy, ix, 2) = -(phi(iz, iy, ix) - phi(iz - 1, iy, ix)) * rdz;
+        }
+      }
+    }
+  }
 };
 
 } // namespace pic_engine
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

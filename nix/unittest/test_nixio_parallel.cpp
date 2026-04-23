@@ -5,13 +5,13 @@
 #include <fstream>
 #include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+
+#include "test_parallel.hpp"
 
 using nixio::float32;
 using nixio::float64;
 
-// MPI option from command line
-extern int options_mpi_decomposition[];
 
 static const char          filename[] = "test_nixio_parallel_data.dat";
 static const size_t        Nx         = 4;
@@ -111,8 +111,11 @@ bool is_array_equal(const int N, T x[], T y[])
 //
 // read_single
 //
-TEST_CASE("ReadSingle")
+TEST_CASE("ReadSingle", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -168,8 +171,11 @@ TEST_CASE("ReadSingle")
 //
 // write_single
 //
-TEST_CASE("WriteSingle")
+TEST_CASE("WriteSingle", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -224,8 +230,11 @@ TEST_CASE("WriteSingle")
 //
 // read_contiguous
 //
-TEST_CASE("ReadContiguous")
+TEST_CASE("ReadContiguous", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -294,8 +303,11 @@ TEST_CASE("ReadContiguous")
 //
 // write_contiguous
 //
-TEST_CASE("WriteContiguous")
+TEST_CASE("WriteContiguous", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -364,8 +376,11 @@ TEST_CASE("WriteContiguous")
 //
 // read_contiguous_at
 //
-TEST_CASE("ReadContiguousAt")
+TEST_CASE("ReadContiguousAt", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -441,8 +456,11 @@ TEST_CASE("ReadContiguousAt")
 //
 // write_contiguous_at
 //
-TEST_CASE("WriteContiguousAt")
+TEST_CASE("WriteContiguousAt", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -518,8 +536,11 @@ TEST_CASE("WriteContiguousAt")
 //
 // read_subarray
 //
-TEST_CASE("ReadSubarray")
+TEST_CASE("ReadSubarray", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -608,8 +629,11 @@ TEST_CASE("ReadSubarray")
 //
 // write_subarray
 //
-TEST_CASE("WriteSubarray")
+TEST_CASE("WriteSubarray", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   init_array_ordered(N, i32a);
   init_array_ordered(N, i64a);
   init_array_ordered(N, f32a);
@@ -691,8 +715,3 @@ TEST_CASE("WriteSubarray")
   }
   MPI_Barrier(MPI_COMM_WORLD);
 }
-
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

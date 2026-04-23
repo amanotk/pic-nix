@@ -5,9 +5,9 @@
 #include "primitives.hpp"
 
 #include <experimental/mdspan>
-#include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using namespace nix::typedefs;
 using namespace nix::esirkepov;
@@ -1274,7 +1274,3 @@ bool test_deposit3d_xsimd(T_array& xu, T_array& xv, const int Np, float64 delt, 
   return status1 && status2;
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

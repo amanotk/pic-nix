@@ -2,7 +2,7 @@
 
 #include "mpistream.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("get_filename_pattern")
 {
@@ -62,7 +62,3 @@ TEST_CASE("get_filename")
   }
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

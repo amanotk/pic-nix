@@ -3,9 +3,10 @@
 #include "balancer.hpp"
 #include "chunkvector.hpp"
 
-#include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+
+bool require_mpi_size(int expected);
 
 using namespace nix;
 
@@ -39,7 +40,7 @@ private:
   std::vector<float64> x;
 
 public:
-  MockChunk(const int dims[3], const bool has_dim[3], int id) : myid(id)
+  MockChunk(Dims3D dims, Bool3D has_dim, int id) : myid(id)
   {
     x.resize(ndata);
   }
@@ -147,7 +148,7 @@ public:
     return data;
   }
 
-  virtual PtrChunk create_chunk(const int dims[3], const bool has_dim[3], int id)
+  virtual PtrChunk create_chunk(Dims3D dims, Bool3D has_dim, int id)
   {
     return std::make_unique<MockChunk>(dims, has_dim, id);
   }
@@ -174,10 +175,11 @@ public:
   {
     ChunkVec chunkvec;
 
-    bool has_dim[3] = {true, true, true};
+    Bool3D has_dim{true, true, true};
+    Dims3D dims{ndims[0], ndims[1], ndims[2]};
 
     for (int i = boundary[thisrank], j = 0; i < boundary[thisrank + 1]; i++, j++) {
-      chunkvec.push_back(std::make_unique<MockChunk>(ndims, has_dim, i));
+      chunkvec.push_back(std::make_unique<MockChunk>(dims, has_dim, i));
       chunkvec[j]->set_load(1.0 / (boundary[thisrank + 1] - boundary[thisrank]));
     }
 
@@ -263,8 +265,11 @@ public:
   }
 };
 
-TEST_CASE("test_uppdate_global_load")
+TEST_CASE("test_uppdate_global_load", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   const int        nchunk   = 32;
   std::vector<int> boundary = {0, 5, 9, 12, 15, 19, 25, 27, 32};
 
@@ -274,8 +279,11 @@ TEST_CASE("test_uppdate_global_load")
   balancer.test_upload_global_load(boundary);
 }
 
-TEST_CASE("test_sendrecv_chunk")
+TEST_CASE("test_sendrecv_chunk", "[np=8]")
 {
+  if (!require_mpi_size(8)) {
+    return;
+  }
   const int        nchunk   = 32;
   std::vector<int> boundary = {0, 5, 9, 12, 15, 19, 25, 27, 32};
 
@@ -283,8 +291,3 @@ TEST_CASE("test_sendrecv_chunk")
 
   balancer.test_sendrecv_chunk(boundary);
 }
-
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

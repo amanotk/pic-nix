@@ -42,7 +42,7 @@ public:
   }
 
   // create chunk
-  virtual PtrChunk create_chunk(const int dims[], const bool has_dim[], int id)
+  virtual PtrChunk create_chunk(Dims3D dims, Bool3D has_dim, int id)
   {
     return std::make_unique<Chunk>(dims, has_dim, id);
   }
@@ -125,7 +125,7 @@ protected:
   int     curstep;  ///< current iteration step
   float64 curtime;  ///< current time
 
-  bool is_mpi_init_already_called; ///< flag for testing purpose
+  bool is_mpi_init_called_by_me;   ///< true if Application initialized MPI
 
 public:
   /// @brief default constructor
@@ -139,7 +139,8 @@ public:
   /// @param argv array of arguments
   ///
   Application(int argc, char** argv, PtrInterface interface)
-      : is_mpi_init_already_called(false), interface(interface), chunkvec()
+      : is_mpi_init_called_by_me(false), interface(interface),
+        chunkvec()
   {
     cl_argc = argc;
     cl_argv = argv;
@@ -392,8 +393,4 @@ protected:
 
 NIX_NAMESPACE_END
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

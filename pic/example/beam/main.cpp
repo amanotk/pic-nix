@@ -1,0 +1,134 @@
+// -*- C++ -*-
+
+#include "nix/random.hpp"
+#include "pic_application.hpp"
+#include "pic_chunk.hpp"
+#include "pic_diag.hpp"
+
+using MainApplication = PicApplication;
+
+class MainChunk : public PicChunk
+{
+public:
+  using PicChunk::PicChunk; // inherit constructors
+
+  virtual void setup(json& config) override
+  {
+    PicChunk::setup(config);
+
+    float64 delt;
+    float64 delh;
+
+    Ns   = config["Ns"].get<int>();
+    cc   = config["cc"].get<float64>();
+    delt = config["delt"].get<float64>();
+    delh = config["delh"].get<float64>();
+
+    // set grid size and coordinate
+    set_coordinate(delh, delh, delh);
+
+    //
+    // initialize field
+    //
+    {
+      float64 Ex = config["Ex"].get<float64>();
+      float64 Ey = config["Ey"].get<float64>();
+      float64 Ez = config["Ez"].get<float64>();
+      float64 Bx = config["Bx"].get<float64>();
+      float64 By = config["By"].get<float64>();
+      float64 Bz = config["Bz"].get<float64>();
+      float64 B0 = sqrt(Bx * Bx + By * By + Bz * Bz);
+
+      // memory allocation
+      allocate();
+
+      for (int iz = Lbz; iz <= Ubz; iz++) {
+        for (int iy = Lby; iy <= Uby; iy++) {
+          for (int ix = Lbx; ix <= Ubx; ix++) {
+            uf(iz, iy, ix, 0) = Ex;
+            uf(iz, iy, ix, 1) = Ey;
+            uf(iz, iy, ix, 2) = Ez;
+            uf(iz, iy, ix, 3) = Bx;
+            uf(iz, iy, ix, 4) = By;
+            uf(iz, iy, ix, 5) = Bz;
+          }
+        }
+      }
+
+      this->allocate_mpi_buffers();
+
+      // setup for Friedman filter
+      this->init_friedman();
+    }
+
+    //
+    // initialize particles
+    //
+    {
+      float64           target      = 1 + this->get_buffer_ratio();
+      int               random_seed = option["random_seed"].get<int>();
+      std::mt19937_64   mtp_pos(random_seed);
+      std::mt19937_64   mtp_neg(random_seed);
+      std::mt19937_64   mtv(random_seed);
+      nix::rand_uniform uniform(0.0, 1.0);
+      nix::rand_normal  normal(0.0, 1.0);
+
+      json particle = config["particle"];
+
+      up.resize(Ns);
+      for (int is = 0; is < Ns; is++) {
+        int     np = particle[is]["np"].get<int>();
+        int     mp = np * dims[0] * dims[1] * dims[2];
+        int64   id = mp;
+        float64 ro = particle[is]["ro"].get<float64>();
+        float64 qm = particle[is]["qm"].get<float64>();
+        float64 vt = particle[is]["vt"].get<float64>();
+        float64 vx = particle[is]["vx"].get<float64>();
+        float64 vy = particle[is]["vy"].get<float64>();
+        float64 vz = particle[is]["vz"].get<float64>();
+
+        id *= this->myid;
+
+        up[is]     = std::make_shared<ParticleType>(mp * target, *this);
+        up[is]->m  = ro / np;
+        up[is]->q  = qm * up[is]->m;
+        up[is]->Np = mp;
+
+        auto& mtp = up[is]->q > 0.0 ? mtp_pos : mtp_neg;
+        for (int ip = 0; ip < up[is]->Np; ip++) {
+          float64* ptcl = &up[is]->xu(ip, 0);
+          int64*   id64 = reinterpret_cast<int64*>(ptcl);
+
+          ptcl[0] = uniform(mtp) * xlim[2] + xlim[0];
+          ptcl[1] = uniform(mtp) * ylim[2] + ylim[0];
+          ptcl[2] = uniform(mtp) * zlim[2] + zlim[0];
+          ptcl[3] = normal(mtv) * vt + vx;
+          ptcl[4] = normal(mtv) * vt + vy;
+          ptcl[5] = normal(mtv) * vt + vz;
+          id64[6] = id + ip;
+        }
+      }
+
+      // initial sort
+      this->sort_particle(up);
+    }
+  }
+};
+
+class MainInterface : public PicApplicationInterface
+{
+public:
+  virtual PtrChunk create_chunk(nix::Dims3D dims, nix::Bool3D has_dim, int id) override
+  {
+    return std::make_unique<MainChunk>(dims, has_dim, id);
+  }
+};
+
+//
+// main
+//
+int main(int argc, char** argv)
+{
+  MainApplication app(argc, argv, std::make_shared<MainInterface>());
+  return app.main();
+}

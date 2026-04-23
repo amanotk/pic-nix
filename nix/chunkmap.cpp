@@ -150,7 +150,3 @@ int ChunkMap::get_chunkid(int cz, int cy, int cx)
 
 NIX_NAMESPACE_END
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

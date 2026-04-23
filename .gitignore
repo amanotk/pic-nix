@@ -1,4 +1,3 @@
-compiler.mk
 *.o
 *.d
 *.a
@@ -9,6 +8,14 @@ compiler.mk
 *.mp4
 *.stdout
 *.stderr
-build
 __pycache__
+# typical build directories
+build*
+# VSCode settings
 .vscode
+# Local notes
+notes
+TODO.md
+
+# Manual integration run output
+run-integration-pic/

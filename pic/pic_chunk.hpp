@@ -37,6 +37,7 @@ public:
     float64 (&ylim)[3];
     float64 (&zlim)[3];
     std::vector<float64>&    load;
+    xt::xtensor<float64, 3>& phi;
     xt::xtensor<float64, 4>& uf;
     xt::xtensor<float64, 4>& uj;
     xt::xtensor<float64, 5>& um;
@@ -65,6 +66,7 @@ public:
             ylim,
             zlim,
             load,
+            phi,
             uf,
             uj,
             um,
@@ -78,16 +80,17 @@ protected:
   int order;     ///< order of shape function
   int dimension; ///< dimension of the simulation
 
-  int                     Ns; ///< number of particle species
-  float64                 cc; ///< speed of light
-  xt::xtensor<float64, 4> uf; ///< electromagnetic field
-  xt::xtensor<float64, 4> uj; ///< current density
-  xt::xtensor<float64, 5> um; ///< particle moment
-  xt::xtensor<float64, 5> ff; ///< electric field for Friedmann filter
-  ParticleVec             up; ///< list of particles
+  int                     Ns;  ///< number of particle species
+  float64                 cc;  ///< speed of light
+  xt::xtensor<float64, 3> phi; ///< electrostatic potential
+  xt::xtensor<float64, 4> uf;  ///< electromagnetic field
+  xt::xtensor<float64, 4> uj;  ///< current density
+  xt::xtensor<float64, 5> um;  ///< particle moment
+  xt::xtensor<float64, 5> ff;  ///< electric field for Friedmann filter
+  ParticleVec             up;  ///< list of particles
 
 public:
-  PicChunk(const int dims[3], const bool has_dim[3], int id = 0);
+  PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id = 0);
 
   virtual ~PicChunk() override = default;
 
@@ -101,8 +104,9 @@ public:
 
   virtual void allocate();
 
-  virtual void reset_load() override;
+  virtual void allocate_mpi_buffers();
 
+  virtual void reset_load() override;
   virtual void setup(json& config) override;
 
   virtual void init_friedman();
@@ -140,10 +144,8 @@ public:
   virtual void push_efd(float64 delt);
 
   virtual void push_bfd(float64 delt);
+
+  virtual void compute_efield_poisson();
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

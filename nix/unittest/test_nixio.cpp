@@ -1,9 +1,8 @@
 // -*- C++ -*-
 
 #include "nixio.hpp"
-#include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 static const auto json_to_check = R"(
 {
@@ -243,7 +242,3 @@ TEST_CASE("Attribute")
   }
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

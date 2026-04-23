@@ -9,7 +9,6 @@
 #include <iostream>
 #include <mpi.h>
 #include <ostream>
-#include <sstream>
 
 #include "nix.hpp"
 
@@ -276,8 +275,4 @@ public:
   }
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

@@ -1,0 +1,9 @@
+numpy
+matplotlib
+tqdm
+msgpack
+h5py
+toml
+watchdog
+nest-asyncio
+aiofiles

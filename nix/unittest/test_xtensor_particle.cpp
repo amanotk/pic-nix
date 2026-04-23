@@ -1,9 +1,9 @@
 // -*- C++ -*-
 
 #include "xtensor_particle.hpp"
-#include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using namespace nix::typedefs;
 using namespace nix::primitives;
@@ -220,9 +220,9 @@ TEST_CASE("CreateParticle")
   particle.Np = Np;
 
   // check array size
-  REQUIRE(particle.xu.size() == Np * Particle::Nc);
-  REQUIRE(particle.xv.size() == Np * Particle::Nc);
-  REQUIRE(particle.gindex.size() == Np);
+  REQUIRE(particle.xu.size() == static_cast<size_t>(particle.Np_total) * Particle::Nc);
+  REQUIRE(particle.xv.size() == static_cast<size_t>(particle.Np_total) * Particle::Nc);
+  REQUIRE(particle.gindex.size() == static_cast<size_t>(particle.Np_total));
   REQUIRE(particle.pindex.size() == Ng + 1);
   REQUIRE(particle.pcount.size() == (Ng + 1) * nix::simd_width);
 
@@ -366,7 +366,3 @@ TEST_CASE("SortParticle3D")
   REQUIRE(check_sort3d(particle, Nx, Ny, Nz) == true);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

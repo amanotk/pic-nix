@@ -16,7 +16,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <list>
@@ -77,6 +76,10 @@ using uint64 = uint64_t;
 using float32 = float;
 using float64 = double;
 using real    = float64;
+
+// array types
+using Dims3D = std::array<int, 3>;
+using Bool3D = std::array<bool, 3>;
 
 // SIMD types
 using simd_f32 = xsimd::batch<float32>;
@@ -291,8 +294,4 @@ void fill_all(T_array& array, T&& value)
 
 NIX_NAMESPACE_END
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

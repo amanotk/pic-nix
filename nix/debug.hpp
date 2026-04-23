@@ -5,7 +5,6 @@
 #include "tinyformat.hpp"
 #include <cstring>
 #include <iomanip>
-#include <iostream>
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
 #include <plog/Initializers/ConsoleInitializer.h>
@@ -98,8 +97,4 @@ public:
   }
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

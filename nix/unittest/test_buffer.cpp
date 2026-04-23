@@ -1,9 +1,8 @@
 // -*- C++ -*-
 
 #include "buffer.hpp"
-#include <iostream>
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 using namespace nix;
 
@@ -27,7 +26,3 @@ TEST_CASE("Buffer resize")
   REQUIRE(buffer.size == 512);
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

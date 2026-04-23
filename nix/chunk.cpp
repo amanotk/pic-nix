@@ -3,7 +3,7 @@
 
 NIX_NAMESPACE_BEGIN
 
-Chunk::Chunk(const int dims[3], const bool has_dim[3], int id)
+Chunk::Chunk(Dims3D dims, Bool3D has_dim, int id)
     : myid(id), delx(1.0), dely(1.0), delz(1.0), option({})
 {
   for (int i = 0; i < 3; i++) {
@@ -452,8 +452,3 @@ int Chunk::MpiBuffer::unpack(void* buffer, int address)
 }
 
 NIX_NAMESPACE_END
-
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

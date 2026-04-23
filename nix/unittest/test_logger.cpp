@@ -2,7 +2,7 @@
 
 #include "logger.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 using namespace nix;
 
@@ -196,7 +196,3 @@ TEST_CASE("test_flush")
   logger.test_flush();
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

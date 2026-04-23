@@ -128,18 +128,22 @@ void Application::initialize_mpi(int* argc, char*** argv)
   {
     int thread_required = NIX_MPI_THREAD_LEVEL;
     int thread_provided = -1;
+    int mpi_initialized = 0;
 
-    if (is_mpi_init_already_called == false) {
+    MPI_Initialized(&mpi_initialized);
+
+    if (mpi_initialized == 0) {
       MPI_Init_thread(argc, argv, thread_required, &thread_provided);
-      is_mpi_init_already_called = true;
+      is_mpi_init_called_by_me = true;
     } else {
-
-      MPI_Init_thread(nullptr, nullptr, thread_required, &thread_provided);
+      MPI_Query_thread(&thread_provided);
     }
 
     if (thread_provided < thread_required) {
       ERROR << tfm::format("Your MPI does not support required thread level!");
-      MPI_Finalize();
+      if (is_mpi_init_called_by_me) {
+        MPI_Finalize();
+      }
       exit(-1);
     }
   }
@@ -182,7 +186,9 @@ void Application::finalize_mpi()
   MpiStream::finalize();
   Diag::finalize();
 
-  MPI_Finalize();
+  if (is_mpi_init_called_by_me) {
+    MPI_Finalize();
+  }
 }
 
 void Application::assert_mpi(bool condition, std::string msg)
@@ -260,12 +266,12 @@ void Application::setup_chunks_init()
   auto boundary = balancer->assign_initial(nprocess);
   chunkmap->set_rank_boundary(boundary);
 
-  bool has_dim[3] = {
+  Bool3D has_dim{
       (ndims[0] == 1 && cdims[0] == 1) ? false : true,
       (ndims[1] == 1 && cdims[1] == 1) ? false : true,
       (ndims[2] == 1 && cdims[2] == 1) ? false : true,
   };
-  int dims[3]{
+  Dims3D dims{
       ndims[0] / cdims[0],
       ndims[1] / cdims[1],
       ndims[2] / cdims[2],
@@ -464,8 +470,3 @@ void Application::increment_time()
 }
 
 NIX_NAMESPACE_END
-
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:

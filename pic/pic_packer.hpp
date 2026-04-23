@@ -15,8 +15,4 @@ public:
   virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) = 0;
 };
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif

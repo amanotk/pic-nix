@@ -2,6 +2,8 @@
 #include "pic_application.hpp"
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
+#include "pic_poisson.hpp"
+#include "pic_poisson_factory.hpp"
 
 #include "diag/field.hpp"
 #include "diag/history.hpp"
@@ -11,6 +13,14 @@
 #include "diag/tracer.hpp"
 
 #include <taskflow/taskflow.hpp>
+
+PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
+{
+  nix::Dims3D dims = {ndims[0], ndims[1], ndims[2]};
+  float64     delh = cfgparser->get_delx();
+
+  return std::static_pointer_cast<elliptic::SolverInterface>(make_poisson_solver(dims, delh));
+}
 
 int PicApplicationInterface::get_num_species()
 {
@@ -53,6 +63,11 @@ void PicApplication::initialize(int argc, char** argv)
 {
   base_type::initialize(argc, argv);
 
+  if (elliptic::Solver::initialize(&argc, &argv) != 0) {
+    ERROR << "Failed to initialize elliptic solver backend." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
 
@@ -64,6 +79,16 @@ void PicApplication::initialize(int argc, char** argv)
           MPI_Comm_dup(MPI_COMM_WORLD, &mpicommvec(mode, iz, iy, ix));
         }
       }
+    }
+  }
+
+  // initialize Poisson solver
+  {
+    auto poisson = create_poisson_interface();
+    solver       = std::make_unique<elliptic::Solver>(poisson);
+
+    if (solver != nullptr) {
+      solver->set_option(cfgparser->get_application());
     }
   }
 }
@@ -153,6 +178,13 @@ void PicApplication::finalize()
   }
 
   // finalize
+  solver.reset();
+
+  if (elliptic::Solver::finalize() != 0) {
+    ERROR << "Failed to finalize elliptic solver backend." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
   base_type::finalize();
 }
 
@@ -506,7 +538,64 @@ void PicApplication::calculate_moment_taskflow()
   executor.run(taskflow).wait();
 }
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
+void PicApplication::update_poisson_efield()
+{
+  if (solver == nullptr) {
+    return;
+  }
+
+  auto poisson = std::dynamic_pointer_cast<PicPoisson>(solver->get_interface());
+  if (poisson == nullptr) {
+    ERROR << "PicApplication requires PicPoisson solver interface." << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
+  // bind chunks to poisson solver and get its accessor
+  poisson->bind_chunks(chunkvec);
+  auto accessor = poisson->get_accessor();
+
+  // solve Poisson equation
+  const int status = solver->solve(accessor);
+  if (status != 0) {
+    ERROR << "Poisson solve failed with status: " << status << std::endl;
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+
+  // compute E-field from potential
+  exchange_phi_boundaries();
+
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->compute_efield_poisson();
+  }
+
+  exchange_emf_boundaries();
+}
+
+void PicApplication::exchange_phi_boundaries()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_pack(BoundaryPhi);
+    chunk->set_boundary_begin(BoundaryPhi);
+  }
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_end(BoundaryPhi);
+    chunk->set_boundary_unpack(BoundaryPhi);
+  }
+}
+
+void PicApplication::exchange_emf_boundaries()
+{
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_pack(BoundaryEmf);
+    chunk->set_boundary_begin(BoundaryEmf);
+  }
+  for (auto& chunk_ptr : chunkvec) {
+    auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
+    chunk->set_boundary_end(BoundaryEmf);
+    chunk->set_boundary_unpack(BoundaryEmf);
+  }
+}

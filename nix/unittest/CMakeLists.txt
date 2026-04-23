@@ -2,6 +2,8 @@
 set(PROJECT_NAME "unittest")
 project(${PROJECT_NAME} CXX)
 
+include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
+
 set(INCLUDE_DIRS
 	${CMAKE_BINARY_DIR}/nix
 	${CMAKE_BINARY_DIR}/nix/thirdparty
@@ -30,23 +32,47 @@ set(SERIAL_EXECS
 	test_mpistream
 	test_argparser
 	test_cfgparser
-	test_application
+	test_xtensor_halo3d
+	test_xtensor_packer3d
 	)
 
 add_library(obj_serial OBJECT test_serial.cpp)
 target_include_directories(obj_serial PRIVATE ${INCLUDE_DIRS})
 target_link_directories(obj_serial PRIVATE ${LIBRARY_DIRS})
-target_link_libraries(obj_serial nix)
+target_link_libraries(obj_serial PRIVATE Catch2::Catch2)
+target_link_libraries(obj_serial PRIVATE nix)
+
+add_library(obj_parallel OBJECT test_parallel.cpp)
+target_include_directories(obj_parallel PRIVATE ${INCLUDE_DIRS})
+target_link_directories(obj_parallel PRIVATE ${LIBRARY_DIRS})
+target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
+target_link_libraries(obj_parallel PRIVATE nix)
 
 foreach(target IN ITEMS ${SERIAL_EXECS})
 	add_executable(${target} ${target}.cpp)
 	target_include_directories(${target} PRIVATE ${INCLUDE_DIRS})
 	target_link_directories(${target} PRIVATE ${LIBRARY_DIRS})
-	target_link_libraries(${target} obj_serial)
-	target_link_libraries(${target} nix)
-	target_link_libraries(${target} std::filesystem)
+	target_link_libraries(${target} PRIVATE
+		Catch2::Catch2
+		obj_serial
+		nix
+		std::filesystem
+	)
 	add_test(NAME ${target} COMMAND ${target})
 endforeach()
+
+add_executable(test_application test_application.cpp)
+target_include_directories(test_application PRIVATE ${INCLUDE_DIRS})
+target_link_directories(test_application PRIVATE ${LIBRARY_DIRS})
+target_link_libraries(test_application PRIVATE
+	Catch2::Catch2
+	obj_parallel
+	nix
+	std::filesystem
+)
+add_test(NAME test_application
+	COMMAND mpiexec -n 1 ./test_application
+	)
 
 #
 # parallel testing
@@ -58,32 +84,30 @@ set(PARALLEL_EXECS
 	test_statehandler_parallel
 	)
 
-add_library(obj_parallel OBJECT test_parallel.cpp)
-target_include_directories(obj_parallel PRIVATE ${INCLUDE_DIRS})
-target_link_directories(obj_parallel PRIVATE ${LIBRARY_DIRS})
-target_link_libraries(obj_parallel nix)
-
 foreach(target IN ITEMS ${PARALLEL_EXECS})
 	add_executable(${target} ${target}.cpp)
 	target_include_directories(${target} PRIVATE ${INCLUDE_DIRS})
 	target_link_directories(${target} PRIVATE ${LIBRARY_DIRS})
-	target_link_libraries(${target} obj_parallel)
-	target_link_libraries(${target} nix)
-	target_link_libraries(${target} std::filesystem)
+	target_link_libraries(${target} PRIVATE
+		Catch2::Catch2
+		obj_parallel
+		nix
+		std::filesystem
+	)
 endforeach()
 
 add_test(NAME test_nixio_parallel
-	COMMAND mpiexec -n 8 ./test_nixio_parallel -X 2 -Y 2 -Z 2
+	COMMAND mpiexec -n 8 ./test_nixio_parallel -X 2 -Y 2 -Z 2 "[np=8]"
 	)
 
 add_test(NAME test_balancer_parallel
-	COMMAND mpiexec -n 8 ./test_balancer_parallel
+	COMMAND mpiexec -n 8 ./test_balancer_parallel "[np=8]"
 	)
 
 add_test(NAME test_mpistream_parallel
-	COMMAND mpiexec -n 8 ./test_mpistream_parallel
+	COMMAND mpiexec -n 8 ./test_mpistream_parallel "[np=8]"
 	)
 
 add_test(NAME test_statehandler_parallel
-	COMMAND mpiexec -n 8 ./test_statehandler_parallel
+	COMMAND mpiexec -n 8 ./test_statehandler_parallel "[np=8]"
 	)

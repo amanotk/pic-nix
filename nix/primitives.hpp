@@ -933,8 +933,4 @@ static void append_moment3d(T_array& um, T_int iz0, T_int iy0, T_int ix0, int is
 
 NIX_NAMESPACE_END
 
-// Local Variables:
-// c-file-style   : "gnu"
-// c-file-offsets : ((innamespace . 0) (inline-open . 0))
-// End:
 #endif
