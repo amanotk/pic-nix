@@ -239,10 +239,11 @@ def _generate_snapshot(
         axs[i].set_xlim(xlim)
     fig.align_ylabels(axs)
 
+    coord = np.array(run.chunkmap["coord"])
+    rank = run.get_chunk_rank(field_step)
     cdelx = run.delh * (run.Nx // run.Cx)
     for i in range(4):
-        for c in range(1, run.Cx):
-            axs[i].axvline(c * cdelx, color="gray", lw=0.5)
+        picnix.plot_chunk_dist1d(axs[i], coord, rank, cdelx, colors="gray")
 
     fig.suptitle(rf"$t = {tt:6.2f}$")
     fig.savefig(outpath, dpi=120)
