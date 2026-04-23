@@ -28,13 +28,13 @@ DEFAULT_CASE_NAME = "twostream"
 
 
 from .twostream import CASE as TWOSTREAM_CASE
-from .weibel import CASE as WEIBEL_CASE
+from .weibel import CASES as WEIBEL_CASES
 
 
 CASES = {
     case.name: case
     for case in (
         TWOSTREAM_CASE,
-        WEIBEL_CASE,
+        *WEIBEL_CASES.values(),
     )
 }

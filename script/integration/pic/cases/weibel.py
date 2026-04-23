@@ -12,35 +12,45 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
 
 
-CASE = IntegrationCase(
-    name="weibel",
-    target="beam",
-    executable_relpath=Path("pic") / "example" / "beam" / "main.out",
-    base_config=REPO_ROOT / "pic" / "example" / "beam" / "weibel" / "config.toml",
-    golden_dir=SCRIPT_DIR / "golden" / "weibel",
-    run_dir=REPO_ROOT / "run-integration-pic" / "weibel",
-    Ns=4,
-    tmax=30.0,
-    nproc=8,
-    snapshot_times=(10.0, 20.0, 30.0),
-    config_overrides={
-        "application": {
-            "option": {"seed_type": "fixed"},
-        },
-        "parameter": {
-            "Nx": 32,
-            "Ny": 32,
-            "Cx": 4,
-            "Cy": 4,
-        },
+_SHARED_OVERRIDES = {
+    "parameter": {
+        "Nx": 32,
+        "Ny": 32,
+        "Cx": 4,
+        "Cy": 4,
     },
-    generate_plots=lambda case,
-    run_dir,
-    data_dir,
-    out_dir,
-    summary,
-    repo_root: generate_plots(case, data_dir, out_dir, summary, repo_root),
+}
+
+_PLOT_HOOK = (
+    lambda case, run_dir, data_dir, out_dir, summary, repo_root: generate_plots(
+        case, data_dir, out_dir, summary, repo_root
+    )
 )
+
+
+def _make_case(order: int) -> IntegrationCase:
+    return IntegrationCase(
+        name=f"weibel-order{order}",
+        target="beam",
+        executable_relpath=Path("pic") / "example" / "beam" / "main.out",
+        base_config=REPO_ROOT / "pic" / "example" / "beam" / "weibel" / "config.toml",
+        golden_dir=SCRIPT_DIR / "golden" / f"weibel-order{order}",
+        run_dir=REPO_ROOT / "run-integration-pic" / f"weibel-order{order}",
+        Ns=4,
+        tmax=30.0,
+        nproc=8,
+        snapshot_times=(10.0, 20.0, 30.0),
+        config_overrides={
+            "application": {
+                "option": {"seed_type": "fixed", "order": order},
+            },
+            **_SHARED_OVERRIDES,
+        },
+        generate_plots=_PLOT_HOOK,
+    )
+
+
+CASES = {f"weibel-order{order}": _make_case(order) for order in (1, 2, 3, 4)}
 
 
 def generate_plots(case, data_dir, out_dir, summary, repo_root):
