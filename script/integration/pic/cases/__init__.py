@@ -27,6 +27,7 @@ class IntegrationCase:
 DEFAULT_CASE_NAME = "twostream"
 
 
+from .shock import CASE as SHOCK_CASE
 from .twostream import CASE as TWOSTREAM_CASE
 from .weibel import CASES as WEIBEL_CASES
 
@@ -36,5 +37,6 @@ CASES = {
     for case in (
         TWOSTREAM_CASE,
         *WEIBEL_CASES.values(),
+        SHOCK_CASE,
     )
 }
