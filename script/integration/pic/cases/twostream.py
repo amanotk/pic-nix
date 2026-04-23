@@ -152,11 +152,11 @@ def _generate_snapshot(run, picnix, field_step, particle_step, outpath):
     me = 1.0
     mi = 1.0e2
     ebinx = (0, run.Nx, run.Nx + 1)
-    ebiny = (-30, +30, 61)
+    ebiny = (-30, +30, 31)
     ibinx = (0, run.Nx, run.Nx + 1)
-    ibiny = (-5, +5, 61)
+    ibiny = (-5, +5, 31)
     electron_range = (0.0, 20.0)
-    ion_range = (0.0, 50.0)
+    ion_range = (0.0, 70.0)
 
     fig = plt.figure(figsize=(6.4, 6.4), dpi=120)
     fig.subplots_adjust(

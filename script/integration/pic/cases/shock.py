@@ -67,9 +67,9 @@ def generate_plots(case, data_dir, out_dir, summary, repo_root):
         roi = 1.0 * mime
 
         ebinx = (0, run.Nx, run.Nx + 1)
-        ebiny = (-1.0, +1.0, 81)
+        ebiny = (-1.0, +1.0, 41)
         ibinx = (0, run.Nx, run.Nx + 1)
-        ibiny = (-0.2, +0.2, 81)
+        ibiny = (-0.2, +0.2, 41)
         xlim = (0, run.Nx * run.delh)
 
         for target_time in case.snapshot_times:
@@ -217,10 +217,15 @@ def _generate_snapshot(
     axs[1].set_ylabel(r"$B$")
     axs[1].set_ylim(-1, +10)
 
+    electron_range = (0, 1000)
+    ion_range = (0, 4000)
+
     fvxe = picnix.Histogram2D(up[0][:, 0], up[0][:, 3], ebinx, ebiny)
     xe, ye, ze = fvxe.pcolormesh_args()
     plt.sca(axs[2])
-    plt.pcolormesh(xe, ye, ze, shading="nearest")
+    plt.pcolormesh(
+        xe, ye, ze, shading="nearest", vmin=electron_range[0], vmax=electron_range[1]
+    )
     axs[2].set_ylabel(r"$v_x$")
     fmt = mpl.ticker.FormatStrFormatter("%4.0e")
     cax = fig.add_subplot(gridspec[2, 1])
@@ -229,7 +234,7 @@ def _generate_snapshot(
     fvxi = picnix.Histogram2D(up[1][:, 0], up[1][:, 3], ibinx, ibiny)
     xi, yi, zi = fvxi.pcolormesh_args()
     plt.sca(axs[3])
-    plt.pcolormesh(xi, yi, zi, shading="nearest")
+    plt.pcolormesh(xi, yi, zi, shading="nearest", vmin=ion_range[0], vmax=ion_range[1])
     axs[3].set_xlabel(r"$x$")
     axs[3].set_ylabel(r"$v_x$")
     cax = fig.add_subplot(gridspec[3, 1])
