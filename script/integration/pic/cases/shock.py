@@ -185,7 +185,7 @@ def _generate_snapshot(
     uf = field["uf"]
     um = field["um"]
     up = [particle["up00"], particle["up01"]]
-    tt = run.get_time_at("particle", particle_step)
+    tt = run.get_time_at("field", field_step)
 
     fig = plt.figure(figsize=(6.4, 6.4), dpi=120)
     fig.subplots_adjust(
