@@ -12,6 +12,12 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
 
 
+def _patch_diagnostic_intervals(config):
+    for diag in config.get("diagnostic", []):
+        if diag.get("name") == "particle":
+            diag["interval"] = 800
+
+
 CASE = IntegrationCase(
     name="shock",
     target="shock",
@@ -38,6 +44,7 @@ CASE = IntegrationCase(
             "mime": 16,
         },
     },
+    config_patch=_patch_diagnostic_intervals,
     generate_plots=lambda case,
     run_dir,
     data_dir,

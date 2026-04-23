@@ -379,6 +379,8 @@ def _materialize_case_config(case: IntegrationCase):
     with open(case.base_config, "r") as f:
         config = toml.load(f)
     _deep_update(config, case.config_overrides)
+    if case.config_patch is not None:
+        case.config_patch(config)
 
     output_path = case.run_dir / "config.toml"
     with open(output_path, "w") as f:

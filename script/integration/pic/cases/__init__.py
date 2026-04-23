@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 
 PlotHook = Callable[["IntegrationCase", Path, Path, Path, dict[str, Any], Path], None]
+ConfigPatchHook = Callable[[dict[str, Any]], None]
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class IntegrationCase:
     nproc: int
     snapshot_times: tuple[float, ...] = field(default_factory=tuple)
     config_overrides: dict[str, Any] = field(default_factory=dict)
+    config_patch: ConfigPatchHook | None = None
     generate_plots: PlotHook | None = None
 
 
