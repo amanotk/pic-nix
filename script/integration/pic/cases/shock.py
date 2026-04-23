@@ -48,19 +48,6 @@ CASE = IntegrationCase(
 
 
 def generate_plots(case, data_dir, out_dir, summary, repo_root):
-    mime = 16
-    roe = 1.0
-    roi = 1.0 * mime
-
-    _plot_energy_history(
-        summary,
-        out_dir / "energy_history.png",
-        ("electron", "ion"),
-        xlim=(0.0, case.tmax),
-        ylim=(1.0e-4, 2.0e0),
-    )
-    print(f"[plots] Wrote {out_dir / 'energy_history.png'}")
-
     try:
         picnix = _load_picnix(repo_root)
         profile_path = _get_profile_path(data_dir)
@@ -72,9 +59,12 @@ def generate_plots(case, data_dir, out_dir, summary, repo_root):
         field_steps = run.get_step("field")
         particle_steps = run.get_step("particle")
 
+        mime = run.config["parameter"]["mime"]
         sigma = run.config["parameter"]["sigma"]
         u0 = run.config["parameter"]["u0"]
         b0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
+        roe = 1.0
+        roi = 1.0 * mime
 
         ebinx = (0, run.Nx, run.Nx + 1)
         ebiny = (-1.0, +1.0, 81)
@@ -258,11 +248,6 @@ def _generate_snapshot(
     fig.suptitle(rf"$t = {tt:6.2f}$")
     fig.savefig(outpath, dpi=120)
     plt.close(fig)
-
-
-def _normalized(values, safe_total):
-    data = np.array(values) / safe_total
-    return np.clip(data, 1.0e-30, None)
 
 
 def _get_profile_path(data_dir):
