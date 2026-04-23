@@ -36,7 +36,7 @@ RUN_BASE = REPO_ROOT / "run-integration-pic"
 
 COMPILER_PROFILES = {
     "gcc": {
-        "build_dir": REPO_ROOT / "build-integration-pic-gcc",
+        "build_dir": RUN_BASE / "build-gcc",
         "cache": REPO_ROOT / "cmake" / "linux-gcc.cmake",
     },
 }
@@ -212,6 +212,7 @@ def analyze_run(run_dir, Ns):
         "final_energy_drift": float(drift),
         "Ns": Ns,
         "num_steps": n,
+        "particle_keys": data["particle_keys"],
     }
     for k in data["particle_keys"]:
         summary[k] = data[k]
@@ -381,7 +382,7 @@ def cmd_update_golden(args):
 
 def cmd_images(args):
     case_name = _resolve_case(args.case)
-    case = _get_case(case_name)
+    case = _get_case(case_name, args.compiler)
     run_dir = case["run_dir"]
 
     data_dir = run_dir / "data"
@@ -406,17 +407,47 @@ def cmd_images(args):
     time_arr = np.array(summary["time"])
 
     # -- energy history -------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(time_arr, np.array(summary["ene_e"]), label=r"$E^2/2$")
-    ax.plot(time_arr, np.array(summary["ene_b"]), label=r"$B^2/2$")
-    for ispec in range(summary["Ns"]):
-        k = f"ene_p{ispec:02d}"
-        ax.plot(time_arr, np.array(summary[k]), label=k)
-    ax.plot(time_arr, np.array(summary["total_energy"]), "k--", label="total")
-    ax.set_xlabel("time")
-    ax.set_ylabel("energy")
-    ax.legend(fontsize=8)
-    ax.set_title("Energy history")
+    fig, (ax_energy, ax_drift) = plt.subplots(
+        2,
+        1,
+        figsize=(8, 6),
+        sharex=True,
+        gridspec_kw={"height_ratios": [3, 2]},
+    )
+    total_energy = np.array(summary["total_energy"])
+    safe_total_energy = np.where(total_energy != 0.0, total_energy, np.nan)
+    ax_energy.plot(
+        time_arr, np.array(summary["ene_e"]) / safe_total_energy, label=r"$E^2/2$"
+    )
+    ax_energy.plot(
+        time_arr, np.array(summary["ene_b"]) / safe_total_energy, label=r"$B^2/2$"
+    )
+    ax_energy.plot(
+        time_arr, np.array(summary["ene_p00"]) / safe_total_energy, label="ele1"
+    )
+    ax_energy.plot(
+        time_arr, np.array(summary["ene_p01"]) / safe_total_energy, label="ele2"
+    )
+    ax_energy.plot(
+        time_arr, np.array(summary["ene_p02"]) / safe_total_energy, label="ion"
+    )
+    ax_energy.plot(time_arr, total_energy / safe_total_energy, "k--", label="total")
+    ax_energy.set_yscale("log")
+    ax_energy.set_ylabel("normalized energy")
+    ax_energy.legend(fontsize=8)
+    ax_energy.set_title("Energy history")
+    ax_energy.set_xlim(0.0, 30.0)
+    ax_energy.set_ylim(1.0e-4, 2.0e0)
+
+    initial_total = total_energy[0]
+    relative_drift = (total_energy - initial_total) / initial_total
+    ax_drift.plot(time_arr, relative_drift, color="k")
+    ax_drift.axhline(0.0, color="k", linewidth=0.8)
+    ax_drift.set_yscale("symlog", linthresh=1.0e-6)
+    ax_drift.set_xlabel("time")
+    ax_drift.set_ylabel("total energy drift")
+    ax_drift.set_xlim(0.0, 30.0)
+    ax_drift.set_ylim(-1.0e-4, 1.0e-4)
     fig.tight_layout()
     fig.savefig(out_dir / "energy_history.png", dpi=150)
     plt.close(fig)
@@ -595,6 +626,9 @@ def cmd_all(args):
     )
     cmd_compare(compare_args)
 
+    images_args = argparse.Namespace(case=case_name, compiler=args.compiler)
+    cmd_images(images_args)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -714,6 +748,12 @@ def main():
     p = sub.add_parser("images", help="Generate PNG images for manual review")
     p.add_argument(
         "case", nargs="?", default=None, help="Case name (default: twostream)"
+    )
+    p.add_argument(
+        "--compiler",
+        choices=sorted(COMPILER_PROFILES.keys()),
+        default="gcc",
+        help="Compiler profile (default: gcc)",
     )
 
     # -- all --
