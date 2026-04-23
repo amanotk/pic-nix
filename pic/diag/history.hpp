@@ -45,16 +45,6 @@ public:
       auto    chunk = static_cast<PicChunk*>(data.chunkvec[i].get());
 
       const auto dims = chunk->get_dims();
-      const auto bm   = chunk->get_boundary_margin();
-      const int  x0   = chunk->get_nb_rank(0, 0, -1) == MPI_PROC_NULL ? bm : 0;
-      const int  x1   = chunk->get_nb_rank(0, 0, +1) == MPI_PROC_NULL ? bm : 0;
-      const int  y0   = chunk->has_ydim() && chunk->get_nb_rank(0, -1, 0) == MPI_PROC_NULL ? bm : 0;
-      const int  y1   = chunk->has_ydim() && chunk->get_nb_rank(0, +1, 0) == MPI_PROC_NULL ? bm : 0;
-      const int  z0   = chunk->has_zdim() && chunk->get_nb_rank(-1, 0, 0) == MPI_PROC_NULL ? bm : 0;
-      const int  z1   = chunk->has_zdim() && chunk->get_nb_rank(+1, 0, 0) == MPI_PROC_NULL ? bm : 0;
-      const int  nx   = dims[2] - x0 - x1;
-      const int  ny   = chunk->has_ydim() ? dims[1] - y0 - y1 : 1;
-      const int  nz   = chunk->has_zdim() ? dims[0] - z0 - z1 : 1;
 
       chunk->get_diverror(div_e, div_b);
       chunk->get_energy(ene_e, ene_b, ene_p);
@@ -63,7 +53,8 @@ public:
       history[1] += div_b;
       history[2] += ene_e;
       history[3] += ene_b;
-      div_count_local += static_cast<int64>(nx) * static_cast<int64>(ny) * static_cast<int64>(nz);
+      div_count_local +=
+          static_cast<int64>(dims[0]) * static_cast<int64>(dims[1]) * static_cast<int64>(dims[2]);
       for (int is = 0; is < Ns; is++) {
         history[is + 4] += ene_p[is];
       }
