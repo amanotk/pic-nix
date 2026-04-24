@@ -3,8 +3,6 @@
 #define _CHUNKMAP_HPP_
 
 #include "nix.hpp"
-#include "sfc.hpp"
-#include "xtensorall.hpp"
 
 NIX_NAMESPACE_BEGIN
 
@@ -20,16 +18,12 @@ NIX_NAMESPACE_BEGIN
 class ChunkMap
 {
 protected:
-  using IntArray1D = xt::xtensor<int, 1>;
-  using IntArray2D = xt::xtensor<int, 2>;
-  using IntArray3D = xt::xtensor<int, 3>;
-
   int              size;           ///< number of total chunks
   int              dims[3];        ///< chunk dimension
   int              periodicity[3]; ///< periodicity in each direction
   std::vector<int> boundary;       ///< rank boundary
-  IntArray2D       coord;          ///< chunk ID to coordinate map
-  IntArray3D       chunkid;        ///< coordinate to chunk ID map
+  std::vector<int> coord;          ///< chunk ID to coordinate map (size * 3)
+  std::vector<int> chunkid;        ///< coordinate to chunk ID map (dims[0] * dims[1] * dims[2])
 
 public:
   /// @brief constructor

@@ -1,7 +1,74 @@
 // -*- C++ -*-
 #include "chunkmap.hpp"
 
+#include "sfc.hpp"
+
 NIX_NAMESPACE_BEGIN
+
+namespace
+{
+json chunkid_to_json(const std::vector<int>& chunkid, const int dims[3])
+{
+  json obj = json::array();
+
+  for (int iz = 0; iz < dims[0]; iz++) {
+    json plane = json::array();
+    for (int iy = 0; iy < dims[1]; iy++) {
+      json row = json::array();
+      for (int ix = 0; ix < dims[2]; ix++) {
+        row.push_back(chunkid[iz * dims[1] * dims[2] + iy * dims[2] + ix]);
+      }
+      plane.push_back(row);
+    }
+    obj.push_back(plane);
+  }
+
+  return obj;
+}
+
+json coord_to_json(const std::vector<int>& coord, int size)
+{
+  json obj = json::array();
+
+  for (int id = 0; id < size; id++) {
+    json row = json::array();
+    row.push_back(coord[id * 3 + 0]);
+    row.push_back(coord[id * 3 + 1]);
+    row.push_back(coord[id * 3 + 2]);
+    obj.push_back(row);
+  }
+
+  return obj;
+}
+
+std::vector<int> chunkid_from_json(const json& obj, const int dims[3])
+{
+  std::vector<int> chunkid(dims[0] * dims[1] * dims[2], 0);
+
+  for (int iz = 0; iz < dims[0]; iz++) {
+    for (int iy = 0; iy < dims[1]; iy++) {
+      for (int ix = 0; ix < dims[2]; ix++) {
+        chunkid[iz * dims[1] * dims[2] + iy * dims[2] + ix] = obj[iz][iy][ix].get<int>();
+      }
+    }
+  }
+
+  return chunkid;
+}
+
+std::vector<int> coord_from_json(const json& obj, int size)
+{
+  std::vector<int> coord(size * 3, 0);
+
+  for (int id = 0; id < size; id++) {
+    coord[id * 3 + 0] = obj[id][0].get<int>();
+    coord[id * 3 + 1] = obj[id][1].get<int>();
+    coord[id * 3 + 2] = obj[id][2].get<int>();
+  }
+
+  return coord;
+}
+} // namespace
 
 ChunkMap::ChunkMap(int Cz, int Cy, int Cx) : periodicity{1, 1, 1}
 {
@@ -10,21 +77,9 @@ ChunkMap::ChunkMap(int Cz, int Cy, int Cx) : periodicity{1, 1, 1}
   dims[1] = Cy;
   dims[2] = Cx;
 
-  // memory allocation
-  {
-    std::vector<size_t> dims1 = {static_cast<size_t>(size)};
-    std::vector<size_t> dims2 = {static_cast<size_t>(size), 3};
-    std::vector<size_t> dims3 = {static_cast<size_t>(Cz), static_cast<size_t>(Cy),
-                                 static_cast<size_t>(Cx)};
+  coord.assign(size * 3, 0);
+  chunkid.assign(size, 0);
 
-    coord.resize(dims2);
-    chunkid.resize(dims3);
-
-    coord.fill(0);
-    chunkid.fill(0);
-  }
-
-  // build mapping
   sfc::get_map3d(Cz, Cy, Cx, chunkid, coord);
 }
 
@@ -34,7 +89,7 @@ ChunkMap::ChunkMap(const int dims[3]) : ChunkMap(dims[0], dims[1], dims[2])
 
 bool ChunkMap::validate()
 {
-  return sfc::check_index(chunkid) & sfc::check_locality3d(coord);
+  return sfc::check_index(chunkid) & sfc::check_locality3d(coord, size);
 }
 
 bool ChunkMap::is_chunk_active(int id)
@@ -46,16 +101,13 @@ json ChunkMap::to_json()
 {
   json obj;
 
-  // meta data
   obj["size"]        = size;
   obj["ndim"]        = 3;
   obj["shape"]       = {dims[0], dims[1], dims[2]};
   obj["periodicity"] = {periodicity[0], periodicity[1], periodicity[2]};
-
-  // map
-  obj["chunkid"]  = chunkid;
-  obj["coord"]    = coord;
-  obj["boundary"] = boundary;
+  obj["chunkid"]     = chunkid_to_json(chunkid, dims);
+  obj["coord"]       = coord_to_json(coord, size);
+  obj["boundary"]    = boundary;
 
   return obj;
 }
@@ -66,7 +118,6 @@ void ChunkMap::from_json(json& obj)
     ERROR << tfm::format("Invalid input to ChunkMap::load_json");
   }
 
-  // meta data
   size           = obj["size"].get<int>();
   dims[0]        = obj["shape"][0].get<int>();
   dims[1]        = obj["shape"][1].get<int>();
@@ -75,9 +126,9 @@ void ChunkMap::from_json(json& obj)
   periodicity[1] = obj["periodicity"][1].get<int>();
   periodicity[2] = obj["periodicity"][2].get<int>();
 
-  // map
-  chunkid  = obj["chunkid"];
-  coord    = obj["coord"];
+  chunkid = chunkid_from_json(obj["chunkid"], dims);
+  coord   = coord_from_json(obj["coord"], size);
+
   boundary = obj["boundary"].get<std::vector<int>>();
 }
 
@@ -127,9 +178,9 @@ std::tuple<int, int, int> ChunkMap::get_coordinate(int id)
   int cz, cy, cx;
 
   if (id >= 0 && id < size) {
-    cx = coord(id, 0);
-    cy = coord(id, 1);
-    cz = coord(id, 2);
+    cx = coord[id * 3 + 0];
+    cy = coord[id * 3 + 1];
+    cz = coord[id * 3 + 2];
   } else {
     cz = -1;
     cy = -1;
@@ -142,11 +193,10 @@ std::tuple<int, int, int> ChunkMap::get_coordinate(int id)
 int ChunkMap::get_chunkid(int cz, int cy, int cx)
 {
   if ((cz >= 0 && cz < dims[0]) && (cy >= 0 && cy < dims[1]) && (cx >= 0 && cx < dims[2])) {
-    return chunkid(cz, cy, cx);
+    return chunkid[cz * dims[1] * dims[2] + cy * dims[2] + cx];
   } else {
     return -1;
   }
 }
 
 NIX_NAMESPACE_END
-
