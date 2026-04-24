@@ -1,0 +1,35 @@
+# Graphify/generated state
+graphify-out/
+.graphify/
+.graphify-scope/
+docs/graphify/
+
+# Agent/tooling config, not project architecture
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.opencode/
+.codex/
+.gemini/
+.cursor/
+
+# Build and cache output
+build*/
+.ruff_cache/
+__pycache__/
+*.o
+*.d
+*.a
+
+# Runtime/generated simulation output
+run-integration-pic/
+*.msgpack
+*.out
+*.data
+*.stdout
+*.stderr
+*.mp4
+*.png
+
+# Vendored code
+nix/thirdparty/
