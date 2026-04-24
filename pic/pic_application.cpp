@@ -14,8 +14,6 @@
 #include "nix/diag/load.hpp"
 #include "nix/diag/resource.hpp"
 
-#include <taskflow/taskflow.hpp>
-
 PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
 {
   nix::Dims3D dims = {ndims[0], ndims[1], ndims[2]};
@@ -49,13 +47,7 @@ void PicApplication::calculate_moment()
   if (curstep == momstep)
     return;
 
-  auto option = cfgparser->get_application()["option"];
-
-  if (option.contains("thread") == false || option["thread"] == "openmp") {
-    calculate_moment_openmp();
-  } else if (option["thread"] == "taskflow") {
-    calculate_moment_taskflow();
-  }
+  calculate_moment_openmp();
 
   // cache
   momstep = curstep;
@@ -229,17 +221,9 @@ void PicApplication::push()
   DEBUG2 << "push() start";
   float64 wclock1 = nix::wall_clock();
 
-  auto option = cfgparser->get_application()["option"];
-
-  if (option.contains("thread") == false || option["thread"] == "openmp") {
-    DEBUG2 << "push_openmp() start";
-    push_openmp();
-    DEBUG2 << "push_openmp() end";
-  } else if (option["thread"] == "taskflow") {
-    DEBUG2 << "push_taskflow() start";
-    push_taskflow();
-    DEBUG2 << "push_taskflow() end";
-  }
+  DEBUG2 << "push_openmp() start";
+  push_openmp();
+  DEBUG2 << "push_openmp() end";
 
   MPI_Barrier(MPI_COMM_WORLD);
 
@@ -346,198 +330,6 @@ void PicApplication::calculate_moment_openmp()
       chunk->set_boundary_unpack(BoundaryMom);
     }
   }
-}
-
-void PicApplication::push_taskflow()
-{
-  const float64 delt = cfgparser->get_delt();
-
-  tf::Executor executor(nix::get_max_threads());
-  tf::Taskflow taskflow;
-
-  // critical section if MPI_THREAD_MULTIPLE is not supported
-  tf::CriticalSection critical_section;
-
-  auto push1 = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto task = subflow.emplace([&]() {
-        chunk->reset_load();
-        chunk->push_bfd(0.5 * delt);
-        chunk->push_velocity(delt);
-        chunk->push_position(delt);
-        chunk->deposit_current(delt);
-
-        // packing for boundary exchange
-        chunk->set_boundary_pack(BoundaryCur);
-        chunk->set_boundary_pack(BoundaryParticle);
-
-        chunk->push_bfd(0.5 * delt);
-      });
-
-      // boundary exchange
-      auto bc_begin = subflow.emplace([&]() {
-        chunk->set_boundary_begin(BoundaryCur);
-        chunk->set_boundary_begin(BoundaryParticle);
-      });
-
-      // dependency
-      task.precede(bc_begin);
-
-      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
-        critical_section.add(bc_begin);
-      }
-    }
-  });
-
-  auto push2 = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto task = subflow.emplace([&]() {
-        chunk->push_efd(delt);
-        chunk->set_boundary_pack(BoundaryEmf);
-      });
-
-      // boundary exchange
-      auto bc_begin = subflow.emplace([&]() { chunk->set_boundary_begin(BoundaryEmf); });
-
-      // dependency
-      task.precede(bc_begin);
-
-      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
-        critical_section.add(bc_begin);
-      }
-    }
-  });
-
-  auto particle_bc_probe = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto start = subflow.emplace([&]() {});
-      auto probe =
-          subflow.emplace([&]() { return chunk->set_boundary_probe(BoundaryParticle, false); });
-      auto end = subflow.emplace([&]() {});
-
-      // dependency
-      start.precede(probe);
-      probe.precede(probe, end);
-
-      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
-        critical_section.add(probe);
-      }
-    }
-  });
-
-  auto particle_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto start = subflow.emplace([&]() {});
-      auto query =
-          subflow.emplace([&]() { return chunk->set_boundary_query(BoundaryParticle, 0); });
-      auto end    = subflow.emplace([&]() { chunk->set_boundary_end(BoundaryParticle); });
-      auto unpack = subflow.emplace([&]() { chunk->set_boundary_unpack(BoundaryParticle); });
-
-      // dependency
-      start.precede(query);
-      query.precede(query, end);
-      end.precede(unpack);
-
-      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
-        critical_section.add(query);
-        critical_section.add(end);
-      }
-    }
-  });
-
-  auto cur_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto start  = subflow.emplace([&]() {});
-      auto query  = subflow.emplace([&]() { return chunk->set_boundary_query(BoundaryCur, 0); });
-      auto end    = subflow.emplace([&]() { chunk->set_boundary_end(BoundaryCur); });
-      auto unpack = subflow.emplace([&]() { chunk->set_boundary_unpack(BoundaryCur); });
-
-      // dependency
-      start.precede(query);
-      query.precede(query, end);
-      end.precede(unpack);
-
-      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
-        critical_section.add(query);
-        critical_section.add(end);
-      }
-    }
-  });
-
-  auto emf_bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto start  = subflow.emplace([&]() {});
-      auto query  = subflow.emplace([&]() { return chunk->set_boundary_query(BoundaryEmf, 0); });
-      auto end    = subflow.emplace([&]() { chunk->set_boundary_end(BoundaryEmf); });
-      auto unpack = subflow.emplace([&]() { chunk->set_boundary_unpack(BoundaryEmf); });
-
-      // dependency
-      start.precede(query);
-      query.precede(query, end);
-      end.precede(unpack);
-
-      if (NIX_MPI_THREAD_LEVEL != MPI_THREAD_MULTIPLE) {
-        critical_section.add(query);
-        critical_section.add(end);
-      }
-    }
-  });
-
-  // dependency
-  push1.precede(cur_bc_end);
-  push1.precede(particle_bc_probe);
-  push2.succeed(cur_bc_end);
-  push2.precede(emf_bc_end);
-  particle_bc_probe.precede(particle_bc_end);
-
-  executor.run(taskflow).wait();
-}
-
-void PicApplication::calculate_moment_taskflow()
-{
-  tf::Executor executor(nix::get_max_threads());
-  tf::Taskflow taskflow;
-
-  auto deposit = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto local = subflow.emplace([&]() { chunk->deposit_moment(); });
-      auto begin = subflow.emplace([&]() {
-        chunk->set_boundary_pack(BoundaryMom);
-        chunk->set_boundary_begin(BoundaryMom);
-      });
-
-      local.precede(begin);
-    }
-  });
-
-  auto bc_end = taskflow.emplace([&](tf::Subflow& subflow) {
-    for (auto& basechunk : chunkvec) {
-      auto chunk = static_cast<PicChunk*>(basechunk.get());
-
-      auto local = subflow.emplace([&]() {
-        chunk->set_boundary_end(BoundaryMom);
-        chunk->set_boundary_unpack(BoundaryMom);
-      });
-    }
-  });
-
-  deposit.precede(bc_end);
-
-  executor.run(taskflow).wait();
 }
 
 void PicApplication::update_poisson_efield()

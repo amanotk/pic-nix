@@ -12,7 +12,7 @@ A separate repository for `nix` can be found [here](https://github.com/amanotk/n
 - [Post-processing](#post-processing)  
   - [Environment Variable](#environment-variable)  
   - [Python Script Dependencies](#python-script-dependencies)  
-  - [Plot](#plot)  
+  - [Quick Look](#quick-look)  
 
 ## Build
 
@@ -123,9 +123,9 @@ Or with `uv` (may require `--system` depending on your Python setup):
 $ uv pip install -r script/requirements.txt
 ```  
 
-### Plot
+### Quick Look
 After finishing the simulation, you can run the following command in the same directory:
 ```
-$ python batch.py data/profile.msgpack
+$ python quicklook.py data/profile.msgpack
 ```
-You will now see image files `twosteam-XXXXXXXX.png` for each snapshot and `twostream.mp4`, which is a movie file encoded by using `ffmpeg`.
+You will now see image files `twostream-XXXXXXXX.png` for each snapshot and `twostream.mp4`, which is a movie file encoded by using `ffmpeg`.

@@ -32,7 +32,7 @@ class Run(picnix.Run):
         um = field["um"]
         # particle
         particle = self.read_at("particle", step)
-        up = [particle["up00"], particle["up01"], particle["up02"]]
+        up = [particle["up00"], particle["up01"]]
         tt = self.get_time_at("particle", step)
 
         binx = [0] * 3
@@ -47,8 +47,9 @@ class Run(picnix.Run):
             xlim = kwargs["xlim"]
             ylim0 = kwargs.get("ylim0", None)
             ylim1 = kwargs.get("ylim1", None)
-            me = kwargs["me"]
-            mi = kwargs["mi"]
+            roe = kwargs["roe"]
+            roi = kwargs["roi"]
+            b0 = kwargs["b0"]
         except Exception as e:
             print("Inappropriate keyword arguments")
             raise e
@@ -63,37 +64,38 @@ class Run(picnix.Run):
             hspace=0.25,
             wspace=0.02,
         )
-        gridspec = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1], width_ratios=[50, 1])
+        gridspec = fig.add_gridspec(
+            4, 2, height_ratios=[1, 1, 1, 1], width_ratios=[50, 1]
+        )
         axs = [0] * 4
         for i in range(4):
             axs[i] = fig.add_subplot(gridspec[i, 0])
 
         ## density
-        ne = (um[..., 0, 0] + um[..., 1, 0]).mean(axis=(0, 1)) / me
-        ni = um[..., 2, 0].mean(axis=(0, 1)) / mi
+        ne = um[..., 0, 0].mean(axis=(0, 1)) / roe
+        ni = um[..., 1, 0].mean(axis=(0, 1)) / roi
         plt.sca(axs[0])
-        plt.plot(xc, ne, "b-")
-        plt.plot(xc, ni, "r-")
+        plt.plot(xc, ne, "b-", lw=1.0)
+        plt.plot(xc, ni, "r-", lw=1.0)
         axs[0].set_ylabel(r"$N$")
         if ylim0 is not None:
             axs[0].set_ylim(ylim0)
 
-        ## electric field
-        ex = uf[..., 0].mean(axis=(0, 1))
+        ## magnetic field
+        bx = uf[..., 3].mean(axis=(0, 1)) / b0
+        by = uf[..., 4].mean(axis=(0, 1)) / b0
+        bz = uf[..., 5].mean(axis=(0, 1)) / b0
         plt.sca(axs[1])
-        plt.plot(xc, ex, "k-")
-        axs[1].set_ylabel(r"$E_x$")
+        plt.plot(xc, bx, "r-", lw=1.0)
+        plt.plot(xc, by, "g-", lw=1.0)
+        plt.plot(xc, bz, "b-", lw=1.0)
+        axs[1].set_ylabel(r"$B$")
         if ylim1 is not None:
             axs[1].set_ylim(ylim1)
 
         ## electron phase space
-        fvx0 = picnix.Histogram2D(up[0][:, 0], up[0][:, 3], binx[0], biny[0])
-        fvx1 = picnix.Histogram2D(up[1][:, 0], up[1][:, 3], binx[1], biny[1])
-        x0, y0, z0 = fvx0.pcolormesh_args()
-        x1, y1, z1 = fvx1.pcolormesh_args()
-        Xe = x0
-        Ye = y0
-        Ze = z0 + z1
+        fvxe = picnix.Histogram2D(up[0][:, 0], up[0][:, 3], binx[0], biny[0])
+        Xe, Ye, Ze = fvxe.pcolormesh_args()
         plt.sca(axs[2])
         plt.pcolormesh(Xe, Ye, Ze, shading="nearest")
         axs[2].set_ylabel(r"$v_x$")
@@ -103,8 +105,8 @@ class Run(picnix.Run):
         plt.colorbar(cax=cax, format=fmt, label=r"$f_e(x, v_x)$")
 
         ## ion phase space
-        fvx2 = picnix.Histogram2D(up[2][:, 0], up[2][:, 3], binx[2], biny[2])
-        Xi, Yi, Zi = fvx2.pcolormesh_args()
+        fvxi = picnix.Histogram2D(up[1][:, 0], up[1][:, 3], binx[2], biny[2])
+        Xi, Yi, Zi = fvxi.pcolormesh_args()
         plt.sca(axs[3])
         plt.pcolormesh(Xi, Yi, Zi, shading="nearest")
         axs[3].set_xlabel(r"x")
@@ -117,11 +119,12 @@ class Run(picnix.Run):
         ## appearance
         for i in range(4):
             axs[i].set_xlim(xlim)
+        fig.align_ylabels(axs)
 
         if self.plot_chunk_boundary:
             coord = np.array(self.chunkmap["coord"])
             rank = self.get_chunk_rank(step)
-            cdelx = self.delh * self.Nx // self.Cx
+            cdelx = self.delh * (self.Nx // self.Cx)
             for i in range(4):
                 picnix.plot_chunk_dist1d(axs[i], coord, rank, cdelx, colors="gray")
 
@@ -133,26 +136,29 @@ class Run(picnix.Run):
 def doit_job(profile, prefix, fps, boundary, cleanup):
     run = Run(profile, boundary)
 
+    mime = run.config["parameter"]["mime"]
+    sigma = run.config["parameter"]["sigma"]
+    u0 = run.config["parameter"]["u0"]
+
+    roe = 1.0
+    roi = 1.0 * mime
+    b0 = np.sqrt(sigma) / np.sqrt(1 + u0**2)
+
     # setup plot
     ebinx = (0, run.Nx, run.Nx + 1)
     ibinx = (0, run.Nx, run.Nx + 1)
-    ebiny = (-30, +30, 61)
-    ibiny = (-5, +5, 61)
+    ebiny = (-1.0, +1.0, 81)
+    ibiny = (-0.2, +0.2, 81)
     kwargs = dict(
         ele=dict(binx=ebinx, biny=ebiny),
         ion=dict(binx=ibinx, biny=ibiny),
         xlim=(0, run.Nx * run.delh),
-        ylim0=(0.5, 2.5),
-        ylim1=(-10, +10),
-        me=1.0e0,
-        mi=1.0e2,
+        ylim0=(0.5, 6.5),
+        ylim1=(-1, +10),
+        roe=roe,
+        roi=roi,
+        b0=b0,
     )
-
-    # check field and particle snapshot time
-    time1 = run.get_time("field")
-    time2 = run.get_time("particle")
-    if time1.size != time2.size or np.allclose(time1, time2) == False:
-        raise ValueError("snapshots of field and particle do not match")
 
     # for all snapshots
     for step in run.get_step("particle"):
@@ -172,7 +178,7 @@ if __name__ == "__main__":
         "-p",
         "--prefix",
         type=str,
-        default="twostream",
+        default="shock",
         help="Prefix used for output image and movie files",
     )
     parser.add_argument(
