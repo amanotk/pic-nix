@@ -1,26 +1,29 @@
 // -*- C++ -*-
-#ifndef _RESOURCE_DIAG_HPP_
-#define _RESOURCE_DIAG_HPP_
+#ifndef _DIAG_RESOURCE_HPP_
+#define _DIAG_RESOURCE_HPP_
 
-#include "pic_diag.hpp"
+#include "diag.hpp"
+#include "nixio.hpp"
 
-///
-/// @brief Diagnostic for resource usage
-///
-class ResourceDiag : public PicDiag
+NIX_NAMESPACE_BEGIN
+
+template <typename BaseDiag>
+class ResourceDiag : public BaseDiag
 {
 public:
+  using data_type    = typename BaseDiag::data_type;
+  using PtrInterface = typename BaseDiag::PtrInterface;
+
   static constexpr const char* diag_name = "resource";
 
-public:
   // constructor
-  ResourceDiag(PtrInterface interface) : PicDiag(diag_name, interface)
+  ResourceDiag(PtrInterface interface) : BaseDiag(diag_name, interface)
   {
   }
 
   void operator()(json& config) override
   {
-    auto data = interface->get_data();
+    auto data = this->interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -62,35 +65,35 @@ public:
       // chunk
       {
         int sum = 0;
-        MPI_Reduce(&local_chunk, &sum, 1, MPI_INT, MPI_SUM, 0, info->intra_comm);
+        MPI_Reduce(&local_chunk, &sum, 1, MPI_INT, MPI_SUM, 0, this->info->intra_comm);
 
-        if (info->intra_rank == 0) {
-          node_chunk.resize(info->inter_size, 0);
-          MPI_Gather(&sum, 1, MPI_INT, node_chunk.data(), 1, MPI_INT, 0, info->inter_comm);
+        if (this->info->intra_rank == 0) {
+          node_chunk.resize(this->info->inter_size, 0);
+          MPI_Gather(&sum, 1, MPI_INT, node_chunk.data(), 1, MPI_INT, 0, this->info->inter_comm);
         }
       }
 
       // memory
       {
         float64 sum = 0;
-        MPI_Reduce(&local_memory, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, info->intra_comm);
+        MPI_Reduce(&local_memory, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, this->info->intra_comm);
 
-        if (info->intra_rank == 0) {
-          node_memory.resize(info->inter_size, 0);
+        if (this->info->intra_rank == 0) {
+          node_memory.resize(this->info->inter_size, 0);
           MPI_Gather(&sum, 1, MPI_FLOAT64_T, node_memory.data(), 1, MPI_FLOAT64_T, 0,
-                     info->inter_comm);
+                     this->info->inter_comm);
         }
       }
 
       // load
       {
         float64 sum = 0;
-        MPI_Reduce(&local_load, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, info->intra_comm);
+        MPI_Reduce(&local_load, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, this->info->intra_comm);
 
-        if (info->intra_rank == 0) {
-          node_load.resize(info->inter_size, 0);
+        if (this->info->intra_rank == 0) {
+          node_load.resize(this->info->inter_size, 0);
           MPI_Gather(&sum, 1, MPI_FLOAT64_T, node_load.data(), 1, MPI_FLOAT64_T, 0,
-                     info->inter_comm);
+                     this->info->inter_comm);
           // normalize
           std::for_each(node_load.begin(), node_load.end(), [=](auto& x) { x /= total_load; });
         }
@@ -224,12 +227,12 @@ public:
   }
 
   template <typename T>
-  nix::json statistics(std::vector<T>& data)
+  json statistics(std::vector<T>& data)
   {
     // sort
     std::sort(data.begin(), data.end());
 
-    nix::json stat = {};
+    json stat      = {};
     stat["min"]    = data.front();
     stat["max"]    = data.back();
     stat["mean"]   = std::accumulate(data.begin(), data.end(), 0.0) / data.size();
@@ -241,5 +244,7 @@ public:
     return stat;
   }
 };
+
+NIX_NAMESPACE_END
 
 #endif

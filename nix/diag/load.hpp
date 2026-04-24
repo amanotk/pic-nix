@@ -1,22 +1,24 @@
 // -*- C++ -*-
-#ifndef _LOAD_DIAG_HPP_
-#define _LOAD_DIAG_HPP_
+#ifndef _DIAG_LOAD_HPP_
+#define _DIAG_LOAD_HPP_
 
-#include "parallel.hpp"
+#include "chunk.hpp"
+#include "diag.hpp"
+#include "diag/parallel.hpp"
+#include "nixio.hpp"
 
-///
-/// @brief Diagnostic for computational work load
-///
-class LoadDiag : public ParallelDiag
+NIX_NAMESPACE_BEGIN
+
+template <typename BaseDiag, typename Packer>
+class LoadDiag : public ParallelDiag<BaseDiag, Packer>
 {
-public:
-  static constexpr const char* diag_name = "load";
-
 protected:
   // data packer for load
-  class LoadPacker : public PicPacker
+  class LoadPacker : public Packer
   {
   public:
+    using chunk_data_type = typename Packer::chunk_data_type;
+
     virtual size_t operator()(chunk_data_type data, uint8_t* buffer, int address) override
     {
       auto& load = data.load;
@@ -36,12 +38,14 @@ protected:
   };
 
   // data packer for rank
-  class RankPacker : public PicPacker
+  class RankPacker : public Packer
   {
   private:
     int thisrank;
 
   public:
+    using chunk_data_type = typename Packer::chunk_data_type;
+
     RankPacker(int rank) : thisrank(rank)
     {
     }
@@ -64,14 +68,15 @@ protected:
 
 public:
   /// constructor
-  LoadDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
+  LoadDiag(typename BaseDiag::PtrInterface interface)
+      : ParallelDiag<BaseDiag, Packer>(diag_name, interface)
   {
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-    auto data = interface->get_data();
+    auto data = this->interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
@@ -93,15 +98,21 @@ public:
       // data
       auto   packer = LoadPacker();
       size_t disp0  = disp;
-      size_t size   = NumLoadMode * sizeof(float64);
       size_t nbyte  = this->queue(packer, data, disp);
-      int    nc     = static_cast<int>(nbyte / size);
+
+      // determine load vector size from first chunk
+      size_t load_size = 0;
+      if (data.chunkvec.size() > 0) {
+        load_size = data.chunkvec[0]->get_load().size();
+      }
+      size_t size = load_size * sizeof(float64);
+      int    nc   = static_cast<int>(nbyte / size);
 
       // metadata
       const char name[]  = "load";
       const char desc[]  = "computational work load";
       int        ndim    = 2;
-      int        dims[2] = {nc, NumLoadMode};
+      int        dims[2] = {nc, static_cast<int>(load_size)};
       nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 
@@ -154,6 +165,10 @@ public:
 
     MPI_Barrier(MPI_COMM_WORLD);
   }
+
+  static constexpr const char* diag_name = "load";
 };
+
+NIX_NAMESPACE_END
 
 #endif

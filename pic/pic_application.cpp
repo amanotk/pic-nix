@@ -7,10 +7,11 @@
 
 #include "diag/field.hpp"
 #include "diag/history.hpp"
-#include "diag/load.hpp"
 #include "diag/particle.hpp"
-#include "diag/resource.hpp"
 #include "diag/tracer.hpp"
+
+#include "nix/diag/load.hpp"
+#include "nix/diag/resource.hpp"
 
 #include <taskflow/taskflow.hpp>
 
@@ -103,8 +104,8 @@ void PicApplication::initialize_diagnostic()
 
   auto interface = std::static_pointer_cast<PicApplicationInterface>(get_interface());
   diagvec.push_back(std::make_unique<HistoryDiag>(interface));
-  diagvec.push_back(std::make_unique<ResourceDiag>(interface));
-  diagvec.push_back(std::make_unique<LoadDiag>(interface));
+  diagvec.push_back(std::make_unique<nix::ResourceDiag<PicDiag>>(interface));
+  diagvec.push_back(std::make_unique<nix::LoadDiag<PicDiag, PicPacker>>(interface));
   diagvec.push_back(std::make_unique<FieldDiag>(interface));
   diagvec.push_back(std::make_unique<ParticleDiag>(interface));
   diagvec.push_back(std::make_unique<PickupTracerDiag>(interface));

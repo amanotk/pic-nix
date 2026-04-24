@@ -7,6 +7,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
 set(INCLUDE_DIRS
 	${CMAKE_BINARY_DIR}/nix
 	${CMAKE_BINARY_DIR}/nix/thirdparty
+	${CMAKE_CURRENT_SOURCE_DIR}/..
 	)
 set(LIBRARY_DIRS
 	${CMAKE_BINARY_DIR}/nix
@@ -34,6 +35,7 @@ set(SERIAL_EXECS
 	test_cfgparser
 	test_xtensor_halo3d
 	test_xtensor_packer3d
+	test_diag_resource
 	)
 
 add_library(obj_serial OBJECT test_serial.cpp)
