@@ -1,11 +1,11 @@
 // -*- C++ -*-
-#ifndef _DIAG_PARALLEL_HPP_
-#define _DIAG_PARALLEL_HPP_
+#ifndef _CHUNK_WRITER_HPP_
+#define _CHUNK_WRITER_HPP_
 
 #include "buffer.hpp"
 #include "chunk.hpp"
 #include "diag.hpp"
-#include "diag/handler.hpp"
+#include "diag/io_handler.hpp"
 
 NIX_NAMESPACE_BEGIN
 
@@ -19,11 +19,11 @@ NIX_NAMESPACE_BEGIN
 /// Modules may use adapters to forward to internal data packers when needed.
 ///
 template <typename BaseDiag, typename Packer>
-class ParallelDiag : public BaseDiag
+class ChunkDiagWriter : public BaseDiag
 {
 protected:
-  std::unique_ptr<DiagHandler> handler;
-  std::vector<Buffer>          buffer;
+  std::unique_ptr<DiagIoHandler> handler;
+  std::vector<Buffer>            buffer;
 
   using data_type  = typename BaseDiag::data_type;
   using chunk_type = typename BaseDiag::chunk_type;
@@ -51,13 +51,13 @@ protected:
 
 public:
   // constructor
-  ParallelDiag(std::string name, typename BaseDiag::PtrInterface interface)
+  ChunkDiagWriter(std::string name, typename BaseDiag::PtrInterface interface)
       : BaseDiag(name, interface)
   {
     if (BaseDiag::info->iomode == "mpiio") {
-      handler = std::make_unique<MpiioDiagHandler>(BaseDiag::info);
+      handler = std::make_unique<MpiioDiagIoHandler>(BaseDiag::info);
     } else if (BaseDiag::info->iomode == "posix") {
-      handler = std::make_unique<PosixDiagHandler>(BaseDiag::info);
+      handler = std::make_unique<PosixDiagIoHandler>(BaseDiag::info);
     }
   }
 

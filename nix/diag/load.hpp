@@ -4,14 +4,14 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "diag/chunk_writer.hpp"
 #include "diag/metadata.hpp"
-#include "diag/parallel.hpp"
 #include "nixio.hpp"
 
 NIX_NAMESPACE_BEGIN
 
 template <typename BaseDiag, typename Packer>
-class LoadDiag : public ParallelDiag<BaseDiag, Packer>
+class LoadDiag : public ChunkDiagWriter<BaseDiag, Packer>
 {
 protected:
   // data packer for load
@@ -70,7 +70,7 @@ protected:
 public:
   /// constructor
   LoadDiag(typename BaseDiag::PtrInterface interface)
-      : ParallelDiag<BaseDiag, Packer>(diag_name, interface)
+      : ChunkDiagWriter<BaseDiag, Packer>(diag_name, interface)
   {
   }
 

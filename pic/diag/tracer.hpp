@@ -4,7 +4,7 @@
 
 #include "nix/random.hpp"
 
-#include "parallel.hpp"
+#include "chunk_writer.hpp"
 
 ///
 /// @brief Diagnostic for picking up tracer
@@ -97,7 +97,7 @@ public:
 ///
 /// @brief Diagnostic for tracer
 ///
-class TracerDiag : public ParallelDiag
+class TracerDiag : public PicChunkDiagWriter
 {
 public:
   static constexpr const char* diag_name = "tracer";
@@ -123,7 +123,7 @@ protected:
 
 public:
   // constructor
-  TracerDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
+  TracerDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 

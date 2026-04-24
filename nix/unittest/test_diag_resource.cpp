@@ -1,8 +1,8 @@
 // -*- C++ -*-
 
-#include "diag/handler.hpp"
+#include "diag/chunk_writer.hpp"
+#include "diag/io_handler.hpp"
 #include "diag/load.hpp"
-#include "diag/parallel.hpp"
 #include "diag/resource.hpp"
 #include "nix.hpp"
 
@@ -109,20 +109,20 @@ TEST_CASE("diagnostic trigger helpers are available from nix::Diag")
 
 TEST_CASE("moved diagnostics have module-facing template shapes")
 {
-  using ResourceDiagType = ResourceDiag<MockResourceDiagBase>;
-  using ParallelDiagType = ParallelDiag<MockResourceDiagBase, MockPacker>;
-  using LoadDiagType     = LoadDiag<MockResourceDiagBase, MockPacker>;
+  using ResourceDiagType    = ResourceDiag<MockResourceDiagBase>;
+  using ChunkDiagWriterType = ChunkDiagWriter<MockResourceDiagBase, MockPacker>;
+  using LoadDiagType        = LoadDiag<MockResourceDiagBase, MockPacker>;
 
   REQUIRE(std::is_base_of_v<MockResourceDiagBase, ResourceDiagType>);
-  REQUIRE(std::is_base_of_v<MockResourceDiagBase, ParallelDiagType>);
-  REQUIRE(std::is_base_of_v<ParallelDiagType, LoadDiagType>);
+  REQUIRE(std::is_base_of_v<MockResourceDiagBase, ChunkDiagWriterType>);
+  REQUIRE(std::is_base_of_v<ChunkDiagWriterType, LoadDiagType>);
   REQUIRE(std::is_constructible_v<ResourceDiagType, MockResourceDiagBase::PtrInterface>);
   REQUIRE(std::is_constructible_v<LoadDiagType, MockResourceDiagBase::PtrInterface>);
 }
 
 TEST_CASE("diagnostic handlers expose concrete backends")
 {
-  REQUIRE(std::is_abstract_v<DiagHandler>);
-  REQUIRE(std::is_base_of_v<DiagHandler, MpiioDiagHandler>);
-  REQUIRE(std::is_base_of_v<DiagHandler, PosixDiagHandler>);
+  REQUIRE(std::is_abstract_v<DiagIoHandler>);
+  REQUIRE(std::is_base_of_v<DiagIoHandler, MpiioDiagIoHandler>);
+  REQUIRE(std::is_base_of_v<DiagIoHandler, PosixDiagIoHandler>);
 }

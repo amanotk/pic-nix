@@ -2,12 +2,12 @@
 #ifndef _PARTICLE_DIAG_HPP_
 #define _PARTICLE_DIAG_HPP_
 
-#include "parallel.hpp"
+#include "chunk_writer.hpp"
 
 ///
 /// @brief Diagnostic for particle
 ///
-class ParticleDiag : public ParallelDiag
+class ParticleDiag : public PicChunkDiagWriter
 {
 public:
   static constexpr const char* diag_name = "particle";
@@ -55,7 +55,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
+  ParticleDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 

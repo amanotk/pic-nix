@@ -1,23 +1,26 @@
 // -*- C++ -*-
-#ifndef _DIAG_HANDLER_HPP_
-#define _DIAG_HANDLER_HPP_
+#ifndef _IO_HANDLER_HPP_
+#define _IO_HANDLER_HPP_
 
-#include "pic.hpp"
-#include "pic_diag.hpp"
+#include "buffer.hpp"
+#include "diag.hpp"
+#include "nixio.hpp"
 
-class PicDiagHandler
+NIX_NAMESPACE_BEGIN
+
+class DiagIoHandler
 {
 protected:
-  using info_type = PicDiag::info_type;
+  using info_type = Diag::info_type;
 
   std::shared_ptr<info_type> info;
 
 public:
-  PicDiagHandler(std::shared_ptr<info_type> info) : info(info)
+  DiagIoHandler(std::shared_ptr<info_type> info) : info(info)
   {
   }
 
-  virtual ~PicDiagHandler()
+  virtual ~DiagIoHandler()
   {
   }
 
@@ -35,10 +38,10 @@ public:
 
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) = 0;
 
-  virtual size_t queue(int index, nix::Buffer& buffer, size_t& disp) = 0;
+  virtual size_t write(int index, Buffer& buffer, size_t& disp) = 0;
 };
 
-class MpiioHandler : public PicDiagHandler
+class MpiioDiagIoHandler : public DiagIoHandler
 {
 protected:
   MPI_File                 filehandle;
@@ -46,7 +49,7 @@ protected:
   std::vector<MPI_Request> request;
 
 public:
-  MpiioHandler(std::shared_ptr<info_type> info) : PicDiagHandler(info), is_opened(false)
+  MpiioDiagIoHandler(std::shared_ptr<info_type> info) : DiagIoHandler(info), is_opened(false)
   {
   }
 
@@ -106,7 +109,7 @@ public:
     return std::vector<int>({global_id_min, global_id_max});
   }
 
-  virtual size_t queue(int index, nix::Buffer& buffer, size_t& disp) override
+  virtual size_t write(int index, Buffer& buffer, size_t& disp) override
   {
     if (request.size() <= index) {
       request.resize(index + 1, MPI_REQUEST_NULL);
@@ -118,13 +121,13 @@ public:
   }
 };
 
-class PosixHandler : public PicDiagHandler
+class PosixDiagIoHandler : public DiagIoHandler
 {
 protected:
   std::ofstream file;
 
 public:
-  PosixHandler(std::shared_ptr<info_type> info) : PicDiagHandler(info)
+  PosixDiagIoHandler(std::shared_ptr<info_type> info) : DiagIoHandler(info)
   {
   }
 
@@ -185,9 +188,9 @@ public:
     return std::vector<int>({node_id_min, node_id_max});
   }
 
-  virtual size_t queue(int index, nix::Buffer& buffer, size_t& disp) override
+  virtual size_t write(int index, Buffer& buffer, size_t& disp) override
   {
-    nix::Buffer      totbuf;
+    Buffer           totbuf;
     int              totcnt  = 0;
     int              sendcnt = static_cast<int>(buffer.size);
     std::vector<int> recvcnt(info->intra_size + 1, 0);
@@ -212,5 +215,7 @@ public:
     return totcnt;
   }
 };
+
+NIX_NAMESPACE_END
 
 #endif

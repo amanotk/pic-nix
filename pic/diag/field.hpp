@@ -2,12 +2,12 @@
 #ifndef _FIELD_DIAG_HPP_
 #define _FIELD_DIAG_HPP_
 
-#include "parallel.hpp"
+#include "chunk_writer.hpp"
 
 ///
 /// @brief Diagnostic for field
 ///
-class FieldDiag : public ParallelDiag
+class FieldDiag : public PicChunkDiagWriter
 {
 public:
   static constexpr const char* diag_name = "field";
@@ -57,7 +57,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
+  FieldDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 
