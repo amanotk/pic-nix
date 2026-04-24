@@ -9,6 +9,7 @@
 #include "diag/history.hpp"
 #include "diag/particle.hpp"
 #include "diag/tracer.hpp"
+#include "diag/tracer_pickup.hpp"
 
 #include "nix/diag/load.hpp"
 #include "nix/diag/resource.hpp"
@@ -108,7 +109,7 @@ void PicApplication::initialize_diagnostic()
   diagvec.push_back(std::make_unique<nix::LoadDiag<PicDiag, PicPacker>>(interface));
   diagvec.push_back(std::make_unique<FieldDiag>(interface));
   diagvec.push_back(std::make_unique<ParticleDiag>(interface));
-  diagvec.push_back(std::make_unique<PickupTracerDiag>(interface));
+  diagvec.push_back(std::make_unique<TracerPickupDiag>(interface));
   diagvec.push_back(std::make_unique<TracerDiag>(interface));
 }
 
