@@ -209,27 +209,44 @@ public:
   template <typename T>
   T percentile(std::vector<T>& data, float64 p, bool is_sorted)
   {
-    int     size  = data.size();
-    int     index = p * (size - 1);
-    float64 frac  = p * (size - 1) - index;
+    int size = data.size();
+
+    if (size == 0) {
+      return static_cast<T>(0);
+    }
+    if (size == 1) {
+      return data[0];
+    }
 
     if (is_sorted == false) {
       std::sort(data.begin(), data.end());
     }
 
-    if (index >= 0 && index < size - 1) {
-      // linear interpolation
+    int     index = p * (size - 1);
+    float64 frac  = p * (size - 1) - index;
+
+    if (index < size - 1) {
       return data[index] * (1 - frac) + data[index + 1] * frac;
     } else {
-      // error
-      return -1;
+      return data.back();
     }
   }
 
   template <typename T>
   json statistics(std::vector<T>& data)
   {
-    // sort
+    if (data.empty()) {
+      json stat      = {};
+      stat["min"]    = static_cast<T>(0);
+      stat["max"]    = static_cast<T>(0);
+      stat["mean"]   = 0.0;
+      stat["quant1"] = static_cast<T>(0);
+      stat["quant2"] = static_cast<T>(0);
+      stat["quant3"] = static_cast<T>(0);
+      stat["size"]   = 0;
+      return stat;
+    }
+
     std::sort(data.begin(), data.end());
 
     json stat      = {};

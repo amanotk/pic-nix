@@ -116,10 +116,8 @@ public:
       if (load_size > 0) {
         size_t size = load_size * sizeof(float64);
         dims[0]     = static_cast<int>(nbyte / size);
-        nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
-      } else {
-        nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
       }
+      nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 
     //
