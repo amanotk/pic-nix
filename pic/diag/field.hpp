@@ -147,7 +147,7 @@ public:
       auto   packer = FieldPacker(decimate);
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * 6 * sizeof(float64);
-      size_t nbyte  = this->queue(packer, data, disp);
+      size_t nbyte  = this->write_packed_chunks(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata
@@ -167,7 +167,7 @@ public:
       auto   packer = MomentPacker(decimate);
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * Ns * 14 * sizeof(float64);
-      size_t nbyte  = this->queue(packer, data, disp);
+      size_t nbyte  = this->write_packed_chunks(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata

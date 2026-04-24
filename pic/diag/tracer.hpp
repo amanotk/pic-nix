@@ -151,7 +151,7 @@ public:
       int    seed    = data.thisrank;
       auto   packer  = TracerPacker(species, seed);
       size_t disp0   = disp;
-      size_t nbyte   = this->queue(packer, data, disp);
+      size_t nbyte   = this->write_packed_chunks(packer, data, disp);
 
       // meta data
       {

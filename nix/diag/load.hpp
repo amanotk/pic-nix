@@ -4,6 +4,7 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "diag/metadata.hpp"
 #include "diag/parallel.hpp"
 #include "nixio.hpp"
 
@@ -98,22 +99,27 @@ public:
       // data
       auto   packer = LoadPacker();
       size_t disp0  = disp;
-      size_t nbyte  = this->queue(packer, data, disp);
+      size_t nbyte  = this->write_packed_chunks(packer, data, disp);
 
       // determine load vector size from first chunk
       size_t load_size = 0;
       if (data.chunkvec.size() > 0) {
         load_size = data.chunkvec[0]->get_load().size();
       }
-      size_t size = load_size * sizeof(float64);
-      int    nc   = static_cast<int>(nbyte / size);
 
       // metadata
       const char name[]  = "load";
       const char desc[]  = "computational work load";
       int        ndim    = 2;
-      int        dims[2] = {nc, static_cast<int>(load_size)};
-      nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
+      int        dims[2] = {0, static_cast<int>(load_size)};
+
+      if (load_size > 0) {
+        size_t size = load_size * sizeof(float64);
+        dims[0]     = static_cast<int>(nbyte / size);
+        nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
+      } else {
+        nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
+      }
     }
 
     //
@@ -124,7 +130,7 @@ public:
       auto   packer = RankPacker(data.thisrank);
       size_t disp0  = disp;
       size_t size   = sizeof(int);
-      size_t nbyte  = this->queue(packer, data, disp);
+      size_t nbyte  = this->write_packed_chunks(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata
@@ -148,12 +154,7 @@ public:
       json root;
 
       // meta data
-      root["meta"] = {{"endian", nix::get_endian_flag()},
-                      {"rawfile", fn_data},
-                      {"layout", nix::ARRAY_LAYOUT},
-                      {"time", data.curtime},
-                      {"step", data.curstep},
-                      {"chunk_id_range", chunk_id_range}};
+      root["meta"] = make_metadata(fn_data, data.curtime, data.curstep, chunk_id_range);
       // dataset
       root["dataset"] = dataset;
 

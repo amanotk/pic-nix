@@ -87,7 +87,7 @@ public:
       float64 fraction = config.value("fraction", 0.01);
       auto    packer   = ParticlePacker(is, seed, fraction);
       size_t  disp0    = disp;
-      size_t  nbyte    = this->queue(packer, data, disp);
+      size_t  nbyte    = this->write_packed_chunks(packer, data, disp);
 
       // meta data
       {

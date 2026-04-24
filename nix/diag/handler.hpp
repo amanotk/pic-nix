@@ -38,7 +38,7 @@ public:
 
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) = 0;
 
-  virtual size_t queue(int index, Buffer& buffer, size_t& disp) = 0;
+  virtual size_t write(int index, Buffer& buffer, size_t& disp) = 0;
 };
 
 class MpiioDiagHandler : public DiagHandler
@@ -109,7 +109,7 @@ public:
     return std::vector<int>({global_id_min, global_id_max});
   }
 
-  virtual size_t queue(int index, Buffer& buffer, size_t& disp) override
+  virtual size_t write(int index, Buffer& buffer, size_t& disp) override
   {
     if (request.size() <= index) {
       request.resize(index + 1, MPI_REQUEST_NULL);
@@ -188,7 +188,7 @@ public:
     return std::vector<int>({node_id_min, node_id_max});
   }
 
-  virtual size_t queue(int index, Buffer& buffer, size_t& disp) override
+  virtual size_t write(int index, Buffer& buffer, size_t& disp) override
   {
     Buffer           totbuf;
     int              totcnt  = 0;

@@ -9,6 +9,15 @@
 
 NIX_NAMESPACE_BEGIN
 
+/// Parallel diagnostic base for module-specific diagnostics.
+///
+/// Module packer contract:
+/// Packer must support the chunk-based call used by write_packed_chunks():
+///
+///   size_t operator()(typename BaseDiag::chunk_type* chunk, uint8_t* buffer, int address);
+///
+/// Modules may use adapters to forward to internal data packers when needed.
+///
 template <typename BaseDiag, typename Packer>
 class ParallelDiag : public BaseDiag
 {
@@ -104,18 +113,18 @@ public:
     return handler->get_chunk_id_range(id_min, id_max);
   }
 
-  // queue write request
-  size_t queue(Packer& packer, data_type& data, size_t& disp)
+  // write packed chunks to disk
+  size_t write_packed_chunks(Packer& packer, data_type& data, size_t& disp)
   {
     size_t bufsize = 0;
 
-    // calculate buffer size
+    // calculate packed buffer size
     for (int i = 0; i < data.chunkvec.size(); i++) {
       auto chunk = static_cast<chunk_type*>(data.chunkvec[i].get());
       bufsize += packer(chunk, nullptr, 0);
     }
 
-    // pack data
+    // pack chunks into buffer
     buffer.emplace_back(bufsize);
     int  index  = buffer.size() - 1;
     auto bufptr = buffer[index].get();
@@ -125,10 +134,10 @@ public:
       address    = packer(chunk, bufptr, address);
     }
 
-    // write to the disk
-    auto count = handler->queue(index, buffer[index], disp);
+    // write packed buffer to disk
+    auto count = handler->write(index, buffer[index], disp);
 
-    // keep synchronous behavior for Phase 1
+    // synchronous write: wait for completion immediately
     wait(index);
 
     return count;
