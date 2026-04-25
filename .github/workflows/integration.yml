@@ -43,11 +43,16 @@ jobs:
         run: |
           export OMP_NUM_THREADS=1
           CASES="twostream weibel-order1 weibel-order2 weibel-order3 weibel-order4 shock"
+          FAILED=""
           for case in $CASES; do
             echo "=== Case: $case ==="
-            python3 script/integration/pic/main.py run "$case"
-            python3 script/integration/pic/main.py compare "$case"
+            python3 script/integration/pic/main.py run "$case" || { FAILED="$FAILED $case"; continue; }
+            python3 script/integration/pic/main.py compare "$case" || FAILED="$FAILED $case"
           done
+          if [ -n "$FAILED" ]; then
+            echo "FAILED:$FAILED"
+            exit 1
+          fi
 
       - name: Upload run output on failure
         if: failure()
