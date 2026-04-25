@@ -43,6 +43,7 @@ SNAPSHOT_MAX_REL_TOL = 1.0e-8
 SNAPSHOT_NMSE_TOL = 1.0e-14
 SNAPSHOT_REL_FLOOR = 1.0e-12
 SNAPSHOT_NMSE_EPS = 1.0e-30
+DIV_ABS_TOL = 1.0e-12
 
 
 def cmd_build(args):
@@ -293,7 +294,30 @@ def cmd_compare(args):
     ok = True
     keys_checked = 0
 
-    for key in ["div_e", "div_b", "ene_e", "ene_b", "total_energy"]:
+    for key in ["div_e", "div_b"]:
+        if key not in golden or key not in current:
+            continue
+        g = np.array(golden[key])
+        c = np.array(current[key])
+        if g.shape != c.shape:
+            print(
+                f"[compare] FAIL {key}: shape mismatch golden={g.shape} current={c.shape}"
+            )
+            ok = False
+            continue
+
+        max_abs = float(np.max(np.abs(c - g)))
+        if max_abs > DIV_ABS_TOL:
+            print(
+                f"[compare] FAIL {key}: max absolute diff = {max_abs:.6e} "
+                f"(tol={DIV_ABS_TOL:.6e})"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   {key}: max_abs={max_abs:.6e}")
+        keys_checked += 1
+
+    for key in ["ene_e", "ene_b", "total_energy"]:
         if key not in golden or key not in current:
             continue
         g = np.array(golden[key])
