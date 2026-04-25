@@ -292,6 +292,33 @@ Pull always uses `--squash` to keep history linear.
    then open a PR on the upstream `nix` repo
 4. After the upstream PR is merged, pull again to synchronize
 
+## Graphify Snapshot
+
+The project keeps a knowledge graph snapshot at `docs/graphify/`
+(`graph.html`, `graph.json`, `GRAPH_REPORT.md`) for architecture
+navigation.
+
+### Prerequisites
+
+Install the `graphify` CLI (see the graphify skill for details).
+
+### Update the Snapshot
+
+```sh
+script/update-graphify-snapshot.sh
+```
+
+The script performs an incremental update:
+
+1. Seeds `graphify-out/` from the existing snapshot (if present).
+2. Runs `graphify update .` to re-extract only new or changed files.
+3. Copies the outputs (`GRAPH_REPORT.md`, `graph.json`, `graph.html`)
+   into `docs/graphify/`.
+4. Rewrites absolute paths so the committed snapshot is portable
+   across machines.
+
+Commit the changes in `docs/graphify/` when done.
+
 ## CI Notes
 
 The GitHub Actions workflow installs Catch2 v3 externally and sets

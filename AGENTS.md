@@ -68,3 +68,4 @@ This project keeps a graphify knowledge graph snapshot at `docs/graphify/`.
 Rules:
 - Before architecture/codebase questions, read `docs/graphify/GRAPH_REPORT.md` if it exists.
 - For graph traversal, use `graphify query|path|explain` with `--graph docs/graphify/graph.json`.
+- To update the snapshot, run `script/update-graphify-snapshot.sh` (see DEVELOPMENT.md for details).
