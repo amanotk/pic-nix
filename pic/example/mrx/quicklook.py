@@ -7,6 +7,7 @@ import sys
 
 import matplotlib as mpl
 import numpy as np
+from scipy import signal
 
 mpl.use("Agg") if __name__ == "__main__" else None
 from matplotlib import pyplot as plt
@@ -110,9 +111,7 @@ class Run(picnix.Run):
         vix = um[..., 1, 1].mean(axis=(0,)) / (roi + 1e-32)
         bz = uf[..., 5].mean(axis=(0,))
 
-        # normalization and smoothiing
-        from scipy import signal
-
+        # normalization and smoothing
         win = np.hanning(3)[:, None] * np.hanning(3)[None, :]
         roe = signal.convolve2d(roe, win, mode="same", boundary="wrap") / me
         roi = signal.convolve2d(roi, win, mode="same", boundary="wrap") / mi
@@ -156,7 +155,9 @@ class Run(picnix.Run):
             rank = self.get_chunk_rank(step)
             cdelx = self.delh * self.Nx / self.Cx / L
             cdely = self.delh * self.Ny / self.Cy / L
-            picnix.plot_chunk_dist2d(axs[0], coord, rank, cdelx, cdely, colors="white", width=0.5)
+            picnix.plot_chunk_dist2d(
+                axs[0], coord, rank, cdelx, cdely, colors="white", width=0.5
+            )
 
         # title
         fig.suptitle(r"$\Omega_{{ci}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
@@ -189,7 +190,7 @@ def doit_job(profile, prefix, fps, cleanup):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Summary Plot Script")
+    parser = argparse.ArgumentParser(description="Quicklook Script")
     parser.add_argument(
         "-p",
         "--prefix",

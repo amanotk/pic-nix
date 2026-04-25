@@ -5,9 +5,40 @@
 #include "buffer.hpp"
 #include "debug.hpp"
 #include "nix.hpp"
-#include "xtensorall.hpp"
 
 NIX_NAMESPACE_BEGIN
+
+template <typename T>
+struct FixedArray3D {
+  static constexpr int N = 27;
+
+  std::array<T, N> data_{};
+
+  T& operator()(int z, int y, int x)
+  {
+    return data_[z * 9 + y * 3 + x];
+  }
+  const T& operator()(int z, int y, int x) const
+  {
+    return data_[z * 9 + y * 3 + x];
+  }
+  T* data()
+  {
+    return data_.data();
+  }
+  const T* data() const
+  {
+    return data_.data();
+  }
+  constexpr size_t size() const
+  {
+    return N;
+  }
+  void fill(const T& v)
+  {
+    data_.fill(v);
+  }
+};
 
 ///
 /// @brief Base class for 3D Chunk
@@ -18,10 +49,10 @@ public:
   static constexpr int nbsize = 27;
 
   struct MpiBuffer; ///< forward declaration
-  using IntArray     = xt::xtensor_fixed<int, xt::xshape<3, 3, 3>>;
-  using Comm         = xt::xtensor_fixed<MPI_Comm, xt::xshape<3, 3, 3>>;
-  using Request      = xt::xtensor_fixed<MPI_Request, xt::xshape<3, 3, 3>>;
-  using Datatype     = xt::xtensor_fixed<MPI_Datatype, xt::xshape<3, 3, 3>>;
+  using IntArray     = FixedArray3D<int>;
+  using Comm         = FixedArray3D<MPI_Comm>;
+  using Request      = FixedArray3D<MPI_Request>;
+  using Datatype     = FixedArray3D<MPI_Datatype>;
   using MpiBufferPtr = std::shared_ptr<MpiBuffer>;
   using MpiBufferVec = std::vector<MpiBufferPtr>;
 
@@ -31,13 +62,13 @@ public:
     bool     recvwait;
     Buffer   sendbuf;
     Buffer   recvbuf;
-    IntArray bufsize;
-    IntArray bufaddr;
-    Comm     comm;
-    Request  sendreq;
-    Request  recvreq;
-    Datatype sendtype;
-    Datatype recvtype;
+    IntArray bufsize  = {};
+    IntArray bufaddr  = {};
+    Comm     comm     = {};
+    Request  sendreq  = {};
+    Request  recvreq  = {};
+    Datatype sendtype = {};
+    Datatype recvtype = {};
 
     /// constructor
     MpiBuffer() : sendwait(false), recvwait(false)

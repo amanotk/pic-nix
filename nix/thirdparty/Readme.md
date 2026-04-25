@@ -41,11 +41,6 @@ This directory contains third-party header-only libraries.
 - Version: 0.24.7
 - Description: Multidimensional array containers.
 
-## taskflow
-- URL: https://github.com/taskflow/taskflow
-- Version: 3.7.0
-- Description: Task-Parallel Library
-
 ## mdspan
 - URL: https://github.com/kokkos/mdspan
 - Version: 0.6

@@ -83,10 +83,6 @@ protected:
 
   virtual void calculate_moment_openmp();
 
-  virtual void push_taskflow();
-
-  virtual void calculate_moment_taskflow();
-
   virtual void update_poisson_efield();
 
   virtual void exchange_phi_boundaries();

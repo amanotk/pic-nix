@@ -105,7 +105,9 @@ class Run(picnix.Run):
             cdelx = self.delh * self.Nx // self.Cx
             cdely = self.delh * self.Ny // self.Cy
             for i in range(3):
-                picnix.plot_chunk_dist2d(axs[i], coord, rank, cdelx, cdely, colors="white")
+                picnix.plot_chunk_dist2d(
+                    axs[i], coord, rank, cdelx, cdely, colors="white"
+                )
 
         fig.suptitle(r"$\omega_{{pe}} t = {:6.2f}$".format(tt), x=0.5, y=0.99)
 

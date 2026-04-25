@@ -54,6 +54,9 @@ After building, run the tests with:
 ctest --test-dir build --output-on-failure
 ```
 
+Do **not** use `-j` (parallelism) with `ctest` — many tests spawn MPI
+processes and concurrent MPI jobs can interfere or deadlock.
+
 When running MPI tests in a sandboxed environment, use escalated
 permissions; otherwise PMIx can fail with `socket()` errors.
 For a focused test run, use the `-R` option followed by the test name
@@ -230,6 +233,94 @@ cloning:
 ```sh
 script/git-hooks/install.sh
 ```
+
+## Git Subtree (`nix/`)
+
+The `nix/` directory is a git subtree of the standalone repository
+<https://github.com/amanotk/nix>.
+Use `script/subtree-nix.sh` to sync `nix/` between the two repos.
+
+### One-time setup
+
+```sh
+script/subtree-nix.sh setup
+```
+
+This adds a git remote named `nix` pointing to the upstream repository.
+
+### Branch semantics
+
+The `--branch` flag always refers to the **remote** (upstream `nix` repo)
+branch. The **local** branch is whatever you are currently on in
+`pic-nix` (detected automatically from `git branch --show-current`).
+
+| pic-nix (local) | nix upstream (`--branch`) | Use case |
+|---|---|---|
+| `develop` | `develop` (default) | Day-to-day sync between integration branches |
+| `feature/foo` | `feature/foo` | Push nix/ changes from a feature branch to a matching upstream branch |
+| `develop` | `main` | Pull a release from upstream into pic-nix develop |
+
+The default `--branch` value is `develop` (mapping `develop` ↔ `develop`).
+
+### Commands
+
+```sh
+# Pull upstream develop into nix/ (most common)
+script/subtree-nix.sh pull
+
+# Pull a specific upstream branch
+script/subtree-nix.sh pull --branch main
+
+# Push nix/ subtree changes to upstream develop
+script/subtree-nix.sh push
+
+# Push to a specific upstream branch
+script/subtree-nix.sh push --branch feature/new-balancer
+
+# Fetch upstream refs without merging (for inspection)
+script/subtree-nix.sh fetch
+
+# Show upstream log
+script/subtree-nix.sh log
+```
+
+Pull always uses `--squash` to keep history linear.
+
+### Typical workflow
+
+1. Pull upstream changes: `script/subtree-nix.sh pull`
+2. Resolve any conflicts in `nix/`, commit the merge
+3. If you modified `nix/` in pic-nix, push back:
+   `script/subtree-nix.sh push --branch feature/<name>`,
+   then open a PR on the upstream `nix` repo
+4. After the upstream PR is merged, pull again to synchronize
+
+## Graphify Snapshot
+
+The project keeps a knowledge graph snapshot at `docs/graphify/`
+(`graph.html`, `graph.json`, `GRAPH_REPORT.md`) for architecture
+navigation.
+
+### Prerequisites
+
+Install the `graphify` CLI (see the graphify skill for details).
+
+### Update the Snapshot
+
+```sh
+script/update-graphify-snapshot.sh
+```
+
+The script performs an incremental update:
+
+1. Seeds `graphify-out/` from the existing snapshot (if present).
+2. Runs `graphify update .` to re-extract only new or changed files.
+3. Copies the outputs (`GRAPH_REPORT.md`, `graph.json`, `graph.html`)
+   into `docs/graphify/`.
+4. Rewrites absolute paths so the committed snapshot is portable
+   across machines.
+
+Commit the changes in `docs/graphify/` when done.
 
 ## CI Notes
 
