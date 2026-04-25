@@ -54,6 +54,9 @@ After building, run the tests with:
 ctest --test-dir build --output-on-failure
 ```
 
+Do **not** use `-j` (parallelism) with `ctest` — many tests spawn MPI
+processes and concurrent MPI jobs can interfere or deadlock.
+
 When running MPI tests in a sandboxed environment, use escalated
 permissions; otherwise PMIx can fail with `socket()` errors.
 For a focused test run, use the `-R` option followed by the test name
