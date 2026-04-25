@@ -299,15 +299,10 @@ def cmd_update_golden(args):
 
     case.golden_dir.mkdir(parents=True, exist_ok=True)
     msgpack_path = case.golden_dir / "summary.msgpack"
-    json_path = case.golden_dir / "summary.json"
 
     with open(msgpack_path, "wb") as f:
         msgpack.dump(summary, f)
     print(f"[update-golden] Wrote {msgpack_path}")
-
-    with open(json_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"[update-golden] Wrote {json_path}")
 
 
 def cmd_plots(args):
