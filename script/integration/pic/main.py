@@ -204,16 +204,20 @@ def _read_field_snapshot(run_dir):
     if "uf" not in datasets or "um" not in datasets:
         return None
 
-    raw = np.fromfile(str(data_path), dtype=np.float64)
+    dtype = np.float64
+    itemsize = np.dtype(dtype).itemsize
+    raw = np.fromfile(str(data_path), dtype=dtype)
 
     uf_info = datasets["uf"]
     uf = raw[
-        uf_info["offset"] // 8 : uf_info["offset"] // 8 + uf_info["size"] // 8
+        uf_info["offset"] // itemsize : uf_info["offset"] // itemsize
+        + uf_info["size"] // itemsize
     ].reshape(uf_info["shape"])
 
     um_info = datasets["um"]
     um = raw[
-        um_info["offset"] // 8 : um_info["offset"] // 8 + um_info["size"] // 8
+        um_info["offset"] // itemsize : um_info["offset"] // itemsize
+        + um_info["size"] // itemsize
     ].reshape(um_info["shape"])
 
     snapshot = {
@@ -340,11 +344,20 @@ def cmd_compare(args):
 
     golden_snap = golden.get("snapshot")
     current_snap = current.get("snapshot")
-    if golden_snap is not None and current_snap is not None:
-        snap_ok, snap_checked = _compare_snapshot(golden_snap, current_snap, rtol, atol)
-        if not snap_ok:
+    if golden_snap is not None:
+        if current_snap is None:
+            print(
+                "[compare] FAIL snapshot: golden has snapshot data but current run produced none"
+            )
             ok = False
-        keys_checked += snap_checked
+            keys_checked += 1
+        else:
+            snap_ok, snap_checked = _compare_snapshot(
+                golden_snap, current_snap, rtol, atol
+            )
+            if not snap_ok:
+                ok = False
+            keys_checked += snap_checked
 
     if ok:
         print(f"[compare] PASS ({keys_checked} keys checked)")
