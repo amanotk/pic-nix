@@ -1,4 +1,4 @@
-# Foot Example
+# Collisionless Shock Transition Layer (Foot)
 
 This setup models the dynamics of a collisionless shock transition layer with
 a three-component homogeneous plasma with the periodic boundary condition in
@@ -7,15 +7,7 @@ core (upstream) ions, and the background electrons, all represented by
 isotropic Maxwellian distributions in the rest frame of each component.
 The simulation frame corresponds to the rest frame of electrons.
 
-Three scenarios are included:
-- **alfven**: Ion beam propagating parallel to the ambient magnetic field
-  generating Alfven waves via the cyclotron resonance
-  (Hoshino & Terasawa, 1985).
-- **buneman**: Electrostatic ion-electron beam (Buneman) instability.
-- **weibel**: Perpendicular shock with filamentation-type instabilities.
-
-
-# Physical Parameters
+## Physical Parameters
 
 The following parameters should be defined in the configuration file:
 - `cc` : speed of light $c$
@@ -64,66 +56,20 @@ Note that the electron and ion Alfven speeds are defined by
 $V_{A,e} = B_0 / \sqrt{n_0 m_e}$ and $V_{A,i} = B_0 / \sqrt{n_0 m_i}$,
 respectively.
 
+## Scenarios
 
-# Running
-
-Build the `foot` target from the top-level build directory:
-```
-$ cmake --build build --target foot
-```
-
-Each scenario is in its own subdirectory containing `config.toml`.
-To run, go to the scenario directory and execute:
-```
-$ cd build/pic/example/foot/<scenario>
-$ export OMP_NUM_THREADS=2
-$ mpiexec -n 8 ./main.out -e 86400 -t <duration> -c config.toml
-```
-
-Set the environment variable `PICNIX_DIR` to the path to the pic-nix root
-directory. Then, run the quicklook script to examine the simulation results:
-```
-$ python quicklook.py data/profile.msgpack
-```
-
-## Example 1: buneman
-Electrostatic ion-electron beam instability.
-```
-$ mpiexec -n 8 ./main.out -e 86400 -t 200 -c config.toml
-```
-
-## Example 2: alfven
-Ion beam generating Alfven waves via the cyclotron resonance.
-For details, see Hoshino & Terasawa (1985).
-```
-$ mpiexec -n 16 ./main.out -e 86400 -t 5000 -c config.toml
-```
-
-## Example 3: weibel
-Perpendicular shock ($\theta = 90^\circ$) with filamentation-type instabilities.
-```
-$ mpiexec -n 16 ./main.out -e 86400 -t 5000 -c config.toml
-```
+- **buneman**: Electrostatic ion-electron beam (Buneman) instability
+  (e.g., Amano & Hoshino, 2009). The suggested run time is `-t 200`.
+- **alfven**: Electromagnetic ion-cyclotron beam instability
+  (e.g., Hoshino & Terasawa, 1985). The suggested run time is `-t 5000`.
+- **weibel**: Weibel instability with magnetized electrons
+  (e.g., Jikei et al., 2024). The suggested run time is `-t 5000`.
 
 
-# References
-- Hoshino, M., & Terasawa, T. (1985). Numerical Study of the Upstream Wave
-  Excitation Mechanism, 1. Nonlinear Phase Bunching of Beam Ions.
-  *Journal of Geophysical Research*, *90*(A1), 57–64.
-  https://doi.org/10.1029/JA090iA01p00057
-- Matsukiyo, S., & Scholer, M. (2003). Modified two-stream instability in
-  the foot of high Mach number quasi-perpendicular shocks.
-  *Journal of Geophysical Research: Space Physics*, *108*(A12), 1459.
-  https://doi.org/10.1029/2003JA010080
-- Matsukiyo, S., & Scholer, M. (2006). On microinstabilities in the foot of
-  high Mach number perpendicular shocks.
-  *Journal of Geophysical Research: Space Physics*, *111*(6), 1–10.
-  https://doi.org/10.1029/2005JA011409
-- Amano, T., & Hoshino, M. (2009). Nonlinear evolution of Buneman instability
-  and its implication for electron acceleration in high Mach number collisionless
-  perpendicular shocks. *Physics of Plasmas*, *16*(10), 102901.
+## References
+- Amano, T., & Hoshino, M. (2009). Nonlinear evolution of Buneman instability and its implication for electron acceleration in high Mach number collisionless perpendicular shocks. *Physics of Plasmas*, *16*(10), 102901.
   https://doi.org/10.1063/1.3240336
-- Muschietti, L., & Lembège, B. (2013). Microturbulence in the electron
-  cyclotron frequency range at perpendicular supercritical shocks.
-  *Journal of Geophysical Research: Space Physics*, *118*(5), 2267–2285.
-  https://doi.org/10.1002/jgra.50224
+- Hoshino, M., & Terasawa, T. (1985). Numerical Study of the Upstream Wave Excitation Mechanism, 1. Nonlinear Phase Bunching of Beam Ions. *Journal of Geophysical Research*, *90*(A1), 57–64.
+  https://doi.org/10.1029/JA090iA01p00057
+- Jikei, T., Amano, T., & Matsumoto, Y. (2024). Enhanced Magnetic Field Amplification by Ion-beam Weibel Instability in Weakly Magnetized Astrophysical Shocks. *The Astrophysical Journal*, 961(2), 157.
+  https://doi.org/10.3847/1538-4357/ad1594
