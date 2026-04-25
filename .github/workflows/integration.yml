@@ -33,9 +33,9 @@ jobs:
         run: |
           mkdir -p run-integration-pic/build-gcc
           cmake -S . -B run-integration-pic/build-gcc \
+            -C cmake/linux-gcc.cmake \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DCMAKE_CXX_COMPILER=mpicxx
+            -DBUILD_TESTING=OFF
           cmake --build run-integration-pic/build-gcc --target beam --parallel
           cmake --build run-integration-pic/build-gcc --target shock --parallel
 
