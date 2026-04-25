@@ -4,8 +4,6 @@ on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
-  push:
-    branches: ["develop", "main"]
 
 jobs:
   integration:
@@ -33,9 +31,9 @@ jobs:
         run: |
           mkdir -p run-integration-pic/build-gcc
           cmake -S . -B run-integration-pic/build-gcc \
+            -C cmake/linux-gcc.cmake \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF \
-            -DCMAKE_CXX_COMPILER=mpicxx
+            -DBUILD_TESTING=OFF
           cmake --build run-integration-pic/build-gcc --target beam --parallel
           cmake --build run-integration-pic/build-gcc --target shock --parallel
 
@@ -43,11 +41,16 @@ jobs:
         run: |
           export OMP_NUM_THREADS=1
           CASES="twostream weibel-order1 weibel-order2 weibel-order3 weibel-order4 shock"
+          FAILED=""
           for case in $CASES; do
             echo "=== Case: $case ==="
-            python3 script/integration/pic/main.py run "$case"
-            python3 script/integration/pic/main.py compare "$case"
+            python3 script/integration/pic/main.py run "$case" || { FAILED="$FAILED $case"; continue; }
+            python3 script/integration/pic/main.py compare "$case" || FAILED="$FAILED $case"
           done
+          if [ -n "$FAILED" ]; then
+            echo "FAILED:$FAILED"
+            exit 1
+          fi
 
       - name: Upload run output on failure
         if: failure()

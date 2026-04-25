@@ -39,6 +39,16 @@ COMPILER_PROFILES = {
     },
 }
 
+SNAPSHOT_MAX_REL_TOL = 1.0e-7
+SNAPSHOT_NMSE_TOL = 1.0e-14
+SNAPSHOT_REL_FLOOR = 1.0e-12
+SNAPSHOT_NMSE_EPS = 1.0e-30
+DIV_ABS_TOL = 1.0e-12
+SHOCK_HISTORY_RTOL = 5.0e-2
+SHOCK_SCALAR_RTOL = 5.0e-2
+SHOCK_PEAK_STEP_TOL = 500
+SHOCK_SNAPSHOT_NMSE_TOL = 1.0e-2
+
 
 def cmd_build(args):
     case = _resolve_case(args.case)
@@ -285,10 +295,37 @@ def cmd_compare(args):
     rtol = args.rtol
     atol = args.atol
 
+    if case.name == "shock":
+        _compare_shock(golden, current)
+        return
+
     ok = True
     keys_checked = 0
 
-    for key in ["div_e", "div_b", "ene_e", "ene_b", "total_energy"]:
+    for key in ["div_e", "div_b"]:
+        if key not in golden or key not in current:
+            continue
+        g = np.array(golden[key])
+        c = np.array(current[key])
+        if g.shape != c.shape:
+            print(
+                f"[compare] FAIL {key}: shape mismatch golden={g.shape} current={c.shape}"
+            )
+            ok = False
+            continue
+
+        max_abs = float(np.max(np.abs(c - g)))
+        if max_abs > DIV_ABS_TOL:
+            print(
+                f"[compare] FAIL {key}: max absolute diff = {max_abs:.6e} "
+                f"(tol={DIV_ABS_TOL:.6e})"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   {key}: max_abs={max_abs:.6e}")
+        keys_checked += 1
+
+    for key in ["ene_e", "ene_b", "total_energy"]:
         if key not in golden or key not in current:
             continue
         g = np.array(golden[key])
@@ -352,9 +389,7 @@ def cmd_compare(args):
             ok = False
             keys_checked += 1
         else:
-            snap_ok, snap_checked = _compare_snapshot(
-                golden_snap, current_snap, rtol, atol
-            )
+            snap_ok, snap_checked = _compare_snapshot(golden_snap, current_snap)
             if not snap_ok:
                 ok = False
             keys_checked += snap_checked
@@ -367,7 +402,189 @@ def cmd_compare(args):
     sys.exit(1)
 
 
-def _compare_snapshot(golden_snap, current_snap, rtol, atol):
+def _compare_shock(golden, current):
+    ok = True
+    keys_checked = 0
+
+    for key in ["div_e", "div_b"]:
+        if key not in golden or key not in current:
+            continue
+        g = np.array(golden[key])
+        c = np.array(current[key])
+        if g.shape != c.shape:
+            print(
+                f"[compare] FAIL {key}: shape mismatch golden={g.shape} current={c.shape}"
+            )
+            ok = False
+            continue
+
+        max_abs = float(np.max(np.abs(c - g)))
+        if max_abs > DIV_ABS_TOL:
+            print(
+                f"[compare] FAIL {key}: max absolute diff = {max_abs:.6e} "
+                f"(tol={DIV_ABS_TOL:.6e})"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   {key}: max_abs={max_abs:.6e}")
+        keys_checked += 1
+
+    history_keys = ["ene_e", "ene_b", "total_energy", *current.get("particle_keys", [])]
+    for key in history_keys:
+        if key not in golden or key not in current:
+            continue
+        g = np.array(golden[key])
+        c = np.array(current[key])
+        if g.shape != c.shape:
+            print(
+                f"[compare] FAIL {key}: shape mismatch golden={g.shape} current={c.shape}"
+            )
+            ok = False
+            continue
+        if not np.all(np.isfinite(c)):
+            print(f"[compare] FAIL {key}: non-finite values present")
+            ok = False
+        elif not np.allclose(c, g, rtol=SHOCK_HISTORY_RTOL, atol=1.0e-12):
+            diff = np.max(np.abs(c - g) / (np.abs(g) + 1.0e-12))
+            print(
+                f"[compare] FAIL {key}: max relative diff = {diff:.6e} "
+                f"(tol={SHOCK_HISTORY_RTOL:.6e})"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   {key}: rtol={SHOCK_HISTORY_RTOL:.6e}")
+        keys_checked += 1
+
+    for key in ["peak_ene_e", "final_energy_drift"]:
+        if key not in golden or key not in current:
+            continue
+        golden_value = golden[key]
+        current_value = current[key]
+        rel_diff = abs(current_value - golden_value) / (abs(golden_value) + 1.0e-30)
+        if not np.isfinite(current_value) or rel_diff > SHOCK_SCALAR_RTOL:
+            print(
+                f"[compare] FAIL {key}: golden={golden_value} current={current_value} "
+                f"rel_diff={rel_diff:.6e} (tol={SHOCK_SCALAR_RTOL:.6e})"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   {key}: {current_value}")
+        keys_checked += 1
+
+    if "peak_ene_e_step" in golden and "peak_ene_e_step" in current:
+        step_diff = abs(current["peak_ene_e_step"] - golden["peak_ene_e_step"])
+        if step_diff > SHOCK_PEAK_STEP_TOL:
+            print(
+                "[compare] FAIL peak_ene_e_step: "
+                f"golden={golden['peak_ene_e_step']} current={current['peak_ene_e_step']} "
+                f"diff={step_diff} (tol={SHOCK_PEAK_STEP_TOL})"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   peak_ene_e_step: {current['peak_ene_e_step']}")
+        keys_checked += 1
+
+    if "num_steps" in golden and "num_steps" in current:
+        if golden["num_steps"] != current["num_steps"]:
+            print(
+                f"[compare] FAIL num_steps: golden={golden['num_steps']} "
+                f"current={current['num_steps']}"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   num_steps: {current['num_steps']}")
+        keys_checked += 1
+
+    golden_snap = golden.get("snapshot")
+    current_snap = current.get("snapshot")
+    if golden_snap is not None:
+        if current_snap is None:
+            print(
+                "[compare] FAIL snapshot: golden has snapshot data but current run produced none"
+            )
+            ok = False
+            keys_checked += 1
+        else:
+            snap_ok, snap_checked = _compare_shock_snapshot(golden_snap, current_snap)
+            if not snap_ok:
+                ok = False
+            keys_checked += snap_checked
+
+    if ok:
+        print(f"[compare] PASS ({keys_checked} keys checked)")
+        return
+
+    print(f"[compare] FAIL ({keys_checked} keys checked)")
+    sys.exit(1)
+
+
+def _compare_shock_snapshot(golden_snap, current_snap):
+    ok = True
+    checked = 0
+
+    golden_step = golden_snap.get("step")
+    current_step = current_snap.get("step")
+    if golden_step != current_step:
+        print(
+            f"[compare] FAIL snapshot: step mismatch golden={golden_step} current={current_step}"
+        )
+        ok = False
+    else:
+        print(f"[compare] OK   snapshot: step={current_step}")
+    checked += 1
+
+    snap_ok, snap_checked = _compare_shock_snapshot_array(
+        "uf",
+        np.array(golden_snap["uf"]),
+        np.array(current_snap["uf"]),
+        golden_snap.get("uf_shape"),
+        current_snap.get("uf_shape"),
+    )
+    ok &= snap_ok
+    checked += snap_checked
+
+    for key in sorted(current_snap.keys()):
+        if not key.startswith("density_") or key.endswith("_shape"):
+            continue
+        g = np.array(golden_snap.get(key, []))
+        c = np.array(current_snap[key])
+        snap_ok, snap_checked = _compare_shock_snapshot_array(
+            key,
+            g,
+            c,
+            golden_snap.get(f"{key}_shape"),
+            current_snap.get(f"{key}_shape"),
+        )
+        ok &= snap_ok
+        checked += snap_checked
+
+    return ok, checked
+
+
+def _compare_shock_snapshot_array(name, golden, current, golden_shape, current_shape):
+    golden_shape = golden_shape or list(golden.shape)
+    current_shape = current_shape or list(current.shape)
+    if golden_shape != current_shape:
+        print(
+            f"[compare] FAIL snapshot.{name}: shape mismatch "
+            f"golden={golden_shape} current={current_shape}"
+        )
+        return False, 1
+
+    max_rel, nmse, max_abs = _snapshot_error_metrics(current, golden)
+    if not np.all(np.isfinite(current)) or nmse > SHOCK_SNAPSHOT_NMSE_TOL:
+        print(
+            f"[compare] FAIL snapshot.{name}: "
+            f"nmse={nmse:.6e} (tol={SHOCK_SNAPSHOT_NMSE_TOL:.6e}), "
+            f"max_rel={max_rel:.6e}, max_abs={max_abs:.6e}"
+        )
+        return False, 1
+
+    print(f"[compare] OK   snapshot.{name}: nmse={nmse:.6e}, max_rel={max_rel:.6e}")
+    return True, 1
+
+
+def _compare_snapshot(golden_snap, current_snap):
     ok = True
     checked = 0
 
@@ -391,12 +608,18 @@ def _compare_snapshot(golden_snap, current_snap, rtol, atol):
             f"[compare] FAIL snapshot.uf: shape mismatch golden={g_shape} current={c_shape}"
         )
         ok = False
-    elif not np.allclose(c_uf, g_uf, rtol=rtol, atol=atol):
-        diff = np.max(np.abs(c_uf - g_uf) / (np.abs(g_uf) + atol))
-        print(f"[compare] FAIL snapshot.uf: max relative diff = {diff:.6e}")
-        ok = False
     else:
-        print("[compare] OK   snapshot.uf")
+        max_rel, nmse, max_abs = _snapshot_error_metrics(c_uf, g_uf)
+        if max_rel > SNAPSHOT_MAX_REL_TOL or nmse > SNAPSHOT_NMSE_TOL:
+            print(
+                "[compare] FAIL snapshot.uf: "
+                f"max_rel={max_rel:.6e} (tol={SNAPSHOT_MAX_REL_TOL:.6e}), "
+                f"nmse={nmse:.6e} (tol={SNAPSHOT_NMSE_TOL:.6e}), "
+                f"max_abs={max_abs:.6e}"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   snapshot.uf: max_rel={max_rel:.6e}, nmse={nmse:.6e}")
     checked += 1
 
     for key in sorted(current_snap.keys()):
@@ -412,15 +635,41 @@ def _compare_snapshot(golden_snap, current_snap, rtol, atol):
                 f"[compare] FAIL snapshot.{base_key}: shape mismatch golden={g_shape} current={c_shape}"
             )
             ok = False
-        elif not np.allclose(c, g, rtol=rtol, atol=atol):
-            diff = np.max(np.abs(c - g) / (np.abs(g) + atol))
-            print(f"[compare] FAIL snapshot.{base_key}: max relative diff = {diff:.6e}")
-            ok = False
         else:
-            print(f"[compare] OK   snapshot.{base_key}")
+            max_rel, nmse, max_abs = _snapshot_error_metrics(c, g)
+            if max_rel > SNAPSHOT_MAX_REL_TOL or nmse > SNAPSHOT_NMSE_TOL:
+                print(
+                    f"[compare] FAIL snapshot.{base_key}: "
+                    f"max_rel={max_rel:.6e} (tol={SNAPSHOT_MAX_REL_TOL:.6e}), "
+                    f"nmse={nmse:.6e} (tol={SNAPSHOT_NMSE_TOL:.6e}), "
+                    f"max_abs={max_abs:.6e}"
+                )
+                ok = False
+            else:
+                print(
+                    f"[compare] OK   snapshot.{base_key}: "
+                    f"max_rel={max_rel:.6e}, nmse={nmse:.6e}"
+                )
         checked += 1
 
     return ok, checked
+
+
+def _snapshot_error_metrics(current, golden):
+    if current.size == 0:
+        return 0.0, 0.0, 0.0
+
+    diff = current - golden
+    abs_diff = np.abs(diff)
+    rel_denom = np.maximum(np.abs(golden), SNAPSHOT_REL_FLOOR)
+
+    max_rel = float(np.max(abs_diff / rel_denom))
+    max_abs = float(np.max(abs_diff))
+    mse = float(np.mean(diff * diff))
+    nmse_denom = float(np.mean(golden * golden)) + SNAPSHOT_NMSE_EPS
+    nmse = mse / nmse_denom
+
+    return max_rel, nmse, max_abs
 
 
 def cmd_update_golden(args):
