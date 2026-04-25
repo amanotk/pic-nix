@@ -175,7 +175,64 @@ def analyze_run(run_dir, Ns):
     for key in data["particle_keys"]:
         summary[key] = data[key]
 
+    snapshot = _read_field_snapshot(run_dir)
+    if snapshot is not None:
+        summary["snapshot"] = snapshot
+
     return summary
+
+
+def _read_field_snapshot(run_dir):
+    field_dir = run_dir / "data" / "field"
+    if not field_dir.is_dir():
+        return None
+
+    json_files = sorted(field_dir.glob("*.json"))
+    if not json_files:
+        return None
+
+    final_json = json_files[-1]
+    with open(final_json) as f:
+        meta = json.load(f)
+
+    rawfile = meta["meta"]["rawfile"]
+    data_path = field_dir / rawfile
+    if not data_path.exists():
+        return None
+
+    datasets = meta["dataset"]
+    if "uf" not in datasets or "um" not in datasets:
+        return None
+
+    dtype = np.float64
+    itemsize = np.dtype(dtype).itemsize
+    raw = np.fromfile(str(data_path), dtype=dtype)
+
+    uf_info = datasets["uf"]
+    uf = raw[
+        uf_info["offset"] // itemsize : uf_info["offset"] // itemsize
+        + uf_info["size"] // itemsize
+    ].reshape(uf_info["shape"])
+
+    um_info = datasets["um"]
+    um = raw[
+        um_info["offset"] // itemsize : um_info["offset"] // itemsize
+        + um_info["size"] // itemsize
+    ].reshape(um_info["shape"])
+
+    snapshot = {
+        "step": meta["meta"]["step"],
+        "uf_shape": list(uf_info["shape"]),
+        "uf": uf.tolist(),
+    }
+
+    n_species = um_info["shape"][-2]
+    for ispec in range(n_species):
+        density = um[..., ispec, 0]
+        snapshot[f"density_{ispec}_shape"] = list(density.shape)
+        snapshot[f"density_{ispec}"] = density.tolist()
+
+    return snapshot
 
 
 def _parse_history(path, Ns):
@@ -285,6 +342,23 @@ def cmd_compare(args):
             print(f"[compare] OK   {key}: {current_value}")
         keys_checked += 1
 
+    golden_snap = golden.get("snapshot")
+    current_snap = current.get("snapshot")
+    if golden_snap is not None:
+        if current_snap is None:
+            print(
+                "[compare] FAIL snapshot: golden has snapshot data but current run produced none"
+            )
+            ok = False
+            keys_checked += 1
+        else:
+            snap_ok, snap_checked = _compare_snapshot(
+                golden_snap, current_snap, rtol, atol
+            )
+            if not snap_ok:
+                ok = False
+            keys_checked += snap_checked
+
     if ok:
         print(f"[compare] PASS ({keys_checked} keys checked)")
         return
@@ -293,21 +367,72 @@ def cmd_compare(args):
     sys.exit(1)
 
 
+def _compare_snapshot(golden_snap, current_snap, rtol, atol):
+    ok = True
+    checked = 0
+
+    golden_step = golden_snap.get("step")
+    current_step = current_snap.get("step")
+    if golden_step != current_step:
+        print(
+            f"[compare] FAIL snapshot: step mismatch golden={golden_step} current={current_step}"
+        )
+        ok = False
+    else:
+        print(f"[compare] OK   snapshot: step={current_step}")
+    checked += 1
+
+    g_uf = np.array(golden_snap["uf"])
+    c_uf = np.array(current_snap["uf"])
+    g_shape = golden_snap.get("uf_shape", list(g_uf.shape))
+    c_shape = current_snap.get("uf_shape", list(c_uf.shape))
+    if g_shape != c_shape:
+        print(
+            f"[compare] FAIL snapshot.uf: shape mismatch golden={g_shape} current={c_shape}"
+        )
+        ok = False
+    elif not np.allclose(c_uf, g_uf, rtol=rtol, atol=atol):
+        diff = np.max(np.abs(c_uf - g_uf) / (np.abs(g_uf) + atol))
+        print(f"[compare] FAIL snapshot.uf: max relative diff = {diff:.6e}")
+        ok = False
+    else:
+        print("[compare] OK   snapshot.uf")
+    checked += 1
+
+    for key in sorted(current_snap.keys()):
+        if not key.startswith("density_") or key.endswith("_shape"):
+            continue
+        base_key = key
+        g = np.array(golden_snap.get(base_key, []))
+        c = np.array(current_snap[base_key])
+        g_shape = golden_snap.get(f"{base_key}_shape", list(g.shape))
+        c_shape = current_snap.get(f"{base_key}_shape", list(c.shape))
+        if g_shape != c_shape:
+            print(
+                f"[compare] FAIL snapshot.{base_key}: shape mismatch golden={g_shape} current={c_shape}"
+            )
+            ok = False
+        elif not np.allclose(c, g, rtol=rtol, atol=atol):
+            diff = np.max(np.abs(c - g) / (np.abs(g) + atol))
+            print(f"[compare] FAIL snapshot.{base_key}: max relative diff = {diff:.6e}")
+            ok = False
+        else:
+            print(f"[compare] OK   snapshot.{base_key}")
+        checked += 1
+
+    return ok, checked
+
+
 def cmd_update_golden(args):
     case = _resolve_case(args.case)
     summary = _ndarray_to_list(analyze_run(case.run_dir, case.Ns))
 
     case.golden_dir.mkdir(parents=True, exist_ok=True)
     msgpack_path = case.golden_dir / "summary.msgpack"
-    json_path = case.golden_dir / "summary.json"
 
     with open(msgpack_path, "wb") as f:
         msgpack.dump(summary, f)
     print(f"[update-golden] Wrote {msgpack_path}")
-
-    with open(json_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"[update-golden] Wrote {json_path}")
 
 
 def cmd_plots(args):

@@ -1,0 +1,58 @@
+name: integration
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: ["develop", "main"]
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            openmpi-bin \
+            libopenmpi-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install msgpack numpy toml
+
+      - name: Build
+        run: |
+          mkdir -p run-integration-pic/build-gcc
+          cmake -S . -B run-integration-pic/build-gcc \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_CXX_COMPILER=mpicxx
+          cmake --build run-integration-pic/build-gcc --target beam --parallel
+          cmake --build run-integration-pic/build-gcc --target shock --parallel
+
+      - name: Run and compare all cases
+        run: |
+          export OMP_NUM_THREADS=1
+          CASES="twostream weibel-order1 weibel-order2 weibel-order3 weibel-order4 shock"
+          for case in $CASES; do
+            echo "=== Case: $case ==="
+            python3 script/integration/pic/main.py run "$case"
+            python3 script/integration/pic/main.py compare "$case"
+          done
+
+      - name: Upload run output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-output
+          path: run-integration-pic/
+          retention-days: 7
