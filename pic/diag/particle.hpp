@@ -2,12 +2,12 @@
 #ifndef _PARTICLE_DIAG_HPP_
 #define _PARTICLE_DIAG_HPP_
 
-#include "parallel.hpp"
+#include "chunk_writer.hpp"
 
 ///
 /// @brief Diagnostic for particle
 ///
-class ParticleDiag : public ParallelDiag
+class ParticleDiag : public PicChunkDiagWriter
 {
 public:
   static constexpr const char* diag_name = "particle";
@@ -55,7 +55,7 @@ protected:
 
 public:
   // constructor
-  ParticleDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
+  ParticleDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 
@@ -87,7 +87,7 @@ public:
       float64 fraction = config.value("fraction", 0.01);
       auto    packer   = ParticlePacker(is, seed, fraction);
       size_t  disp0    = disp;
-      size_t  nbyte    = this->queue(packer, data, disp);
+      size_t  nbyte    = this->write_packed_chunks(packer, data, disp);
 
       // meta data
       {

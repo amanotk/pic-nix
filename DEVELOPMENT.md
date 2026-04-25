@@ -54,6 +54,9 @@ After building, run the tests with:
 ctest --test-dir build --output-on-failure
 ```
 
+Do **not** use `-j` (parallelism) with `ctest` — many tests spawn MPI
+processes and concurrent MPI jobs can interfere or deadlock.
+
 When running MPI tests in a sandboxed environment, use escalated
 permissions; otherwise PMIx can fail with `socket()` errors.
 For a focused test run, use the `-R` option followed by the test name
@@ -172,7 +175,62 @@ Use `--compiler gcc` to select a compiler profile (currently only
 | `weibel-order{1..4}` | beam | 32x32x1 / 4x4 chunks | 4 | 30 | 8 | Weibel instability, shape-order sweep |
 | `shock` | shock | 256x1x1 / 16 chunks | 2 | 160 | 8 | Shock with open boundaries, rebalance |
 
-All cases use `seed_type = 'fixed'` for deterministic output.
+All cases use `seed_type = 'fixed'`, but fixed seeds should be understood
+as reproducible for a given implementation, not as a guarantee of bitwise
+portable output across all compilers, standard libraries, CPUs, and math
+libraries.
+
+### Golden Comparison And Random Numbers
+
+The integration tests compare simulation summaries against golden data.
+This is useful for catching regressions, but golden tests can be fragile
+when random-number generation is part of the test case.
+
+The random engine `std::mt19937_64` has a specified deterministic sequence,
+but C++ standard-library distributions do **not** guarantee a bitwise-stable
+algorithm.  For example, `std::uniform_real_distribution`,
+`std::normal_distribution`, `std::poisson_distribution`, and
+`std::gamma_distribution` are required to produce values with the requested
+statistical distribution, but the exact samples produced from a fixed engine
+seed may differ between libstdc++ versions, libc++, operating systems, or
+compiler/library updates.
+
+This affects the integration cases differently:
+
+- `twostream` and `weibel-order{1..4}` use random numbers only to build the
+  initial particle distribution in `pic/example/beam/main.cpp`.  After
+  initialization, the run evolves a fixed particle set.  These cases are
+  therefore kept as relatively strict golden-regression tests, but they may
+  still need golden regeneration if the CI toolchain or standard library
+  changes enough to alter the initial samples.
+- `shock` uses stochastic open-boundary particle injection throughout the
+  run.  Its boundary condition samples the number of injected particles and
+  their velocities during the simulation.  A different Poisson/gamma sample,
+  or even one different rejection-sampling decision, can desynchronize the
+  random stream and produce a different valid stochastic realization.  The
+  shock case is also nonlinear and can amplify small differences at late
+  times.  For this reason, shock comparison uses case-specific physical and
+  statistical checks rather than strict pointwise snapshot equality.
+
+Do not blindly loosen global tolerances when an integration comparison
+fails.  First identify whether the failure is a deterministic regression, a
+floating-point/environment difference, or a stochastic-realization difference.
+If exact cross-environment stochastic reproducibility is required in the
+future, use project-owned portable sampling routines or a deterministic test
+mode instead of relying on `std::*_distribution` output.
+
+### CI Workflow
+
+The integration workflow is intentionally not triggered on every push.
+It runs on the scheduled workflow and can be launched manually on any branch
+that contains the workflow file:
+
+```sh
+gh workflow run integration.yml --ref <branch-name>
+```
+
+This keeps routine pushes fast while allowing the full integration suite to
+be run before merging or when investigating environment-dependent failures.
 
 ### Adding New Cases
 
@@ -196,7 +254,7 @@ CLI.
 ### Golden Data
 
 Golden summaries live in `script/integration/pic/golden/<case>/` as
-`summary.msgpack` and `summary.json`.
+`summary.msgpack`.
 To regenerate after intentional physics changes:
 
 ```sh
@@ -230,6 +288,94 @@ cloning:
 ```sh
 script/git-hooks/install.sh
 ```
+
+## Git Subtree (`nix/`)
+
+The `nix/` directory is a git subtree of the standalone repository
+<https://github.com/amanotk/nix>.
+Use `script/subtree-nix.sh` to sync `nix/` between the two repos.
+
+### One-time setup
+
+```sh
+script/subtree-nix.sh setup
+```
+
+This adds a git remote named `nix` pointing to the upstream repository.
+
+### Branch semantics
+
+The `--branch` flag always refers to the **remote** (upstream `nix` repo)
+branch. The **local** branch is whatever you are currently on in
+`pic-nix` (detected automatically from `git branch --show-current`).
+
+| pic-nix (local) | nix upstream (`--branch`) | Use case |
+|---|---|---|
+| `develop` | `develop` (default) | Day-to-day sync between integration branches |
+| `feature/foo` | `feature/foo` | Push nix/ changes from a feature branch to a matching upstream branch |
+| `develop` | `main` | Pull a release from upstream into pic-nix develop |
+
+The default `--branch` value is `develop` (mapping `develop` ↔ `develop`).
+
+### Commands
+
+```sh
+# Pull upstream develop into nix/ (most common)
+script/subtree-nix.sh pull
+
+# Pull a specific upstream branch
+script/subtree-nix.sh pull --branch main
+
+# Push nix/ subtree changes to upstream develop
+script/subtree-nix.sh push
+
+# Push to a specific upstream branch
+script/subtree-nix.sh push --branch feature/new-balancer
+
+# Fetch upstream refs without merging (for inspection)
+script/subtree-nix.sh fetch
+
+# Show upstream log
+script/subtree-nix.sh log
+```
+
+Pull always uses `--squash` to keep history linear.
+
+### Typical workflow
+
+1. Pull upstream changes: `script/subtree-nix.sh pull`
+2. Resolve any conflicts in `nix/`, commit the merge
+3. If you modified `nix/` in pic-nix, push back:
+   `script/subtree-nix.sh push --branch feature/<name>`,
+   then open a PR on the upstream `nix` repo
+4. After the upstream PR is merged, pull again to synchronize
+
+## Graphify Snapshot
+
+The project keeps a knowledge graph snapshot at `docs/graphify/`
+(`graph.html`, `graph.json`, `GRAPH_REPORT.md`) for architecture
+navigation.
+
+### Prerequisites
+
+Install the `graphify` CLI (see the graphify skill for details).
+
+### Update the Snapshot
+
+```sh
+script/update-graphify-snapshot.sh
+```
+
+The script performs an incremental update:
+
+1. Seeds `graphify-out/` from the existing snapshot (if present).
+2. Runs `graphify update .` to re-extract only new or changed files.
+3. Copies the outputs (`GRAPH_REPORT.md`, `graph.json`, `graph.html`)
+   into `docs/graphify/`.
+4. Rewrites absolute paths so the committed snapshot is portable
+   across machines.
+
+Commit the changes in `docs/graphify/` when done.
 
 ## CI Notes
 

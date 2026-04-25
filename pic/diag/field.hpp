@@ -2,12 +2,12 @@
 #ifndef _FIELD_DIAG_HPP_
 #define _FIELD_DIAG_HPP_
 
-#include "parallel.hpp"
+#include "chunk_writer.hpp"
 
 ///
 /// @brief Diagnostic for field
 ///
-class FieldDiag : public ParallelDiag
+class FieldDiag : public PicChunkDiagWriter
 {
 public:
   static constexpr const char* diag_name = "field";
@@ -57,7 +57,7 @@ protected:
 
 public:
   // constructor
-  FieldDiag(PtrInterface interface) : ParallelDiag(diag_name, interface)
+  FieldDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 
@@ -147,7 +147,7 @@ public:
       auto   packer = FieldPacker(decimate);
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * 6 * sizeof(float64);
-      size_t nbyte  = this->queue(packer, data, disp);
+      size_t nbyte  = this->write_packed_chunks(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata
@@ -167,7 +167,7 @@ public:
       auto   packer = MomentPacker(decimate);
       size_t disp0  = disp;
       size_t size   = nz * ny * nx * Ns * 14 * sizeof(float64);
-      size_t nbyte  = this->queue(packer, data, disp);
+      size_t nbyte  = this->write_packed_chunks(packer, data, disp);
       int    nc     = static_cast<int>(nbyte / size);
 
       // metadata

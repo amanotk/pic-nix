@@ -3,7 +3,6 @@
 #define _HALO3D_HPP_
 
 #include "nix.hpp"
-#include "xtensorall.hpp"
 
 NIX_NAMESPACE_BEGIN
 

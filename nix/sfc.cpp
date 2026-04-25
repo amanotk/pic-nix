@@ -5,164 +5,194 @@
 ///
 #include "sfc.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+
 namespace sfc
 {
-void gilbert2d(array2d& index, int& id, int x, int y, int ax, int ay, int bx, int by);
-void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int az, int bx, int by,
-               int bz, int cx, int cy, int cz);
+//
+// internal helpers
+//
+void get_map1d(size_t Nx, int ncol, std::vector<int>& index, std::vector<int>& coord);
+
+void gilbert2d(std::vector<int>& index, int Nx, int& id, int x, int y, int ax, int ay, int bx,
+               int by);
+
+void gilbert3d(std::vector<int>& index, int Ny, int Nx, int& id, int x, int y, int z, int ax,
+               int ay, int az, int bx, int by, int bz, int cx, int cy, int cz);
 
 inline int sign(const int x)
 {
   return x == 0 ? 0 : (x > 0 ? +1 : -1);
 }
 
-inline void forward_id_2d(array2d& index, int& id, int x, int y)
+inline void forward_id_2d(std::vector<int>& index, int Nx, int& id, int x, int y)
 {
-  index.at(y, x) = id;
+  index[y * Nx + x] = id;
   id++;
 }
 
-inline void forward_id_3d(array3d& index, int& id, int x, int y, int z)
+inline void forward_id_3d(std::vector<int>& index, int Ny, int Nx, int& id, int x, int y, int z)
 {
-  index.at(z, y, x) = id;
+  index[z * Ny * Nx + y * Nx + x] = id;
   id++;
 }
 
-void get_map1d(size_t Nx, array1d& index, array2d& coord)
+//
+// 1D SFC
+//
+void get_map1d(size_t Nx, int ncol, std::vector<int>& index, std::vector<int>& coord)
 {
-  for (int ix = 0; ix < Nx; ix++) {
-    index(ix)    = ix;
-    coord(ix, 0) = ix;
+  for (size_t ix = 0; ix < Nx; ix++) {
+    index[ix]        = static_cast<int>(ix);
+    coord[ix * ncol] = static_cast<int>(ix);
   }
 }
 
-void get_map2d(size_t Ny, size_t Nx, array2d& index, array2d& coord)
+//
+// 2D SFC
+//
+void get_map2d(size_t Ny, size_t Nx, int ncol, std::vector<int>& index, std::vector<int>& coord)
 {
-  // calculate coordiante to ID map
   if (Ny != 1 && Nx != 1) {
-    // 2D mapping
     int id = 0;
     int x  = 0;
     int y  = 0;
 
     if (Nx >= Ny) {
-      gilbert2d(index, id, x, y, Nx, 0, 0, Ny);
+      gilbert2d(index, static_cast<int>(Nx), id, x, y, static_cast<int>(Nx), 0, 0,
+                static_cast<int>(Ny));
     } else {
-      gilbert2d(index, id, x, y, 0, Ny, Nx, 0);
+      gilbert2d(index, static_cast<int>(Nx), id, x, y, 0, static_cast<int>(Ny),
+                static_cast<int>(Nx), 0);
     }
   } else if (Ny == 1 && Nx != 1) {
-    // 1D mapping along x
-    array1d index1d = xt::zeros<int>({Nx});
-    get_map1d(Nx, index1d, coord);
-    xt::view(index, 1, xt::all()) = index1d;
+    std::vector<int> index1d(Nx, 0);
+    get_map1d(Nx, ncol, index1d, coord);
+    for (size_t ix = 0; ix < Nx; ix++) {
+      index[0 * Nx + ix] = index1d[ix];
+    }
   } else if (Ny != 1 && Nx == 1) {
-    // 1D mapping along y
-    array1d index1d = xt::zeros<int>({Ny});
-    get_map1d(Ny, index1d, coord);
-    xt::view(index, xt::all(), 1) = index1d;
+    std::vector<int> index1d(Ny, 0);
+    get_map1d(Ny, ncol, index1d, coord);
+    for (size_t iy = 0; iy < Ny; iy++) {
+      index[iy * Nx + 0] = index1d[iy];
+    }
   } else {
-    // Nx = Ny = 1
-    index(0, 0) = 0;
+    index[0] = 0;
   }
 
-  // calculate ID to coordiante map
-  for (int iy = 0; iy < Ny; iy++) {
-    for (int ix = 0; ix < Nx; ix++) {
-      int id          = index(iy, ix);
-      coord.at(id, 0) = ix;
-      coord.at(id, 1) = iy;
+  for (size_t iy = 0; iy < Ny; iy++) {
+    for (size_t ix = 0; ix < Nx; ix++) {
+      int id               = index[iy * Nx + ix];
+      coord[id * ncol + 0] = static_cast<int>(ix);
+      coord[id * ncol + 1] = static_cast<int>(iy);
     }
   }
 }
 
-void get_map3d(size_t Nz, size_t Ny, size_t Nx, array3d& index, array2d& coord)
+//
+// 3D SFC
+//
+void get_map3d(size_t Nz, size_t Ny, size_t Nx, std::vector<int>& index, std::vector<int>& coord)
 {
-  // calculate coordiante to ID map
   if (Nz != 1 && Ny != 1 && Nx != 1) {
-    // 3D mapping
     int id = 0;
-    int x  = 0;
-    int y  = 0;
-    int z  = 0;
+    int x = 0, y = 0, z = 0;
 
     if (Nx >= Ny && Nx >= Nz) {
-      gilbert3d(index, id, x, y, z, Nx, 0, 0, 0, Ny, 0, 0, 0, Nz);
+      gilbert3d(index, static_cast<int>(Ny), static_cast<int>(Nx), id, x, y, z,
+                static_cast<int>(Nx), 0, 0, 0, static_cast<int>(Ny), 0, 0, 0, static_cast<int>(Nz));
     } else if (Ny >= Nx && Ny >= Nz) {
-      gilbert3d(index, id, x, y, z, 0, Ny, 0, Nx, 0, 0, 0, 0, Nz);
+      gilbert3d(index, static_cast<int>(Ny), static_cast<int>(Nx), id, x, y, z, 0,
+                static_cast<int>(Ny), 0, static_cast<int>(Nx), 0, 0, 0, 0, static_cast<int>(Nz));
     } else if (Nz >= Nx && Nz >= Ny) {
-      gilbert3d(index, id, x, y, z, 0, 0, Nz, Nx, 0, 0, 0, Ny, 0);
+      gilbert3d(index, static_cast<int>(Ny), static_cast<int>(Nx), id, x, y, z, 0, 0,
+                static_cast<int>(Nz), static_cast<int>(Nx), 0, 0, 0, static_cast<int>(Ny), 0);
     }
   } else if (Nz == 1 && Ny == 1 && Nx != 1) {
-    // 1D mapping along x
-    array1d index1d = xt::zeros<int>({Nx});
-    get_map1d(Nx, index1d, coord);
-    xt::view(index, 1, 1, xt::all()) = index1d;
+    std::vector<int> index1d(Nx, 0);
+    get_map1d(Nx, 3, index1d, coord);
+    for (size_t ix = 0; ix < Nx; ix++) {
+      index[ix] = index1d[ix];
+    }
   } else if (Nz == 1 && Ny != 1 && Nx == 1) {
-    // 1D mapping along y
-    array1d index1d = xt::zeros<int>({Ny});
-    get_map1d(Ny, index1d, coord);
-    xt::view(index, 1, xt::all(), 1) = index1d;
+    std::vector<int> index1d(Ny, 0);
+    get_map1d(Ny, 3, index1d, coord);
+    for (size_t iy = 0; iy < Ny; iy++) {
+      index[iy * Nx] = index1d[iy];
+    }
   } else if (Nz != 1 && Ny == 1 && Nx == 1) {
-    // 1D mapping along z
-    array1d index1d = xt::zeros<int>({Nz});
-    get_map1d(Nz, index1d, coord);
-    xt::view(index, xt::all(), 1, 1) = index1d;
+    std::vector<int> index1d(Nz, 0);
+    get_map1d(Nz, 3, index1d, coord);
+    for (size_t iz = 0; iz < Nz; iz++) {
+      index[iz * Ny * Nx] = index1d[iz];
+    }
   } else if (Nz == 1 && Ny != 1 && Nx != 1) {
-    // 2D mapping along x, y
-    array2d index2d = xt::zeros<int>({Ny, Nx});
-    get_map2d(Ny, Nx, index2d, coord);
-    xt::view(index, 1, xt::all(), xt::all()) = index2d;
+    std::vector<int> index2d(Ny * Nx, 0);
+    get_map2d(Ny, Nx, 3, index2d, coord);
+    for (size_t iy = 0; iy < Ny; iy++) {
+      for (size_t ix = 0; ix < Nx; ix++) {
+        index[iy * Nx + ix] = index2d[iy * Nx + ix];
+      }
+    }
   } else if (Nz != 1 && Ny == 1 && Nx != 1) {
-    // 2D mapping along x, z
-    array2d index2d = xt::zeros<int>({Nz, Nx});
-    get_map2d(Nz, Nx, index2d, coord);
-    xt::view(index, xt::all(), 1, xt::all()) = index2d;
+    std::vector<int> index2d(Nz * Nx, 0);
+    get_map2d(Nz, Nx, 3, index2d, coord);
+    for (size_t iz = 0; iz < Nz; iz++) {
+      for (size_t ix = 0; ix < Nx; ix++) {
+        index[iz * Ny * Nx + ix] = index2d[iz * Nx + ix];
+      }
+    }
   } else if (Nz != 1 && Ny != 1 && Nx == 1) {
-    // 2D mapping along y, z
-    array2d index2d = xt::zeros<int>({Nz, Ny});
-    get_map2d(Nz, Ny, index2d, coord);
-    xt::view(index, xt::all(), xt::all(), 1) = index2d;
+    std::vector<int> index2d(Nz * Ny, 0);
+    get_map2d(Nz, Ny, 3, index2d, coord);
+    for (size_t iz = 0; iz < Nz; iz++) {
+      for (size_t iy = 0; iy < Ny; iy++) {
+        index[iz * Ny * Nx + iy * Nx] = index2d[iz * Ny + iy];
+      }
+    }
   } else {
-    // Nx = Ny = Nz = 1
-    index(0, 0, 0) = 0;
+    index[0] = 0;
   }
 
-  // calculate ID to coordinate map
-  for (int iz = 0; iz < Nz; iz++) {
-    for (int iy = 0; iy < Ny; iy++) {
-      for (int ix = 0; ix < Nx; ix++) {
-        int id          = index.at(iz, iy, ix);
-        coord.at(id, 0) = ix;
-        coord.at(id, 1) = iy;
-        coord.at(id, 2) = iz;
+  for (size_t iz = 0; iz < Nz; iz++) {
+    for (size_t iy = 0; iy < Ny; iy++) {
+      for (size_t ix = 0; ix < Nx; ix++) {
+        int id            = index[iz * Ny * Nx + iy * Nx + ix];
+        coord[id * 3 + 0] = static_cast<int>(ix);
+        coord[id * 3 + 1] = static_cast<int>(iy);
+        coord[id * 3 + 2] = static_cast<int>(iz);
       }
     }
   }
 }
 
-template <typename T>
-bool check_index(T& index)
+//
+// validation
+//
+bool check_index(const std::vector<int>& index)
 {
   bool status = true;
 
-  auto flatindex = xt::sort(xt::flatten(index));
-  for (int id = 0; id < flatindex.size(); id++) {
-    status = status & (id == flatindex(id));
+  std::vector<int> flat(index.begin(), index.end());
+  std::sort(flat.begin(), flat.end());
+  for (size_t id = 0; id < flat.size(); id++) {
+    status = status & (static_cast<int>(id) == flat[id]);
   }
 
   return status;
 }
 
-bool check_locality2d(array2d& coord, const int distmax2)
+bool check_locality2d(const std::vector<int>& coord, size_t N, int distmax2)
 {
   bool status = true;
 
-  int dx, dy;
-  dx = coord(0, 0);
-  dy = coord(0, 1);
-  for (int id = 1; id < coord.shape(0); id++) {
-    int ix = coord(id, 0);
-    int iy = coord(id, 1);
+  int dx = coord[0 * 2 + 0];
+  int dy = coord[0 * 2 + 1];
+  for (size_t id = 1; id < N; id++) {
+    int ix = coord[id * 2 + 0];
+    int iy = coord[id * 2 + 1];
     dx     = dx - ix;
     dy     = dy - iy;
     status = status & (dx * dx + dy * dy <= distmax2);
@@ -173,18 +203,17 @@ bool check_locality2d(array2d& coord, const int distmax2)
   return status;
 }
 
-bool check_locality3d(array2d& coord, const int distmax2)
+bool check_locality3d(const std::vector<int>& coord, size_t N, int distmax2)
 {
   bool status = true;
 
-  int dx, dy, dz;
-  dx = coord(0, 0);
-  dy = coord(0, 1);
-  dz = coord(0, 2);
-  for (int id = 1; id < coord.shape(0); id++) {
-    int ix = coord(id, 0);
-    int iy = coord(id, 1);
-    int iz = coord(id, 2);
+  int dx = coord[0 * 3 + 0];
+  int dy = coord[0 * 3 + 1];
+  int dz = coord[0 * 3 + 2];
+  for (size_t id = 1; id < N; id++) {
+    int ix = coord[id * 3 + 0];
+    int iy = coord[id * 3 + 1];
+    int iz = coord[id * 3 + 2];
     dx     = dx - ix;
     dy     = dy - iy;
     dz     = dz - iz;
@@ -197,7 +226,11 @@ bool check_locality3d(array2d& coord, const int distmax2)
   return status;
 }
 
-void gilbert2d(array2d& index, int& id, int x, int y, int ax, int ay, int bx, int by)
+//
+// Gilbert curve recursion (2D)
+//
+void gilbert2d(std::vector<int>& index, int Nx, int& id, int x, int y, int ax, int ay, int bx,
+               int by)
 {
   int w   = std::abs(ax + ay);
   int h   = std::abs(bx + by);
@@ -210,20 +243,18 @@ void gilbert2d(array2d& index, int& id, int x, int y, int ax, int ay, int bx, in
   // trivial path
   //
   {
-    // straight segment in x
     if (h == 1) {
       for (int i = 0; i < w; i++) {
-        forward_id_2d(index, id, x, y);
+        forward_id_2d(index, Nx, id, x, y);
         x += dax;
         y += day;
       }
       return;
     }
 
-    // straight segment in y
     if (w == 1) {
       for (int i = 0; i < h; i++) {
-        forward_id_2d(index, id, x, y);
+        forward_id_2d(index, Nx, id, x, y);
         x += dbx;
         y += dby;
       }
@@ -243,9 +274,6 @@ void gilbert2d(array2d& index, int& id, int x, int y, int ax, int ay, int bx, in
     int h2  = abs(bx2 + by2);
 
     if (2 * w > 3 * h) {
-      //
-      // one-dimensional spliting in x
-      //
       if ((w2 % 2) && (w > 2)) {
         ax2 = ax2 + dax;
         ay2 = ay2 + day;
@@ -254,17 +282,12 @@ void gilbert2d(array2d& index, int& id, int x, int y, int ax, int ay, int bx, in
       int ax3 = ax - ax2;
       int ay3 = ay - ay2;
 
-      // first step
-      gilbert2d(index, id, x, y, +ax2, +ay2, +bx, +by);
+      gilbert2d(index, Nx, id, x, y, +ax2, +ay2, +bx, +by);
       x += ax2;
       y += ay2;
 
-      // second step
-      gilbert2d(index, id, x, y, +ax3, +ay3, +bx, +by);
+      gilbert2d(index, Nx, id, x, y, +ax3, +ay3, +bx, +by);
     } else {
-      //
-      // two-dimensional spliting
-      //
       if ((h2 % 2) && (h > 2)) {
         bx2 = bx2 + dbx;
         by2 = by2 + dby;
@@ -275,26 +298,26 @@ void gilbert2d(array2d& index, int& id, int x, int y, int ax, int ay, int bx, in
       int bx3 = bx - bx2;
       int by3 = by - by2;
 
-      // first step
-      gilbert2d(index, id, x, y, +bx2, +by2, +ax2, +ay2);
+      gilbert2d(index, Nx, id, x, y, +bx2, +by2, +ax2, +ay2);
       x += bx2;
       y += by2;
 
-      // second step
-      gilbert2d(index, id, x, y, +ax, +ay, +bx3, +by3);
+      gilbert2d(index, Nx, id, x, y, +ax, +ay, +bx3, +by3);
       x += ax;
       y += ay;
 
-      // third step
       x -= dax + dbx;
       y -= day + dby;
-      gilbert2d(index, id, x, y, -bx2, -by2, -ax3, -ay3);
+      gilbert2d(index, Nx, id, x, y, -bx2, -by2, -ax3, -ay3);
     }
   }
 }
 
-void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int az, int bx, int by,
-               int bz, int cx, int cy, int cz)
+//
+// Gilbert curve recursion (3D)
+//
+void gilbert3d(std::vector<int>& index, int Ny, int Nx, int& id, int x, int y, int z, int ax,
+               int ay, int az, int bx, int by, int bz, int cx, int cy, int cz)
 {
   int w   = std::abs(ax + ay + az);
   int h   = std::abs(bx + by + bz);
@@ -313,10 +336,9 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
   // trivial path
   //
   {
-    // straight segment in x
     if (h == 1 && d == 1) {
       for (int i = 0; i < w; i++) {
-        forward_id_3d(index, id, x, y, z);
+        forward_id_3d(index, Ny, Nx, id, x, y, z);
         x += dax;
         y += day;
         z += daz;
@@ -324,10 +346,9 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
       return;
     }
 
-    // straight segment in y
     if (d == 1 && w == 1) {
       for (int i = 0; i < h; i++) {
-        forward_id_3d(index, id, x, y, z);
+        forward_id_3d(index, Ny, Nx, id, x, y, z);
         x += dbx;
         y += dby;
         z += dbz;
@@ -335,10 +356,9 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
       return;
     }
 
-    // straight segment in z
     if (w == 1 && h == 1) {
       for (int i = 0; i < d; i++) {
-        forward_id_3d(index, id, x, y, z);
+        forward_id_3d(index, Ny, Nx, id, x, y, z);
         x += dcx;
         y += dcy;
         z += dcz;
@@ -383,25 +403,17 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
     }
 
     if ((2 * w > 3 * h) && (2 * w > 3 * d)) {
-      //
-      // one-dimensional spliting in x
-      //
       int ax3 = ax - ax2;
       int ay3 = ay - ay2;
       int az3 = az - az2;
 
-      // first step
-      gilbert3d(index, id, x, y, z, +ax2, +ay2, +az2, +bx, +by, +bz, +cx, +cy, +cz);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +ax2, +ay2, +az2, +bx, +by, +bz, +cx, +cy, +cz);
       x += ax2;
       y += ay2;
       z += az2;
 
-      // second step
-      gilbert3d(index, id, x, y, z, +ax3, +ay3, +az3, +bx, +by, +bz, +cx, +cy, +cz);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +ax3, +ay3, +az3, +bx, +by, +bz, +cx, +cy, +cz);
     } else if (3 * h > 4 * d) {
-      //
-      // two-dimensional spliting in x-y
-      //
       int ax3 = ax - ax2;
       int ay3 = ay - ay2;
       int az3 = az - az2;
@@ -409,27 +421,21 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
       int by3 = by - by2;
       int bz3 = bz - bz2;
 
-      // first step
-      gilbert3d(index, id, x, y, z, +bx2, +by2, +bz2, +cx, +cy, +cz, +ax2, +ay2, +az2);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +bx2, +by2, +bz2, +cx, +cy, +cz, +ax2, +ay2, +az2);
       x += bx2;
       y += by2;
       z += bz2;
 
-      // second step
-      gilbert3d(index, id, x, y, z, +ax, +ay, +az, +bx3, +by3, +bz3, +cx, +cy, +cz);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +ax, +ay, +az, +bx3, +by3, +bz3, +cx, +cy, +cz);
       x += ax;
       y += ay;
       z += az;
 
-      // third step
       x -= dax + dbx;
       y -= day + dby;
       z -= daz + dbz;
-      gilbert3d(index, id, x, y, z, -bx2, -by2, -bz2, +cx, +cy, +cz, -ax3, -ay3, -az3);
+      gilbert3d(index, Ny, Nx, id, x, y, z, -bx2, -by2, -bz2, +cx, +cy, +cz, -ax3, -ay3, -az3);
     } else if (3 * d > 4 * h) {
-      //
-      // two-dimensional spliting in x-z
-      //
       int ax3 = ax - ax2;
       int ay3 = ay - ay2;
       int az3 = az - az2;
@@ -437,27 +443,21 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
       int cy3 = cy - cy2;
       int cz3 = cz - cz2;
 
-      // first step
-      gilbert3d(index, id, x, y, z, +cx2, +cy2, +cz2, +ax2, +ay2, +az2, +bx, +by, +bz);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +cx2, +cy2, +cz2, +ax2, +ay2, +az2, +bx, +by, +bz);
       x += cx2;
       y += cy2;
       z += cz2;
 
-      // second step
-      gilbert3d(index, id, x, y, z, +ax, +ay, +az, +bx, +by, +bz, +cx3, +cy3, +cz3);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +ax, +ay, +az, +bx, +by, +bz, +cx3, +cy3, +cz3);
       x += ax;
       y += ay;
       z += az;
 
-      // third step
       x -= dax + dcx;
       y -= day + dcy;
       z -= daz + dcz;
-      gilbert3d(index, id, x, y, z, -cx2, -cy2, -cz2, -ax3, -ay3, -az3, +bx, +by, +bz);
+      gilbert3d(index, Ny, Nx, id, x, y, z, -cx2, -cy2, -cz2, -ax3, -ay3, -az3, +bx, +by, +bz);
     } else {
-      //
-      // fully three-dimensional spliting
-      //
       int ax3 = ax - ax2;
       int ay3 = ay - ay2;
       int az3 = az - az2;
@@ -468,48 +468,38 @@ void gilbert3d(array3d& index, int& id, int x, int y, int z, int ax, int ay, int
       int cy3 = cy - cy2;
       int cz3 = cz - cz2;
 
-      // first step
-      gilbert3d(index, id, x, y, z, +bx2, +by2, +bz2, +cx2, +cy2, +cz2, +ax2, +ay2, +az2);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +bx2, +by2, +bz2, +cx2, +cy2, +cz2, +ax2, +ay2, +az2);
       x += bx2;
       y += by2;
       z += bz2;
 
-      // second step
-      gilbert3d(index, id, x, y, z, +cx, +cy, +cz, +ax2, +ay2, +az2, +bx3, +by3, +bz3);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +cx, +cy, +cz, +ax2, +ay2, +az2, +bx3, +by3, +bz3);
       x += cx;
       y += cy;
       z += cz;
 
-      // third step
       x -= dbx + dcx;
       y -= dby + dcy;
       z -= dbz + dcz;
-      gilbert3d(index, id, x, y, z, +ax, +ay, +az, -bx2, -by2, -bz2, -cx3, -cy3, -cz3);
+      gilbert3d(index, Ny, Nx, id, x, y, z, +ax, +ay, +az, -bx2, -by2, -bz2, -cx3, -cy3, -cz3);
       x += ax;
       y += ay;
       z += az;
 
-      // fourth step
       x -= dax - dbx;
       y -= day - dby;
       z -= daz - dbz;
-      gilbert3d(index, id, x, y, z, -cx, -cy, -cz, -ax3, -ay3, -az3, +bx3, +by3, +bz3);
+      gilbert3d(index, Ny, Nx, id, x, y, z, -cx, -cy, -cz, -ax3, -ay3, -az3, +bx3, +by3, +bz3);
       x -= cx;
       y -= cy;
       z -= cz;
 
-      // fifth step
       x -= dbx - dcx;
       y -= dby - dcy;
       z -= dbz - dcz;
-      gilbert3d(index, id, x, y, z, -bx2, -by2, -bz2, +cx2, +cy2, +cz2, -ax3, -ay3, -az3);
+      gilbert3d(index, Ny, Nx, id, x, y, z, -bx2, -by2, -bz2, +cx2, +cy2, +cz2, -ax3, -ay3, -az3);
     }
   }
 }
 
-template bool check_index(array1d& index);
-template bool check_index(array2d& index);
-template bool check_index(array3d& index);
-
 } // namespace sfc
-

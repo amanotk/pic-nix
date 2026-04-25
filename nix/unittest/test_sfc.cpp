@@ -1,7 +1,6 @@
 // -*- C++ -*-
 
 #include "sfc.hpp"
-#include "xtensorall.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -16,11 +15,11 @@ TEST_CASE("SFC2D")
     size_t Nx = GENERATE(1, 4, 20, 100);
     size_t Ny = GENERATE(1, 4, 20, 100);
 
-    xt::xtensor<int, 2> index({Ny, Nx});
-    xt::xtensor<int, 2> coord({Ny * Nx, 2});
+    std::vector<int> index(Ny * Nx, 0);
+    std::vector<int> coord(Ny * Nx * 2, 0);
 
-    sfc::get_map2d(Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality2d(coord));
+    sfc::get_map2d(Ny, Nx, 2, index, coord);
+    REQUIRE(sfc::check_locality2d(coord, Ny * Nx));
     REQUIRE(sfc::check_index(index));
   }
   SECTION("odd-x")
@@ -29,11 +28,11 @@ TEST_CASE("SFC2D")
     size_t    Nx       = GENERATE(3, 7, 9);
     size_t    Ny       = GENERATE(4, 8, 16);
 
-    xt::xtensor<int, 2> index({Ny, Nx});
-    xt::xtensor<int, 2> coord({Ny * Nx, 2});
+    std::vector<int> index(Ny * Nx, 0);
+    std::vector<int> coord(Ny * Nx * 2, 0);
 
-    sfc::get_map2d(Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality2d(coord, distmax2));
+    sfc::get_map2d(Ny, Nx, 2, index, coord);
+    REQUIRE(sfc::check_locality2d(coord, Ny * Nx, distmax2));
     REQUIRE(sfc::check_index(index));
   }
   SECTION("odd-y")
@@ -42,11 +41,11 @@ TEST_CASE("SFC2D")
     size_t    Nx       = GENERATE(4, 8, 16);
     size_t    Ny       = GENERATE(3, 7, 9);
 
-    xt::xtensor<int, 2> index({Ny, Nx});
-    xt::xtensor<int, 2> coord({Ny * Nx, 2});
+    std::vector<int> index(Ny * Nx, 0);
+    std::vector<int> coord(Ny * Nx * 2, 0);
 
-    sfc::get_map2d(Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality2d(coord, distmax2));
+    sfc::get_map2d(Ny, Nx, 2, index, coord);
+    REQUIRE(sfc::check_locality2d(coord, Ny * Nx, distmax2));
     REQUIRE(sfc::check_index(index));
   }
 }
@@ -62,11 +61,11 @@ TEST_CASE("SFC3D")
     size_t Ny = GENERATE(1, 4, 20, 100);
     size_t Nz = GENERATE(1, 4, 20, 100);
 
-    xt::xtensor<int, 3> index({Nz, Ny, Nx});
-    xt::xtensor<int, 2> coord({Nz * Ny * Nx, 3});
+    std::vector<int> index(Nz * Ny * Nx, 0);
+    std::vector<int> coord(Nz * Ny * Nx * 3, 0);
 
     sfc::get_map3d(Nz, Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality3d(coord));
+    REQUIRE(sfc::check_locality3d(coord, Nz * Ny * Nx));
     REQUIRE(sfc::check_index(index));
   }
   SECTION("odd-x")
@@ -76,11 +75,11 @@ TEST_CASE("SFC3D")
     size_t    Ny       = GENERATE(4, 8, 16);
     size_t    Nz       = GENERATE(4, 8, 16);
 
-    xt::xtensor<int, 3> index({Nz, Ny, Nx});
-    xt::xtensor<int, 2> coord({Nz * Ny * Nx, 3});
+    std::vector<int> index(Nz * Ny * Nx, 0);
+    std::vector<int> coord(Nz * Ny * Nx * 3, 0);
 
     sfc::get_map3d(Nz, Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality3d(coord, distmax2));
+    REQUIRE(sfc::check_locality3d(coord, Nz * Ny * Nx, distmax2));
     REQUIRE(sfc::check_index(index));
   }
   SECTION("odd-y")
@@ -90,11 +89,11 @@ TEST_CASE("SFC3D")
     size_t    Ny       = GENERATE(3, 7, 9);
     size_t    Nz       = GENERATE(4, 8, 16);
 
-    xt::xtensor<int, 3> index({Nz, Ny, Nx});
-    xt::xtensor<int, 2> coord({Nz * Ny * Nx, 3});
+    std::vector<int> index(Nz * Ny * Nx, 0);
+    std::vector<int> coord(Nz * Ny * Nx * 3, 0);
 
     sfc::get_map3d(Nz, Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality3d(coord, distmax2));
+    REQUIRE(sfc::check_locality3d(coord, Nz * Ny * Nx, distmax2));
     REQUIRE(sfc::check_index(index));
   }
   SECTION("odd-z")
@@ -104,12 +103,11 @@ TEST_CASE("SFC3D")
     size_t    Ny       = GENERATE(4, 8, 16);
     size_t    Nz       = GENERATE(3, 7, 9);
 
-    xt::xtensor<int, 3> index({Nz, Ny, Nx});
-    xt::xtensor<int, 2> coord({Nz * Ny * Nx, 3});
+    std::vector<int> index(Nz * Ny * Nx, 0);
+    std::vector<int> coord(Nz * Ny * Nx * 3, 0);
 
     sfc::get_map3d(Nz, Ny, Nx, index, coord);
-    REQUIRE(sfc::check_locality3d(coord, distmax2));
+    REQUIRE(sfc::check_locality3d(coord, Nz * Ny * Nx, distmax2));
     REQUIRE(sfc::check_index(index));
   }
 }
-

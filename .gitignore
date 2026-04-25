@@ -2,6 +2,7 @@
 *.d
 *.a
 *.msgpack
+!script/integration/pic/golden/**/*.msgpack
 *.out
 *.data
 *.png
@@ -19,3 +20,14 @@ TODO.md
 
 # Manual integration run output
 run-integration-pic/
+
+# graphify local state
+.graphify/
+.graphify-scope/
+graphify-out/
+
+# OpenCode local dependencies
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock

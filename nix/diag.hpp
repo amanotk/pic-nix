@@ -10,7 +10,6 @@ class Diag
 {
 protected:
   class Info; // forward declaration
-  using info_type = Info;
 
   /// class to hold MPI information
   class Info
@@ -76,6 +75,8 @@ protected:
   std::string                         name; // diagnostic name
 
 public:
+  using info_type = Info;
+
   // constructor
   Diag(std::string name) : name(name)
   {
@@ -96,6 +97,53 @@ public:
   virtual bool match(std::string key)
   {
     return key == name;
+  }
+
+  // check if the diagnostic is required
+  virtual bool require_diagnostic(int curstep, json& config)
+  {
+    return require_diagnostic_impl(curstep, config);
+  }
+
+  // check if JSON output is required for this rank
+  virtual bool is_json_required()
+  {
+    bool is_json_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
+    bool is_json_required_posix = info->iomode == "posix" && info->intra_rank == 0;
+
+    return is_json_required_mpiio || is_json_required_posix;
+  }
+
+  // check if the given step is the initial step
+  virtual bool is_initial_step(int curstep, json& config)
+  {
+    return is_initial_step_impl(curstep, config);
+  }
+
+  // get output prefix from config
+  virtual std::string get_prefix(json& config, std::string prefix)
+  {
+    return get_prefix_impl(config, prefix);
+  }
+
+  static bool require_diagnostic_impl(int curstep, json& config)
+  {
+    int interval = config.value("interval", 1);
+    int begin    = config.value("begin", 0);
+    int end      = config.value("end", std::numeric_limits<int>::max());
+
+    return (curstep >= begin) && (curstep <= end) && ((curstep - begin) % interval == 0);
+  }
+
+  static bool is_initial_step_impl(int curstep, json& config)
+  {
+    int begin = config.value("begin", 0);
+    return curstep == begin;
+  }
+
+  static std::string get_prefix_impl(json& config, std::string prefix)
+  {
+    return config.value("prefix", prefix);
   }
 
   // initialize static info
