@@ -175,14 +175,14 @@ def analyze_run(run_dir, Ns):
     for key in data["particle_keys"]:
         summary[key] = data[key]
 
-    snapshot = _read_field_snapshot(run_dir, Ns)
+    snapshot = _read_field_snapshot(run_dir)
     if snapshot is not None:
         summary["snapshot"] = snapshot
 
     return summary
 
 
-def _read_field_snapshot(run_dir, Ns):
+def _read_field_snapshot(run_dir):
     field_dir = run_dir / "data" / "field"
     if not field_dir.is_dir():
         return None

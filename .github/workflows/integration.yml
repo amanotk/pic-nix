@@ -31,12 +31,13 @@ jobs:
 
       - name: Build
         run: |
-          cmake -S . -B build \
+          mkdir -p run-integration-pic/build-gcc
+          cmake -S . -B run-integration-pic/build-gcc \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
             -DCMAKE_CXX_COMPILER=mpicxx
-          cmake --build build --target beam --parallel
-          cmake --build build --target shock --parallel
+          cmake --build run-integration-pic/build-gcc --target beam --parallel
+          cmake --build run-integration-pic/build-gcc --target shock --parallel
 
       - name: Run and compare all cases
         run: |
