@@ -39,6 +39,11 @@ COMPILER_PROFILES = {
     },
 }
 
+SNAPSHOT_MAX_REL_TOL = 1.0e-8
+SNAPSHOT_NMSE_TOL = 1.0e-14
+SNAPSHOT_REL_FLOOR = 1.0e-12
+SNAPSHOT_NMSE_EPS = 1.0e-30
+
 
 def cmd_build(args):
     case = _resolve_case(args.case)
@@ -352,9 +357,7 @@ def cmd_compare(args):
             ok = False
             keys_checked += 1
         else:
-            snap_ok, snap_checked = _compare_snapshot(
-                golden_snap, current_snap, rtol, atol
-            )
+            snap_ok, snap_checked = _compare_snapshot(golden_snap, current_snap)
             if not snap_ok:
                 ok = False
             keys_checked += snap_checked
@@ -367,7 +370,7 @@ def cmd_compare(args):
     sys.exit(1)
 
 
-def _compare_snapshot(golden_snap, current_snap, rtol, atol):
+def _compare_snapshot(golden_snap, current_snap):
     ok = True
     checked = 0
 
@@ -391,12 +394,18 @@ def _compare_snapshot(golden_snap, current_snap, rtol, atol):
             f"[compare] FAIL snapshot.uf: shape mismatch golden={g_shape} current={c_shape}"
         )
         ok = False
-    elif not np.allclose(c_uf, g_uf, rtol=rtol, atol=atol):
-        diff = np.max(np.abs(c_uf - g_uf) / (np.abs(g_uf) + atol))
-        print(f"[compare] FAIL snapshot.uf: max relative diff = {diff:.6e}")
-        ok = False
     else:
-        print("[compare] OK   snapshot.uf")
+        max_rel, nmse, max_abs = _snapshot_error_metrics(c_uf, g_uf)
+        if max_rel > SNAPSHOT_MAX_REL_TOL or nmse > SNAPSHOT_NMSE_TOL:
+            print(
+                "[compare] FAIL snapshot.uf: "
+                f"max_rel={max_rel:.6e} (tol={SNAPSHOT_MAX_REL_TOL:.6e}), "
+                f"nmse={nmse:.6e} (tol={SNAPSHOT_NMSE_TOL:.6e}), "
+                f"max_abs={max_abs:.6e}"
+            )
+            ok = False
+        else:
+            print(f"[compare] OK   snapshot.uf: max_rel={max_rel:.6e}, nmse={nmse:.6e}")
     checked += 1
 
     for key in sorted(current_snap.keys()):
@@ -412,15 +421,41 @@ def _compare_snapshot(golden_snap, current_snap, rtol, atol):
                 f"[compare] FAIL snapshot.{base_key}: shape mismatch golden={g_shape} current={c_shape}"
             )
             ok = False
-        elif not np.allclose(c, g, rtol=rtol, atol=atol):
-            diff = np.max(np.abs(c - g) / (np.abs(g) + atol))
-            print(f"[compare] FAIL snapshot.{base_key}: max relative diff = {diff:.6e}")
-            ok = False
         else:
-            print(f"[compare] OK   snapshot.{base_key}")
+            max_rel, nmse, max_abs = _snapshot_error_metrics(c, g)
+            if max_rel > SNAPSHOT_MAX_REL_TOL or nmse > SNAPSHOT_NMSE_TOL:
+                print(
+                    f"[compare] FAIL snapshot.{base_key}: "
+                    f"max_rel={max_rel:.6e} (tol={SNAPSHOT_MAX_REL_TOL:.6e}), "
+                    f"nmse={nmse:.6e} (tol={SNAPSHOT_NMSE_TOL:.6e}), "
+                    f"max_abs={max_abs:.6e}"
+                )
+                ok = False
+            else:
+                print(
+                    f"[compare] OK   snapshot.{base_key}: "
+                    f"max_rel={max_rel:.6e}, nmse={nmse:.6e}"
+                )
         checked += 1
 
     return ok, checked
+
+
+def _snapshot_error_metrics(current, golden):
+    if current.size == 0:
+        return 0.0, 0.0, 0.0
+
+    diff = current - golden
+    abs_diff = np.abs(diff)
+    rel_denom = np.maximum(np.abs(golden), SNAPSHOT_REL_FLOOR)
+
+    max_rel = float(np.max(abs_diff / rel_denom))
+    max_abs = float(np.max(abs_diff))
+    mse = float(np.mean(diff * diff))
+    nmse_denom = float(np.mean(golden * golden)) + SNAPSHOT_NMSE_EPS
+    nmse = mse / nmse_denom
+
+    return max_rel, nmse, max_abs
 
 
 def cmd_update_golden(args):
