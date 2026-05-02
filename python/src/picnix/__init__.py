@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" Python Data Analysis Tool for PIC-NIX
-"""
+"""Python Data Analysis Tool for PIC-NIX"""
 
 DEFAULT_LOG_PREFIX = "log"
 DEFAULT_LOAD_PREFIX = "load"

@@ -9,10 +9,9 @@ A separate repository for `nix` can be found [here](https://github.com/amanotk/n
   - [Compile](#compile)  
 - [Tests](#tests)  
 - [Run](#run)  
-- [Post-processing](#post-processing)  
-  - [Environment Variable](#environment-variable)  
-  - [Python Script Dependencies](#python-script-dependencies)  
-  - [Quick Look](#quick-look)  
+- [Post-processing](#post-processing)
+  - [Python Analysis Package](#python-analysis-package)
+  - [Quick Look](#quick-look)
 
 ## Build
 
@@ -84,44 +83,23 @@ options:
   
 ## Post-processing
 
-### Environment Variable
-```
-$ export PICNIX_DIR=/some/where/pic-nix
-```
-Setting the environment variable `PICNIX_DIR` is necessary for running diagnostic python scripts.
+### Python Analysis Package
 
-### Python Script Dependencies  
-Third-party modules needed by the scripts under `script/` are listed in `script/requirements.txt`.  
-You can install them with `pip` or `uv` (both use the same file).  
-If you are new to Python environments: a virtual environment keeps project packages isolated  
-from your system Python. You can either install packages directly with `pip`/`uv`,  
-or install inside a virtual environment (`venv`). See the docs for details:  
-- https://docs.python.org/3/library/venv.html  
-- https://pip.pypa.io/en/stable/  
-- https://docs.astral.sh/uv/  
-  
-With `pip`:  
+The `picnix` Python package provides data analysis tools for simulation output.
+Install it as an editable package with `uv`:
+
+```sh
+# From the repository root
+uv pip install -e ./python
+
+# From another directory, pointing to a local clone
+uv pip install -e /path/to/pic-nix/python
+
+# Without cloning (install directly from git)
+uv pip install -e "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
-$ python -m venv picnix
-$ source picnix/bin/activate
-$ python -m pip install --upgrade pip
-$ python -m pip install -r script/requirements.txt
-```  
-With `uv`:  
-```
-$ uv venv picnix
-$ source picnix/bin/activate
-$ uv pip install -r script/requirements.txt
-```  
-`picnix` is just the environment directory name; you can rename it if you prefer.  
-Direct install without a virtual environment (installs into your current Python):  
-```
-$ python -m pip install --user -r script/requirements.txt
-```
-Or with `uv` (may require `--system` depending on your Python setup):  
-```
-$ uv pip install -r script/requirements.txt
-```  
+
+After installation, `import picnix` works from any directory.
 
 ### Quick Look
 After finishing the simulation, you can run the following command in the same directory:

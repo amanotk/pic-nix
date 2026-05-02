@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -45,18 +44,16 @@ CASE = IntegrationCase(
         },
     },
     config_patch=_patch_diagnostic_intervals,
-    generate_plots=lambda case,
-    run_dir,
-    data_dir,
-    out_dir,
-    summary,
-    repo_root: generate_plots(case, data_dir, out_dir, summary, repo_root),
+    generate_plots=lambda case, run_dir, data_dir, out_dir, summary, repo_root: (
+        generate_plots(case, data_dir, out_dir, summary, repo_root)
+    ),
 )
 
 
 def generate_plots(case, data_dir, out_dir, summary, repo_root):
     try:
-        picnix = _load_picnix(repo_root)
+        import picnix
+
         profile_path = _get_profile_path(data_dir)
         if profile_path is None:
             print("[plots] No profile.msgpack found; skipping field snapshots")
@@ -269,12 +266,3 @@ def _get_profile_path(data_dir):
     for candidate in sorted(data_dir.glob("profile*.msgpack")):
         return candidate
     return None
-
-
-def _load_picnix(repo_root):
-    script_dir = str(repo_root / "script")
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-    import picnix
-
-    return picnix
