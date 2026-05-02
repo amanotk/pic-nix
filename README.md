@@ -86,7 +86,15 @@ options:
 ### Python Analysis Package
 
 The `picnix` Python package provides data analysis tools for simulation output.
-Install it as an editable package with `uv`:
+It is recommended to install it inside a virtual environment:
+
+```sh
+# Create and activate a virtual environment
+uv venv .venv
+source .venv/bin/activate
+```
+
+Then install the package:
 
 ```sh
 # From the repository root
