@@ -147,7 +147,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
     # check field and particle snapshot time
     time1 = run.get_time("field")
     time2 = run.get_time("particle")
-    if time1.size != time2.size or np.allclose(time1, time2) == False:
+    if time1.size != time2.size or not np.allclose(time1, time2):
         raise ValueError("snapshots of field and particle do not match")
 
     # for all snapshots

@@ -99,7 +99,7 @@ class Run(picnix.Run):
             )
             plt.semilogy()
             plt.legend(loc="lower right")
-            plt.ylabel(r"$|B_y - i B_z|/B_0$".format(mode))
+            plt.ylabel(r"$|B_y - i B_z|/B_0$")
             plt.ylim(1e-4, 1e0)
             plt.grid()
 
@@ -199,14 +199,12 @@ class Run(picnix.Run):
         bp[...] = 0.0
         bp[..., ip] = bk[..., ip]
         bp = np.fft.ifft(bp, axis=-1)
-        bpy = +bp.real
         bpz = -bp.imag
 
         # positive helicity
         bm[...] = 0.0
         bm[..., im] = bk[..., im]
         bm = np.fft.ifft(bm, axis=-1)
-        bmy = +bm.real
         bmz = -bm.imag
 
         # plot

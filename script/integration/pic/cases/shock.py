@@ -266,3 +266,8 @@ def _get_profile_path(data_dir):
     for candidate in sorted(data_dir.glob("profile*.msgpack")):
         return candidate
     return None
+
+
+def _normalized(values, safe_total):
+    data = np.array(values) / safe_total
+    return np.clip(data, 1.0e-30, None)

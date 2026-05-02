@@ -97,7 +97,7 @@ class Run(picnix.Run):
             )
             plt.semilogy()
             plt.legend(loc="lower right")
-            plt.ylabel(r"$|E_x|$".format(mode))
+            plt.ylabel(r"$|E_x|$")
             plt.xlim(0, tt[-1])
             plt.ylim(1e-4, 1e-1)
             plt.grid()
