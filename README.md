@@ -89,22 +89,21 @@ The `picnix` Python package provides data analysis tools for simulation output.
 It is recommended to install it inside a virtual environment using `uv`:
 
 ```sh
-# Create and activate a virtual environment
+# Create a virtual environment
 uv venv .venv
-source .venv/bin/activate
 
 # Install the package
-uv pip install -e ./python
+uv pip install --python .venv -e ./python
 ```
 
 You can also install from other locations:
 
 ```sh
 # Pointing to a local clone
-uv pip install -e /path/to/pic-nix/python
+uv pip install --python .venv -e /path/to/pic-nix/python
 
 # Without cloning (install directly from git)
-uv pip install "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
+uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
 
 After installation, `import picnix` works from any directory.
