@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "picnix"
+version = "0.1.0"
+description = "Python data analysis tools for PIC-NIX simulations"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "tqdm",
+    "msgpack",
+    "h5py",
+    "toml",
+    "watchdog",
+    "nest-asyncio",
+    "aiofiles",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/picnix"]

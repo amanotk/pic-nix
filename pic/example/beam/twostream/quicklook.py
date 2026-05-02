@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import pathlib
-import sys
-
 import matplotlib as mpl
 import numpy as np
 
@@ -14,8 +10,6 @@ from matplotlib import pyplot as plt
 # global configuration
 plt.rcParams.update({"font.size": 12})
 
-if "PICNIX_DIR" in os.environ:
-    sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
 
 
@@ -153,7 +147,7 @@ def doit_job(profile, prefix, fps, boundary, cleanup):
     # check field and particle snapshot time
     time1 = run.get_time("field")
     time2 = run.get_time("particle")
-    if time1.size != time2.size or np.allclose(time1, time2) == False:
+    if time1.size != time2.size or not np.allclose(time1, time2):
         raise ValueError("snapshots of field and particle do not match")
 
     # for all snapshots

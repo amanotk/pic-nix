@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import pathlib
-import sys
-
 import matplotlib as mpl
 import numpy as np
 
@@ -14,8 +10,6 @@ from matplotlib import pyplot as plt
 # global configuration
 plt.rcParams.update({"font.size": 12})
 
-if "PICNIX_DIR" in os.environ:
-    sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
 
 

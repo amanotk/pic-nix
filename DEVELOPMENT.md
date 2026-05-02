@@ -74,6 +74,36 @@ To run only these tests:
 ctest --test-dir build -R test_pic_application --output-on-failure
 ```
 
+## Python Analysis Package (`picnix`)
+
+The `python/` directory contains the `picnix` Python package for
+analyzing PIC-NIX simulation output (field data, particle data, load
+balance diagnostics, etc.).
+
+### Install (editable, for development)
+
+From the repository root:
+
+```sh
+uv pip install -e ./python
+```
+
+After this, `import picnix` works from any directory.
+
+### Install from another directory
+
+Point `uv` at the `python/` subdirectory of any local clone:
+
+```sh
+uv pip install -e /path/to/pic-nix/python
+```
+
+### Install from git (no clone needed)
+
+```sh
+uv pip install "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
+```
+
 ## Language Server
 
 Generate the compilation database whenever you configure so `clangd`/your

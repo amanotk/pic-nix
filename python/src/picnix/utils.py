@@ -7,7 +7,6 @@ import pathlib
 import numpy as np
 import json
 import msgpack
-import asyncio
 import aiofiles
 
 from picnix import DEFAULT_LOG_PREFIX
@@ -218,7 +217,6 @@ def convert_to_mp4(prefix, fps, cleanup):
 
 
 def plot_chunk_dist1d(ax, coord, rank, delx=1, colors="w"):
-    import matplotlib as mpl
 
     cx = coord[:, 0]
     Nx = np.max(cx) + 1
@@ -269,7 +267,6 @@ def plot_chunk_dist2d(ax, coord, rank, delx=1, dely=1, colors="w", width=1):
 
 
 def plot_loadbalance(run, axs):
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
 
     # check load data
@@ -278,7 +275,7 @@ def plot_loadbalance(run, axs):
         if diagnostic["name"] == "load":
             status = True
             break
-    if status == False:
+    if not status:
         return False
 
     Nt = run.step_load.size

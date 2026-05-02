@@ -32,7 +32,7 @@ def convert_tracer_to_hdf5(run, species, hdffile):
 
     if os.path.exists(hdffile):
         # check if the file is valid
-        if is_valid_tracer_hdf5(hdffile, group) == False:
+        if not is_valid_tracer_hdf5(hdffile, group):
             raise ValueError("Invalid file: {}".format(hdffile))
     else:
         # new file
@@ -119,7 +119,7 @@ def remove_tracer_file_after_confirmation(run, species, hdffile):
                 is_step_valid and is_time_valid and is_xp_valid and is_id_valid
             )
 
-            if is_everything_okay == False:
+            if not is_everything_okay:
                 status = False
                 print("Data at step: {:08d} is invalid".format(step))
 
@@ -229,9 +229,9 @@ class Histogram2D:
         self.density = self.count / self.area
 
     def handle_bin_arg(self, bin, logscale=False):
-        if isinstance(bin, tuple) and logscale == False:
+        if isinstance(bin, tuple) and not logscale:
             return np.linspace(bin[0], bin[1], bin[2])
-        if isinstance(bin, tuple) and logscale == True:
+        if isinstance(bin, tuple) and logscale:
             return np.geomspace(bin[0], bin[1], bin[2])
         if isinstance(bin, np.ndarray) and bin.ndim == 1:
             return bin
@@ -240,6 +240,6 @@ class Histogram2D:
     def pcolormesh_args(self, density=True):
         x = 0.5 * (self.xedges[+1:] + self.xedges[:-1])
         y = 0.5 * (self.yedges[+1:] + self.yedges[:-1])
-        Z = self.density if density == True else self.count
+        Z = self.density if density else self.count
         X, Y = np.broadcast_arrays(x[:, None], y[None, :])
         return X, Y, Z

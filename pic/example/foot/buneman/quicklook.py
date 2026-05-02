@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
-import pathlib
 
 import numpy as np
 import matplotlib as mpl
@@ -14,8 +12,6 @@ from matplotlib import pyplot as plt
 # global configuration
 plt.rcParams.update({"font.size": 12})
 
-if "PICNIX_DIR" in os.environ:
-    sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
 
 # result of linear analysis
@@ -101,7 +97,7 @@ class Run(picnix.Run):
             )
             plt.semilogy()
             plt.legend(loc="lower right")
-            plt.ylabel(r"$|E_x|$".format(mode))
+            plt.ylabel(r"$|E_x|$")
             plt.xlim(0, tt[-1])
             plt.ylim(1e-4, 1e-1)
             plt.grid()
