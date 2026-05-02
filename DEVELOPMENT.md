@@ -85,7 +85,8 @@ balance diagnostics, etc.).
 From the repository root:
 
 ```sh
-uv pip install -e ./python
+uv venv .venv
+uv pip install --python .venv -e ./python
 ```
 
 After this, `import picnix` works from any directory.
@@ -95,13 +96,13 @@ After this, `import picnix` works from any directory.
 Point `uv` at the `python/` subdirectory of any local clone:
 
 ```sh
-uv pip install -e /path/to/pic-nix/python
+uv pip install --python .venv -e /path/to/pic-nix/python
 ```
 
 ### Install from git (no clone needed)
 
 ```sh
-uv pip install "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
+uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
 
 ## Language Server
@@ -170,27 +171,27 @@ Each case is defined in its own module under
 Entry point:
 
 ```sh
-python script/integration/pic/main.py <command> [case] [options]
+uv run python script/integration/pic/main.py <command> [case] [options]
 ```
 
 ### Quick Start
 
 ```sh
 # Build the target executable
-python script/integration/pic/main.py build shock
+uv run python script/integration/pic/main.py build shock
 
 # Run the simulation
-python script/integration/pic/main.py run shock
+uv run python script/integration/pic/main.py run shock
 
 # Analyze output and compare against golden data
-python script/integration/pic/main.py analyze shock
-python script/integration/pic/main.py compare shock
+uv run python script/integration/pic/main.py analyze shock
+uv run python script/integration/pic/main.py compare shock
 
 # Or do all steps at once
-python script/integration/pic/main.py all shock
+uv run python script/integration/pic/main.py all shock
 
 # Generate PNG plots for manual review
-python script/integration/pic/main.py plots shock
+uv run python script/integration/pic/main.py plots shock
 ```
 
 The default case is `twostream`.
@@ -288,7 +289,7 @@ Golden summaries live in `script/integration/pic/golden/<case>/` as
 To regenerate after intentional physics changes:
 
 ```sh
-python script/integration/pic/main.py update-golden <case>
+uv run python script/integration/pic/main.py update-golden <case>
 ```
 
 The `compare` subcommand checks all numeric keys against golden data

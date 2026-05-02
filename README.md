@@ -86,13 +86,21 @@ options:
 ### Python Analysis Package
 
 The `picnix` Python package provides data analysis tools for simulation output.
-Install it as an editable package with `uv`:
+It is recommended to install it inside a virtual environment using `uv`:
 
 ```sh
-# From the repository root
-uv pip install -e ./python
+# Create and activate a virtual environment
+uv venv .venv
+source .venv/bin/activate
 
-# From another directory, pointing to a local clone
+# Install the package
+uv pip install -e ./python
+```
+
+You can also install from other locations:
+
+```sh
+# Pointing to a local clone
 uv pip install -e /path/to/pic-nix/python
 
 # Without cloning (install directly from git)
@@ -104,6 +112,6 @@ After installation, `import picnix` works from any directory.
 ### Quick Look
 After finishing the simulation, you can run the following command in the same directory:
 ```
-$ python quicklook.py data/profile.msgpack
+$ uv run python quicklook.py data/profile.msgpack
 ```
 You will now see image files `twostream-XXXXXXXX.png` for each snapshot and `twostream.mp4`, which is a movie file encoded by using `ffmpeg`.
