@@ -44,7 +44,7 @@ def plot_wk_spectrum(P, W, K, filename, title, **kwargs):
     plt.ylim(wmin, wmax)
     plt.ylabel(r"$\omega$")
     # clim
-    cmax = kwargs.get("cmin", np.log10(P.max()))
+    cmax = kwargs.get("cmax", np.log10(P.max()))
     cmin = kwargs.get("cmin", cmax - 4)
     plt.clim(cmin, cmax)
     # save

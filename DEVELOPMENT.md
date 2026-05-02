@@ -101,10 +101,8 @@ uv pip install -e /path/to/pic-nix/python
 ### Install from git (no clone needed)
 
 ```sh
-uv pip install -e "git+https://github.com/<org>/pic-nix.git#subdirectory=python"
+uv pip install "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
-
-Replace `<org>` with the actual GitHub organization.
 
 ## Language Server
 

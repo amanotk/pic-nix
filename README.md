@@ -96,7 +96,7 @@ uv pip install -e ./python
 uv pip install -e /path/to/pic-nix/python
 
 # Without cloning (install directly from git)
-uv pip install -e "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
+uv pip install "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
 
 After installation, `import picnix` works from any directory.

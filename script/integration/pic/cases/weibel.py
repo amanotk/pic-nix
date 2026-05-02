@@ -20,10 +20,9 @@ _SHARED_OVERRIDES = {
     },
 }
 
+
 def _PLOT_HOOK(case, run_dir, data_dir, out_dir, summary, repo_root):
-    return (
-    generate_plots(case, data_dir, out_dir, summary, repo_root)
-)
+    return generate_plots(case, data_dir, out_dir, summary, repo_root)
 
 
 def _make_case(order: int) -> IntegrationCase:
