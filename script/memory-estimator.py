@@ -59,7 +59,9 @@ def doit(config, **kwargs):
     ###
     ### field data size
     ###
-    # 3 for E, 3 for B, 4 for J, and 11 for moments for each species
+    # 3 for E, 3 for B, 4 for J, and 14 for moments for each species
+    # Note: implementation-dependent field arrays (e.g., potential, filters)
+    # are deliberately excluded from this estimate.
     byte_per_em_field = 8 * (6 + 4 + Ns * 14)
 
     # field data size (send + recv buffers)
