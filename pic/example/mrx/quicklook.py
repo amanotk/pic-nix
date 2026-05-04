@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import pathlib
-import sys
-
 import matplotlib as mpl
 import numpy as np
 from scipy import signal
@@ -15,8 +11,6 @@ from matplotlib import pyplot as plt
 # global configuration
 plt.rcParams.update({"font.size": 12})
 
-if "PICNIX_DIR" in os.environ:
-    sys.path.append(str(pathlib.Path(os.environ["PICNIX_DIR"]) / "script"))
 import picnix
 
 
@@ -34,7 +28,7 @@ class Run(picnix.Run):
         data = self.read_at("field", step)
         yc = data["yc"]
         uf = data["uf"]
-        um = data["um"]
+        data["um"]
         iy = yc.size // 2
 
         return 0.5 * np.sum(np.abs(uf[:, iy, :, 4]) * delh) / (b0 * self.Nz)
@@ -58,11 +52,11 @@ class Run(picnix.Run):
         wce = wpe * np.sqrt(parameter["sigma"])
         wpi = wpe / np.sqrt(mi)
         wci = wce / mi
-        vae = wce / wpe
+        wce / wpe
         vai = wci / wpi
         b0 = wce / wpe
-        ncs = parameter["ncs"]
-        nbg = parameter["nbg"]
+        parameter["ncs"]
+        parameter["nbg"]
         T = 1 / wci
         L = cc / wpi
 

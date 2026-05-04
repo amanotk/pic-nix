@@ -28,12 +28,11 @@ def get_wk_spectrum(f, delt=1.0, delh=1.0):
 
 
 def plot_wk_spectrum(P, W, K, filename, title, **kwargs):
-    import matplotlib
     from matplotlib import pyplot as plt
 
-    figure = plt.figure()
+    plt.figure()
     im = plt.pcolormesh(K, W, np.log10(P), shading="nearest")
-    cl = plt.colorbar(im)
+    plt.colorbar(im)
     # xlim
     kmax = kwargs.get("kmax", 0.25 * K.max())
     kmin = kwargs.get("kmin", 0.25 * K.min())
@@ -45,7 +44,7 @@ def plot_wk_spectrum(P, W, K, filename, title, **kwargs):
     plt.ylim(wmin, wmax)
     plt.ylabel(r"$\omega$")
     # clim
-    cmax = kwargs.get("cmin", np.log10(P.max()))
+    cmax = kwargs.get("cmax", np.log10(P.max()))
     cmin = kwargs.get("cmin", cmax - 4)
     plt.clim(cmin, cmax)
     # save

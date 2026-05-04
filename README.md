@@ -1,74 +1,67 @@
 # PIC-NIX
-A Particle-In-Cell (PIC) simulation code for collisionless space plasmas.  
+
+A parallel Particle-In-Cell (PIC) simulation code for collisionless space plasmas with dynamic load balancing.  
 This is based on the kinetic plasma simulation framework `nix`, which is included as a subtree.  
 A separate repository for `nix` can be found [here](https://github.com/amanotk/nix).
 
-## Contents  
-- [Build](#build)  
-  - [Clone](#clone)  
-  - [Compile](#compile)  
-- [Tests](#tests)  
-- [Run](#run)  
-- [Post-processing](#post-processing)  
-  - [Environment Variable](#environment-variable)  
-  - [Python Script Dependencies](#python-script-dependencies)  
-  - [Quick Look](#quick-look)  
+## Contents
+
+- [Requirements](#requirements)
+- [Build](#build)
+  - [Clone](#clone)
+  - [Compile](#compile)
+- [Run](#run)
+- [Post-processing](#post-processing)
+  - [Python Analysis Package](#python-analysis-package)
+  - [Quick Look](#quick-look)
+- [Development](#development)
+
+## Requirements
+
+- C++ compiler supporting C++17 or later
+- CMake version 3.14 or later
+- MPI library (OpenMPI, MPICH, etc.)
 
 ## Build
 
 ### Clone
+
 Clone the repository to a local working directory via:
+
 ```
 $ git clone git@github.com:amanotk/pic-nix.git
 ```
 
 ### Compile
-The code can be compiled with `cmake`, to which a proper C++ compiler and its compiler flags should be specified.  
-The simplest way is to use a pre-configured cache file provided in `cmake` directory.  
-For instance, you can do as follows in the repository's top directory:
+
+The code can be compiled with `cmake`.  
+The simplest way is to use a pre-configured cache file provided in the `cmake` directory:
+
 ```
 $ cmake -S . -B build -C cmake/linux-gcc.cmake
 $ cmake --build build
 ```
-which means that you are going to use `mpicxx` as a C++ compiler with `g++` backend with OpenMP enabled.
 
-This is equivalent to the following manual build configuration:
-```
-$ cmake -S . -B build \
-	-DCMAKE_CXX_COMPILER=mpicxx \
-	-DCMAKE_CXX_FLAGS="-march=native -fopenmp -O3"
-$ cmake --build build
-```
-
-PETSc-based solvers are optional and disabled by default.  
-By default, configure/build will not search for PETSc.  
-Enable PETSc explicitly only when needed:  
-```
-$ cmake -S . -B build -DPICNIX_ENABLE_PETSC=ON
-```
-
-Note that this is the so-called out-of-source build, which produces compiled binaries in the `build` directory (in this particular case).
-Therefore, you will find executable files `main.out` in, e.g., `build/pic/example/beam`.
-
-See [here](https://github.com/amanotk/pic-nix/wiki/BuildingCode) for details about build configuration.
+This uses `mpicxx` with a `g++` backend and OpenMP enabled.  
+See [DEVELOPMENT.md](DEVELOPMENT.md) for manual configuration and advanced options.  
 Please also refer to [CMake Reference Documentation](https://cmake.org/cmake/help/latest/).
 
-## Tests
-Tests use Catch2 v3. If Catch2 is installed, it will be used; otherwise CMake will download it during configure.  
-To point CMake at a local Catch2 install, set `-DPICNIX_CATCH2_CONFIG=/path/to/Catch2Config.cmake`.  
-
 ## Run
+
 You can now execute `main.out` using `mpiexec` (or `mpirun`).  
-For example, you can run a simulation with default setup in `pic/example/beam/twostream`.
+For example, you can run a simulation with default setup in `pic/example/beam/twostream`:
+
 ```
 $ cd build/pic/example/beam/twostream
 $ export OMP_NUM_THREADS=2
 $ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.toml
 ```
-In this example, you use 8 MPI processes, each launching 2 threads.
+
+In this example, you use 8 MPI processes, each launching 2 threads.  
 The simulation parameters will be read from the configuration file `config.toml`.
 
 Available command-line options will be shown with the `--help` option:
+
 ```
 $ ./main.out --help
 usage: ./main.out --config=string [options] ...
@@ -81,51 +74,45 @@ options:
   -v, --verbose    verbosity level (int [=0])
   -?, --help       print this message
 ```
-  
+
 ## Post-processing
 
-### Environment Variable
-```
-$ export PICNIX_DIR=/some/where/pic-nix
-```
-Setting the environment variable `PICNIX_DIR` is necessary for running diagnostic python scripts.
+### Python Analysis Package
 
-### Python Script Dependencies  
-Third-party modules needed by the scripts under `script/` are listed in `script/requirements.txt`.  
-You can install them with `pip` or `uv` (both use the same file).  
-If you are new to Python environments: a virtual environment keeps project packages isolated  
-from your system Python. You can either install packages directly with `pip`/`uv`,  
-or install inside a virtual environment (`venv`). See the docs for details:  
-- https://docs.python.org/3/library/venv.html  
-- https://pip.pypa.io/en/stable/  
-- https://docs.astral.sh/uv/  
-  
-With `pip`:  
+The `picnix` Python package provides data analysis tools for simulation output.  
+It is recommended to install it inside a virtual environment using `uv`:
+
 ```
-$ python -m venv picnix
-$ source picnix/bin/activate
-$ python -m pip install --upgrade pip
-$ python -m pip install -r script/requirements.txt
-```  
-With `uv`:  
+# Create a virtual environment
+$ uv venv .venv
+
+# Install the package
+$ uv pip install --python .venv -e ./python
 ```
-$ uv venv picnix
-$ source picnix/bin/activate
-$ uv pip install -r script/requirements.txt
-```  
-`picnix` is just the environment directory name; you can rename it if you prefer.  
-Direct install without a virtual environment (installs into your current Python):  
+
+You can also install from other locations:
+
 ```
-$ python -m pip install --user -r script/requirements.txt
+# Pointing to a local clone
+$ uv pip install --python .venv -e /path/to/pic-nix/python
+
+# Without cloning (install directly from git)
+$ uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
-Or with `uv` (may require `--system` depending on your Python setup):  
-```
-$ uv pip install -r script/requirements.txt
-```  
+
+After installation, `import picnix` works from any directory.
 
 ### Quick Look
+
 After finishing the simulation, you can run the following command in the same directory:
+
 ```
-$ python quicklook.py data/profile.msgpack
+$ uv run python quicklook.py data/profile.msgpack
 ```
+
 You will now see image files `twostream-XXXXXXXX.png` for each snapshot and `twostream.mp4`, which is a movie file encoded by using `ffmpeg`.
+
+## Development
+
+For build & test instructions, language server setup, PIC integration workflow,  
+git hooks, and other development topics, see [DEVELOPMENT.md](DEVELOPMENT.md).

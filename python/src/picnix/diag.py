@@ -85,7 +85,9 @@ class DiagHandler(object):
         # read time and step via asyncio
         tasks = []
         for i, file in enumerate(self.file[0, :]):
-            tasks.append(asyncio.create_task(DiagHandler.async_read_time_and_step(file)))
+            tasks.append(
+                asyncio.create_task(DiagHandler.async_read_time_and_step(file))
+            )
         result = await asyncio.gather(*tasks)
 
         for i in range(len(result)):
