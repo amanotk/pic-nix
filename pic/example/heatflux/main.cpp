@@ -62,12 +62,16 @@ public:
     float64 vte   = config["vte"].get<float64>();
 
     // beam parameters
-    std::string beam_type = config["beam_type"].get<std::string>();
-    float64     nb        = config["nb"].get<float64>();
-    float64     vdb_para  = config["vdb_para"].get<float64>();
-    float64     vdb_perp  = config["vdb_perp"].get<float64>();
-    float64     vtb_para  = config["vtb_para"].get<float64>();
-    float64     vtb_perp  = config["vtb_perp"].get<float64>();
+    float64 nb       = config["nb"].get<float64>();
+    float64 vdb_para = config["vdb_para"].get<float64>();
+    float64 vdb_perp = config["vdb_perp"].get<float64>();
+    float64 vtb_para = config["vtb_para"].get<float64>();
+    float64 vtb_perp = config["vtb_perp"].get<float64>();
+
+    if (vdb_perp < 0) {
+      ERROR << "vdb_perp must be >= 0";
+      exit(-1);
+    }
 
     float64 me = 1.0 / nppc;
     float64 qe = -wp / nppc;
@@ -195,17 +199,8 @@ public:
 
           // beam electron
           {
-            float64 v_para;
-            float64 v_perp_mag;
-
-            if (beam_type == "ring") {
-              v_para     = normal(mtv) * vtb_para + vdb_para;
-              v_perp_mag = ring(mtv);
-            } else {
-              v_para     = normal(mtv) * vtb_para + vdb_para;
-              v_perp_mag = normal(mtv) * vtb_perp;
-            }
-
+            float64 v_para     = normal(mtv) * vtb_para + vdb_para;
+            float64 v_perp_mag = ring(mtv);
             float64 theta_perp = uniform(mtv) * nix::math::pi * 2;
             float64 v_perp_a   = v_perp_mag * std::cos(theta_perp);
             float64 v_perp_b   = v_perp_mag * std::sin(theta_perp);
