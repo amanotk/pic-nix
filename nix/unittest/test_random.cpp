@@ -96,6 +96,99 @@ TEST_CASE("MaxwellJuttner")
 //
 //   $ ./test_random "[.SaveData]"
 //
+inline void compare_ring_with_reference(float64 v_ring, float64 vt_perp, int size,
+                                        double reference[])
+{
+  MaxwellianRing  ring(v_ring, vt_perp);
+  std::mt19937_64 random(0);
+
+  for (int i = 0; i < size; ++i) {
+    float64 vperp = ring(random);
+
+    REQUIRE(std::abs(vperp - reference[i]) < 1e-14);
+  }
+}
+
+inline void generate_and_save_ring(float64 v_ring, float64 vt_perp, int size, std::string filename)
+{
+  MaxwellianRing  ring(v_ring, vt_perp);
+  std::mt19937_64 random(0);
+
+  std::ofstream ofs(filename, std::ios::binary);
+
+  for (int i = 0; i < size; i++) {
+    float64 vperp = ring(random);
+
+    ofs.write(reinterpret_cast<const char*>(&vperp), sizeof(vperp));
+  }
+
+  ofs.close();
+}
+
+TEST_CASE("MaxwellianRing")
+{
+  constexpr int size = 10;
+
+  SECTION("(1) v_ring = 3.0, vt_perp = 0.5")
+  {
+    float64 v_ring  = 3.0;
+    float64 vt_perp = 0.5;
+
+    double reference[size] = {
+        2.5924147747517647e+00, 4.2746634012768867e+00, 2.2193243614542335e+00,
+        3.2043977028161965e+00, 3.1349695755474545e+00, 2.3058581178186746e+00,
+        3.2483536901004957e+00, 2.9875159295946072e+00, 3.5783838411320801e+00,
+        3.7339692038966921e+00,
+    };
+
+    compare_ring_with_reference(v_ring, vt_perp, size, reference);
+  }
+
+  SECTION("(2) v_ring = 0.0, vt_perp = 1.0")
+  {
+    float64 v_ring  = 0.0;
+    float64 vt_perp = 1.0;
+
+    double reference[size] = {
+        5.9009731639668206e-01, 3.1017507935990727e+00, 2.8415898313548410e-01,
+        1.3491085366459799e+00, 1.2502067778907462e+00, 3.4309899687777612e-01,
+        1.4130757731589656e+00, 1.0496687936878313e+00, 1.9218795160267761e+00,
+        2.1760845323652127e+00,
+    };
+
+    compare_ring_with_reference(v_ring, vt_perp, size, reference);
+  }
+}
+
+TEST_CASE("GenerateMaxwellianRing", "[.SaveData]")
+{
+  constexpr int size = 100000;
+
+  SECTION("(1) v_ring = 3.0, vt_perp = 0.5")
+  {
+    float64 v_ring  = 3.0;
+    float64 vt_perp = 0.5;
+
+    generate_and_save_ring(v_ring, vt_perp, size, "ring_test1.dat");
+  }
+
+  SECTION("(2) v_ring = 0.0, vt_perp = 1.0")
+  {
+    float64 v_ring  = 0.0;
+    float64 vt_perp = 1.0;
+
+    generate_and_save_ring(v_ring, vt_perp, size, "ring_test2.dat");
+  }
+
+  SECTION("(3) v_ring = 5.0, vt_perp = 0.01")
+  {
+    float64 v_ring  = 5.0;
+    float64 vt_perp = 0.01;
+
+    generate_and_save_ring(v_ring, vt_perp, size, "ring_test3.dat");
+  }
+}
+
 TEST_CASE("GenerateMaxwellJuttner", "[.SaveData]")
 {
   constexpr int size = 100000;

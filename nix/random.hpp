@@ -136,6 +136,75 @@ public:
   }
 };
 
+///
+/// @brief Ring distribution in the perpendicular plane
+///
+/// This class draws the magnitude |v_perp| of a 2D ring (non-central Rayleigh)
+/// distribution with ring radius v_ring and thermal spread vt_perp.
+/// The angle in the perpendicular plane is then distributed uniformly in [0, 2π).
+///
+/// The PDF is P(|v|) ∝ |v| * exp(-(|v| - v_ring)^2 / (2 * vt_perp^2))
+///
+/// Reference
+/// - The inverse transform method with Newton's method, adapted from
+///   S. Zenitani, "Ring" class in hybrid3d (2024).
+///
+class MaxwellianRing
+{
+private:
+  float64      v_ring;
+  float64      vt_perp;
+  rand_uniform uniform;
+
+  static inline constexpr float64 sqrt_2  = 1.4142135623730951;
+  static inline constexpr float64 sqrt_pi = 1.7724538509055160;
+
+public:
+  MaxwellianRing(float64 v_ring, float64 vt_perp) : v_ring(v_ring), vt_perp(vt_perp)
+  {
+  }
+
+  void set_vring(float64 v_ring)
+  {
+    this->v_ring = v_ring;
+  }
+
+  void set_vtperp(float64 vt_perp)
+  {
+    this->vt_perp = vt_perp;
+  }
+
+  void reset()
+  {
+    uniform.reset();
+  }
+
+  template <typename Random>
+  float64 operator()(Random& random)
+  {
+    // handle vanishing thermal spread
+    if (vt_perp <= 1.0e-14) {
+      return v_ring;
+    }
+
+    // inverse transform sampling with Newton's method
+    const int max_iter = 5;
+    float64   yy       = uniform(random);
+    float64   xx       = 0.5 * (v_ring + std::sqrt(v_ring * v_ring + 4 * vt_perp * vt_perp));
+    float64   V        = v_ring / (sqrt_2 * vt_perp);
+    float64   F0       = vt_perp * vt_perp * (std::exp(-V * V) + sqrt_pi * V * (1 + std::erf(V)));
+
+    for (int i = 0; i < max_iter; i++) {
+      float64 x  = (xx - v_ring) / (sqrt_2 * vt_perp);
+      float64 FF = F0 - vt_perp * vt_perp * (std::exp(-x * x) + sqrt_pi * V * (1 - std::erf(x)));
+      float64 dF = xx * std::exp(-x * x);
+      xx += (yy * F0 - FF) / dF;
+    }
+
+    return xx;
+  }
+};
+
 NIX_NAMESPACE_END
 
 #endif
