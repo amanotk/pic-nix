@@ -49,14 +49,11 @@ mime = 100
 sigma = 0.0
 theta = 0.0
 phi = 0.0
-distribution_type = "bi-maxwellian"
-
-fbeam = 0.1
-vbeam = 5.0
-
-vtec_para = 0.5
-vtec_perp = 0.5
-vteb_para = 0.05
-vteb_perp = 0.5
-vring = 3.0
 vti = 0.05
+vte = 0.5
+beam_type = "bi-maxwellian"
+nb = 0.1
+vdb_para = 5.0
+vdb_perp = 3.0
+vtb_para = 0.05
+vtb_perp = 0.5

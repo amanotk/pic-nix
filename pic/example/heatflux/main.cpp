@@ -9,6 +9,25 @@ using MainApplication = PicApplication;
 
 class MainChunk : public PicChunk
 {
+  static void set_field_aligned_coord(float64 th, float64 ph, float64 e1[3], float64 e2[3],
+                                      float64 e3[3])
+  {
+    float64 ct = std::cos(th);
+    float64 st = std::sin(th);
+    float64 cp = std::cos(ph);
+    float64 sp = std::sin(ph);
+
+    e1[0] = ct;
+    e1[1] = st * cp;
+    e1[2] = st * sp;
+    e2[0] = -st;
+    e2[1] = ct * cp;
+    e2[2] = ct * sp;
+    e3[0] = 0.0;
+    e3[1] = -sp;
+    e3[2] = cp;
+  }
+
 public:
   using PicChunk::PicChunk;
 
@@ -39,76 +58,31 @@ public:
     float64 sigma = config["sigma"].get<float64>();
     float64 theta = config["theta"].get<float64>();
     float64 phi   = config["phi"].get<float64>();
+    float64 vti   = config["vti"].get<float64>();
+    float64 vte   = config["vte"].get<float64>();
 
-    std::string distribution_type = config["distribution_type"].get<std::string>();
-
-    float64 fbeam = config["fbeam"].get<float64>();
-    float64 vbeam = config["vbeam"].get<float64>();
-
-    float64 vtec_para = config["vtec_para"].get<float64>();
-    float64 vtec_perp = config["vtec_perp"].get<float64>();
-    float64 vteb_para = config["vteb_para"].get<float64>();
-    float64 vteb_perp = config["vteb_perp"].get<float64>();
-    float64 vring     = config["vring"].get<float64>();
-    float64 vti       = config["vti"].get<float64>();
+    // beam parameters
+    std::string beam_type = config["beam_type"].get<std::string>();
+    float64     nb        = config["nb"].get<float64>();
+    float64     vdb_para  = config["vdb_para"].get<float64>();
+    float64     vdb_perp  = config["vdb_perp"].get<float64>();
+    float64     vtb_para  = config["vtb_para"].get<float64>();
+    float64     vtb_perp  = config["vtb_perp"].get<float64>();
 
     float64 me = 1.0 / nppc;
     float64 qe = -wp / nppc;
     float64 mi = me * mime;
     float64 qi = -qe;
 
-    // magnetic field
-    float64 b0 = cc * std::sqrt(sigma);
-    float64 B_hat[3];
+    float64 vdc_para = -nb * vdb_para / (1.0 - nb); // core drift velocity for current neutrality
+    float64 b0       = cc * std::sqrt(sigma);       // magnetic field
 
-    if (sigma > 0) {
-      float64 tr = theta / 180.0 * nix::math::pi;
-      float64 pr = phi / 180.0 * nix::math::pi;
-
-      B_hat[0] = std::cos(tr);
-      B_hat[1] = std::sin(tr) * std::cos(pr);
-      B_hat[2] = std::sin(tr) * std::sin(pr);
-    } else {
-      B_hat[0] = 1.0;
-      B_hat[1] = 0.0;
-      B_hat[2] = 0.0;
-    }
-
-    // perpendicular basis vectors (B-aligned coordinate system)
-    float64 e_perp1_x, e_perp1_y, e_perp1_z;
-    float64 e_perp2_x, e_perp2_y, e_perp2_z;
-
-    {
-      // e_perp1 = normalize(B_hat × x_hat)
-      float64 cx = 0;
-      float64 cy = B_hat[2];
-      float64 cz = -B_hat[1];
-      float64 cn = std::sqrt(cx * cx + cy * cy + cz * cz);
-
-      if (cn > 1.0e-12) {
-        e_perp1_x = cx / cn;
-        e_perp1_y = cy / cn;
-        e_perp1_z = cz / cn;
-      } else {
-        // fallback: B_hat × y_hat
-        float64 fx = -B_hat[2];
-        float64 fy = 0;
-        float64 fz = B_hat[0];
-        float64 fn = std::sqrt(fx * fx + fy * fy + fz * fz);
-
-        e_perp1_x = fx / fn;
-        e_perp1_y = fy / fn;
-        e_perp1_z = fz / fn;
-      }
-
-      // e_perp2 = B_hat × e_perp1
-      e_perp2_x = B_hat[1] * e_perp1_z - B_hat[2] * e_perp1_y;
-      e_perp2_y = B_hat[2] * e_perp1_x - B_hat[0] * e_perp1_z;
-      e_perp2_z = B_hat[0] * e_perp1_y - B_hat[1] * e_perp1_x;
-    }
-
-    // core drift velocity for current neutrality
-    float64 v_core = -fbeam * vbeam / (1.0 - fbeam);
+    float64 tr = theta / 180.0 * nix::math::pi;
+    float64 pr = phi / 180.0 * nix::math::pi;
+    float64 e1vec[3];
+    float64 e2vec[3];
+    float64 e3vec[3];
+    set_field_aligned_coord(tr, pr, e1vec, e2vec, e3vec);
 
     // set grid size and coordinate
     set_coordinate(delh, delh, delh);
@@ -126,17 +100,15 @@ public:
             uf(iz, iy, ix, 0) = 0;
             uf(iz, iy, ix, 1) = 0;
             uf(iz, iy, ix, 2) = 0;
-            uf(iz, iy, ix, 3) = b0 * B_hat[0];
-            uf(iz, iy, ix, 4) = b0 * B_hat[1];
-            uf(iz, iy, ix, 5) = b0 * B_hat[2];
+            uf(iz, iy, ix, 3) = b0 * e1vec[0];
+            uf(iz, iy, ix, 4) = b0 * e1vec[1];
+            uf(iz, iy, ix, 5) = b0 * e1vec[2];
           }
         }
       }
 
       // allocate MPI buffer for field
-      this->set_mpi_buffer(mpibufvec[BoundaryEmf], 0, 0, sizeof(float64) * 6);
-      this->set_mpi_buffer(mpibufvec[BoundaryCur], 0, 0, sizeof(float64) * 4);
-      this->set_mpi_buffer(mpibufvec[BoundaryMom], 0, 0, sizeof(float64) * Ns * 14);
+      this->allocate_mpi_buffers();
 
       // setup for Friedman filter
       this->init_friedman();
@@ -151,11 +123,11 @@ public:
       std::mt19937_64     mtv(random_seed);
       nix::rand_uniform   uniform(0.0, 1.0);
       nix::rand_normal    normal(0.0, 1.0);
-      nix::MaxwellianRing ring(vring, vteb_perp);
+      nix::MaxwellianRing ring(vdb_perp, vtb_perp);
 
       {
         int   mp      = nppc * dims[0] * dims[1] * dims[2];
-        int   mp_core = static_cast<int>(mp * (1.0 - fbeam));
+        int   mp_core = static_cast<int>(mp * (1.0 - nb));
         int   mp_beam = mp - mp_core;
         int64 id      = static_cast<int64>(mp) * static_cast<int64>(this->myid);
 
@@ -179,81 +151,89 @@ public:
         up[2]->q  = qi;
         up[2]->Np = mp;
 
-        // pair electrons with ions for charge neutrality
-        for (int ip = 0; ip < mp; ip++) {
+        // initialize core electrons and paired ions
+        for (int ip = 0; ip < mp_core; ip++) {
           float64 x = uniform(mtp) * xlim[2] + xlim[0];
           float64 y = uniform(mtp) * ylim[2] + ylim[0];
           float64 z = uniform(mtp) * zlim[2] + zlim[0];
 
-          // electron velocity in B-aligned frame
-          float64 v_para, v_perp_mag, theta_perp;
-
-          if (ip < mp_core) {
-            // core electron
-            v_para     = normal(mtv) * vtec_para + v_core;
-            v_perp_mag = normal(mtv) * vtec_perp;
-            theta_perp = uniform(mtv) * nix::math::pi * 2;
-
+          // core electron (isotropic Maxwellian)
+          {
             up[0]->xu(ip, 0) = x;
             up[0]->xu(ip, 1) = y;
             up[0]->xu(ip, 2) = z;
+            up[0]->xu(ip, 3) = normal(mtv) * vte + vdc_para * e1vec[0];
+            up[0]->xu(ip, 4) = normal(mtv) * vte + vdc_para * e1vec[1];
+            up[0]->xu(ip, 5) = normal(mtv) * vte + vdc_para * e1vec[2];
+          }
 
-            int64* id64 = reinterpret_cast<int64*>(&up[0]->xu(ip, 0));
+          // ion
+          {
+            up[2]->xu(ip, 0) = x;
+            up[2]->xu(ip, 1) = y;
+            up[2]->xu(ip, 2) = z;
+            up[2]->xu(ip, 3) = normal(mtv) * vti;
+            up[2]->xu(ip, 4) = normal(mtv) * vti;
+            up[2]->xu(ip, 5) = normal(mtv) * vti;
+          }
 
-            id64[6] = id + ip;
-          } else {
-            // beam electron
-            int ib = ip - mp_core;
+          // ID
+          {
+            int64* ele_id64 = reinterpret_cast<int64*>(&up[0]->xu(ip, 0));
+            int64* ion_id64 = reinterpret_cast<int64*>(&up[2]->xu(ip, 0));
+            ele_id64[6]     = id + ip;
+            ion_id64[6]     = id + ip;
+          }
+        }
 
-            if (distribution_type == "ring") {
-              v_para     = normal(mtv) * vteb_para + vbeam;
+        // initialize beam electrons and paired ions
+        for (int ib = 0; ib < mp_beam; ib++) {
+          int     ip = mp_core + ib;
+          float64 x  = uniform(mtp) * xlim[2] + xlim[0];
+          float64 y  = uniform(mtp) * ylim[2] + ylim[0];
+          float64 z  = uniform(mtp) * zlim[2] + zlim[0];
+
+          // beam electron
+          {
+            float64 v_para;
+            float64 v_perp_mag;
+
+            if (beam_type == "ring") {
+              v_para     = normal(mtv) * vtb_para + vdb_para;
               v_perp_mag = ring(mtv);
             } else {
-              v_para     = normal(mtv) * vteb_para + vbeam;
-              v_perp_mag = normal(mtv) * vteb_perp;
+              v_para     = normal(mtv) * vtb_para + vdb_para;
+              v_perp_mag = normal(mtv) * vtb_perp;
             }
-            theta_perp = uniform(mtv) * nix::math::pi * 2;
+
+            float64 theta_perp = uniform(mtv) * nix::math::pi * 2;
+            float64 v_perp_a   = v_perp_mag * std::cos(theta_perp);
+            float64 v_perp_b   = v_perp_mag * std::sin(theta_perp);
 
             up[1]->xu(ib, 0) = x;
             up[1]->xu(ib, 1) = y;
             up[1]->xu(ib, 2) = z;
-
-            int64* id64 = reinterpret_cast<int64*>(&up[1]->xu(ib, 0));
-
-            id64[6] = id + ip;
+            up[1]->xu(ib, 3) = v_para * e1vec[0] + v_perp_a * e2vec[0] + v_perp_b * e3vec[0];
+            up[1]->xu(ib, 4) = v_para * e1vec[1] + v_perp_a * e2vec[1] + v_perp_b * e3vec[1];
+            up[1]->xu(ib, 5) = v_para * e1vec[2] + v_perp_a * e2vec[2] + v_perp_b * e3vec[2];
           }
 
-          // rotate velocity from B-aligned frame to simulation frame
-          float64 v_perp_a = v_perp_mag * std::cos(theta_perp);
-          float64 v_perp_b = v_perp_mag * std::sin(theta_perp);
-
-          float64 vx = v_para * B_hat[0] + v_perp_a * e_perp1_x + v_perp_b * e_perp2_x;
-          float64 vy = v_para * B_hat[1] + v_perp_a * e_perp1_y + v_perp_b * e_perp2_y;
-          float64 vz = v_para * B_hat[2] + v_perp_a * e_perp1_z + v_perp_b * e_perp2_z;
-
           // ion
-          up[2]->xu(ip, 0) = x;
-          up[2]->xu(ip, 1) = y;
-          up[2]->xu(ip, 2) = z;
-          up[2]->xu(ip, 3) = normal(mtv) * vti;
-          up[2]->xu(ip, 4) = normal(mtv) * vti;
-          up[2]->xu(ip, 5) = normal(mtv) * vti;
+          {
+            up[2]->xu(ip, 0) = x;
+            up[2]->xu(ip, 1) = y;
+            up[2]->xu(ip, 2) = z;
+            up[2]->xu(ip, 3) = normal(mtv) * vti;
+            up[2]->xu(ip, 4) = normal(mtv) * vti;
+            up[2]->xu(ip, 5) = normal(mtv) * vti;
+          }
 
-          int64* ion_id64 = reinterpret_cast<int64*>(&up[2]->xu(ip, 0));
-
-          ion_id64[6] = id + ip;
-
-          // assign electron velocity (the velocity RNG was consumed above)
-          if (ip < mp_core) {
-            up[0]->xu(ip, 3) = vx;
-            up[0]->xu(ip, 4) = vy;
-            up[0]->xu(ip, 5) = vz;
-          } else {
-            int ib = ip - mp_core;
-
-            up[1]->xu(ib, 3) = vx;
-            up[1]->xu(ib, 4) = vy;
-            up[1]->xu(ib, 5) = vz;
+          // ID
+          {
+            int64* beam_id64 = reinterpret_cast<int64*>(&up[1]->xu(ib, 0));
+            int64* ion_id64  = reinterpret_cast<int64*>(&up[2]->xu(ip, 0));
+            beam_id64[6]     = id + ip;
+            ion_id64[6]      = id + ip;
           }
         }
       }
