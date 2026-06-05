@@ -17,6 +17,11 @@ build*
 # Local notes
 notes
 TODO.md
+# Local scratch / planning artifacts
+tmp/
+task_plan.md
+findings.md
+progress.md
 
 # Manual integration run output
 run-integration-pic/
