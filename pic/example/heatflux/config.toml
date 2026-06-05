@@ -12,6 +12,7 @@ loglevel = 1
 
 [application.option]
 vectorization = "vector"
+order = 4
 
 [[diagnostic]]
 name = "history"
