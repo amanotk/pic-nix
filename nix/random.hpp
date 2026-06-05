@@ -165,10 +165,12 @@ private:
 public:
   MaxwellianRing(float64 v_ring, float64 v_th) : v_ring(v_ring), v_th(v_th)
   {
+    assert(v_ring >= 0);
   }
 
   void set_vring(float64 v_ring)
   {
+    assert(v_ring >= 0);
     this->v_ring = v_ring;
   }
 
@@ -193,6 +195,11 @@ public:
     // handle vanishing thermal spread
     if (v_th <= 1.0e-14) {
       return v_ring;
+    }
+
+    // fallback to Rayleigh distribution (2D isotropic Maxwellian speed)
+    if (v_ring < 1.0e-14) {
+      return v_th * std::sqrt(-2 * std::log(uniform(random)));
     }
 
     // inverse transform sampling with Newton's method
