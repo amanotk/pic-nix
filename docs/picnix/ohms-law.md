@@ -128,24 +128,6 @@ E_ohm = picnix.calc_e_ohm_1d(run, step, c=1.0)  # or calc_e_ohm_2d
 
 The return value has shape ``(Nx, 3)`` (1D) or ``(Ny, Nx, 3)`` (2D).
 
-## Per-species q/m
-
-``qm_per_species_from_config`` resolves ``q_s/m_s`` from the picnix
-config in two ways:
-
-1. ``[[parameter.particle]]`` array of per-species ``qm`` values
-   (e.g., ``beam/twostream``, ``foot/``)
-2. Top-level ``mime``/``nppc``/``wp`` keys, which imply a 2-species
-   electron-ion pair (e.g., ``anisotropy``, ``heatflux``)
-
-For multi-species cases that do not fit either pattern (such as the
-3-species ``heatflux`` run, which has a core electron, a beam electron,
-and an ion), pass ``qm`` explicitly:
-
-```python
-E_ohm = picnix.calc_e_ohm_2d(run, step, c=1.0, qm_per_species=[-1.0, -1.0, 0.01])
-```
-
 ## Limitations
 
 - Periodic boundary conditions only.

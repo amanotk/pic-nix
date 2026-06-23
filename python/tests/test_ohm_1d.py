@@ -263,3 +263,64 @@ def test_calc_e_ohm_1d_dispatch():
     E_ohm = picnix.calc_e_ohm_1d(run, 0, c=1.0)
     assert E_ohm.shape == (Nx, 3)
     assert np.all(np.isfinite(E_ohm))
+
+
+# -*- _resolve_qm priority order -*-
+
+
+def test_resolve_qm_explicit_arg_wins():
+    """Explicit qm_per_species argument overrides everything else."""
+
+    class _Run:
+        qm = [-2.0, -2.0, 0.5]
+        config = {"parameter": {"Ns": 3}}
+
+    explicit = [-7.0, -7.0, 7.0]
+    out = ohm._resolve_qm(_Run(), explicit)
+    np.testing.assert_array_equal(out, explicit)
+
+
+def test_resolve_qm_profile_field_used_when_no_explicit():
+    """run.qm is used when qm_per_species is not given."""
+
+    class _Run:
+        qm = [-1.0, -1.0, 0.01]
+        config = {"parameter": {"Ns": 3, "mime": 100.0, "wp": 1.0, "nppc": 100}}
+
+    out = ohm._resolve_qm(_Run(), None)
+    np.testing.assert_array_equal(out, [-1.0, -1.0, 0.01])
+
+
+def test_resolve_qm_falls_back_to_config_when_no_profile_qm():
+    """Old profiles (no qm) fall back to qm_per_species_from_config."""
+
+    class _Run:
+        qm = None
+        config = {
+            "parameter": {
+                "Ns": 2,
+                "mime": 25.0,
+                "wp": 1.0,
+                "nppc": 100,
+            }
+        }
+
+    out = ohm._resolve_qm(_Run(), None)
+    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
+
+
+def test_resolve_qm_handles_missing_qm_attribute():
+    """If run has no qm attribute at all, fall back to config inference."""
+
+    class _Run:
+        config = {
+            "parameter": {
+                "Ns": 2,
+                "mime": 25.0,
+                "wp": 1.0,
+                "nppc": 100,
+            }
+        }
+
+    out = ohm._resolve_qm(_Run(), None)
+    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])

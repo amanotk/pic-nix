@@ -347,3 +347,97 @@ def test_calc_e_ohm_2d_explicit_qm_required_for_3_species():
     E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0, qm_per_species=qm)
     assert E_ohm.shape == (Ny, Nx, 3)
     assert np.all(np.isfinite(E_ohm))
+
+
+# -*- _resolve_qm priority order -*-
+
+
+def test_resolve_qm_2d_explicit_arg_wins():
+    """Explicit qm_per_species argument overrides everything else."""
+
+    class _Run:
+        qm = [-2.0, -2.0, 0.5]
+        config = {"parameter": {"Ns": 3}}
+
+    explicit = [-7.0, -7.0, 7.0]
+    out = ohm._resolve_qm(_Run(), explicit)
+    np.testing.assert_array_equal(out, explicit)
+
+
+def test_resolve_qm_2d_profile_field_used_when_no_explicit():
+    """run.qm is used when qm_per_species is not given."""
+
+    class _Run:
+        qm = [-1.0, -1.0, 0.01]
+        config = {"parameter": {"Ns": 3, "mime": 100.0, "wp": 1.0, "nppc": 100}}
+
+    out = ohm._resolve_qm(_Run(), None)
+    np.testing.assert_array_equal(out, [-1.0, -1.0, 0.01])
+
+
+def test_resolve_qm_2d_falls_back_to_config_when_no_profile_qm():
+    """Old profiles (no qm) fall back to qm_per_species_from_config."""
+
+    class _Run:
+        qm = None
+        config = {
+            "parameter": {
+                "Ns": 2,
+                "mime": 25.0,
+                "wp": 1.0,
+                "nppc": 100,
+            }
+        }
+
+    out = ohm._resolve_qm(_Run(), None)
+    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
+
+
+def test_resolve_qm_2d_handles_missing_qm_attribute():
+    """If run has no qm attribute at all, fall back to config inference."""
+
+    class _Run:
+        config = {
+            "parameter": {
+                "Ns": 2,
+                "mime": 25.0,
+                "wp": 1.0,
+                "nppc": 100,
+            }
+        }
+
+    out = ohm._resolve_qm(_Run(), None)
+    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
+
+
+def test_calc_e_ohm_2d_uses_profile_qm_for_3_species():
+    """A 3-species run with run.qm set works without an explicit override."""
+
+    Nx, Ny = 8, 8
+    Ns = 3
+    delta = 0.5
+
+    um = np.zeros((1, Ny, Nx, Ns, 14))
+    um[..., 0, 0] = 1.0
+    um[..., 1, 0] = 1.0
+    um[..., 2, 0] = 1.0
+
+    uf = np.zeros((1, Ny, Nx, 6))
+    uf[..., 3] = 0.5
+
+    # config is intentionally ambiguous (no [[parameter.particle]]); without
+    # the profile qm field, calc_e_ohm_2d would raise.
+    config = {
+        "parameter": {
+            "Ns": Ns,
+            "Ny": Ny,
+            "Nx": Nx,
+            "delh": delta,
+        }
+    }
+    run = _MockRun(uf, um, config)
+    run.qm = [-1.0, -1.0, 0.01]
+
+    E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0)
+    assert E_ohm.shape == (Ny, Nx, 3)
+    assert np.all(np.isfinite(E_ohm))

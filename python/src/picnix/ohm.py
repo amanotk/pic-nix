@@ -150,14 +150,19 @@ def _solve_ohm_2d_core(L, S, c2_dx2, c2_dx4, rtol, maxiter, M1, M2):
 def qm_per_species_from_config(config):
     """Infer per-species charge-to-mass ratio from a picnix config.
 
+    This is a *fallback* used by :func:`_resolve_qm` for profiles written
+    by older picnix builds that do not carry the ``qm`` field. New
+    profiles always include ``qm`` (accessible as ``run.qm``), so this
+    helper is rarely needed.
+
     Supports two config schemas used in PIC-NIX examples:
 
     * ``[[parameter.particle]]`` (array of per-species blocks, each with
-      a ``qm`` field; e.g., ``beam/twostream``, ``foot/``)
+      a ``qm`` field; e.g., ``beam/twostream``, ``beam/weibel``, ``thermal``)
     * Top-level ``mime``, ``nppc``, ``wp`` keys, which implies a 2-species
-      electron-ion pair (e.g., ``anisotropy``, ``heatflux``). Returns
-      ``[-wp, +wp/mime]`` in code units (matches the C++ side which
-      sets ``me = 1/nppc``, ``qe = -wp/nppc`` so ``qme = qe/me = -wp``).
+      electron-ion pair (e.g., ``anisotropy``). Returns ``[-wp, +wp/mime]``
+      in code units (matches the C++ side which sets ``me = 1/nppc``,
+      ``qe = -wp/nppc`` so ``qme = qe/me = -wp``).
 
     For multi-species cases that are not electron-ion pairs, the qm
     cannot be inferred from the config; pass ``qm_per_species`` to
@@ -342,9 +347,11 @@ def solve_ohm_2d(
 
 
 def _resolve_qm(run, qm_per_species):
-    if qm_per_species is None:
-        return qm_per_species_from_config(run.config)
-    return np.asarray(qm_per_species, dtype=np.float64)
+    if qm_per_species is not None:
+        return np.asarray(qm_per_species, dtype=np.float64)
+    if getattr(run, "qm", None) is not None:
+        return np.asarray(run.qm, dtype=np.float64)
+    return qm_per_species_from_config(run.config)
 
 
 def calc_e_ohm_1d(run, step, *, prefix="field", c=1.0, qm_per_species=None):

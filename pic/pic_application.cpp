@@ -148,6 +148,34 @@ void PicApplication::setup_chunks()
   }
 }
 
+void PicApplication::setup_chunks_init()
+{
+  base_type::setup_chunks_init();
+
+  // extract per-species q/m for serialization
+  if (chunkvec.size() > 0) {
+    auto data = static_cast<PicChunk*>(chunkvec[0].get())->get_internal_data();
+
+    // check the validity of up
+    bool is_up_valid = data.up.size() == Ns;
+    if (is_up_valid) {
+      for (int is = 0; is < Ns; is++) {
+        is_up_valid = is_up_valid && (data.up[is] != nullptr);
+      }
+    }
+    if (!is_up_valid) {
+      ERROR << tfm::format("Per-species q/m extraction failed: up is null for some species");
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    // extract per-species q/m
+    qm_per_species.resize(Ns);
+    for (int is = 0; is < Ns; is++) {
+      qm_per_species[is] = data.up[is]->q / data.up[is]->m;
+    }
+  }
+}
+
 bool PicApplication::rebalance()
 {
   if (base_type::rebalance()) {
@@ -200,6 +228,7 @@ json PicApplication::to_json()
 
   state["Ns"]      = Ns;
   state["momstep"] = momstep;
+  state["qm"]      = qm_per_species;
 
   return state;
 }
@@ -212,6 +241,10 @@ bool PicApplication::from_json(json& state)
 
   Ns      = state["Ns"];
   momstep = state["momstep"];
+
+  if (state.contains("qm") == true) {
+    qm_per_species = state["qm"].get<std::vector<float64>>();
+  }
 
   return true;
 }
