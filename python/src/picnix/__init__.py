@@ -11,5 +11,6 @@ DEFAULT_TRACER_PREFIX = "tracer"
 
 from .utils import *
 from .field import *
+from .ohm import *
 from .particle import *
 from .run import *

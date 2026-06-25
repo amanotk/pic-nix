@@ -36,3 +36,8 @@ graphify-out/
 .opencode/package.json
 .opencode/package-lock.json
 .opencode/bun.lock
+
+# Pandoc render artifacts of doc previews
+docs/**/*.html
+docs/**/_files
+docs/**/*_files
