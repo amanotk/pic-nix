@@ -81,6 +81,9 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     ]
     assert manifest["defaults"]["field_dtype"] == "float32"
     assert manifest["defaults"]["compression"] == "none"
+    assert manifest["verification"]["status"] == "passed"
+    assert manifest["verification"]["level"] == "fast"
+    assert manifest["verification"]["raw_fingerprint"]["hdf5_files"] == 2
 
     with h5py.File(output_dir / "field.vds.h5", "r") as h5fp:
         field = h5fp["field/00000000/uf"][...]
@@ -129,3 +132,62 @@ def test_selected_prefix_and_resume(tmp_path, monkeypatch):
     assert (output_dir / "field" / "00000000.h5").exists()
     assert (output_dir / "field.vds.h5").exists()
     assert not (output_dir / "particle.vds.h5").exists()
+
+
+def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--overwrite",
+        "--no-verify",
+    )
+    manifest_path = input_dir / "hdf5" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert "verification" not in manifest
+
+    run_converter(monkeypatch, "verify", "--input-dir", input_dir, "--prefix", "field")
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["verification"]["status"] == "passed"
+
+    run_converter(
+        monkeypatch,
+        "remove-original",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--dry-run",
+    )
+    assert (input_dir / "node000000" / "field" / "00000000.json").exists()
+
+    run_converter(
+        monkeypatch,
+        "remove-original",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--yes",
+    )
+    assert not (input_dir / "node000000" / "field").exists()
+    assert not (input_dir / "node000001" / "field").exists()
+    assert (input_dir / "node000000" / "particle").exists()
+    assert (input_dir / "node000001" / "particle").exists()
+
+    run_converter(
+        monkeypatch, "verify", "--input-dir", input_dir, "--prefix", "particle"
+    )
+    run_converter(
+        monkeypatch,
+        "remove-original",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "particle",
+        "--yes",
+    )
+    assert not (input_dir / "node000000").exists()
+    assert not (input_dir / "node000001").exists()

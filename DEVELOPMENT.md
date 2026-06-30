@@ -105,6 +105,15 @@ picnix-hdf5-convert --input-dir /path/to/run/data
 mpiexec -np 16 picnix-hdf5-convert --input-dir /path/to/run/data
 ```
 
+Conversion verifies HDF5 output by default. To verify later or remove
+verified original diagnostics interactively:
+
+```sh
+picnix-hdf5-convert verify --input-dir /path/to/run/data
+picnix-hdf5-convert remove-original --input-dir /path/to/run/data --dry-run
+picnix-hdf5-convert remove-original --input-dir /path/to/run/data
+```
+
 ### Install from another directory
 
 Point `uv` at the `python/` subdirectory of any local clone:

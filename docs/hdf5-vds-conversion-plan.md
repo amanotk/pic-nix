@@ -346,6 +346,11 @@ Behavior:
 - Write each step to a visible temporary HDF5 file, for example `00000000.h5.tmp`, and atomically rename it after successful completion.  
 - With `--resume`, skip existing valid step files and rebuild the VDS index, so a scheduler kill can be resumed safely.  
 - After physical step files are complete, rank 0 writes the VDS index file for each prefix and `manifest.json` for the converted output directory.  
+- Normal conversion runs verification by default. Use `--no-verify` only for special cases such as `--no-vds` or staged debugging.  
+- Standalone verification is available with `picnix-hdf5-convert verify --input-dir <run>/data`.  
+- Original diagnostics can be removed only through `picnix-hdf5-convert remove-original --input-dir <run>/data` after verification passes and stamps `manifest.json`.  
+- `remove-original` is intended for a normal interactive shell, not Slurm. It deletes only verified original `.json`/`.data` diagnostics, then removes empty prefix directories and empty `nodeXXXXXX` directories for POSIX output.  
+- `remove-original --dry-run` reports what would be deleted; `remove-original --yes` skips the interactive confirmation.  
   
 Parallelism:  
   
