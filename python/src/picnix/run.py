@@ -3,12 +3,12 @@
 
 import asyncio
 import json
+import os
 import pathlib
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import msgpack
-import nest_asyncio
 import numpy as np
 import toml
 
@@ -17,7 +17,14 @@ from picnix import (
 )
 
 from .diag import DiagHandler
-from .utils import *
+from .utils import (
+    async_read_datafile,
+    async_read_jsonfile,
+    convert_array_format,
+    find_record_from_msgpack,
+    read_datafile,
+    read_jsonfile,
+)
 
 
 class Run(object):
@@ -87,7 +94,9 @@ class Run(object):
         self.diag_handlers = dict()
 
         for diagnostic in self.config["diagnostic"]:
-            handler = DiagHandler.create_handler(diagnostic, basedir, iomode, self.method)
+            handler = DiagHandler.create_handler(
+                diagnostic, basedir, iomode, self.method
+            )
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler
 
@@ -128,7 +137,11 @@ class Run(object):
             cache_step = cache.get("step", None)
             cache_pattern = cache.get("pattern", None)
             cache_data = cache.get("data", None)
-            if cache_data is not None and cache_step == step and cache_pattern == pattern:
+            if (
+                cache_data is not None
+                and cache_step == step
+                and cache_pattern == pattern
+            ):
                 return cache_data
 
         # default pattern (read everything)
@@ -137,21 +150,7 @@ class Run(object):
 
         # otherwise, read data
         handler = self.diag_handlers[prefix]
-
-        if self.method == "async":
-            nest_asyncio.apply()  # for jupyter notebook
-
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            data = loop.run_until_complete(Run.async_do_read_at(handler, step, pattern))
-        elif self.method == "thread":
-            data = Run.thread_do_read_at(handler, step, pattern)
-        else:
-            data = Run.do_read_at(handler, step, pattern)
+        data = handler.read_at(step, pattern)
 
         # convert array format
         if handler.is_chunked_data_conversion_required():
@@ -164,6 +163,12 @@ class Run(object):
         self.cache[prefix] = {"step": step, "pattern": pattern, "data": data}
 
         return data
+
+    def read_particle_id_at(self, prefix, step, pattern=None):
+        if pattern is None:
+            pattern = ".*"
+        handler = self.diag_handlers[prefix]
+        return handler.read_particle_id_at(step, pattern)
 
     def remove_file_at(self, prefix, step, are_you_sure=False):
         handler = self.diag_handlers[prefix]
@@ -179,6 +184,12 @@ class Run(object):
 
         # now remove files
         jsonfile_to_be_removed = handler.find_json_at_step(step)
+        if jsonfile_to_be_removed is None:
+            if getattr(handler.storage, "kind", None) != "json":
+                raise NotImplementedError(
+                    "remove_file_at is only supported for raw JSON/data diagnostics"
+                )
+            return
         for jsonfile in jsonfile_to_be_removed:
             _, meta = read_jsonfile(jsonfile)
             datafile = os.sep.join([meta["dirname"], meta["datafile"]])
@@ -317,7 +328,9 @@ class Run(object):
         result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        result = Run.thread_read_data_files(result, address, json_contents, names, pattern)
+        result = Run.thread_read_data_files(
+            result, address, json_contents, names, pattern
+        )
 
         return result
 
@@ -366,6 +379,8 @@ class Run(object):
         result, address = Run.allocate_memory(names, dims, dtype)
 
         # read data
-        result = await Run.async_read_data_files(result, address, json_contents, names, pattern)
+        result = await Run.async_read_data_files(
+            result, address, json_contents, names, pattern
+        )
 
         return result
