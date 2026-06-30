@@ -105,13 +105,47 @@ picnix-hdf5-convert --input-dir /path/to/run/data
 mpiexec -np 16 picnix-hdf5-convert --input-dir /path/to/run/data
 ```
 
-Conversion verifies HDF5 output by default. To verify later or remove
-verified original diagnostics interactively:
+The converter has three commands:
+
+1. **`convert`** (default): converts original `.json`/`.data` diagnostics to
+   HDF5 step files and VDS indexes, then runs verification automatically.
+   Use `--no-verify` to skip verification.
+
+2. **`verify`**: checks existing HDF5 output against original diagnostics
+   and stamps `manifest.json` with the result. Supports `--verify-level fast`
+   (default, structural HDF5 checks plus sampled original comparisons) and
+   `--verify-level full` (scans all original metadata, slower).
+
+3. **`remove-original`**: deletes original `.json`/`.data` diagnostic files
+   that are covered by verified HDF5 output. Requires prior verification.
+   Run in a normal interactive shell, not under a scheduler.
+
+Typical workflow:
 
 ```sh
+# Step 1: Convert (run under Slurm or MPI for large runs)
+mpiexec -np 16 picnix-hdf5-convert --input-dir /path/to/run/data
+
+# Step 2: Verify separately if needed (fast, can run in a normal shell)
 picnix-hdf5-convert verify --input-dir /path/to/run/data
+
+# Step 3: Preview what remove-original would delete
 picnix-hdf5-convert remove-original --input-dir /path/to/run/data --dry-run
+
+# Step 4: Remove original files interactively (normal shell only)
 picnix-hdf5-convert remove-original --input-dir /path/to/run/data
+```
+
+`remove-original` deletes only `.json` and `.data` files for verified
+prefixes. It preserves `hdf5/`, `profile.msgpack`, `log.msgpack`, config
+files, and any unrelated files. After deletion it removes empty prefix
+directories and empty `nodeXXXXXX` directories (POSIX mode).
+
+For noninteractive use (e.g. scripts), use `--yes` to skip the confirmation
+prompt:
+
+```sh
+picnix-hdf5-convert remove-original --input-dir /path/to/run/data --yes
 ```
 
 ### Install from another directory

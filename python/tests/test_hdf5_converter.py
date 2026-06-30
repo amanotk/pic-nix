@@ -191,3 +191,31 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
     )
     assert not (input_dir / "node000000").exists()
     assert not (input_dir / "node000001").exists()
+
+
+def test_remove_original_preserves_unreferenced_data(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+    stale_path = input_dir / "node000000" / "field" / "stale.data"
+    stale_path.write_bytes(b"not referenced by json metadata")
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--overwrite",
+    )
+    run_converter(
+        monkeypatch,
+        "remove-original",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--yes",
+    )
+
+    assert not (input_dir / "node000000" / "field" / "00000000.json").exists()
+    assert not (input_dir / "node000000" / "field" / "00000000.data").exists()
+    assert stale_path.read_bytes() == b"not referenced by json metadata"

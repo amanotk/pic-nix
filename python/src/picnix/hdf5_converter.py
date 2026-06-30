@@ -1306,27 +1306,6 @@ def matching_verification(args, manifest, prefixes):
     return verification, current
 
 
-def collect_original_paths(args, prefixes):
-    selected_steps = parse_step_tokens(args.steps)
-    files = []
-    prefix_dirs = set()
-    node_dirs = set()
-    for prefix in prefixes:
-        iomode = detect_iomode(args.input_dir, prefix)
-        nodes = discover_nodes(args.input_dir) if iomode == "posix" else []
-        steps = discover_steps(
-            args.input_dir, prefix, iomode, nodes, selected_steps, args.step_limit
-        )
-        files.extend(raw_files_for_prefix(args.input_dir, prefix, iomode, nodes, steps))
-        if iomode == "posix":
-            for node in nodes:
-                prefix_dirs.add(node / prefix)
-                node_dirs.add(node)
-        else:
-            prefix_dirs.add(args.input_dir / prefix)
-    return sorted(set(files)), sorted(prefix_dirs), sorted(node_dirs)
-
-
 def remove_empty_dirs(paths):
     removed = []
     kept = []
@@ -1350,6 +1329,66 @@ def estimate_removal_from_verification(verification):
         file_count += int(item.get("steps", 0)) * int(sources) * 2
         node_count = max(node_count, int(item.get("nodes", 0)))
     return file_count, node_count
+
+
+def delete_file(path):
+    if not path.exists():
+        return 0, 0
+    size = path.stat().st_size
+    path.unlink()
+    return 1, size
+
+
+def delete_step_files(json_path):
+    removed = 0
+    bytes_freed = 0
+    if not json_path.exists():
+        return removed, bytes_freed
+    root = load_json(json_path)
+    raw_path = json_path.parent / root["meta"]["rawfile"]
+    count, size = delete_file(raw_path)
+    removed += count
+    bytes_freed += size
+    count, size = delete_file(json_path)
+    removed += count
+    bytes_freed += size
+    return removed, bytes_freed
+
+
+def delete_verified_originals(args, prefixes):
+    selected_steps = parse_step_tokens(args.steps)
+    total_removed = 0
+    total_bytes = 0
+    prefix_dirs = set()
+    node_dirs = set()
+
+    for prefix in prefixes:
+        prefix_removed = 0
+        iomode = detect_iomode(args.input_dir, prefix)
+        nodes = discover_nodes(args.input_dir) if iomode == "posix" else []
+        steps = discover_steps(
+            args.input_dir, prefix, iomode, nodes, selected_steps, args.step_limit
+        )
+        for stem in steps:
+            if iomode == "posix":
+                json_paths = [node / prefix / f"{stem}.json" for node in nodes]
+            else:
+                json_paths = [args.input_dir / prefix / f"{stem}.json"]
+            for json_path in json_paths:
+                removed, bytes_freed = delete_step_files(json_path)
+                total_removed += removed
+                prefix_removed += removed
+                total_bytes += bytes_freed
+
+        if iomode == "posix":
+            for node in nodes:
+                prefix_dirs.add(node / prefix)
+                node_dirs.add(node)
+        else:
+            prefix_dirs.add(args.input_dir / prefix)
+        print(f"  {prefix}: removed {prefix_removed} files", flush=True)
+
+    return total_removed, total_bytes, prefix_dirs, node_dirs
 
 
 def remove_original(args):
@@ -1381,20 +1420,17 @@ def remove_original(args):
         if response != REMOVE_CONFIRMATION:
             raise SystemExit("remove-original cancelled")
 
-    print("enumerating:      original diagnostic files", flush=True)
-    files, prefix_dirs, node_dirs = collect_original_paths(args, prefixes)
-    byte_count = sum(path.stat().st_size for path in files)
-    print(f"files to remove:  {len(files)} exact", flush=True)
-    print(f"bytes to remove:  {byte_count / 1024.0 / 1024.0:.3f} MiB", flush=True)
-    print(f"prefix dirs:      {len(prefix_dirs)}", flush=True)
-    print(f"node dirs:        {len(node_dirs)}", flush=True)
+    total_removed, total_bytes, prefix_dirs, node_dirs = delete_verified_originals(
+        args, prefixes
+    )
 
-    for path in files:
-        path.unlink()
     removed_prefix_dirs, kept_prefix_dirs = remove_empty_dirs(prefix_dirs)
     removed_node_dirs, kept_node_dirs = remove_empty_dirs(node_dirs)
-    print("removed:          original diagnostic files")
-    print(f"removed dirs:     {len(removed_prefix_dirs) + len(removed_node_dirs)}")
+
+    print("")
+    print(f"files removed:    {total_removed}")
+    print(f"bytes freed:      {total_bytes / 1024.0 / 1024.0:.3f} MiB")
+    print(f"dirs removed:     {len(removed_prefix_dirs) + len(removed_node_dirs)}")
     if kept_prefix_dirs or kept_node_dirs:
         print(
             "kept non-empty:   "
