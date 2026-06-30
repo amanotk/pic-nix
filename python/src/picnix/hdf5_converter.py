@@ -36,6 +36,7 @@ JSON_RE = re.compile(r"\d+\.json$")
 SKIP_PREFIXES = {"hdf5"}
 COMMANDS = {"convert", "verify", "remove-original"}
 REMOVE_CONFIRMATION = "remove original diagnostics"
+NODE_METADATA_FILES = ("history.txt",)
 
 
 class SerialComm:
@@ -1320,6 +1321,36 @@ def remove_empty_dirs(paths):
     return removed, kept
 
 
+def relocate_node_metadata(input_dir, node_dirs):
+    relocated = []
+    kept = []
+    if input_dir / "node000000" not in node_dirs:
+        return relocated, kept
+
+    for filename in NODE_METADATA_FILES:
+        source = input_dir / "node000000" / filename
+        destination = input_dir / filename
+        if not source.is_file():
+            continue
+
+        if destination.exists():
+            if (
+                destination.is_file()
+                and destination.read_bytes() == source.read_bytes()
+            ):
+                source.unlink()
+                relocated.append((source, destination))
+            else:
+                kept.append((source, destination))
+            continue
+
+        shutil.copy2(source, destination)
+        source.unlink()
+        relocated.append((source, destination))
+
+    return relocated, kept
+
+
 def estimate_removal_from_verification(verification):
     prefix_items = verification.get("raw_fingerprint", {}).get("prefixes", [])
     file_count = 0
@@ -1424,13 +1455,20 @@ def remove_original(args):
         args, prefixes
     )
 
+    relocated_metadata, kept_metadata = relocate_node_metadata(
+        args.input_dir, node_dirs
+    )
     removed_prefix_dirs, kept_prefix_dirs = remove_empty_dirs(prefix_dirs)
     removed_node_dirs, kept_node_dirs = remove_empty_dirs(node_dirs)
 
     print("")
     print(f"files removed:    {total_removed}")
     print(f"bytes freed:      {total_bytes / 1024.0 / 1024.0:.3f} MiB")
+    if relocated_metadata:
+        print(f"metadata moved:   {len(relocated_metadata)} files")
     print(f"dirs removed:     {len(removed_prefix_dirs) + len(removed_node_dirs)}")
+    if kept_metadata:
+        print(f"metadata kept:    {len(kept_metadata)} files with existing destination")
     if kept_prefix_dirs or kept_node_dirs:
         print(
             "kept non-empty:   "

@@ -138,8 +138,10 @@ picnix-hdf5-convert remove-original --input-dir /path/to/run/data
 
 `remove-original` deletes only `.json` and `.data` files for verified
 prefixes. It preserves `hdf5/`, `profile.msgpack`, `log.msgpack`, config
-files, and any unrelated files. After deletion it removes empty prefix
-directories and empty `nodeXXXXXX` directories (POSIX mode).
+files, and any unrelated files. For POSIX output, it promotes
+`node000000/history.txt` to `history.txt` in the input directory when possible,
+without overwriting a differing existing file. After deletion it removes empty
+prefix directories and empty `nodeXXXXXX` directories.
 
 For noninteractive use (e.g. scripts), use `--yes` to skip the confirmation
 prompt:

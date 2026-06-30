@@ -60,6 +60,7 @@ def make_posix_fixture(tmp_path):
         ids = np.array([100 + node_index * 10, 101 + node_index * 10], dtype="<u8")
         particle[:, -1] = ids.view("<f8")
         write_step(node_dir / "particle", "particle", "00000000", "up00", particle)
+    (input_dir / "node000000" / "history.txt").write_text("history\n")
     return input_dir
 
 
@@ -174,6 +175,8 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
     )
     assert not (input_dir / "node000000" / "field").exists()
     assert not (input_dir / "node000001" / "field").exists()
+    assert (input_dir / "history.txt").read_text() == "history\n"
+    assert not (input_dir / "node000000" / "history.txt").exists()
     assert (input_dir / "node000000" / "particle").exists()
     assert (input_dir / "node000001" / "particle").exists()
 
