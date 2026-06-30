@@ -378,9 +378,17 @@ def selected_dataset_names(dataset):
 
 
 def detect_kind(prefix, dataset_names):
+    if "tracer" in prefix:
+        return "tracer"
     if "particle" in prefix or all(name.startswith("up") for name in dataset_names):
         return "particle"
     return "field"
+
+
+def direct_dtype_for_kind(args, kind, source_dtype):
+    if kind == "tracer":
+        return np.dtype(source_dtype)
+    return dtype_choice(args.field_dtype, source_dtype)
 
 
 def posix_json_path(node_dir, prefix, stem):
@@ -712,7 +720,7 @@ def write_step_file(args, stem, iomode, nodes):
         output_datasets = {
             name: {
                 "shape": tuple(shape),
-                "dtype": str(dtype_choice(args.field_dtype, source_dtype)),
+                "dtype": str(direct_dtype_for_kind(args, kind, source_dtype)),
             }
             for name, (shape, source_dtype) in shape_dtype.items()
         }
@@ -750,7 +758,7 @@ def write_step_file(args, stem, iomode, nodes):
                     timing,
                 )
             else:
-                value_dtype = dtype_choice(args.field_dtype, raw_dtype)
+                value_dtype = direct_dtype_for_kind(args, kind, raw_dtype)
                 write_direct_from_batches(
                     group, name, shape, value_dtype, args, batches, timing
                 )
@@ -968,7 +976,7 @@ def expected_output_datasets(args, prefix, stem, iomode, nodes):
     datasets = {
         name: {
             "shape": tuple(shape),
-            "dtype": str(dtype_choice(args.field_dtype, source_dtype)),
+            "dtype": str(direct_dtype_for_kind(args, kind, source_dtype)),
         }
         for name, (shape, source_dtype) in shape_dtype.items()
     }
@@ -1058,7 +1066,7 @@ def verify_sample_values(args, prefix, stem, iomode, nodes, kind, shape_dtype):
                     actual_id = group[f"{name}_id"][row : row + 1]
                     np.testing.assert_array_equal(actual_id, expected_id)
                 else:
-                    value_dtype = dtype_choice(args.field_dtype, source_dtype)
+                    value_dtype = direct_dtype_for_kind(args, kind, source_dtype)
                     expected = source.astype(value_dtype, copy=False)
                     actual = group[name][row : row + 1, ...]
                     np.testing.assert_allclose(actual, expected)
