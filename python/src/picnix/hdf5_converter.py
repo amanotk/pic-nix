@@ -1188,6 +1188,10 @@ def prepare_output(args, comm):
         if prefix_dir.exists():
             if args.overwrite:
                 shutil.rmtree(prefix_dir)
+                if args.no_vds:
+                    vds_path = args.output_dir / f"{args.prefix}.vds.h5"
+                    if vds_path.exists():
+                        vds_path.unlink()
             elif not args.resume:
                 raise FileExistsError(
                     f"{prefix_dir} exists; pass --overwrite, --resume, or choose another output"

@@ -135,6 +135,27 @@ def test_selected_prefix_and_resume(tmp_path, monkeypatch):
     assert not (output_dir / "particle.vds.h5").exists()
 
 
+def test_overwrite_no_vds_removes_stale_vds(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "field")
+    assert (input_dir / "hdf5" / "field.vds.h5").exists()
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--overwrite",
+        "--no-vds",
+        "--no-verify",
+    )
+
+    assert (input_dir / "hdf5" / "field" / "00000000.h5").exists()
+    assert not (input_dir / "hdf5" / "field.vds.h5").exists()
+
+
 def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
     input_dir = make_posix_fixture(tmp_path)
 
