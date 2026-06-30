@@ -5,7 +5,6 @@ import asyncio
 import json
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import aiofiles
 import nest_asyncio
@@ -17,6 +16,8 @@ from picnix import (
     DEFAULT_PARTICLE_PREFIX,
     DEFAULT_TRACER_PREFIX,
 )
+
+from .diag_storage import create_diag_storage
 
 
 class DiagHandler(object):
@@ -48,50 +49,18 @@ class DiagHandler(object):
 
     def setup(self, config):
         self.config = config
-        self.file = self.get_file_array(config.get("prefix", self.prefix))
-        self.step = np.arange(self.file.shape[1], dtype=np.int32)
-        self.time = np.arange(self.file.shape[1], dtype=np.float64)
-
-        # read time and step
-        for i, file in enumerate(self.file[0, :]):
-            self.step[i], self.time[i] = DiagHandler.read_time_and_step(file)
+        self.storage = create_diag_storage(
+            self.name, config.get("prefix", self.prefix), self.basedir, self.iomode
+        )
+        self.step = self.storage.get_step()
+        self.time = self.storage.get_time()
+        self.file = getattr(self.storage, "file", None)
 
     def thread_setup(self, config):
-        self.config = config
-        self.file = self.get_file_array(config.get("prefix", self.prefix))
-        self.step = np.arange(self.file.shape[1], dtype=np.int32)
-        self.time = np.arange(self.file.shape[1], dtype=np.float64)
-
-        # read time and step via thread
-        with ThreadPoolExecutor() as executor:
-            future_to_index = {}
-            for i, file in enumerate(self.file[0, :]):
-                future = executor.submit(DiagHandler.read_time_and_step, file)
-                future_to_index[future] = i
-
-            for future in as_completed(future_to_index):
-                i = future_to_index[future]
-                try:
-                    self.step[i], self.time[i] = future.result()
-                except Exception as exc:
-                    print(f"File at index {i} generated an exception: {exc}")
+        self.setup(config)
 
     async def async_setup(self, config):
-        self.config = config
-        self.file = self.get_file_array(config.get("prefix", self.prefix))
-        self.step = np.arange(self.file.shape[1], dtype=np.int32)
-        self.time = np.arange(self.file.shape[1], dtype=np.float64)
-
-        # read time and step via asyncio
-        tasks = []
-        for i, file in enumerate(self.file[0, :]):
-            tasks.append(
-                asyncio.create_task(DiagHandler.async_read_time_and_step(file))
-            )
-        result = await asyncio.gather(*tasks)
-
-        for i in range(len(result)):
-            self.step[i], self.time[i] = result[i]
+        self.setup(config)
 
     def get_matching_jsons(self, dirname):
         if not os.path.isdir(dirname):
@@ -126,41 +95,35 @@ class DiagHandler(object):
             return np.array(file)
 
     def find_index_at_step(self, step):
-        index = np.searchsorted(self.step, step)
-        if step == self.step[index]:
-            return index
-        else:
-            return None
+        return self.storage.find_index_at_step(step)
 
     def get_step(self):
-        return self.step
+        return self.storage.get_step()
 
     def get_time(self):
-        return self.time
+        return self.storage.get_time()
 
     def get_time_at_step(self, step):
-        index = self.find_index_at_step(step)
-        if index is not None:
-            return self.time[index]
-        else:
-            return None
+        return self.storage.get_time_at_step(step)
 
     def find_json_at_step(self, step):
-        index = self.find_index_at_step(step)
-        if index is not None:
-            return self.file[:, index]
-        else:
+        if not hasattr(self.storage, "find_json_at_step"):
             return None
+        return self.storage.find_json_at_step(step)
 
     def remove_json_at_step(self, step):
-        index = self.find_index_at_step(step)
-        if index is None:
+        if not hasattr(self.storage, "remove_json_at_step"):
             return
+        self.storage.remove_json_at_step(step)
+        self.step = self.storage.get_step()
+        self.time = self.storage.get_time()
+        self.file = getattr(self.storage, "file", None)
 
-        # remove entries at index
-        self.file = np.delete(self.file, index, axis=1)
-        self.step = np.delete(self.step, index)
-        self.time = np.delete(self.time, index)
+    def read_at(self, step, pattern):
+        return self.storage.read_at(step, pattern)
+
+    def read_particle_id_at(self, step, pattern):
+        return self.storage.read_particle_id_at(step, pattern)
 
     @staticmethod
     def read_time_and_step(filename):

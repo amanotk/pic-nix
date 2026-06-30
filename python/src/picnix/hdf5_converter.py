@@ -60,7 +60,8 @@ def get_comm():
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert PIC-NIX posix/mpiio diagnostics to HDF5 + VDS"
+        prog="picnix-hdf5-convert",
+        description="Convert PIC-NIX posix/mpiio diagnostics to HDF5 + VDS",
     )
     parser.add_argument("--input-dir", type=Path, required=True)
     parser.add_argument(
@@ -665,7 +666,7 @@ def write_step_file(args, stem, iomode, nodes):
     h5_open_t0 = time.perf_counter()
     with h5py.File(tmp_path, "w", libver="latest") as h5fp:
         h5fp.attrs["picnix_hdf5_layout"] = "step-v1"
-        h5fp.attrs["converter"] = "script/hdf5_converter.py"
+        h5fp.attrs["converter"] = "picnix.hdf5_converter"
         h5fp.attrs["field_dtype"] = args.field_dtype
         h5fp.attrs["particle_dtype"] = args.particle_dtype
         h5fp.attrs["particle_id_dtype"] = args.particle_id_dtype
