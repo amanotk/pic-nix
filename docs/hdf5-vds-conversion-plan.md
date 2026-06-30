@@ -11,8 +11,8 @@ It must support both `posix` and `mpiio` input layouts, and `picnix.Run` must re
 ## Constraints  
   
 - Real input data must be treated as read-only.  
-- Conversion output must be written to a separate work/scratch directory.  
-- Temporary local runs should write under `tmp/scratch/...`.  
+- The converter treats original `.json` and `.data` files as read-only.  
+- Production conversion defaults to `<input-dir>/hdf5`; temporary benchmark runs should override `--output-dir` and write under `tmp/scratch/...`.  
 - Serial HDF5 must not have multiple MPI ranks writing the same file at the same time.  
 - Compression must be parallelized by giving different ranks independent output files.  
 - Support both `posix` and `mpiio` output.  
@@ -43,10 +43,11 @@ Input layout example:
 Converted output layout:  
   
 ```text  
-<out>/field/00000000.h5  
-<out>/field/00032000.h5  
-<out>/field/00064000.h5  
-<out>/field.vds.h5  
+<run>/data/hdf5/manifest.json  
+<run>/data/hdf5/field/00000000.h5  
+<run>/data/hdf5/field/00032000.h5  
+<run>/data/hdf5/field/00064000.h5  
+<run>/data/hdf5/field.vds.h5  
 ```  
   
 Each physical step file contains real datasets for one prefix and one step:  
@@ -84,8 +85,9 @@ um: (Nchunk_step, 1, 3, 3, 2, 14)
 For `posix`, `Nchunk_step` is produced by concatenating node-local arrays along axis 0 in node order.  
 For `mpiio`, the original file should already contain the whole step array, so conversion is nearly one-to-one: read the original dataset and write the same shape to HDF5.  
   
-For particle diagnostics, the first dimension is particle records rather than chunk IDs, for example `(Nparticle_step, 7)`.  
-The same rule applies: concatenate `posix` node arrays along axis 0, and preserve the `mpiio` step array shape.  
+For particle diagnostics, the first dimension is particle records.  
+The old raw format stores records as `(Nparticle_step, 7)`, where the first six columns are particle values and the last 8-byte slot is the particle ID.  
+Although the JSON metadata labels the full record as `f8`, the ID slot must be preserved by reinterpreting its bytes as `uint64`, not by numerically converting a float value.  
   
 The Python reader should continue to own user-facing transformations.  
 For example, `FieldDiagHandler.is_chunked_data_conversion_required()` currently causes `Run.read_at()` to convert chunk-major field arrays into global grid arrays.  
@@ -118,17 +120,19 @@ Example physical layout:
   
 ```text  
 <out>/particle_full/02080000.h5  
-  /02080000/particles/up00/block000000  
-  /02080000/particles/up00/block000001  
-  /02080000/particles/up01/block000000  
-  /02080000/particles/up01/block000001  
+  /02080000/particles/up00/value/block000000  
+  /02080000/particles/up00/id/block000000  
+  /02080000/particles/up01/value/block000000  
+  /02080000/particles/up01/id/block000000  
 ```  
   
 The logical datasets exposed to readers can be VDS datasets inside the same file:  
   
 ```text  
-  /02080000/up00    virtual dataset over /02080000/particles/up00/block*  
-  /02080000/up01    virtual dataset over /02080000/particles/up01/block*  
+  /02080000/up00       virtual dataset, shape = (N, 6), dtype = float32 by default  
+  /02080000/up00_id    virtual dataset, shape = (N,), dtype = uint64 by default  
+  /02080000/up01       virtual dataset, shape = (N, 6), dtype = float32 by default  
+  /02080000/up01_id    virtual dataset, shape = (N,), dtype = uint64 by default  
 ```  
   
 This keeps the final data-file count at one HDF5 file per step while allowing memory-bounded writes.  
@@ -140,6 +144,15 @@ For `mpiio`, particle blocks can be first-dimension slabs read directly from the
   
 This internal block layout does not solve the serial-HDF5 single-writer limit for one huge step, but it does solve memory pressure while preserving the desired one-file-per-step output.  
 Parallelism then comes from converting multiple steps and prefixes concurrently.  
+  
+The planned `picnix` behavior is:  
+  
+```python  
+run.read_at("particle", step)["up00"]         # (N, 6) values  
+run.read_particle_id_at("particle", step)["up00"]  # (N,) IDs  
+```  
+  
+No backward compatibility is required for old user-facing `(N, 7)` particle arrays.  
   
 ## HDF5 Chunking And Compression  
   
@@ -167,7 +180,11 @@ hdf5_chunks = (chunk0, *shape[1:])
 ```  
   
 This preserves the leading-dimension access model while avoiding very small HDF5 chunks.  
-Compression defaults should start with `gzip=4` and `shuffle=True`; benchmark options should allow changing these.  
+Default conversion should use `float32` output and no compression.  
+This is the current best speed/size tradeoff for the tested `run101 field` benchmark.  
+Precision-preserving output remains available with `--field-dtype source` and `--particle-dtype source`.  
+Compression remains available with `--compression gzip --compression-opts N`, but gzip is not the default because it made HDF5 write/compression the dominant cost in field tests.  
+Particle IDs default to `uint64` and are stored separately.  
   
 ## Memory-Bounded Writing  
   
@@ -291,26 +308,33 @@ Create a new script, `script/hdf5_converter.py`, separate from the synthetic ben
 Required options:  
   
 - `--input-dir`: path to the run `data` directory.  
-- `--output-dir`: destination directory for converted HDF5 files.  
-- `--prefix`: diagnostic prefix, for example `field`.  
-- `--iomode`: `posix`, `mpiio`, or `auto`.  
-- `--nodes`: optional node limit for benchmark runs.  
-- `--steps`: optional step limit or explicit step list.  
-- `--compression`: default `gzip`.  
-- `--compression-opts`: default `4`.  
-- `--no-shuffle`: disable shuffle if needed.  
-- `--target-chunk-mib`: target uncompressed HDF5 chunk size, default around 1-4 MiB.  
-- `--max-buffer-mib`: target maximum temporary data buffer per rank.  
-- `--node-batch-size`: optional explicit node batch size for `posix`.  
-- `--particle-block-mib`: target internal particle block size for large particle datasets.  
-- `--shard-large-steps`: last-resort mode to split very large steps into multiple independently written shard files.  
-- `--overwrite`: remove previous output directory.  
+
+Optional controls:  
+
+- `--output-dir`: destination directory for converted HDF5 files; default is `<input-dir>/hdf5`.  
+- `--prefix`: one or more diagnostic prefixes, for example `field particle`; default is to discover all diagnostic prefixes from the directory layout.  
+- `--steps`: optional explicit step list or range for debugging/testing.  
+- `--step-limit`: optional limit on discovered steps for debugging/testing.  
+- `--compression`: default `none`.  
+- `--compression-opts`: default `1` when gzip is requested.  
+- `--field-dtype`: `float32`, `float64`, or `source`; default `float32`.  
+- `--particle-dtype`: `float32`, `float64`, or `source`; default `float32`.  
+- `--particle-id-dtype`: `uint64` or `int64`; default `uint64`.  
+- `--target-chunk-mib`: target uncompressed HDF5 chunk size for compressed output; default `4`.  
+- `--max-buffer-mib`: target maximum temporary data buffer per rank; default `1024`.  
+- `--overwrite`: replace existing converted step files for the selected prefix or prefixes.  
+- `--resume`: reuse existing valid step files and regenerate the VDS index.  
 - `--no-vds`: only write physical step files.  
   
 Behavior:  
   
-- Discover nodes from `node??????` directories.  
+- Use `--input-dir` as the protocol anchor. Do not require `profile.msgpack`; optional metadata sources can be added later without coupling conversion to profile internals.  
+- If `--prefix` is omitted, discover prefixes from `<input-dir>/node000000/*/*.json` for `posix`, or `<input-dir>/*/*.json` for `mpiio`.  
+- Detect `posix` or `mpiio` from directory structure.  
+- Detect field-like or particle-like layout from prefix/dataset names.  
+- Discover all nodes from `node??????` directories for `posix`.  
 - Discover steps from `<input-dir>/node000000/<prefix>/*.json` for `posix`, or `<input-dir>/<prefix>/*.json` for `mpiio`.  
+- Convert all datasets for each selected or discovered prefix.  
 - For `posix`, perform concatenation by streaming node batches into output slices, not by materializing the whole step.  
 - For `mpiio`, read first-dimension slabs from the single step `.data` file and preserve its dataset shape.  
 - Write one HDF5 file for that prefix and step.  
@@ -318,7 +342,9 @@ Behavior:
 - For particle-like data, allow internal block groups inside the same step file and expose logical datasets through same-file VDS or reader-side concatenation.  
 - Use HDF5 chunks based on the target byte size and preserve the first dimension as the chunk/record dimension.  
 - Store useful metadata as HDF5 attributes, including step, time, layout, source prefix, source node range, and conversion settings.  
-- After physical step files are complete, rank 0 writes the VDS index file.  
+- Write each step to a visible temporary HDF5 file, for example `00000000.h5.tmp`, and atomically rename it after successful completion.  
+- With `--resume`, skip existing valid step files and rebuild the VDS index, so a scheduler kill can be resumed safely.  
+- After physical step files are complete, rank 0 writes the VDS index file for each prefix and `manifest.json` for the converted output directory.  
   
 Parallelism:  
   
