@@ -91,6 +91,20 @@ uv pip install --python .venv -e ./python
 
 After this, `import picnix` works from any directory.
 
+For Python tests and optional MPI-enabled tools, install extras:
+
+```sh
+uv pip install --python .venv -e "./python[test]"
+uv pip install --python .venv -e "./python[mpi]"
+```
+
+The HDF5 diagnostic converter is installed as a console command:
+
+```sh
+picnix-hdf5-convert --input-dir /path/to/run/data
+mpiexec -np 16 picnix-hdf5-convert --input-dir /path/to/run/data
+```
+
 ### Install from another directory
 
 Point `uv` at the `python/` subdirectory of any local clone:

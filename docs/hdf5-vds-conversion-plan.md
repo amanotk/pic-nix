@@ -303,7 +303,8 @@ Sampled per-step shapes for `field` using 64 nodes:
   
 ### Phase 1: Standalone Real-Data Converter Prototype  
   
-Create a new script, `script/hdf5_converter.py`, separate from the synthetic benchmark.  
+Provide the converter as the packaged executable `picnix-hdf5-convert`, implemented by `picnix.hdf5_converter`.  
+Keep `script/hdf5_converter.py` only as a compatibility wrapper.  
   
 Required options:  
   
@@ -421,7 +422,7 @@ Implementation direction:
   
 ## Recommended Next Step  
   
-Phase 1 prototype exists as `script/hdf5_converter.py`.  
+Phase 1 prototype exists as `picnix.hdf5_converter` with the `picnix-hdf5-convert` console entry point.  
 Real-data smoke tests passed for field, particle, VDS validation, and a 2-rank MPI run.  
 Next, run staged real-data benchmarks using `tmp/scratch/...` output directories, starting with `field` at increasing node and step counts.  
 

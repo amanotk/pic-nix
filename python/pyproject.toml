@@ -21,5 +21,12 @@ dependencies = [
     "aiofiles",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+mpi = ["mpi4py"]
+
+[project.scripts]
+picnix-hdf5-convert = "picnix.hdf5_converter:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/picnix"]
