@@ -368,8 +368,6 @@ def read_dataset_slab(data_path, info, byteorder, layout, start=0, count=None):
         fp.seek(file_offset)
         payload = fp.read(int(np.prod(slab_shape)) * dtype.itemsize)
     array = np.frombuffer(payload, dtype=dtype).reshape(slab_shape).copy()
-    if len(shape) == 1 and shape[0] == 1:
-        return array[0]
     return array
 
 
@@ -880,9 +878,24 @@ def raw_files_for_prefix(input_dir, prefix, iomode, nodes, steps):
     return files
 
 
+def raw_file_stats(input_dir, files):
+    stats = []
+    for path in sorted(files):
+        stat = path.stat()
+        stats.append(
+            {
+                "path": os_path_rel(path, input_dir),
+                "bytes": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+            }
+        )
+    return stats
+
+
 def fingerprint_originals(args, prefixes):
     selected_steps = parse_step_tokens(args.steps)
     prefix_info = []
+    raw_stats = []
     total_files = 0
     total_bytes = 0
     for prefix in prefixes:
@@ -892,7 +905,9 @@ def fingerprint_originals(args, prefixes):
             args.input_dir, prefix, iomode, nodes, selected_steps, args.step_limit
         )
         files = raw_files_for_prefix(args.input_dir, prefix, iomode, nodes, steps)
+        prefix_raw_stats = raw_file_stats(args.input_dir, files)
         byte_count = sum(path.stat().st_size for path in files)
+        raw_stats.extend(prefix_raw_stats)
         total_files += len(files)
         total_bytes += byte_count
         prefix_info.append(
@@ -905,9 +920,15 @@ def fingerprint_originals(args, prefixes):
                 "nodes": len(nodes),
                 "files": len(files),
                 "bytes": byte_count,
+                "raw_files": prefix_raw_stats,
             }
         )
-    return {"prefixes": prefix_info, "files": total_files, "bytes": total_bytes}
+    return {
+        "prefixes": prefix_info,
+        "files": total_files,
+        "bytes": total_bytes,
+        "raw_files": raw_stats,
+    }
 
 
 def fingerprint_fast(args, prefixes, manifest=None):
@@ -944,6 +965,7 @@ def fingerprint_fast(args, prefixes, manifest=None):
         "prefixes": prefix_info,
         "hdf5_files": total_hdf5_files,
         "hdf5_bytes": total_hdf5_bytes,
+        "originals": fingerprint_originals(args, prefixes),
     }
 
 
