@@ -61,7 +61,7 @@ jobs:
 
       - name: Install Catch2 v3
         run: |
-          script/install_catch2v3.sh "$HOME/usr"
+          scripts/install_catch2v3.sh "$HOME/usr"
 
       - name: Build and test
         run: |

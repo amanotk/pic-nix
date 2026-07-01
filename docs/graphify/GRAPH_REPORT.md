@@ -1,20 +1,21 @@
-# Graph Report - pic-nix  (2026-06-30)
+# Graph Report - pic-nix  (2026-07-01)
 
 ## Corpus Check
-- 200 files · ~176,231 words
+- 202 files · ~174,092 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3003 nodes · 4844 edges · 236 communities (190 shown, 46 thin omitted)
+- 3020 nodes · 4906 edges · 222 communities (180 shown, 42 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 107 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `05c444ac`
+- Built from commit: `6519166a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
+- [[_COMMUNITY_Community 0|Community 0]]
 - [[_COMMUNITY_Community 1|Community 1]]
 - [[_COMMUNITY_Community 2|Community 2]]
 - [[_COMMUNITY_Community 3|Community 3]]
@@ -107,7 +108,6 @@
 - [[_COMMUNITY_Community 94|Community 94]]
 - [[_COMMUNITY_Community 95|Community 95]]
 - [[_COMMUNITY_Community 96|Community 96]]
-- [[_COMMUNITY_Community 97|Community 97]]
 - [[_COMMUNITY_Community 98|Community 98]]
 - [[_COMMUNITY_Community 99|Community 99]]
 - [[_COMMUNITY_Community 100|Community 100]]
@@ -145,14 +145,12 @@
 - [[_COMMUNITY_Community 132|Community 132]]
 - [[_COMMUNITY_Community 133|Community 133]]
 - [[_COMMUNITY_Community 134|Community 134]]
-- [[_COMMUNITY_Community 135|Community 135]]
 - [[_COMMUNITY_Community 136|Community 136]]
 - [[_COMMUNITY_Community 137|Community 137]]
 - [[_COMMUNITY_Community 138|Community 138]]
 - [[_COMMUNITY_Community 139|Community 139]]
 - [[_COMMUNITY_Community 140|Community 140]]
 - [[_COMMUNITY_Community 141|Community 141]]
-- [[_COMMUNITY_Community 142|Community 142]]
 - [[_COMMUNITY_Community 143|Community 143]]
 - [[_COMMUNITY_Community 144|Community 144]]
 - [[_COMMUNITY_Community 145|Community 145]]
@@ -163,7 +161,6 @@
 - [[_COMMUNITY_Community 150|Community 150]]
 - [[_COMMUNITY_Community 151|Community 151]]
 - [[_COMMUNITY_Community 152|Community 152]]
-- [[_COMMUNITY_Community 153|Community 153]]
 - [[_COMMUNITY_Community 154|Community 154]]
 - [[_COMMUNITY_Community 155|Community 155]]
 - [[_COMMUNITY_Community 156|Community 156]]
@@ -185,9 +182,7 @@
 - [[_COMMUNITY_Community 173|Community 173]]
 - [[_COMMUNITY_Community 174|Community 174]]
 - [[_COMMUNITY_Community 175|Community 175]]
-- [[_COMMUNITY_Community 176|Community 176]]
 - [[_COMMUNITY_Community 178|Community 178]]
-- [[_COMMUNITY_Community 181|Community 181]]
 - [[_COMMUNITY_Community 182|Community 182]]
 - [[_COMMUNITY_Community 183|Community 183]]
 - [[_COMMUNITY_Community 184|Community 184]]
@@ -204,10 +199,6 @@
 - [[_COMMUNITY_Community 229|Community 229]]
 - [[_COMMUNITY_Community 230|Community 230]]
 - [[_COMMUNITY_Community 231|Community 231]]
-- [[_COMMUNITY_Community 232|Community 232]]
-- [[_COMMUNITY_Community 233|Community 233]]
-- [[_COMMUNITY_Community 234|Community 234]]
-- [[_COMMUNITY_Community 235|Community 235]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `Application` - 72 edges
@@ -217,8 +208,8 @@
 5. `BaseMoment` - 40 edges
 6. `ChunkAccessor` - 34 edges
 7. `DiagHandler` - 32 edges
-8. `PicApplication` - 30 edges
-9. `Run` - 30 edges
+8. `Run` - 32 edges
+9. `PicApplication` - 30 edges
 10. `BaseVelocity` - 29 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -241,7 +232,11 @@
 - **Layered Diagnostic Architecture (nix mechanics + module interpretation)** — nix_diag_ownership, pic_diag_ownership, packer_contract, module_extension_model [EXTRACTED 0.95]
 - **Three-Module Dependency Chain (pic -> elliptic -> nix)** — pic_module, elliptic_module, nix_module [EXTRACTED 1.00]
 
-## Communities (236 total, 46 thin omitted)
+## Communities (222 total, 42 thin omitted)
+
+### Community 0 - "Community 0"
+Cohesion: 0.17
+Nodes (26): Array2D, NIX_NAMESPACE_BEGIN, namespace(), float64, T_array, T_float, T_int, deposit1d_scalar() (+18 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.20
@@ -272,12 +267,12 @@ Cohesion: 0.12
 Nodes (9): copy_chunk_to_src(), copy_sol_to_chunk(), json, Vec, get_vector_sol_g(), get_vector_src_g(), set_option(), solve() (+1 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.26
-Nodes (6): float64, sol, src, MockChunkAccessor, chunkvec, MockChunkVec
+Cohesion: 0.05
+Nodes (79): int32, Nc, DataContainer, cdims, ndims, apply_sinusoidal_field(), capture_smoke_state(), compare_smoke() (+71 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.26
-Nodes (12): Halo3D, BufferPtr, pack(), post_pack(), post_unpack(), pre_pack(), pre_unpack(), unpack() (+4 more)
+Cohesion: 0.11
+Nodes (25): Halo3D, BufferPtr, post_pack(), post_unpack(), pre_pack(), pre_unpack(), BufferPtr, ParticleVec (+17 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
@@ -292,8 +287,8 @@ Cohesion: 0.10
 Nodes (30): apply_petsc_option(), bool_to_string(), copy_chunk_to_src(), copy_sol_to_chunk(), Dims3D, PetscInterface(), float64, json (+22 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.08
-Nodes (65): add_timing(), apply_manifest_defaults(), collect_mpiio_metadata(), collect_original_paths(), collect_posix_metadata(), compression_kwargs(), compute_hdf5_chunks(), convert_particle_id() (+57 more)
+Cohesion: 0.07
+Nodes (69): add_timing(), apply_manifest_defaults(), collect_mpiio_metadata(), collect_posix_metadata(), compression_kwargs(), compute_hdf5_chunks(), convert_particle_id(), convert_prefix() (+61 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.08
@@ -312,8 +307,8 @@ Cohesion: 0.15
 Nodes (13): flatten_index(), ChunkViewVec, Dims3D, float64, PicPoisson(), PicChunkAccessor, vector, get_accessor() (+5 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.17
-Nodes (26): Array2D, NIX_NAMESPACE_BEGIN, namespace(), float64, T_array, T_float, T_int, deposit1d_scalar() (+18 more)
+Cohesion: 0.18
+Nodes (6): Bool3D, Dims3D, PtrChunk, PtrChunkMap, MainApplication, MainInterface
 
 ### Community 19 - "Community 19"
 Cohesion: 0.13
@@ -336,8 +331,8 @@ Cohesion: 0.21
 Nodes (12): CMake Compiler Profiles (cmake/linux-gcc.cmake, cmake/linux-intel.cmake), Deterministic Seeding (seed_type=fixed), Golden Data System (msgpack + json), IntegrationCase Dataclass Registry, PIC Integration Workflow (Python), Python Script Dependencies (numpy, matplotlib, msgpack, h5py, toml, etc.), Open boundaries with particle injection require rebalance, Reduced grid parameters for integration tests (performance vs physics trade-off) (+4 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.05
-Nodes (28): ChunkVector, Halo3D(), Bool3D, ChunkVec, Dims3D, float64, PtrChunk, PtrChunkMap (+20 more)
+Cohesion: 0.08
+Nodes (21): Halo3D(), Bool3D, ChunkVec, Dims3D, float64, PtrChunk, PtrChunkMap, vector (+13 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.10
@@ -352,8 +347,8 @@ Cohesion: 0.18
 Nodes (13): data_type, get_chunk_id_range(), json, Packer, string, vector, is_completed(), open_file() (+5 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.08
-Nodes (23): float64, NIX_NAMESPACE_BEGIN, vector, DEFINE_MEMBER(), ofstream, string, T, unique_ptr (+15 more)
+Cohesion: 0.09
+Nodes (18): ofstream, string, T, unique_ptr, MpiStream, m_err, m_errbuf, m_errf (+10 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.22
@@ -376,36 +371,36 @@ Cohesion: 0.36
 Nodes (4): FieldDiag, diag_name, json, PtrInterface
 
 ### Community 34 - "Community 34"
-Cohesion: 0.13
-Nodes (10): from_json, to_json, ApplicationInterface, app_pointer, PtrInterface, T_Application, PicApplicationInterface, calculate_moment (+2 more)
+Cohesion: 0.11
+Nodes (13): from_json, to_json, ApplicationInterface, app_pointer, Bool3D, Dims3D, PtrChunk, PtrInterface (+5 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.15
-Nodes (6): float64, PetscPoisson1DTest, kx, PetscPoisson2DTest, kx, ky
+Cohesion: 0.06
+Nodes (25): PetscPoisson, PetscPoisson1D, PetscPoisson2D, PetscPoisson3D, float64, set_matrix, set_matrix, set_matrix (+17 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.14
-Nodes (8): Buffer, MPI_File, MPI_Request, vector, MpiioDiagIoHandler, filehandle, is_opened, request
+Cohesion: 0.08
+Nodes (15): Buffer, DiagIoHandler(), Buffer, MPI_File, MPI_Request, NIX_NAMESPACE_BEGIN, ofstream, string (+7 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.12
 Nodes (13): NIX_NAMESPACE_BEGIN, Particle(), NIX_NAMESPACE_BEGIN, primitives(), NIX_NAMESPACE_BEGIN, XtensorPacker3D(), NIX_NAMESPACE_BEGIN, Particle() (+5 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.18
-Nodes (9): info_type, json, PtrInterface, shared_ptr, string, MockResourceDiagBase, interface, name (+1 more)
+Cohesion: 0.15
+Nodes (12): info_type, json, PtrInterface, shared_ptr, string, MockResourceDiagBase, interface, name (+4 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.16
-Nodes (10): vector, MaxwellJuttner, a, b, drift, gamma, table, temperature (+2 more)
+Cohesion: 0.06
+Nodes (49): ChunkVector, ChunkVectorTest, tuple, MockChunk, myid, MockChunkMap, dims, info (+41 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.15
-Nodes (13): PetscPoisson, PetscPoisson1D, PetscPoisson2D, PetscPoisson3D, float64, set_matrix, set_matrix, set_matrix (+5 more)
+Cohesion: 0.45
+Nodes (10): make_posix_fixture(), run_converter(), test_auto_prefix_conversion_writes_manifest_and_vds(), test_overwrite_no_vds_removes_stale_vds(), test_remove_original_preserves_unreferenced_data(), test_selected_prefix_and_resume(), test_standalone_verify_and_remove_original(), test_tracer_keeps_particle_id_column() (+2 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.13
-Nodes (9): json, PtrInterface, ParticleDiag, diag_name, json, PtrInterface, TracerDiag, diag_name (+1 more)
+Cohesion: 0.25
+Nodes (5): json, PtrInterface, ParticleDiag, diag_name, PicChunkDiagWriter
 
 ### Community 42 - "Community 42"
 Cohesion: 0.22
@@ -416,8 +411,8 @@ Cohesion: 0.16
 Nodes (15): int64, T, vector, xtensor, gather_expected_4d(), gather_expected_5d(), MockData, Lbx (+7 more)
 
 ### Community 44 - "Community 44"
-Cohesion: 0.14
-Nodes (13): chunk_data_type, json, LoadPacker, operator()(), RankPacker, thisrank, float64, json (+5 more)
+Cohesion: 0.13
+Nodes (14): Diag, chunk_data_type, json, LoadPacker, operator()(), RankPacker, thisrank, float64 (+6 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.18
@@ -428,44 +423,44 @@ Cohesion: 0.18
 Nodes (6): chunkmap, unique_ptr, set_neighbors(), validate(), ChunkMapTest, vector
 
 ### Community 48 - "Community 48"
-Cohesion: 0.20
-Nodes (5): Bool3D, Dims3D, json, TestChunk, chunk
+Cohesion: 0.12
+Nodes (9): Bool3D, Dims3D, json, TestChunk, Bool3D, json, set_neighbor_ranks(), TestChunk (+1 more)
 
 ### Community 49 - "Community 49"
 Cohesion: 0.48
 Nodes (6): compare_ring_with_reference(), compare_with_reference(), float64, string, generate_and_save(), generate_and_save_ring()
 
 ### Community 50 - "Community 50"
-Cohesion: 0.22
-Nodes (7): Diag, Buffer, DiagIoHandler(), NIX_NAMESPACE_BEGIN, PtrInterface, PicDiag, interface
+Cohesion: 0.28
+Nodes (5): Diag, ChunkMap(), NIX_NAMESPACE_BEGIN, remove_nullptr(), sort_and_shrink()
 
 ### Community 51 - "Community 51"
-Cohesion: 0.25
-Nodes (10): vector, get_chunklist(), get_chunkvec(), get_index_and_chunkvec(), get_mpi_size(), get_rank_dims(), array, tuple (+2 more)
+Cohesion: 0.18
+Nodes (11): vector, get_chunklist(), get_chunkvec(), get_index_and_chunkvec(), get_mpi_size(), get_rank_dims(), array, tuple (+3 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (9): HistoryDiag, diag_name, json, PtrInterface, json, PtrInterface, TracerPickupDiag, diag_name (+1 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.12
-Nodes (13): json, async_read_datafile(), async_read_jsonfile(), async_read_single_dataset(), convert_array_format(), find_record_from_msgpack(), get_dataset_info(), get_json_meta() (+5 more)
+Cohesion: 0.14
+Nodes (15): json, main(), run(), async_read_datafile(), async_read_jsonfile(), async_read_single_dataset(), convert_array_format(), find_record_from_msgpack() (+7 more)
 
 ### Community 54 - "Community 54"
-Cohesion: 0.20
-Nodes (6): PetscPoisson3DTest, kx, ky, kz, run_copy_solve_copy(), SolverT
+Cohesion: 0.18
+Nodes (11): Build, Clone, Compile, Contents, Development, PIC-NIX, Post-processing, Python Analysis Package (+3 more)
 
 ### Community 55 - "Community 55"
-Cohesion: 0.20
-Nodes (10): get_buffer_ratio(), get_delx(), get_dely(), get_delz(), get_dims(), get_load(), get_offset(), get_total_load() (+2 more)
+Cohesion: 0.29
+Nodes (4): json, PtrInterface, TracerDiag, diag_name
 
 ### Community 56 - "Community 56"
 Cohesion: 0.30
 Nodes (12): NIX_NAMESPACE_BEGIN, namespace(), float64, T_array, T_int, test_interp1d_scalar(), test_interp1d_xsimd(), test_interp2d_scalar() (+4 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.04
-Nodes (43): Adding New Cases, Available Cases, Branch semantics, Build, Build & Test, Catch2 v3 Setup, CI Notes, CI Workflow (+35 more)
+Cohesion: 0.15
+Nodes (13): Catch2 v3 Setup, CI Notes, Development, Git Hooks, Graphify Snapshot, Install (editable, for development), Install from another directory, Install from git (no clone needed) (+5 more)
 
 ### Community 58 - "Community 58"
 Cohesion: 0.09
@@ -492,32 +487,28 @@ Cohesion: 0.06
 Nodes (49): Logger, assert_mpi(), float64, json, NIX_NAMESPACE_BEGIN, string, diagnostic(), finalize() (+41 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.33
+Cohesion: 0.25
 Nodes (4): PicChunk, PicPacker, operator(), XtensorPacker3D
 
 ### Community 70 - "Community 70"
-Cohesion: 0.09
-Nodes (15): Dims3D, vector, xtensor, MockChunk, dims, global_dims, id, Lbx (+7 more)
+Cohesion: 0.08
+Nodes (21): Dims3D, float64, vector, xtensor, MockChunk, dims, global_dims, id (+13 more)
 
 ### Community 71 - "Community 71"
-Cohesion: 0.08
-Nodes (10): get_xrange(), get_yrange(), get_zrange(), has_xdim(), has_ydim(), has_zdim(), json, reset_load() (+2 more)
+Cohesion: 0.07
+Nodes (18): get_buffer_ratio(), get_delx(), get_dely(), get_delz(), get_dims(), get_load(), get_offset(), get_total_load() (+10 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.09
-Nodes (44): DataContainer, cdims, ndims, build_exchange_context(), array, Bool3D, Dims3D, float64 (+36 more)
+Cohesion: 0.36
+Nodes (3): Documentation Scope, picnix Python Package, Start Here
 
 ### Community 73 - "Community 73"
 Cohesion: 0.09
 Nodes (21): allocate(), Bool3D, Dims3D, float64, json, ParticleVec, PicChunk(), deposit_current() (+13 more)
 
-### Community 74 - "Community 74"
-Cohesion: 0.06
-Nodes (77): int32, Nc, info, apply_sinusoidal_field(), capture_smoke_state(), compare_smoke(), compare_smoke_diagnostics(), compare_smoke_state() (+69 more)
-
 ### Community 75 - "Community 75"
-Cohesion: 0.16
-Nodes (15): Datatype, IntArray, begin_bc_exchange(), get_sndtag(), get_size_byte, MpiBuffer, bufaddr, bufsize (+7 more)
+Cohesion: 0.12
+Nodes (24): Datatype, Halo, IntArray, begin_bc_exchange(), get_mpi_buffer(), get_sndtag(), MpiBufferPtr, get_size_byte (+16 more)
 
 ### Community 76 - "Community 76"
 Cohesion: 0.07
@@ -540,8 +531,8 @@ Cohesion: 0.09
 Nodes (20): _MockRun, Operator scales with c^2; the manufactured-solution error is stable., transform_moments correctly sums per-species contributions for Ns > 2., solve_ohm_1d rejects invalid input shapes., On a manufactured problem, CG converges (status 0)., All public names are accessible from the picnix top-level namespace., Minimal picnix.Run stub for testing calc_e_ohm_1d / _2d., calc_e_ohm_1d returns shape (Nx, 3) and finite values for a 1D run.      Builds (+12 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.10
-Nodes (20): Benchmark Evidence So Far, Constraints, Dataset Shape Model, Field, Field And Particle Layouts, Goal, HDF5 Chunking And Compression, HDF5 VDS Conversion Plan (+12 more)
+Cohesion: 0.22
+Nodes (9): Adding New Cases, Available Cases, CI Workflow, Golden Comparison And Random Numbers, Golden Data, Overview, PIC Integration Workflow, Quick Start (+1 more)
 
 ### Community 84 - "Community 84"
 Cohesion: 0.10
@@ -564,16 +555,12 @@ Cohesion: 0.16
 Nodes (15): false_type, fill_all(), format_step(), get_data_pointer(), get_extent(), get_stride(), string, T (+7 more)
 
 ### Community 95 - "Community 95"
-Cohesion: 0.12
-Nodes (15): MPI_Comm, float64, MpiBufferPtr, MpiBuffer::pack(), MpiBuffer::unpack(), get_rcvtag(), pack(), probe_bc_exchange() (+7 more)
+Cohesion: 0.11
+Nodes (17): MPI_Comm, float64, MpiBufferPtr, MpiBuffer::pack(), MpiBuffer::unpack(), get_rcvtag(), pack(), probe_bc_exchange() (+9 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.17
-Nodes (12): float64, rand_uniform, lorentz_boost(), MaxwellianRing, num_iter, sqrt_2, sqrt_pi, uniform (+4 more)
-
-### Community 97 - "Community 97"
-Cohesion: 0.50
-Nodes (3): float64, json, MainChunk
+Cohesion: 0.09
+Nodes (22): float64, rand_uniform, vector, lorentz_boost(), MaxwellianRing, num_iter, sqrt_2, sqrt_pi (+14 more)
 
 ### Community 98 - "Community 98"
 Cohesion: 0.11
@@ -596,8 +583,8 @@ Cohesion: 0.12
 Nodes (17): Explicit qm_per_species argument overrides everything else., run.qm is used when qm_per_species is not given., Old profiles (no qm) fall back to qm_per_species_from_config., If run has no qm attribute at all, fall back to config inference., test_resolve_qm_explicit_arg_wins(), test_resolve_qm_falls_back_to_config_when_no_profile_qm(), test_resolve_qm_handles_missing_qm_attribute(), test_resolve_qm_profile_field_used_when_no_explicit() (+9 more)
 
 ### Community 103 - "Community 103"
-Cohesion: 0.18
-Nodes (4): create_diag_storage(), DiagStorage, Hdf5VdsDiagStorage, reinterpret_particle_id()
+Cohesion: 0.20
+Nodes (3): create_diag_storage(), DiagStorage, Hdf5VdsDiagStorage
 
 ### Community 104 - "Community 104"
 Cohesion: 0.13
@@ -636,20 +623,20 @@ Cohesion: 0.21
 Nodes (11): convert_to_clargs(), get_config(), get_elapsed_time_max(), get_load(), get_physical_time_max(), get_save(), float64, NIX_NAMESPACE_BEGIN (+3 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.22
-Nodes (7): float64, vector, MockChunk, myid, myload, x, StateHandler
+Cohesion: 0.46
+Nodes (7): convert_particle(), make_run_fixture(), test_run_prefers_hdf5_particle_values_and_ids(), test_run_reads_raw_particle_values_and_ids(), test_run_rejects_invalid_existing_hdf5_vds(), write_json(), write_particle_step()
 
 ### Community 115 - "Community 115"
-Cohesion: 0.18
-Nodes (11): ChunkVec, PtrInterface, get_x_value(), MockApplication, chunkvec, interface, nprocess, thisrank (+3 more)
+Cohesion: 0.07
+Nodes (25): Bool3D, ChunkVec, Dims3D, float64, json, PtrChunk, PtrInterface, T_Application (+17 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.13
-Nodes (9): Bool3D, Dims3D, PtrChunk, MainInterface, Bool3D, Dims3D, PtrChunk, MainInterface (+1 more)
+Cohesion: 0.18
+Nodes (7): Bool3D, Dims3D, float64, json, PtrChunk, MainChunk, MainInterface
 
 ### Community 117 - "Community 117"
-Cohesion: 0.25
-Nodes (9): Halo, get_mpi_buffer(), MpiBufferPtr, pack, unpack, recvreq, sendreq, pack_bc_exchange() (+1 more)
+Cohesion: 0.29
+Nodes (7): Basic Usage, Commands, HDF5 Converter, Install, Resuming Failed Runs, Typical Workflow, What remove-original Preserves
 
 ### Community 118 - "Community 118"
 Cohesion: 0.15
@@ -660,16 +647,16 @@ Cohesion: 0.31
 Nodes (10): float64, json, PtrInterface, T, vector, operator()(), percentile(), ResourceDiag() (+2 more)
 
 ### Community 120 - "Community 120"
-Cohesion: 0.29
-Nodes (3): T_Application, MockApplicationInterface, app_pointer
+Cohesion: 0.17
+Nodes (9): Balancer(), float64, NIX_NAMESPACE_BEGIN, vector, DEFINE_MEMBER(), NIX_NAMESPACE_BEGIN, NIX_NAMESPACE_BEGIN, struct() (+1 more)
 
 ### Community 121 - "Community 121"
 Cohesion: 0.35
 Nodes (10): call_scalar_impl(), call_vector_impl(), float64, json, T_float, T_particle, operator()(), push() (+2 more)
 
 ### Community 122 - "Community 122"
-Cohesion: 0.18
-Nodes (6): Bool3D, Dims3D, PtrChunk, PtrChunkMap, MainApplication, MainInterface
+Cohesion: 0.33
+Nodes (3): argparser, PtrInterface, TestApplication
 
 ### Community 123 - "Community 123"
 Cohesion: 0.18
@@ -683,41 +670,41 @@ Nodes (5): For /graphify explain, For /graphify path, graphify reference: query,
 Cohesion: 0.20
 Nodes (7): Critical Constraints, File Types Manus Creates, Key Quotes, Manus Statistics, Reference: Manus Context Engineering Principles, Source, The Agent Loop
 
+### Community 126 - "Community 126"
+Cohesion: 0.24
+Nodes (6): FileSystemEventHandler, load_config(), main(), OutputHandler, run(), setup()
+
 ### Community 127 - "Community 127"
-Cohesion: 0.20
-Nodes (6): Bool3D, Dims3D, json, PtrChunk, MainChunk, MainInterface
+Cohesion: 0.06
+Nodes (20): Bool3D, Dims3D, PtrChunk, MainInterface, Bool3D, Dims3D, json, PtrChunk (+12 more)
 
 ### Community 128 - "Community 128"
 Cohesion: 0.20
-Nodes (6): Bool3D, Dims3D, json, PtrChunk, MainChunk, MainInterface
+Nodes (6): Bool3D, Dims3D, PtrChunk, PtrChunkMap, MainApplication, MainInterface
 
 ### Community 129 - "Community 129"
 Cohesion: 0.20
 Nodes (6): Bool3D, Dims3D, json, PtrChunk, MainChunk, MainInterface
 
 ### Community 130 - "Community 130"
-Cohesion: 0.20
-Nodes (6): Bool3D, Dims3D, PtrChunk, PtrChunkMap, MainApplication, MainInterface
+Cohesion: 0.33
+Nodes (6): Editable Install, Install From Another Clone, Install From Git, Installed Commands, Installing picnix, Optional Extras
 
 ### Community 131 - "Community 131"
 Cohesion: 0.33
-Nodes (3): argparser, PtrInterface, TestApplication
+Nodes (6): Basic Usage, Behavior, Caveats, Options, Status, syncdir
 
 ### Community 132 - "Community 132"
 Cohesion: 0.36
 Nodes (6): create_files_in(), init-session.sh script, write_analytics_progress(), write_default_findings(), write_default_progress(), write_default_task_plan()
 
 ### Community 133 - "Community 133"
-Cohesion: 0.14
-Nodes (9): Diag, Balancer(), NIX_NAMESPACE_BEGIN, NIX_NAMESPACE_BEGIN, struct(), ChunkMap(), NIX_NAMESPACE_BEGIN, remove_nullptr() (+1 more)
+Cohesion: 0.50
+Nodes (3): float64, json, MainChunk
 
 ### Community 134 - "Community 134"
 Cohesion: 0.22
 Nodes (6): chunk_data_type, float64, vector, MockChunkData, load, MockPacker
-
-### Community 135 - "Community 135"
-Cohesion: 0.25
-Nodes (8): ParticleVec, vector, XtensorHaloParticle3D, elem_byte, head_byte, Ns, num_unpacked, particle
 
 ### Community 136 - "Community 136"
 Cohesion: 0.28
@@ -727,6 +714,10 @@ Nodes (7): deposit_moment(), call_entry(), Moment, size_table, table, set_bounda
 Cohesion: 0.28
 Nodes (4): Dims3D, float64, shared_ptr, make_poisson_solver()
 
+### Community 138 - "Community 138"
+Cohesion: 0.40
+Nodes (4): push_velocity(), Velocity, size_table, table
+
 ### Community 139 - "Community 139"
 Cohesion: 0.53
 Nodes (8): cmd_fetch(), cmd_log(), cmd_pull(), cmd_push(), cmd_setup(), parse_args(), subtree-nix.sh script, usage()
@@ -735,17 +726,17 @@ Nodes (8): cmd_fetch(), cmd_log(), cmd_pull(), cmd_push(), cmd_setup(), parse_ar
 Cohesion: 0.25
 Nodes (8): 1. Create Plan First, 2. The 2-Action Rule, 3. Read Before Decide, 4. Update After Act, 5. Log ALL Errors, 6. Never Repeat Failures, 7. Continue After Completion, Critical Rules
 
-### Community 142 - "Community 142"
-Cohesion: 0.29
-Nodes (4): Bool3D, json, set_neighbor_ranks(), TestChunk
+### Community 141 - "Community 141"
+Cohesion: 0.40
+Nodes (5): Branch semantics, Commands, Git Subtree (`nix/`), One-time setup, Typical workflow
 
 ### Community 144 - "Community 144"
-Cohesion: 0.54
-Nodes (7): make_posix_fixture(), run_converter(), test_auto_prefix_conversion_writes_manifest_and_vds(), test_selected_prefix_and_resume(), test_standalone_verify_and_remove_original(), write_json(), write_step()
+Cohesion: 0.40
+Nodes (5): Build, Build & Test, Configure, PIC Unit Test, Test
 
 ### Community 145 - "Community 145"
-Cohesion: 0.46
-Nodes (7): convert_particle(), make_run_fixture(), test_run_prefers_hdf5_particle_values_and_ids(), test_run_reads_raw_particle_values_and_ids(), test_run_rejects_invalid_existing_hdf5_vds(), write_json(), write_particle_step()
+Cohesion: 0.40
+Nodes (5): Command Line Tools, Commands, Experimental Commands, HDF5 Converter, Running Without Installing Globally
 
 ### Community 146 - "Community 146"
 Cohesion: 0.29
@@ -763,17 +754,13 @@ Nodes (7): Claude Code Turn-Loop Integration (v2.38.0+), Install scope: plugin v
 Cohesion: 0.33
 Nodes (5): 1D, 2D, From a picnix run, Limitations, Ohm's law solver
 
-### Community 153 - "Community 153"
-Cohesion: 0.53
-Nodes (5): BufferPtr, post_pack(), post_unpack(), pre_pack(), pre_unpack()
-
 ### Community 155 - "Community 155"
 Cohesion: 0.40
 Nodes (5): AppChunkVec, ChunkContainer, bind_chunks(), bind_chunks_impl(), PicChunkVec
 
 ### Community 156 - "Community 156"
-Cohesion: 0.50
-Nodes (3): Bool3D, Dims3D, PtrChunk
+Cohesion: 0.83
+Nodes (3): estimate(), load_config(), main()
 
 ### Community 157 - "Community 157"
 Cohesion: 0.40
@@ -788,8 +775,8 @@ Cohesion: 0.40
 Nodes (4): Electron Heat Flux Instability, Physical Parameters, References, Scenarios
 
 ### Community 164 - "Community 164"
-Cohesion: 0.40
-Nodes (4): push_velocity(), Velocity, size_table, table
+Cohesion: 0.50
+Nodes (3): Bool3D, Dims3D, PtrChunk
 
 ### Community 165 - "Community 165"
 Cohesion: 0.50
@@ -807,7 +794,7 @@ Nodes (4): OptionVec, string, T, is_option_valid()
 Cohesion: 0.50
 Nodes (3): For git commit hook, For native CLAUDE.md integration, graphify reference: commit hook and native CLAUDE.md integration
 
-### Community 171 - "Community 171"
+### Community 172 - "Community 172"
 Cohesion: 0.67
 Nodes (3): data(), fill(), T
 
@@ -815,38 +802,22 @@ Nodes (3): data(), fill(), T
 Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
-### Community 232 - "Community 232"
-Cohesion: 0.19
-Nodes (4): ofstream, string, PosixDiagIoHandler, file
-
-### Community 233 - "Community 233"
-Cohesion: 0.20
-Nodes (6): Bool3D, Dims3D, json, PtrChunk, MainChunk, MainInterface
-
-### Community 234 - "Community 234"
-Cohesion: 0.50
-Nodes (3): float64, json, MainChunk
-
-### Community 235 - "Community 235"
-Cohesion: 0.50
-Nodes (3): Bool3D, Dims3D, PtrChunk
-
 ## Knowledge Gaps
-- **727 isolated node(s):** `attest-plan.sh script`, `check-complete.sh script`, `set-active-plan.sh script`, `build_global_index`, `pack` (+722 more)
+- **730 isolated node(s):** `attest-plan.sh script`, `check-complete.sh script`, `set-active-plan.sh script`, `build_global_index`, `pack` (+725 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **46 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **42 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `_run()` connect `Community 102` to `Community 6`?**
   _High betweenness centrality (0.052) - this node is a cross-community bridge._
-- **Why does `Application` connect `Community 20` to `Community 34`, `Community 131`, `Community 133`, `Community 72`, `Community 105`, `Community 138`, `Community 137`, `Community 76`, `Community 47`?**
-  _High betweenness centrality (0.049) - this node is a cross-community bridge._
-- **Why does `DataContainer` connect `Community 72` to `Community 8`, `Community 74`, `Community 60`, `Community 114`, `Community 115`, `Community 24`, `Community 120`?**
+- **Why does `Application` connect `Community 20` to `Community 34`, `Community 8`, `Community 105`, `Community 137`, `Community 76`, `Community 47`, `Community 50`, `Community 51`, `Community 122`?**
+  _High betweenness centrality (0.050) - this node is a cross-community bridge._
+- **Why does `DataContainer` connect `Community 8` to `Community 70`, `Community 39`, `Community 115`, `Community 24`, `Community 60`?**
   _High betweenness centrality (0.037) - this node is a cross-community bridge._
 - **What connects `attest-plan.sh script`, `check-complete.sh script`, `Prefer optional orjson while keeping the hook dependency-free.` to the rest of the system?**
-  _786 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _789 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.1076923076923077 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**

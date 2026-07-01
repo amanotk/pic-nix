@@ -44,8 +44,8 @@ jobs:
           FAILED=""
           for case in $CASES; do
             echo "=== Case: $case ==="
-            python3 script/integration/pic/main.py run "$case" || { FAILED="$FAILED $case"; continue; }
-            python3 script/integration/pic/main.py compare "$case" || FAILED="$FAILED $case"
+            python3 scripts/integration/pic/main.py run "$case" || { FAILED="$FAILED $case"; continue; }
+            python3 scripts/integration/pic/main.py compare "$case" || FAILED="$FAILED $case"
           done
           if [ -n "$FAILED" ]; then
             echo "FAILED:$FAILED"

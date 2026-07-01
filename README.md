@@ -102,6 +102,9 @@ $ uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subd
 
 After installation, `import picnix` works from any directory.
 
+See [picnix Python Package](docs/picnix/README.md) for package documentation,
+including installed command line tools such as `picnix-hdf5-convert`.
+
 ### Quick Look
 
 After finishing the simulation, you can run the following command in the same directory:
