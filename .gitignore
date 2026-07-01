@@ -2,7 +2,7 @@
 *.d
 *.a
 *.msgpack
-!script/integration/pic/golden/**/*.msgpack
+!scripts/integration/pic/golden/**/*.msgpack
 *.out
 *.data
 *.png
@@ -17,6 +17,11 @@ build*
 # Local notes
 notes
 TODO.md
+# Local scratch / planning artifacts
+tmp/
+task_plan.md
+findings.md
+progress.md
 
 # Manual integration run output
 run-integration-pic/
@@ -31,3 +36,8 @@ graphify-out/
 .opencode/package.json
 .opencode/package-lock.json
 .opencode/bun.lock
+
+# Pandoc render artifacts of doc previews
+docs/**/*.html
+docs/**/_files
+docs/**/*_files

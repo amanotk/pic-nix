@@ -136,6 +136,89 @@ public:
   }
 };
 
+///
+/// @brief Maxwellian Ring Distribution
+///
+/// This class draws random numbers from the Maxwellian-Ring distribution defined as
+///
+///   f(v) ∝ exp(-(v - V)^2 / (2 * vt^2))
+///
+/// The corresponding PDF is given by
+///
+///   P(v) ∝ v * exp(-(v - V)^2 / (2 * vt^2))
+///
+/// because of the Jacobian factor (2 * π * v) in the 2D velocity space.
+/// The inverse transform sampling method with Newton's method is used to draw random numbers from
+/// this distribution because there is no simple analytical formula for the inverse CDF.
+///
+class MaxwellianRing
+{
+private:
+  int          num_iter = 5;
+  float64      v_ring;
+  float64      v_th;
+  rand_uniform uniform;
+
+  static inline constexpr float64 sqrt_2  = 1.4142135623730951;
+  static inline constexpr float64 sqrt_pi = 1.7724538509055160;
+
+public:
+  MaxwellianRing(float64 v_ring, float64 v_th) : v_ring(v_ring), v_th(v_th)
+  {
+    assert(v_ring >= 0);
+  }
+
+  void set_vring(float64 v_ring)
+  {
+    assert(v_ring >= 0);
+    this->v_ring = v_ring;
+  }
+
+  void set_vth(float64 v_th)
+  {
+    this->v_th = v_th;
+  }
+
+  void set_iterations(int n)
+  {
+    num_iter = n;
+  }
+
+  void reset()
+  {
+    uniform.reset();
+  }
+
+  template <typename Random>
+  float64 operator()(Random& random)
+  {
+    // handle vanishing thermal spread
+    if (v_th <= 1.0e-14) {
+      return v_ring;
+    }
+
+    // fallback to Rayleigh distribution (2D isotropic Maxwellian speed)
+    if (v_ring < 1.0e-14) {
+      return v_th * std::sqrt(-2 * std::log(uniform(random)));
+    }
+
+    // inverse transform sampling with Newton's method
+    float64 yy = uniform(random);
+    float64 xx = 0.5 * (v_ring + std::sqrt(v_ring * v_ring + 4 * v_th * v_th));
+    float64 vr = v_ring / (sqrt_2 * v_th);
+    float64 F0 = v_th * v_th * (std::exp(-vr * vr) + sqrt_pi * vr * (1 - std::erf(-vr)));
+
+    for (int i = 0; i < num_iter; i++) {
+      float64 x  = (xx - v_ring) / (sqrt_2 * v_th);
+      float64 FF = F0 - v_th * v_th * (std::exp(-x * x) + sqrt_pi * vr * (1 - std::erf(x)));
+      float64 dF = xx * std::exp(-x * x);
+      xx += (yy * F0 - FF) / dF;
+    }
+
+    return xx;
+  }
+};
+
 NIX_NAMESPACE_END
 
 #endif

@@ -1,0 +1,59 @@
+[application]
+basedir = "data"
+
+[application.log]
+path = "."
+prefix = "log"
+interval = 1000
+
+[application.rebalance]
+interval = 10
+loglevel = 1
+
+[application.option]
+vectorization = "vector"
+order = 4
+
+[[diagnostic]]
+name = "history"
+path = "."
+prefix = "history"
+interval = 100
+
+[[diagnostic]]
+name = "field"
+path = "."
+prefix = "field"
+interval = 100
+
+[[diagnostic]]
+name = "particle"
+path = "."
+prefix = "particle"
+fraction = 0.1
+interval = 1000
+
+[parameter]
+Nx = 256
+Ny = 256
+Nz = 1
+Cx = 16
+Cy = 16
+Cz = 1
+Ns = 3
+cc = 1.0
+wp = 1.0
+delt = 0.05
+delh = 0.1
+nppc = 32
+mime = 100
+sigma = 0.01
+theta = 0.0
+phi = 0.0
+vti = 0.005
+vte = 0.1
+nb = 0.1
+vdb_para = 0.3
+vdb_perp = 0.0
+vtb_para = 0.1
+vtb_perp = 0.05

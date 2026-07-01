@@ -9,6 +9,7 @@
 #include "elliptic/elliptic.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace elliptic
 {
@@ -48,10 +49,11 @@ public:
 protected:
   friend class PicApplicationInterface;
 
-  int              Ns;         ///< number of species
-  int              momstep;    ///< step at which moment quantities are cached
-  MpiCommVec       mpicommvec; ///< MPI Communicators
-  PtrPoissonSolver solver;     ///< Poisson solver
+  int                  Ns;             ///< number of species
+  int                  momstep;        ///< step at which moment quantities are cached
+  MpiCommVec           mpicommvec;     ///< MPI Communicators
+  PtrPoissonSolver     solver;         ///< Poisson solver
+  std::vector<float64> qm_per_species; ///< per-species q/m extracted at setup_chunks
 
   virtual PtrPoissonInterface create_poisson_interface();
 
@@ -66,6 +68,8 @@ protected:
   virtual void set_chunk_communicator();
 
   virtual void setup_chunks() override;
+
+  virtual void setup_chunks_init() override;
 
   virtual bool rebalance() override;
 
