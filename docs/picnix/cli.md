@@ -2,7 +2,7 @@
 
 The `picnix` package installs command line tools into the active Python
 environment.  These commands are the supported interface for Python utilities
-that used to live under `script/`.
+that used to live under `scripts/`.
 
 ## Commands
 

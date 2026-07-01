@@ -158,7 +158,7 @@ Prefer an external Catch2 v3 install and point CMake at its config file.
 Use the helper script to install Catch2 v3 into a custom prefix:
 
 ```sh
-script/install_catch2v3.sh "$HOME/usr"
+scripts/install_catch2v3.sh "$HOME/usr"
 ```
 
 Then configure tests with the explicit config path:
@@ -183,36 +183,36 @@ Regenerate the data by setting `PICNIX_UPDATE_GOLDEN=1` when running
 
 ### Overview
 
-The Python workflow under `script/integration/pic/` provides
+The Python workflow under `scripts/integration/pic/` provides
 deterministic build, run, analyze, compare, and plot generation for
 multiple PIC test cases.
 Each case is defined in its own module under
-`script/integration/pic/cases/`.
+`scripts/integration/pic/cases/`.
 
 Entry point:
 
 ```sh
-uv run python script/integration/pic/main.py <command> [case] [options]
+uv run python scripts/integration/pic/main.py <command> [case] [options]
 ```
 
 ### Quick Start
 
 ```sh
 # Build the target executable
-uv run python script/integration/pic/main.py build shock
+uv run python scripts/integration/pic/main.py build shock
 
 # Run the simulation
-uv run python script/integration/pic/main.py run shock
+uv run python scripts/integration/pic/main.py run shock
 
 # Analyze output and compare against golden data
-uv run python script/integration/pic/main.py analyze shock
-uv run python script/integration/pic/main.py compare shock
+uv run python scripts/integration/pic/main.py analyze shock
+uv run python scripts/integration/pic/main.py compare shock
 
 # Or do all steps at once
-uv run python script/integration/pic/main.py all shock
+uv run python scripts/integration/pic/main.py all shock
 
 # Generate PNG plots for manual review
-uv run python script/integration/pic/main.py plots shock
+uv run python scripts/integration/pic/main.py plots shock
 ```
 
 The default case is `twostream`.
@@ -287,7 +287,7 @@ be run before merging or when investigating environment-dependent failures.
 ### Adding New Cases
 
 Each case is an `IntegrationCase` dataclass defined in
-`script/integration/pic/cases/`.
+`scripts/integration/pic/cases/`.
 Key fields:
 
 - `name` — case identifier (used as CLI argument and directory name)
@@ -305,12 +305,12 @@ CLI.
 
 ### Golden Data
 
-Golden summaries live in `script/integration/pic/golden/<case>/` as
+Golden summaries live in `scripts/integration/pic/golden/<case>/` as
 `summary.msgpack`.
 To regenerate after intentional physics changes:
 
 ```sh
-uv run python script/integration/pic/main.py update-golden <case>
+uv run python scripts/integration/pic/main.py update-golden <case>
 ```
 
 The `compare` subcommand checks all numeric keys against golden data
@@ -338,19 +338,19 @@ Install the local pre-commit hook (clang-format on staged C/C++) after
 cloning:
 
 ```sh
-script/git-hooks/install.sh
+scripts/git-hooks/install.sh
 ```
 
 ## Git Subtree (`nix/`)
 
 The `nix/` directory is a git subtree of the standalone repository
 <https://github.com/amanotk/nix>.
-Use `script/subtree-nix.sh` to sync `nix/` between the two repos.
+Use `scripts/subtree-nix.sh` to sync `nix/` between the two repos.
 
 ### One-time setup
 
 ```sh
-script/subtree-nix.sh setup
+scripts/subtree-nix.sh setup
 ```
 
 This adds a git remote named `nix` pointing to the upstream repository.
@@ -373,32 +373,32 @@ The default `--branch` value is `develop` (mapping `develop` ↔ `develop`).
 
 ```sh
 # Pull upstream develop into nix/ (most common)
-script/subtree-nix.sh pull
+scripts/subtree-nix.sh pull
 
 # Pull a specific upstream branch
-script/subtree-nix.sh pull --branch main
+scripts/subtree-nix.sh pull --branch main
 
 # Push nix/ subtree changes to upstream develop
-script/subtree-nix.sh push
+scripts/subtree-nix.sh push
 
 # Push to a specific upstream branch
-script/subtree-nix.sh push --branch feature/new-balancer
+scripts/subtree-nix.sh push --branch feature/new-balancer
 
 # Fetch upstream refs without merging (for inspection)
-script/subtree-nix.sh fetch
+scripts/subtree-nix.sh fetch
 
 # Show upstream log
-script/subtree-nix.sh log
+scripts/subtree-nix.sh log
 ```
 
 Pull always uses `--squash` to keep history linear.
 
 ### Typical workflow
 
-1. Pull upstream changes: `script/subtree-nix.sh pull`
+1. Pull upstream changes: `scripts/subtree-nix.sh pull`
 2. Resolve any conflicts in `nix/`, commit the merge
 3. If you modified `nix/` in pic-nix, push back:
-   `script/subtree-nix.sh push --branch feature/<name>`,
+   `scripts/subtree-nix.sh push --branch feature/<name>`,
    then open a PR on the upstream `nix` repo
 4. After the upstream PR is merged, pull again to synchronize
 
@@ -415,7 +415,7 @@ Install the `graphify` CLI (see the graphify skill for details).
 ### Update the Snapshot
 
 ```sh
-script/update-graphify-snapshot.sh
+scripts/update-graphify-snapshot.sh
 ```
 
 The script performs an incremental update:

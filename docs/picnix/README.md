@@ -22,4 +22,4 @@ current working knowledge in plain Markdown before introducing a full website
 or documentation generator.
 
 Keep user-facing Python package notes here.  Keep repository maintenance
-workflow in `DEVELOPMENT.md` or `script/`.
+workflow in `DEVELOPMENT.md` or `scripts/`.

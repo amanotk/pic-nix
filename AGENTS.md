@@ -49,7 +49,7 @@ The human user primarily manages branch switching, but these rules apply when yo
 - `pic/` : Module for Particle-in-Cell simulation  
   Examples of PIC simulations are under `pic/example/`.  
 - `elliptic/` : Module for elliptic PDE solvers  
-- `script/` : Utility scripts  
+- `scripts/` : Repository maintenance and developer helper scripts  
 
 ## Third-Party Code
 The code under `nix/thirdparty/` should not be modified unless explicitly instructed.  

@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [ "${1-}" = "-h" ] || [ "${1-}" = "--help" ]; then
   cat <<'EOF'
-Usage: script/install_catch2v3.sh [install_prefix]
+  Usage: scripts/install_catch2v3.sh [install_prefix]
 
 Install Catch2 v3.5.4 into the given prefix (default: $HOME/usr).
 EOF

@@ -2,7 +2,7 @@
 *.d
 *.a
 *.msgpack
-!script/integration/pic/golden/**/*.msgpack
+!scripts/integration/pic/golden/**/*.msgpack
 *.out
 *.data
 *.png
