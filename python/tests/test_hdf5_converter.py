@@ -5,6 +5,7 @@ import json
 
 import h5py
 import numpy as np
+import pytest
 
 from picnix import hdf5_converter
 
@@ -85,6 +86,7 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert manifest["verification"]["status"] == "passed"
     assert manifest["verification"]["level"] == "fast"
     assert manifest["verification"]["raw_fingerprint"]["hdf5_files"] == 2
+    assert manifest["verification"]["raw_fingerprint"]["originals"]["files"] == 8
 
     with h5py.File(output_dir / "field.vds.h5", "r") as h5fp:
         field = h5fp["field/00000000/uf"][...]
@@ -101,6 +103,17 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert values.dtype == np.dtype("float32")
     assert ids.dtype == np.dtype("uint64")
     assert ids.tolist() == [100, 101, 110, 111]
+
+
+def test_read_dataset_slab_preserves_singleton_rank1_shape(tmp_path):
+    data_path = tmp_path / "singleton.data"
+    data_path.write_bytes(np.array([42.0], dtype="<f8").tobytes())
+    info = {"datatype": "f8", "shape": [1], "offset": 0}
+
+    array = hdf5_converter.read_dataset_slab(data_path, info, "<", 1)
+
+    assert array.shape == (1,)
+    np.testing.assert_array_equal(array, np.array([42.0]))
 
 
 def test_selected_prefix_and_resume(tmp_path, monkeypatch):
@@ -246,6 +259,29 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
     )
     assert not (input_dir / "node000000").exists()
     assert not (input_dir / "node000001").exists()
+
+
+def test_remove_original_rejects_modified_raw_files_after_fast_verify(
+    tmp_path, monkeypatch
+):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "field")
+    raw_path = input_dir / "node000000" / "field" / "00000000.data"
+    raw_path.write_bytes(raw_path.read_bytes() + b"stale")
+
+    with pytest.raises(ValueError, match="current original files"):
+        run_converter(
+            monkeypatch,
+            "remove-original",
+            "--input-dir",
+            input_dir,
+            "--prefix",
+            "field",
+            "--yes",
+        )
+
+    assert raw_path.exists()
 
 
 def test_remove_original_preserves_unreferenced_data(tmp_path, monkeypatch):
