@@ -78,7 +78,8 @@ ctest --test-dir build -R test_pic_application --output-on-failure
 
 The `python/` directory contains the `picnix` Python package for
 analyzing PIC-NIX simulation output (field data, particle data, load
-balance diagnostics, etc.).
+balance diagnostics, etc.).  User-facing package documentation lives in
+[`docs/picnix/`](docs/picnix/README.md).
 
 ### Install (editable, for development)
 
@@ -98,56 +99,17 @@ uv pip install --python .venv -e "./python[test]"
 uv pip install --python .venv -e "./python[mpi]"
 ```
 
-The HDF5 diagnostic converter is installed as a console command:
+The package installs console commands such as `picnix-hdf5-convert`,
+`picnix-memory-estimator`, and `picnix-syncdir`.
+See [Command Line Tools](docs/picnix/cli.md) for the current list.
+
+The HDF5 diagnostic conversion workflow is documented in
+[HDF5 Converter](docs/picnix/hdf5-converter.md).
+
+Quick example:
 
 ```sh
-picnix-hdf5-convert --input-dir /path/to/run/data
 mpiexec -np 16 picnix-hdf5-convert --input-dir /path/to/run/data
-```
-
-The converter has three commands:
-
-1. **`convert`** (default): converts original `.json`/`.data` diagnostics to
-   HDF5 step files and VDS indexes, then runs verification automatically.
-   Use `--no-verify` to skip verification.
-
-2. **`verify`**: checks existing HDF5 output against original diagnostics
-   and stamps `manifest.json` with the result. Supports `--verify-level fast`
-   (default, structural HDF5 checks plus sampled original comparisons) and
-   `--verify-level full` (scans all original metadata, slower).
-
-3. **`remove-original`**: deletes original `.json`/`.data` diagnostic files
-   that are covered by verified HDF5 output. Requires prior verification.
-   Run in a normal interactive shell, not under a scheduler.
-
-Typical workflow:
-
-```sh
-# Step 1: Convert (run under Slurm or MPI for large runs)
-mpiexec -np 16 picnix-hdf5-convert --input-dir /path/to/run/data
-
-# Step 2: Verify separately if needed (fast, can run in a normal shell)
-picnix-hdf5-convert verify --input-dir /path/to/run/data
-
-# Step 3: Preview what remove-original would delete
-picnix-hdf5-convert remove-original --input-dir /path/to/run/data --dry-run
-
-# Step 4: Remove original files interactively (normal shell only)
-picnix-hdf5-convert remove-original --input-dir /path/to/run/data
-```
-
-`remove-original` deletes only `.json` and `.data` files for verified
-prefixes. It preserves `hdf5/`, `profile.msgpack`, `log.msgpack`, config
-files, and any unrelated files. For POSIX output, it promotes
-`node000000/history.txt` to `history.txt` in the input directory when possible,
-without overwriting a differing existing file. After deletion it removes empty
-prefix directories and empty `nodeXXXXXX` directories.
-
-For noninteractive use (e.g. scripts), use `--yes` to skip the confirmation
-prompt:
-
-```sh
-picnix-hdf5-convert remove-original --input-dir /path/to/run/data --yes
 ```
 
 ### Install from another directory
