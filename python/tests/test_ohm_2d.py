@@ -20,6 +20,44 @@ def test_solve_ohm_2d_shape_validation():
         ohm.solve_ohm_2d(np.ones((8, 8)), np.zeros((7, 8, 3)), 1.0)
 
 
+def test_build_source_term_2d_uses_ny_nx_axes_for_pressure_gradients():
+    """Pressure divergence uses x=axis -1 and y=axis -2 for (Ny, Nx) arrays."""
+    nx, ny = 7, 5
+    delta = 0.25
+    x = np.arange(nx)
+    y = np.arange(ny)
+    xx = np.broadcast_to(x, (ny, nx))
+    yy = np.broadcast_to(y[:, None], (ny, nx))
+    B = np.zeros((ny, nx, 3))
+    M = np.zeros((ny, nx, 10))
+
+    M[..., 4] = xx**2 + 10 * yy
+    M[..., 5] = 3 * yy**2 - xx
+    M[..., 7] = 2 * xx + 5 * yy**2
+    M[..., 8] = yy**2 + 7 * xx
+    M[..., 9] = 4 * xx**2 - 3 * yy
+
+    def ddx(values):
+        return (np.roll(values, -1, axis=-1) - np.roll(values, 1, axis=-1)) / (
+            2.0 * delta
+        )
+
+    def ddy(values):
+        return (np.roll(values, -1, axis=-2) - np.roll(values, 1, axis=-2)) / (
+            2.0 * delta
+        )
+
+    expected = np.stack(
+        [
+            ddx(M[..., 4]) + ddy(M[..., 7]),
+            ddx(M[..., 7]) + ddy(M[..., 5]),
+            ddx(M[..., 9]) + ddy(M[..., 8]),
+        ],
+        axis=-1,
+    )
+    np.testing.assert_allclose(ohm._build_source_term_2d(B, M, delta), expected)
+
+
 # -*- matrix symmetry and base shape validation -*-
 
 

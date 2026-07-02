@@ -244,12 +244,12 @@ def _build_source_term_2d(B, M, delta):
     Pxx, Pyy = M[..., 4], M[..., 5]
     Pxy, Pyz, Pzx = M[..., 7], M[..., 8], M[..., 9]
 
-    dPxx_dx = (np.roll(Pxx, -1, axis=-2) - np.roll(Pxx, 1, axis=-2)) / (2.0 * delta)
-    dPxy_dx = (np.roll(Pxy, -1, axis=-2) - np.roll(Pxy, 1, axis=-2)) / (2.0 * delta)
-    dPzx_dx = (np.roll(Pzx, -1, axis=-2) - np.roll(Pzx, 1, axis=-2)) / (2.0 * delta)
-    dPyy_dy = (np.roll(Pyy, -1, axis=-1) - np.roll(Pyy, 1, axis=-1)) / (2.0 * delta)
-    dPxy_dy = (np.roll(Pxy, -1, axis=-1) - np.roll(Pxy, 1, axis=-1)) / (2.0 * delta)
-    dPyz_dy = (np.roll(Pyz, -1, axis=-1) - np.roll(Pyz, 1, axis=-1)) / (2.0 * delta)
+    dPxx_dx = (np.roll(Pxx, -1, axis=-1) - np.roll(Pxx, 1, axis=-1)) / (2.0 * delta)
+    dPxy_dx = (np.roll(Pxy, -1, axis=-1) - np.roll(Pxy, 1, axis=-1)) / (2.0 * delta)
+    dPzx_dx = (np.roll(Pzx, -1, axis=-1) - np.roll(Pzx, 1, axis=-1)) / (2.0 * delta)
+    dPyy_dy = (np.roll(Pyy, -1, axis=-2) - np.roll(Pyy, 1, axis=-2)) / (2.0 * delta)
+    dPxy_dy = (np.roll(Pxy, -1, axis=-2) - np.roll(Pxy, 1, axis=-2)) / (2.0 * delta)
+    dPyz_dy = (np.roll(Pyz, -1, axis=-2) - np.roll(Pyz, 1, axis=-2)) / (2.0 * delta)
 
     divPi = np.stack(
         [dPxx_dx + dPxy_dy, dPxy_dx + dPyy_dy, dPzx_dx + dPyz_dy],

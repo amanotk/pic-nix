@@ -114,6 +114,17 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert ids.tolist() == [100, 101, 110, 111]
 
 
+def test_read_dataset_slab_preserves_singleton_rank1_shape(tmp_path):
+    data_path = tmp_path / "singleton.data"
+    data_path.write_bytes(np.array([42.0], dtype="<f8").tobytes())
+    info = {"datatype": "f8", "shape": [1], "offset": 0}
+
+    array = hdf5_converter.read_dataset_slab(data_path, info, "<", 1)
+
+    assert array.shape == (1,)
+    np.testing.assert_array_equal(array, np.array([42.0]))
+
+
 def test_selected_prefix_and_resume(tmp_path, monkeypatch):
     input_dir = make_posix_fixture(tmp_path)
     output_dir = tmp_path / "selected"

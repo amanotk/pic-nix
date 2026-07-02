@@ -368,8 +368,6 @@ def read_dataset_slab(data_path, info, byteorder, layout, start=0, count=None):
         fp.seek(file_offset)
         payload = fp.read(int(np.prod(slab_shape)) * dtype.itemsize)
     array = np.frombuffer(payload, dtype=dtype).reshape(slab_shape).copy()
-    if len(shape) == 1 and shape[0] == 1:
-        return array[0]
     return array
 
 
