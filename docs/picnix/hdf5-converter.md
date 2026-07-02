@@ -66,6 +66,12 @@ picnix-hdf5-convert remove-original --input-dir /path/to/run/data
 Run `remove-original` in a normal interactive shell, not under MPI or a batch
 scheduler.  It asks for confirmation before deleting files.
 
+Before deletion, `remove-original` uses the exact original file list recorded by
+`verify` in `hdf5/manifest.json`.  It checks the recorded size and modification
+time for each listed file, then deletes only those verified files.  It does not
+rediscover node directories, step directories, or reopen all JSON metadata during
+the normal removal path.
+
 ## Typical Workflow
 
 Convert under MPI or a batch scheduler:

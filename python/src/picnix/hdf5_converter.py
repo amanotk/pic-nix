@@ -873,17 +873,18 @@ def raw_files_for_prefix(input_dir, prefix, iomode, nodes, steps):
         )
         for json_path in json_paths:
             root = load_json(json_path)
-            files.append(json_path)
-            files.append(json_path.parent / root["meta"]["rawfile"])
+            files.append((stem, json_path))
+            files.append((stem, json_path.parent / root["meta"]["rawfile"]))
     return files
 
 
 def raw_file_stats(input_dir, files):
     stats = []
-    for path in sorted(files):
+    for stem, path in sorted(files, key=lambda item: item[1]):
         stat = path.stat()
         stats.append(
             {
+                "step": stem,
                 "path": os_path_rel(path, input_dir),
                 "bytes": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
@@ -906,7 +907,7 @@ def fingerprint_originals(args, prefixes):
         )
         files = raw_files_for_prefix(args.input_dir, prefix, iomode, nodes, steps)
         prefix_raw_stats = raw_file_stats(args.input_dir, files)
-        byte_count = sum(path.stat().st_size for path in files)
+        byte_count = sum(item["bytes"] for item in prefix_raw_stats)
         raw_stats.extend(prefix_raw_stats)
         total_files += len(files)
         total_bytes += byte_count
@@ -1325,20 +1326,135 @@ def convert_prefix(args, prefix, comm):
     }
 
 
+def original_fingerprint_from_verification(verification):
+    fingerprint = verification.get("raw_fingerprint") or {}
+    return fingerprint.get("originals", fingerprint)
+
+
+def selected_verified_steps(raw_files, selected_steps, limit, prefix):
+    if selected_steps is None and limit is None:
+        return None
+    step_values = {item.get("step") for item in raw_files}
+    if None in step_values:
+        raise ValueError(
+            "verification manifest does not include per-step original file data; "
+            "rerun verify before using --steps or --step-limit with remove-original"
+        )
+    steps = sorted(step_values)
+    if selected_steps is not None:
+        available = set(steps)
+        missing = [stem for stem in selected_steps if stem not in available]
+        if missing:
+            raise FileNotFoundError(
+                f"selected steps not found for prefix {prefix}: {', '.join(missing)}"
+            )
+        steps = selected_steps
+    if limit is not None:
+        steps = steps[:limit]
+    if not steps:
+        raise FileNotFoundError(f"no steps found for prefix {prefix}")
+    return set(steps)
+
+
+def verified_path(input_dir, rel_path):
+    if os.path.isabs(rel_path):
+        raise ValueError(f"verified path must be relative: {rel_path}")
+    path = input_dir / rel_path
+    input_root = input_dir.resolve()
+    resolved = path.resolve(strict=False)
+    if os.path.commonpath([str(input_root), str(resolved)]) != str(input_root):
+        raise ValueError(f"verified path escapes input directory: {rel_path}")
+    return path
+
+
+def removal_plan_from_verification(
+    input_dir, verification, prefixes, selected_steps=None, limit=None
+):
+    fingerprint = original_fingerprint_from_verification(verification)
+    by_prefix = {item["prefix"]: item for item in fingerprint.get("prefixes", [])}
+    missing = [prefix for prefix in prefixes if prefix not in by_prefix]
+    if missing:
+        raise ValueError(
+            "verified HDF5 output is required for selected prefixes: "
+            + ", ".join(missing)
+        )
+
+    files = []
+    seen = set()
+    prefix_dirs = set()
+    node_dirs = set()
+    prefix_file_counts = {}
+    for prefix in prefixes:
+        item = by_prefix[prefix]
+        raw_files = item.get("raw_files")
+        if raw_files is None:
+            raise ValueError(
+                "verification manifest does not include the original file list; "
+                "rerun verify before remove-original"
+            )
+        allowed_steps = selected_verified_steps(
+            raw_files, selected_steps, limit, prefix
+        )
+        prefix_count = 0
+        for raw_file in raw_files:
+            if allowed_steps is not None and raw_file.get("step") not in allowed_steps:
+                continue
+            rel_path = raw_file["path"]
+            if rel_path in seen:
+                continue
+            seen.add(rel_path)
+            path = verified_path(input_dir, rel_path)
+            files.append(
+                {
+                    "prefix": prefix,
+                    "path": path,
+                    "bytes": int(raw_file["bytes"]),
+                    "mtime_ns": int(raw_file["mtime_ns"]),
+                }
+            )
+            prefix_count += 1
+            prefix_dirs.add(path.parent)
+            if item.get("iomode") == "posix":
+                node_dirs.add(path.parent.parent)
+        prefix_file_counts[prefix] = prefix_count
+
+    return {
+        "files": files,
+        "prefix_dirs": prefix_dirs,
+        "node_dirs": node_dirs,
+        "prefix_file_counts": prefix_file_counts,
+    }
+
+
+def verify_removal_plan(plan):
+    for item in plan["files"]:
+        try:
+            stat = item["path"].stat()
+        except FileNotFoundError as exc:
+            raise ValueError(
+                f"verified original file is missing: {item['path']}"
+            ) from exc
+        if stat.st_size != item["bytes"] or stat.st_mtime_ns != item["mtime_ns"]:
+            raise ValueError(
+                "current original files do not match the verified fingerprint"
+            )
+
+
 def matching_verification(args, manifest, prefixes):
     verification = manifest.get("verification")
     if not verification or verification.get("status") != "passed":
         raise ValueError("verified HDF5 output is required before remove-original")
-    level = verification.get("level", "full")
-    current = (
-        fingerprint_originals(args, prefixes)
-        if level == "full"
-        else fingerprint_fast(args, prefixes, manifest)
+    plan = removal_plan_from_verification(
+        args.input_dir,
+        verification,
+        prefixes,
+        parse_step_tokens(args.steps),
+        args.step_limit,
     )
-    expected = verification.get("raw_fingerprint")
-    if current != expected:
-        raise ValueError("current original files do not match the verified fingerprint")
-    return verification, current
+    print(f"checking files:    {len(plan['files'])} verified originals", flush=True)
+    verify_removal_plan(plan)
+    print("check:            passed", flush=True)
+    return verification, plan
 
 
 def remove_empty_dirs(paths):
@@ -1385,83 +1501,43 @@ def relocate_node_metadata(input_dir, node_dirs):
     return relocated, kept
 
 
-def estimate_removal_from_verification(verification):
-    prefix_items = verification.get("raw_fingerprint", {}).get("prefixes", [])
-    file_count = 0
-    node_count = 0
-    for item in prefix_items:
-        sources = item.get("nodes", 0) if item.get("iomode") == "posix" else 1
-        file_count += int(item.get("steps", 0)) * int(sources) * 2
-        node_count = max(node_count, int(item.get("nodes", 0)))
-    return file_count, node_count
+def estimate_removal_from_plan(plan):
+    return len(plan["files"]), len(plan["node_dirs"])
 
 
-def delete_file(path):
-    if not path.exists():
-        return 0, 0
-    size = path.stat().st_size
-    path.unlink()
-    return 1, size
-
-
-def delete_step_files(json_path):
-    removed = 0
-    bytes_freed = 0
-    if not json_path.exists():
-        return removed, bytes_freed
-    root = load_json(json_path)
-    raw_path = json_path.parent / root["meta"]["rawfile"]
-    count, size = delete_file(raw_path)
-    removed += count
-    bytes_freed += size
-    count, size = delete_file(json_path)
-    removed += count
-    bytes_freed += size
-    return removed, bytes_freed
-
-
-def delete_verified_originals(args, prefixes):
-    selected_steps = parse_step_tokens(args.steps)
+def delete_verified_originals(plan):
     total_removed = 0
     total_bytes = 0
-    prefix_dirs = set()
-    node_dirs = set()
+    prefix_removed = {prefix: 0 for prefix in plan["prefix_file_counts"]}
 
-    for prefix in prefixes:
-        prefix_removed = 0
-        iomode = detect_iomode(args.input_dir, prefix)
-        nodes = discover_nodes(args.input_dir) if iomode == "posix" else []
-        steps = discover_steps(
-            args.input_dir, prefix, iomode, nodes, selected_steps, args.step_limit
-        )
-        for stem in steps:
-            if iomode == "posix":
-                json_paths = [node / prefix / f"{stem}.json" for node in nodes]
-            else:
-                json_paths = [args.input_dir / prefix / f"{stem}.json"]
-            for json_path in json_paths:
-                removed, bytes_freed = delete_step_files(json_path)
-                total_removed += removed
-                prefix_removed += removed
-                total_bytes += bytes_freed
+    print(f"removing files:   {len(plan['files'])} verified originals", flush=True)
+    for item in plan["files"]:
+        item["path"].unlink()
+        total_removed += 1
+        total_bytes += item["bytes"]
+        prefix_removed[item["prefix"]] += 1
 
-        if iomode == "posix":
-            for node in nodes:
-                prefix_dirs.add(node / prefix)
-                node_dirs.add(node)
-        else:
-            prefix_dirs.add(args.input_dir / prefix)
-        print(f"  {prefix}: removed {prefix_removed} files", flush=True)
+    for prefix, count in prefix_removed.items():
+        print(f"  {prefix}: removed {count} files", flush=True)
 
-    return total_removed, total_bytes, prefix_dirs, node_dirs
+    return total_removed, total_bytes, plan["prefix_dirs"], plan["node_dirs"]
 
 
 def remove_original(args):
     manifest = load_manifest(args.output_dir)
     apply_manifest_defaults(args, manifest)
     prefixes = select_prefixes(args, manifest)
-    verification, _ = matching_verification(args, manifest, prefixes)
-    estimated_files, estimated_nodes = estimate_removal_from_verification(verification)
+    verification = manifest.get("verification")
+    if not verification or verification.get("status") != "passed":
+        raise ValueError("verified HDF5 output is required before remove-original")
+    plan = removal_plan_from_verification(
+        args.input_dir,
+        verification,
+        prefixes,
+        parse_step_tokens(args.steps),
+        args.step_limit,
+    )
+    estimated_files, estimated_nodes = estimate_removal_from_plan(plan)
 
     print("\nPIC-NIX remove-original")
     print("=======================")
@@ -1477,6 +1553,8 @@ def remove_original(args):
         print("dry-run:          no files removed")
         return
 
+    _, plan = matching_verification(args, manifest, prefixes)
+
     if not args.yes:
         print("")
         print("This will remove original PIC-NIX diagnostic .json/.data files")
@@ -1485,9 +1563,7 @@ def remove_original(args):
         if response != REMOVE_CONFIRMATION:
             raise SystemExit("remove-original cancelled")
 
-    total_removed, total_bytes, prefix_dirs, node_dirs = delete_verified_originals(
-        args, prefixes
-    )
+    total_removed, total_bytes, prefix_dirs, node_dirs = delete_verified_originals(plan)
 
     relocated_metadata, kept_metadata = relocate_node_metadata(
         args.input_dir, node_dirs
