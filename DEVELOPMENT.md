@@ -2,6 +2,27 @@
 
 This document describes the local developer workflow.
 
+## Branching And Releases
+
+Use `develop` as the integration branch and `main` as the stable release
+branch.  Feature and fix branches should target `develop` by pull request.
+
+Release changes from `develop` to `main` by pull request and use a regular
+merge commit.  Do not squash release PRs, because the merge commit records the
+release boundary on `main`.
+
+After a release PR is merged, open a follow-up synchronization PR from `main`
+back to `develop`.  This usually has no file changes, but it brings the release
+merge commit back into `develop` so `develop` does not permanently appear behind
+`main`.
+
+Typical release flow:
+
+1. Merge feature/fix PRs into `develop`.
+2. Open and merge `develop` -> `main` with a regular merge commit.
+3. Tag the resulting `main` commit if the release should be versioned.
+4. Open and merge `main` -> `develop` to synchronize release history.
+
 ## Build & Test
 
 ### Configure
