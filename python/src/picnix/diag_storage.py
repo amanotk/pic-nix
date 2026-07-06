@@ -49,6 +49,10 @@ class JsonDiagStorage(DiagStorage):
 
     def setup(self):
         self.file = self.get_file_array()
+        if self.file.ndim != 2 or self.file.shape[1] == 0:
+            raise FileNotFoundError(
+                f"no JSON diagnostic files found for prefix {self.prefix!r} in {self.basedir}"
+            )
         self.step = np.arange(self.file.shape[1], dtype=np.int32)
         self.time = np.arange(self.file.shape[1], dtype=np.float64)
         for i, filename in enumerate(self.file[0, :]):
