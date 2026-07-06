@@ -101,8 +101,6 @@ class Run(object):
             except FileNotFoundError as exc:
                 if "no JSON diagnostic files found" not in str(exc):
                     raise
-                prefix = diagnostic.get("prefix", diagnostic.get("name", "<unknown>"))
-                print(f"Warning: skipping unavailable diagnostic {prefix!r}: {exc}")
                 continue
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler

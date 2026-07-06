@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 mpi = ["mpi4py"]
+dev = ["ruff"]
 
 [project.scripts]
 picnix-hdf5-convert = "picnix.hdf5_converter:main"
