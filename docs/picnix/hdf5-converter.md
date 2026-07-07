@@ -53,8 +53,9 @@ picnix-hdf5-convert verify --input-dir /path/to/run/data
 ```
 
 The default verification level is `fast`, which performs structural HDF5
-checks and sampled comparisons against the original data.  Use
-`--verify-level full` to scan all original metadata.
+checks and sampled comparisons against the original data.  Fast verification
+does not scan or store a complete original-file fingerprint.  Use
+`--verify-level full` to scan all original metadata and enable strict cleanup.
 
 `remove-original` deletes original `.json` and `.data` files that are covered
 by verified HDF5 output:
@@ -66,11 +67,16 @@ picnix-hdf5-convert remove-original --input-dir /path/to/run/data
 Run `remove-original` in a normal interactive shell, not under MPI or a batch
 scheduler.  It asks for confirmation before deleting files.
 
-Before deletion, `remove-original` uses the exact original file list recorded by
-`verify` in `hdf5/manifest.json`.  It checks the recorded size and modification
-time for each listed file, then deletes only those verified files.  It does not
-rediscover node directories, step directories, or reopen all JSON metadata during
-the normal removal path.
+By default, `remove-original` requires a full verification manifest.  It uses
+the exact original file list recorded by `verify --verify-level full` in
+`hdf5/manifest.json`, checks the recorded size and modification time for each
+listed file, then deletes only those verified files.
+
+For large POSIX runs where metadata scans are expensive, pass
+`--trust-manifest` after a passed fast verification.  This is an explicit
+low-metadata cleanup mode: it confirms the selected HDF5/VDS outputs exist,
+generates deterministic original `.json` and `.data` paths from the manifest,
+and unlinks those paths without per-file stat checks.
 
 ## Typical Workflow
 
@@ -86,23 +92,32 @@ Verify separately if needed:
 picnix-hdf5-convert verify --input-dir /path/to/run/data
 ```
 
+Use full verification if you want strict default removal:
+
+```sh
+picnix-hdf5-convert verify --input-dir /path/to/run/data --verify-level full
+```
+
 Preview what would be removed:
 
 ```sh
-picnix-hdf5-convert remove-original --input-dir /path/to/run/data --dry-run
+picnix-hdf5-convert remove-original --input-dir /path/to/run/data --dry-run --trust-manifest
 ```
 
 Remove original files interactively:
 
 ```sh
-picnix-hdf5-convert remove-original --input-dir /path/to/run/data
+picnix-hdf5-convert remove-original --input-dir /path/to/run/data --trust-manifest
 ```
 
 For noninteractive use, pass `--yes`:
 
 ```sh
-picnix-hdf5-convert remove-original --input-dir /path/to/run/data --yes
+picnix-hdf5-convert remove-original --input-dir /path/to/run/data --yes --trust-manifest
 ```
+
+Omit `--trust-manifest` only after `verify --verify-level full` if you want the
+strict pre-delete file-size and modification-time checks.
 
 ## What remove-original Preserves
 
