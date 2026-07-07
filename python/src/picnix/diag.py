@@ -122,8 +122,11 @@ class DiagHandler(object):
     def read_at(self, step, pattern):
         return self.storage.read_at(step, pattern)
 
-    def read_particle_id_at(self, step, pattern):
-        return self.storage.read_particle_id_at(step, pattern)
+    def read_particle_at(self, step, pattern, start=None, stop=None):
+        return self.storage.read_particle_at(step, pattern, start, stop)
+
+    def read_particle_id_at(self, step, pattern, start=None, stop=None):
+        return self.storage.read_particle_id_at(step, pattern, start, stop)
 
     @staticmethod
     def read_time_and_step(filename):
