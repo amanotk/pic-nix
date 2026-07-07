@@ -579,7 +579,8 @@ void cleanup_config_and_tmpdir(const std::filesystem::path& config_path, int ran
   cleanup_tmpdir(rank);
 }
 
-CliArgs make_cli_args(const std::filesystem::path& config_path)
+CliArgs make_cli_args(const std::filesystem::path&    config_path,
+                      const std::vector<std::string>& extra_args = {})
 {
   CliArgs cli;
   cli.args = {
@@ -587,8 +588,21 @@ CliArgs make_cli_args(const std::filesystem::path& config_path)
       "-c",
       config_path.string(),
   };
+  cli.args.insert(cli.args.end(), extra_args.begin(), extra_args.end());
   cli.argv = nix::ArgParser::convert_to_clargs(cli.args);
   return cli;
+}
+
+void cleanup_checkpoint(const std::filesystem::path& prefix, int rank)
+{
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (rank == 0) {
+    std::filesystem::remove(prefix.string() + ".msgpack");
+    std::filesystem::remove(prefix.string() + ".status.json");
+    std::filesystem::remove(prefix.string() + ".status.json.tmp");
+    std::filesystem::remove_all(prefix);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
 }
 
 float64 compute_kappa_component(float64 k, float64 h)
@@ -628,6 +642,45 @@ TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
 
   REQUIRE(app.main() == 0);
 
+  cleanup_config_and_tmpdir(config_path, rank);
+}
+
+TEST_CASE("pic_application_writes_complete_checkpoint_status", "[np=1][np=8]")
+{
+  int nprocess = get_mpi_size();
+  int rank     = get_mpi_rank();
+
+  if (nprocess != 1 && nprocess != 8) {
+    SUCCEED("Skipping test: only np=1 or np=8 are supported.");
+    return;
+  }
+
+  const GridConfig      grid_config = GridConfig{8, 8, 8, 2, 2, 2};
+  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
+  std::filesystem::path checkpoint  = config_path.parent_path() / "test_pic_checkpoint";
+
+  cleanup_checkpoint(checkpoint, rank);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  CliArgs         cli       = make_cli_args(config_path, {"-s", checkpoint.string()});
+  auto            interface = std::make_shared<TestInterface>();
+  TestApplication app(cli.argc(), cli.cargv(), interface);
+
+  REQUIRE(app.main() == 0);
+
+  if (rank == 0) {
+    std::ifstream status_file(checkpoint.string() + ".status.json");
+    json          status = json::parse(status_file);
+
+    REQUIRE(status["status"] == "complete");
+    REQUIRE(status["prefix"] == checkpoint.string());
+    REQUIRE(status["nprocess"] == nprocess);
+    REQUIRE(status.contains("curstep") == true);
+    REQUIRE(status.contains("curtime") == true);
+    REQUIRE(status.contains("timestamp") == true);
+  }
+
+  cleanup_checkpoint(checkpoint, rank);
   cleanup_config_and_tmpdir(config_path, rank);
 }
 

@@ -2,7 +2,6 @@
 
 #include "statehandler.hpp"
 
-
 #include <catch2/catch_test_macros.hpp>
 
 bool require_mpi_size(int expected);
@@ -18,6 +17,8 @@ struct DataContainer {
   int*      cdims;
   int&      nprocess;
   int&      thisrank;
+  int&      curstep;
+  float64&  curtime;
   ChunkVec& chunkvec;
 };
 
@@ -125,6 +126,8 @@ private:
 
   int      thisrank;
   int      nprocess;
+  int      curstep;
+  float64  curtime;
   double   x;
   double   y;
   double   z;
@@ -136,9 +139,11 @@ public:
     MPI_Comm_rank(MPI_COMM_WORLD, &thisrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
 
-    x = 1.0;
-    y = sqrt(2.0);
-    z = exp(3.0);
+    curstep = 42;
+    curtime = 4.2;
+    x       = 1.0;
+    y       = sqrt(2.0);
+    z       = exp(3.0);
 
     interface = std::make_unique<Interface>();
     interface->set_application(this);
@@ -151,7 +156,7 @@ public:
 
   DataContainer get_internal_data()
   {
-    return {ndims, cdims, nprocess, thisrank, chunkvec};
+    return {ndims, cdims, nprocess, thisrank, curstep, curtime, chunkvec};
   }
 
   json to_json()
@@ -162,6 +167,8 @@ public:
                   {"x", x},
                   {"y", y},
                   {"z", z},
+                  {"curstep", curstep},
+                  {"curtime", curtime},
                   {"nprocess", nprocess},
                   {"thisrank", thisrank}};
 
@@ -181,7 +188,25 @@ public:
     consistency &= current_state["z"] == state["z"];
     consistency &= current_state["nprocess"] == state["nprocess"];
 
+    if (consistency == true) {
+      curstep = state["curstep"].get<int>();
+      curtime = state["curtime"].get<float64>();
+    }
+
     return consistency;
+  }
+
+  void cleanup_checkpoint(std::string prefix)
+  {
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (thisrank == 0) {
+      StateHandler statehandler;
+      std::filesystem::remove(prefix + ".msgpack");
+      std::filesystem::remove(statehandler.get_status_filename(prefix));
+      std::filesystem::remove(statehandler.get_status_filename(prefix) + ".tmp");
+      std::filesystem::remove_all(prefix);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 
   void prepare_chunkvec(int numchunk)
@@ -267,6 +292,78 @@ public:
     REQUIRE(save == true);
     REQUIRE(load == true);
   }
+
+  void test_save_load_checkpoint_status()
+  {
+    const int   numchunk = 10;
+    std::string prefix   = "foo_checkpoint";
+
+    StateHandler statehandler;
+    cleanup_checkpoint(prefix);
+    prepare_chunkvec(numchunk);
+
+    bool save = statehandler.save(get_interface(), prefix);
+
+    if (thisrank == 0) {
+      std::ifstream ifs(statehandler.get_status_filename(prefix));
+      json          status = json::parse(ifs);
+      REQUIRE(status["status"] == "complete");
+      REQUIRE(status["prefix"] == prefix);
+      REQUIRE(status["curstep"] == curstep);
+      REQUIRE(status["curtime"] == curtime);
+      REQUIRE(status["nprocess"] == nprocess);
+    }
+
+    bool load = statehandler.load(get_interface(), prefix);
+
+    REQUIRE(save == true);
+    REQUIRE(load == true);
+    REQUIRE(validate_chunkvec(numchunk) == true);
+
+    cleanup_checkpoint(prefix);
+  }
+
+  void test_load_rejects_missing_status()
+  {
+    const int   numchunk = 10;
+    std::string prefix   = "foo_missing_status";
+
+    StateHandler statehandler;
+    cleanup_checkpoint(prefix);
+    prepare_chunkvec(numchunk);
+
+    statehandler.save(get_interface(), prefix);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (thisrank == 0) {
+      std::filesystem::remove(statehandler.get_status_filename(prefix));
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    bool load = statehandler.load(get_interface(), prefix);
+
+    REQUIRE(load == false);
+
+    cleanup_checkpoint(prefix);
+  }
+
+  void test_load_rejects_incomplete_status()
+  {
+    const int   numchunk = 10;
+    std::string prefix   = "foo_incomplete_status";
+
+    StateHandler statehandler;
+    cleanup_checkpoint(prefix);
+    prepare_chunkvec(numchunk);
+
+    statehandler.save(get_interface(), prefix);
+    statehandler.write_status(get_interface(), prefix, "in_progress", false);
+
+    bool load = statehandler.load(get_interface(), prefix);
+
+    REQUIRE(load == false);
+
+    cleanup_checkpoint(prefix);
+  }
 };
 
 TEST_CASE("test_save_load_application", "[np=8]")
@@ -285,4 +382,31 @@ TEST_CASE("test_save_load_chunkvec", "[np=8]")
   }
   MockApplication app;
   app.test_save_load_chunkvec();
+}
+
+TEST_CASE("test_save_load_checkpoint_status", "[np=8]")
+{
+  if (!require_mpi_size(8)) {
+    return;
+  }
+  MockApplication app;
+  app.test_save_load_checkpoint_status();
+}
+
+TEST_CASE("test_load_rejects_missing_status", "[np=8]")
+{
+  if (!require_mpi_size(8)) {
+    return;
+  }
+  MockApplication app;
+  app.test_load_rejects_missing_status();
+}
+
+TEST_CASE("test_load_rejects_incomplete_status", "[np=8]")
+{
+  if (!require_mpi_size(8)) {
+    return;
+  }
+  MockApplication app;
+  app.test_load_rejects_incomplete_status();
 }
