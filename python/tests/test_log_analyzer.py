@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import csv
+import re
 from copy import deepcopy
 
 import msgpack
@@ -49,7 +50,7 @@ def test_extract_timing_rows_and_summaries(tmp_path):
     log = tmp_path / "log.msgpack"
     write_msgpack_stream(log, sample_records())
 
-    records = log_analyzer.read_msgpack_stream(log)
+    records = log_analyzer.iter_msgpack_records(log)
     rows = log_analyzer.extract_timing_rows(records)
     phase_summary = log_analyzer.summarize_phases(rows)
     rebalance_summary = log_analyzer.summarize_rebalance(rows)
@@ -63,6 +64,29 @@ def test_extract_timing_rows_and_summaries(tmp_path):
     assert rebalance_summary["active"]["total"] == pytest.approx(0.50)
     assert rebalance_summary["inactive"]["count"] == 2
     assert rebalance_summary["inactive"]["total"] == pytest.approx(0.03)
+
+
+def test_read_msgpack_stream_keeps_list_compatibility(tmp_path):
+    log = tmp_path / "log.msgpack"
+    write_msgpack_stream(log, sample_records())
+
+    records = log_analyzer.read_msgpack_stream(log)
+
+    assert [record["step"] for record in records] == [0, 1, 2]
+
+
+def test_main_streams_msgpack_records(tmp_path, monkeypatch, capsys):
+    log = tmp_path / "log.msgpack"
+    write_msgpack_stream(log, sample_records())
+
+    def fail_read_msgpack_stream(*args, **kwargs):
+        raise AssertionError("main should stream records instead of materializing them")
+
+    monkeypatch.setattr(log_analyzer, "read_msgpack_stream", fail_read_msgpack_stream)
+
+    log_analyzer.main([str(log), "--no-progress"])
+
+    assert "Records: 3" in capsys.readouterr().out
 
 
 def test_resolve_log_filename_from_profile(tmp_path):
@@ -150,9 +174,10 @@ def test_binned_total_timing_and_plot(tmp_path):
 
 def test_parser_has_max_points_option():
     parser = log_analyzer.build_parser()
-    args = parser.parse_args(["log.msgpack", "--max-points", "100"])
+    args = parser.parse_args(["log.msgpack", "--max-points", "100", "--no-progress"])
 
     assert args.max_points == 100
+    assert args.no_progress is True
 
 
 def test_format_report_contains_expected_sections():
@@ -165,3 +190,29 @@ def test_format_report_contains_expected_sections():
     assert "diagnostic" in report
     assert "push" in report
     assert "rebalance" in report
+
+
+def test_format_report_keeps_large_values_separated():
+    rows = log_analyzer.extract_timing_rows(
+        [
+            {
+                "step": index,
+                "diagnostic": {"elapsed": 219.477725 if index == 99 else 0.000081},
+                "push": {"elapsed": 25.008171 if index == 99 else 0.110201},
+                "rebalance": {"elapsed": 17.105017 if index == 99 else 0.067230},
+            }
+            for index in range(100)
+        ]
+    )
+
+    report = log_analyzer.format_report(rows, "log.msgpack", top=0)
+
+    assert re.search(r"diagnostic\s+.*\s+\d+\.\d{3}\s+2\.195e\+05\s+100", report)
+    assert re.search(r"push\s+.*\s+\d+\.\d{3}\s+25008\.171\s+100", report)
+    assert re.search(r"rebalance\s+.*\s+\d+\.\d{3}\s+17105\.017\s+100", report)
+
+
+def test_format_summary_value_uses_scientific_for_extremes():
+    assert log_analyzer.format_summary_value(64.286) == "64.286"
+    assert log_analyzer.format_summary_value(219477.725) == "2.195e+05"
+    assert log_analyzer.format_summary_value(0.0004) == "4.000e-04"
