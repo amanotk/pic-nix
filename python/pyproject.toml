@@ -28,6 +28,7 @@ mpi = ["mpi4py"]
 [project.scripts]
 picnix-hdf5-convert = "picnix.hdf5_converter:main"
 picnix-loadchecker = "picnix.loadchecker:main"
+picnix-log-analyze = "picnix.log_analyzer:main"
 picnix-memory-estimator = "picnix.memory_estimator:main"
 picnix-msgpack-printer = "picnix.msgpack_printer:main"
 picnix-syncdir = "picnix.syncdir:main"
