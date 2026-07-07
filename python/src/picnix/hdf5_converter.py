@@ -165,6 +165,11 @@ def parse_args(argv=None):
         action="store_true",
         help="skip interactive confirmation for remove-original",
     )
+    parser.add_argument(
+        "--trust-manifest",
+        action="store_true",
+        help="allow remove-original to delete deterministic original paths without per-file stat checks",
+    )
     args = parser.parse_args(argv)
     args.command = command
     if args.overwrite and args.resume:
@@ -173,8 +178,12 @@ def parse_args(argv=None):
         parser.error(
             "--overwrite, --resume, and --no-verify are only valid for convert"
         )
-    if args.command != "remove-original" and (args.dry_run or args.yes):
-        parser.error("--dry-run and --yes are only valid for remove-original")
+    if args.command != "remove-original" and (
+        args.dry_run or args.yes or args.trust_manifest
+    ):
+        parser.error(
+            "--dry-run, --yes, and --trust-manifest are only valid for remove-original"
+        )
     if args.command == "convert" and args.no_vds and not args.no_verify:
         parser.error(
             "default verification requires VDS output; use --no-verify with --no-vds"
@@ -954,6 +963,7 @@ def fingerprint_fast(args, prefixes, manifest=None):
                 "prefix": prefix,
                 "iomode": iomode,
                 "steps": len(steps),
+                "step_names": steps,
                 "first_step": steps[0],
                 "last_step": steps[-1],
                 "nodes": len(nodes),
@@ -966,7 +976,6 @@ def fingerprint_fast(args, prefixes, manifest=None):
         "prefixes": prefix_info,
         "hdf5_files": total_hdf5_files,
         "hdf5_bytes": total_hdf5_bytes,
-        "originals": fingerprint_originals(args, prefixes),
     }
 
 
@@ -1160,7 +1169,7 @@ def verify_prefix(args, prefix):
     if args.verify_level == "full":
         files = raw_files_for_prefix(args.input_dir, prefix, iomode, nodes, steps)
         file_count = len(files)
-        byte_count = sum(path.stat().st_size for path in files)
+        byte_count = sum(path.stat().st_size for _, path in files)
     else:
         file_count = None
         byte_count = None
@@ -1203,7 +1212,16 @@ def verify_output(args):
     if args.verify_level == "full":
         print(f"original files:   {fingerprint['files']}")
         print(f"original size:    {fingerprint['bytes'] / 1024.0 / 1024.0:.3f} MiB")
-    print("ready:            original diagnostics can be removed with remove-original")
+        print(
+            "ready:            original diagnostics can be removed with remove-original"
+        )
+    else:
+        print(
+            "ready:            use remove-original --trust-manifest for low-metadata cleanup"
+        )
+        print(
+            "strict cleanup:   rerun verify --verify-level full before remove-original"
+        )
     return manifest["verification"]
 
 
@@ -1356,6 +1374,54 @@ def selected_verified_steps(raw_files, selected_steps, limit, prefix):
     return set(steps)
 
 
+def selected_manifest_steps(item, selected_steps, limit, prefix):
+    steps = item.get("step_names")
+    if steps is None:
+        if item.get("steps") == 1 and item.get("first_step") == item.get("last_step"):
+            steps = [item["first_step"]]
+        else:
+            raise ValueError(
+                "fast verification manifest does not include per-step data; "
+                "rerun verify before using --trust-manifest with remove-original"
+            )
+    steps = sorted(steps)
+    if selected_steps is not None:
+        available = set(steps)
+        missing = [stem for stem in selected_steps if stem not in available]
+        if missing:
+            raise FileNotFoundError(
+                f"selected steps not found for prefix {prefix}: {', '.join(missing)}"
+            )
+        steps = selected_steps
+    if limit is not None:
+        steps = steps[:limit]
+    if not steps:
+        raise FileNotFoundError(f"no steps found for prefix {prefix}")
+    return steps
+
+
+def deterministic_original_paths(input_dir, item, steps):
+    prefix = item["prefix"]
+    iomode = item.get("iomode")
+    if iomode == "posix":
+        nodes = int(item.get("nodes", 0))
+        if nodes <= 0:
+            raise ValueError(f"fast verification manifest has no nodes for {prefix}")
+        for stem in steps:
+            for node_index in range(nodes):
+                prefix_dir = input_dir / f"node{node_index:06d}" / prefix
+                yield stem, prefix_dir / f"{stem}.json"
+                yield stem, prefix_dir / f"{stem}.data"
+        return
+    if iomode == "mpiio":
+        prefix_dir = input_dir / prefix
+        for stem in steps:
+            yield stem, prefix_dir / f"{stem}.json"
+            yield stem, prefix_dir / f"{stem}.data"
+        return
+    raise ValueError(f"unsupported iomode in verification manifest: {iomode}")
+
+
 def verified_path(input_dir, rel_path):
     if os.path.isabs(rel_path):
         raise ValueError(f"verified path must be relative: {rel_path}")
@@ -1368,7 +1434,12 @@ def verified_path(input_dir, rel_path):
 
 
 def removal_plan_from_verification(
-    input_dir, verification, prefixes, selected_steps=None, limit=None
+    input_dir,
+    verification,
+    prefixes,
+    selected_steps=None,
+    limit=None,
+    trust_manifest=False,
 ):
     fingerprint = original_fingerprint_from_verification(verification)
     by_prefix = {item["prefix"]: item for item in fingerprint.get("prefixes", [])}
@@ -1384,21 +1455,41 @@ def removal_plan_from_verification(
     prefix_dirs = set()
     node_dirs = set()
     prefix_file_counts = {}
+    prefix_steps = {}
     for prefix in prefixes:
         item = by_prefix[prefix]
         raw_files = item.get("raw_files")
         if raw_files is None:
-            raise ValueError(
-                "verification manifest does not include the original file list; "
-                "rerun verify before remove-original"
-            )
+            if not trust_manifest:
+                raise ValueError(
+                    "verification manifest does not include the original file list; "
+                    "rerun verify --verify-level full before remove-original, or pass "
+                    "--trust-manifest to use deterministic paths"
+                )
+            steps = selected_manifest_steps(item, selected_steps, limit, prefix)
+            prefix_count = 0
+            for stem, path in deterministic_original_paths(input_dir, item, steps):
+                rel_path = os_path_rel(path, input_dir)
+                if rel_path in seen:
+                    continue
+                seen.add(rel_path)
+                files.append({"prefix": prefix, "path": path, "bytes": None})
+                prefix_count += 1
+                prefix_dirs.add(path.parent)
+                if item.get("iomode") == "posix":
+                    node_dirs.add(path.parent.parent)
+            prefix_file_counts[prefix] = prefix_count
+            prefix_steps[prefix] = steps
+            continue
         allowed_steps = selected_verified_steps(
             raw_files, selected_steps, limit, prefix
         )
+        included_steps = set()
         prefix_count = 0
         for raw_file in raw_files:
             if allowed_steps is not None and raw_file.get("step") not in allowed_steps:
                 continue
+            included_steps.add(raw_file.get("step"))
             rel_path = raw_file["path"]
             if rel_path in seen:
                 continue
@@ -1417,12 +1508,14 @@ def removal_plan_from_verification(
             if item.get("iomode") == "posix":
                 node_dirs.add(path.parent.parent)
         prefix_file_counts[prefix] = prefix_count
+        prefix_steps[prefix] = sorted(included_steps)
 
     return {
         "files": files,
         "prefix_dirs": prefix_dirs,
         "node_dirs": node_dirs,
         "prefix_file_counts": prefix_file_counts,
+        "prefix_steps": prefix_steps,
     }
 
 
@@ -1450,11 +1543,29 @@ def matching_verification(args, manifest, prefixes):
         prefixes,
         parse_step_tokens(args.steps),
         args.step_limit,
+        args.trust_manifest,
     )
-    print(f"checking files:    {len(plan['files'])} verified originals", flush=True)
-    verify_removal_plan(plan)
-    print("check:            passed", flush=True)
+    if args.trust_manifest:
+        print(
+            f"trust-manifest:   skipping stat check for {len(plan['files'])} originals",
+            flush=True,
+        )
+    else:
+        print(f"checking files:    {len(plan['files'])} verified originals", flush=True)
+        verify_removal_plan(plan)
+        print("check:            passed", flush=True)
     return verification, plan
+
+
+def verify_manifest_outputs(output_dir, plan):
+    for prefix, steps in plan["prefix_steps"].items():
+        vds_path = output_dir / f"{prefix}.vds.h5"
+        if not vds_path.exists():
+            raise FileNotFoundError(f"VDS file not found: {vds_path}")
+        for stem in steps:
+            step_path = output_dir / prefix / f"{stem}.h5"
+            if not step_path.exists():
+                raise FileNotFoundError(f"step file not found: {step_path}")
 
 
 def remove_empty_dirs(paths):
@@ -1505,22 +1616,36 @@ def estimate_removal_from_plan(plan):
     return len(plan["files"]), len(plan["node_dirs"])
 
 
-def delete_verified_originals(plan):
+def delete_verified_originals(plan, missing_ok=False):
     total_removed = 0
     total_bytes = 0
+    skipped_missing = 0
     prefix_removed = {prefix: 0 for prefix in plan["prefix_file_counts"]}
 
     print(f"removing files:   {len(plan['files'])} verified originals", flush=True)
     for item in plan["files"]:
-        item["path"].unlink()
+        try:
+            item["path"].unlink()
+        except FileNotFoundError:
+            if not missing_ok:
+                raise
+            skipped_missing += 1
+            continue
         total_removed += 1
-        total_bytes += item["bytes"]
+        if item["bytes"] is not None:
+            total_bytes += item["bytes"]
         prefix_removed[item["prefix"]] += 1
 
     for prefix, count in prefix_removed.items():
         print(f"  {prefix}: removed {count} files", flush=True)
 
-    return total_removed, total_bytes, plan["prefix_dirs"], plan["node_dirs"]
+    return (
+        total_removed,
+        total_bytes,
+        plan["prefix_dirs"],
+        plan["node_dirs"],
+        skipped_missing,
+    )
 
 
 def remove_original(args):
@@ -1536,7 +1661,10 @@ def remove_original(args):
         prefixes,
         parse_step_tokens(args.steps),
         args.step_limit,
+        args.trust_manifest,
     )
+    if args.trust_manifest:
+        verify_manifest_outputs(args.output_dir, plan)
     estimated_files, estimated_nodes = estimate_removal_from_plan(plan)
 
     print("\nPIC-NIX remove-original")
@@ -1545,6 +1673,8 @@ def remove_original(args):
     print(f"output-dir:       {args.output_dir}")
     print(f"prefixes:         {', '.join(prefixes)}")
     print(f"verified level:   {verification.get('level', 'unknown')}")
+    if args.trust_manifest:
+        print("trust-manifest:   enabled")
     print(f"files to remove:  {estimated_files} estimated")
     print(f"node dirs:        {estimated_nodes} candidates")
     print("kept:             hdf5/, profile/log/config/unmatched files")
@@ -1554,6 +1684,8 @@ def remove_original(args):
         return
 
     _, plan = matching_verification(args, manifest, prefixes)
+    if args.trust_manifest:
+        verify_manifest_outputs(args.output_dir, plan)
 
     if not args.yes:
         print("")
@@ -1563,7 +1695,9 @@ def remove_original(args):
         if response != REMOVE_CONFIRMATION:
             raise SystemExit("remove-original cancelled")
 
-    total_removed, total_bytes, prefix_dirs, node_dirs = delete_verified_originals(plan)
+    total_removed, total_bytes, prefix_dirs, node_dirs, skipped_missing = (
+        delete_verified_originals(plan, args.trust_manifest)
+    )
 
     relocated_metadata, kept_metadata = relocate_node_metadata(
         args.input_dir, node_dirs
@@ -1573,7 +1707,12 @@ def remove_original(args):
 
     print("")
     print(f"files removed:    {total_removed}")
-    print(f"bytes freed:      {total_bytes / 1024.0 / 1024.0:.3f} MiB")
+    if args.trust_manifest:
+        print("bytes freed:      unknown in trust-manifest mode")
+    else:
+        print(f"bytes freed:      {total_bytes / 1024.0 / 1024.0:.3f} MiB")
+    if skipped_missing:
+        print(f"missing skipped:  {skipped_missing}")
     if relocated_metadata:
         print(f"metadata moved:   {len(relocated_metadata)} files")
     print(f"dirs removed:     {len(removed_prefix_dirs) + len(removed_node_dirs)}")

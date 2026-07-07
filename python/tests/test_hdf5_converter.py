@@ -93,9 +93,8 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert manifest["verification"]["status"] == "passed"
     assert manifest["verification"]["level"] == "fast"
     assert manifest["verification"]["raw_fingerprint"]["hdf5_files"] == 2
-    assert manifest["verification"]["raw_fingerprint"]["originals"]["files"] == 8
-    raw_files = manifest["verification"]["raw_fingerprint"]["originals"]["raw_files"]
-    assert all(item["step"] == "00000000" for item in raw_files)
+    assert "originals" not in manifest["verification"]["raw_fingerprint"]
+    assert "raw_files" not in manifest["verification"]["raw_fingerprint"]
 
     with h5py.File(output_dir / "field.vds.h5", "r") as h5fp:
         field = h5fp["field/00000000/uf"][...]
@@ -227,6 +226,18 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
     manifest = json.loads(manifest_path.read_text())
     assert manifest["verification"]["status"] == "passed"
 
+    with pytest.raises(ValueError, match="rerun verify --verify-level full"):
+        run_converter(
+            monkeypatch,
+            "remove-original",
+            "--input-dir",
+            input_dir,
+            "--prefix",
+            "field",
+            "--yes",
+        )
+    assert (input_dir / "node000000" / "field" / "00000000.json").exists()
+
     run_converter(
         monkeypatch,
         "remove-original",
@@ -235,6 +246,7 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
         "--prefix",
         "field",
         "--dry-run",
+        "--trust-manifest",
     )
     assert (input_dir / "node000000" / "field" / "00000000.json").exists()
 
@@ -246,6 +258,7 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
         "--prefix",
         "field",
         "--yes",
+        "--trust-manifest",
     )
     assert not (input_dir / "node000000" / "field").exists()
     assert not (input_dir / "node000001" / "field").exists()
@@ -265,6 +278,7 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
         "--prefix",
         "particle",
         "--yes",
+        "--trust-manifest",
     )
     assert not (input_dir / "node000000").exists()
     assert not (input_dir / "node000001").exists()
@@ -282,7 +296,16 @@ def test_remove_original_uses_verified_manifest_file_list(tmp_path, monkeypatch)
         "--overwrite",
         "--no-verify",
     )
-    run_converter(monkeypatch, "verify", "--input-dir", input_dir, "--prefix", "field")
+    run_converter(
+        monkeypatch,
+        "verify",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--verify-level",
+        "full",
+    )
 
     def fail_discovery(*args, **kwargs):
         raise AssertionError("remove-original should use the verified manifest")
@@ -307,12 +330,22 @@ def test_remove_original_uses_verified_manifest_file_list(tmp_path, monkeypatch)
     assert (input_dir / "node000000" / "particle").exists()
 
 
-def test_remove_original_rejects_modified_raw_files_after_fast_verify(
+def test_remove_original_rejects_modified_raw_files_after_full_verify(
     tmp_path, monkeypatch
 ):
     input_dir = make_posix_fixture(tmp_path)
 
     run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "field")
+    run_converter(
+        monkeypatch,
+        "verify",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--verify-level",
+        "full",
+    )
     raw_path = input_dir / "node000000" / "field" / "00000000.data"
     raw_path.write_bytes(raw_path.read_bytes() + b"stale")
 
@@ -334,6 +367,16 @@ def test_remove_original_dry_run_skips_file_preflight(tmp_path, monkeypatch):
     input_dir = make_posix_fixture(tmp_path)
 
     run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "field")
+    run_converter(
+        monkeypatch,
+        "verify",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--verify-level",
+        "full",
+    )
 
     def fail_preflight(*args, **kwargs):
         raise AssertionError("dry-run should not stat-check original files")
@@ -368,6 +411,7 @@ def test_remove_original_respects_selected_steps(tmp_path, monkeypatch):
         "--steps",
         "0",
         "--yes",
+        "--trust-manifest",
     )
 
     assert not (input_dir / "node000000" / "field" / "00000000.json").exists()
@@ -392,6 +436,7 @@ def test_remove_original_respects_step_limit(tmp_path, monkeypatch):
         "--step-limit",
         "1",
         "--yes",
+        "--trust-manifest",
     )
 
     assert not (input_dir / "node000000" / "field" / "00000000.json").exists()
@@ -420,6 +465,7 @@ def test_remove_original_preserves_unreferenced_data(tmp_path, monkeypatch):
         "--prefix",
         "field",
         "--yes",
+        "--trust-manifest",
     )
 
     assert not (input_dir / "node000000" / "field" / "00000000.json").exists()
