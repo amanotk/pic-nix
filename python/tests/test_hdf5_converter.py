@@ -113,6 +113,150 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert ids.tolist() == [100, 101, 110, 111]
 
 
+def test_particle_conversion_writes_bbox_index(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "2",
+        "--overwrite",
+    )
+
+    with h5py.File(input_dir / "hdf5" / "particle.vds.h5", "r") as h5fp:
+        bbox = h5fp["particle_bbox/00000000/up00"]
+        assert bbox.attrs["schema_version"] == "particle-bbox-v1"
+        assert bbox.attrs["group_size"] == 2
+        assert bbox.attrs["position_columns"] == "x=0,y=1,z=2"
+        assert bbox["start"][...].tolist() == [0, 2]
+        assert bbox["stop"][...].tolist() == [2, 4]
+        assert bbox["count"][...].tolist() == [2, 2]
+        np.testing.assert_allclose(bbox["xmin"][...], [1.0, 2.0])
+        np.testing.assert_allclose(bbox["xmax"][...], [7.0, 8.0])
+        np.testing.assert_allclose(bbox["ymin"][...], [2.0, 2.0])
+        np.testing.assert_allclose(bbox["ymax"][...], [8.0, 8.0])
+        np.testing.assert_allclose(bbox["zmin"][...], [3.0, 3.0])
+        np.testing.assert_allclose(bbox["zmax"][...], [9.0, 9.0])
+
+
+def test_index_bbox_command_adds_missing_existing_hdf5_index(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "2",
+        "--overwrite",
+        "--no-verify",
+    )
+    vds_path = input_dir / "hdf5" / "particle.vds.h5"
+    with h5py.File(vds_path, "r+") as h5fp:
+        del h5fp["particle_bbox"]
+
+    run_converter(
+        monkeypatch,
+        "index-bbox",
+        "--hdf5-dir",
+        input_dir / "hdf5",
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "2",
+    )
+
+    with h5py.File(vds_path, "r") as h5fp:
+        bbox = h5fp["particle_bbox/00000000/up00"]
+        assert bbox["start"][...].tolist() == [0, 2]
+        assert bbox["stop"][...].tolist() == [2, 4]
+
+    with pytest.raises(ValueError, match="incompatible particle bbox"):
+        run_converter(
+            monkeypatch,
+            "index-bbox",
+            "--hdf5-dir",
+            input_dir / "hdf5",
+            "--prefix",
+            "particle",
+            "--bbox-group-size",
+            "3",
+        )
+
+    run_converter(
+        monkeypatch,
+        "index-bbox",
+        "--hdf5-dir",
+        input_dir / "hdf5",
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "3",
+        "--overwrite",
+    )
+    with h5py.File(vds_path, "r") as h5fp:
+        bbox = h5fp["particle_bbox/00000000/up00"]
+        assert bbox.attrs["group_size"] == 3
+        assert bbox["start"][...].tolist() == [0, 3]
+        assert bbox["stop"][...].tolist() == [3, 4]
+
+
+def test_index_bbox_discovers_up_particle_prefix_without_particle_name(
+    tmp_path, monkeypatch
+):
+    input_dir = make_posix_fixture(tmp_path)
+    for node_index in range(2):
+        particle = np.array(
+            [
+                [1.0 + node_index, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0],
+                [7.0 + node_index, 8.0, 9.0, 10.0, 11.0, 12.0, 0.0],
+            ],
+            dtype="<f8",
+        )
+        ids = np.array([300 + node_index * 10, 301 + node_index * 10], dtype="<u8")
+        particle[:, -1] = ids.view("<f8")
+        write_step(
+            input_dir / f"node{node_index:06d}" / "electron",
+            "electron",
+            "00000000",
+            "up00",
+            particle,
+        )
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "electron",
+        "--bbox-group-size",
+        "2",
+        "--overwrite",
+        "--no-verify",
+    )
+    vds_path = input_dir / "hdf5" / "electron.vds.h5"
+    with h5py.File(vds_path, "r+") as h5fp:
+        del h5fp["particle_bbox"]
+
+    run_converter(
+        monkeypatch,
+        "index-bbox",
+        "--hdf5-dir",
+        input_dir / "hdf5",
+        "--bbox-group-size",
+        "2",
+    )
+
+    with h5py.File(vds_path, "r") as h5fp:
+        assert h5fp["particle_bbox/00000000/up00/start"][...].tolist() == [0, 2]
+
+
 def test_read_dataset_slab_preserves_singleton_rank1_shape(tmp_path):
     data_path = tmp_path / "singleton.data"
     data_path.write_bytes(np.array([42.0], dtype="<f8").tobytes())
