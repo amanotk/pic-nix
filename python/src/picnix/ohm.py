@@ -43,9 +43,14 @@ an ``N \\times N`` matrix. Both are solved by conjugate gradient with
 optional external preconditioning.
 """
 
+import inspect
+
 import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import cg
+
+
+_CG_TOL_KWARG = "rtol" if "rtol" in inspect.signature(cg).parameters else "tol"
 
 
 __all__ = [
@@ -147,7 +152,14 @@ def _cg_solve(A, b, rtol, maxiter, M):
         nonlocal niter
         niter += 1
 
-    x, status = cg(A, b, M=M, rtol=rtol, maxiter=maxiter, callback=count_iteration)
+    x, status = cg(
+        A,
+        b,
+        M=M,
+        **{_CG_TOL_KWARG: rtol},
+        maxiter=maxiter,
+        callback=count_iteration,
+    )
     return x, int(status), niter
 
 
