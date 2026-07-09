@@ -323,10 +323,10 @@ public:
     cleanup_checkpoint(prefix);
   }
 
-  void test_load_rejects_missing_status()
+  void test_load_accepts_legacy_missing_status()
   {
     const int   numchunk = 10;
-    std::string prefix   = "foo_missing_status";
+    std::string prefix   = "foo_legacy_missing_status";
 
     StateHandler statehandler;
     cleanup_checkpoint(prefix);
@@ -336,6 +336,31 @@ public:
     MPI_Barrier(MPI_COMM_WORLD);
     if (thisrank == 0) {
       std::filesystem::remove(statehandler.get_status_filename(prefix));
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    bool load = statehandler.load(get_interface(), prefix);
+
+    REQUIRE(load == true);
+    REQUIRE(validate_chunkvec(numchunk) == true);
+
+    cleanup_checkpoint(prefix);
+  }
+
+  void test_load_rejects_malformed_status()
+  {
+    const int   numchunk = 10;
+    std::string prefix   = "foo_malformed_status";
+
+    StateHandler statehandler;
+    cleanup_checkpoint(prefix);
+    prepare_chunkvec(numchunk);
+
+    statehandler.save(get_interface(), prefix);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (thisrank == 0) {
+      std::ofstream ofs(statehandler.get_status_filename(prefix));
+      ofs << "{ invalid json";
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -393,13 +418,22 @@ TEST_CASE("test_save_load_checkpoint_status", "[np=8]")
   app.test_save_load_checkpoint_status();
 }
 
-TEST_CASE("test_load_rejects_missing_status", "[np=8]")
+TEST_CASE("test_load_accepts_legacy_missing_status", "[np=8]")
 {
   if (!require_mpi_size(8)) {
     return;
   }
   MockApplication app;
-  app.test_load_rejects_missing_status();
+  app.test_load_accepts_legacy_missing_status();
+}
+
+TEST_CASE("test_load_rejects_malformed_status", "[np=8]")
+{
+  if (!require_mpi_size(8)) {
+    return;
+  }
+  MockApplication app;
+  app.test_load_rejects_malformed_status();
 }
 
 TEST_CASE("test_load_rejects_incomplete_status", "[np=8]")

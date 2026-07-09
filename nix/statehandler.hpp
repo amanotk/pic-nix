@@ -254,30 +254,31 @@ protected:
     std::ifstream ifs(filename);
 
     if (ifs.is_open() == false) {
-      ERROR << tfm::format("checkpoint status file not found: %s", filename);
+      DEBUG0 << tfm::format("checkpoint status file not found: %s; treating as legacy checkpoint",
+                            filename);
+      return true;
+    }
+
+    json payload = json::parse(ifs, nullptr, false);
+    if (payload.is_discarded()) {
+      ERROR << tfm::format("failed to parse checkpoint status file: %s", filename);
       return false;
     }
 
-    json payload = {};
-    try {
-      ifs >> payload;
-    } catch (const std::exception& exception) {
-      ERROR << tfm::format("failed to parse checkpoint status file %s: %s", filename,
-                           exception.what());
-      return false;
-    }
-
-    if (payload.value("status", "") != "complete") {
+    if (payload.contains("status") == false || payload["status"].is_string() == false ||
+        payload["status"].get<std::string>() != "complete") {
       ERROR << tfm::format("checkpoint is not complete: %s", filename);
       return false;
     }
 
-    if (payload.value("prefix", "") != prefix) {
+    if (payload.contains("prefix") == false || payload["prefix"].is_string() == false ||
+        payload["prefix"].get<std::string>() != prefix) {
       ERROR << tfm::format("checkpoint status prefix mismatch: %s", filename);
       return false;
     }
 
-    if (payload.value("nprocess", -1) != nprocess) {
+    if (payload.contains("nprocess") == false || payload["nprocess"].is_number_integer() == false ||
+        payload["nprocess"].get<int>() != nprocess) {
       ERROR << tfm::format("checkpoint status nprocess mismatch: %s", filename);
       return false;
     }
