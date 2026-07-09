@@ -40,12 +40,17 @@ In 2D, the standard finite-difference discretization of
 ``\\nabla \\times \\nabla \\times`` couples ``(E_x, E_y)`` through a
 ``2N \\times 2N`` block matrix (``N = N_x N_y``); ``E_z`` is decoupled in
 an ``N \\times N`` matrix. Both are solved by conjugate gradient with
-optional pyamg AMG preconditioning.
+optional external preconditioning.
 """
 
+import inspect
+
 import numpy as np
-import pyamg
 from scipy import sparse
+from scipy.sparse.linalg import cg
+
+
+_CG_TOL_KWARG = "rtol" if "rtol" in inspect.signature(cg).parameters else "tol"
 
 
 __all__ = [
@@ -55,6 +60,10 @@ __all__ = [
     "calc_e_ohm_2d",
     "transform_moments",
     "qm_per_species_from_config",
+    "build_ohm_bases_from_grid",
+    "build_ohm_bases",
+    "assemble_matrix_1",
+    "assemble_matrix_2",
 ]
 
 
@@ -82,25 +91,8 @@ def _periodic_second_difference_matrix(n):
     return D.tocsr()
 
 
-# -*- Solver cores -*-
-
-
-def _solve_ohm_1d_core(L, S_yz, c2_dx2, rtol, maxiter, M):
-    """Solve the circulant 1D system ``(Lambda - c^2 D^2) E = S`` once.
-
-    Used for both the ``E_y`` and ``E_z`` components.
-    """
-    N = L.shape[0]
-    D2 = _periodic_second_difference_matrix(N)
-    A = (-c2_dx2) * D2 + sparse.diags(L, format="csr")
-    if M is None:
-        M = pyamg.smoothed_aggregation_solver(A).aspreconditioner(cycle="V")
-    x, status = pyamg.krylov.cg(A, S_yz, M=M, tol=rtol, maxiter=maxiter)
-    return x, int(status)
-
-
-def _build_ohm_matrices_2d(Nx, Ny, L, c2_dx2, c2_dx4):
-    """Build the coupled (Ex, Ey) and decoupled Ez sparse matrices."""
+def build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4):
+    """Build Lambda-independent base matrices for the 2D Ohm solver."""
     Ix = sparse.eye(Nx, format="csr")
     Iy = sparse.eye(Ny, format="csr")
     Dx1 = _periodic_first_difference_matrix(Nx)
@@ -111,37 +103,110 @@ def _build_ohm_matrices_2d(Nx, Ny, L, c2_dx2, c2_dx4):
     Ly = sparse.kron(Dyy, Ix, format="csr")
     Cxy = sparse.kron(Dy1, Dx1, format="csr")
 
-    L_flat = L.flatten(order="C")
-    A1 = sparse.bmat(
+    base1 = sparse.bmat(
         [[(-c2_dx2) * Ly, c2_dx4 * Cxy], [c2_dx4 * Cxy.T, (-c2_dx2) * Lx]],
         format="csr",
-    ) + sparse.diags(np.concatenate((L_flat, L_flat)), format="csr")
-    A2 = (-c2_dx2) * (Lx + Ly) + sparse.diags(L_flat, format="csr")
-    return A1, A2
+    )
+    base2 = (-c2_dx2) * (Lx + Ly)
+    return base1, base2
 
 
-def _solve_ohm_2d_core(L, S, c2_dx2, c2_dx4, rtol, maxiter, M1, M2):
+def build_ohm_bases_from_grid(Nx, Ny, c, delta):
+    """Build Lambda-independent 2D base matrices from grid parameters."""
+    c2_dx2 = c * c / (delta * delta)
+    c2_dx4 = c2_dx2 / 4.0
+    return build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+
+
+def assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=None):
+    """Assemble the coupled ``(E_x, E_y)`` sparse matrix."""
+    if base is None:
+        base, _ = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+    expected_shape = (2 * Nx * Ny, 2 * Nx * Ny)
+    if base.shape != expected_shape:
+        raise ValueError(f"base shape {base.shape} must be {expected_shape}")
+
+    L_flat = L.flatten(order="C")
+    return base + sparse.diags(np.concatenate((L_flat, L_flat)), format="csr")
+
+
+def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None):
+    """Assemble the decoupled ``E_z`` sparse matrix."""
+    if base is None:
+        _, base = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx2 / 4.0)
+    expected_shape = (Nx * Ny, Nx * Ny)
+    if base.shape != expected_shape:
+        raise ValueError(f"base shape {base.shape} must be {expected_shape}")
+
+    L_flat = L.flatten(order="C")
+    return base + sparse.diags(L_flat, format="csr")
+
+
+# -*- Solver cores -*-
+
+
+def _cg_solve(A, b, rtol, maxiter, M):
+    niter = 0
+
+    def count_iteration(_):
+        nonlocal niter
+        niter += 1
+
+    x, status = cg(
+        A,
+        b,
+        M=M,
+        **{_CG_TOL_KWARG: rtol},
+        maxiter=maxiter,
+        callback=count_iteration,
+    )
+    return x, int(status), niter
+
+
+def _solve_ohm_1d_core(L, S_yz, c2_dx2, rtol, maxiter, M):
+    """Solve the circulant 1D system ``(Lambda - c^2 D^2) E = S`` once.
+
+    Used for both the ``E_y`` and ``E_z`` components.
+    """
+    N = L.shape[0]
+    D2 = _periodic_second_difference_matrix(N)
+    A = (-c2_dx2) * D2 + sparse.diags(L, format="csr")
+    return _cg_solve(A, S_yz, rtol, maxiter, M)
+
+
+def _build_ohm_matrices_2d(Nx, Ny, L, c2_dx2, c2_dx4):
+    """Build the coupled (Ex, Ey) and decoupled Ez sparse matrices."""
+    base1, base2 = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+    return (
+        assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=base1),
+        assemble_matrix_2(Nx, Ny, L, c2_dx2, base=base2),
+    )
+
+
+def _solve_ohm_2d_core(L, S, c2_dx2, c2_dx4, rtol, maxiter, M1, M2, base1, base2):
     """Solve the 2D periodic system, returning ``E`` of shape ``(Ny, Nx, 3)``."""
     Ny, Nx = L.shape
     N = Nx * Ny
-    A1, A2 = _build_ohm_matrices_2d(Nx, Ny, L, c2_dx2, c2_dx4)
+    if base1 is None or base2 is None:
+        built_base1, built_base2 = build_ohm_bases(Nx, Ny, c2_dx2, c2_dx4)
+        if base1 is None:
+            base1 = built_base1
+        if base2 is None:
+            base2 = built_base2
+    A1 = assemble_matrix_1(Nx, Ny, L, c2_dx2, c2_dx4, base=base1)
+    A2 = assemble_matrix_2(Nx, Ny, L, c2_dx2, base=base2)
 
     S1 = np.concatenate((S[..., 0].flatten(order="C"), S[..., 1].flatten(order="C")))
     S2 = S[..., 2].flatten(order="C")
 
-    if M1 is None:
-        M1 = pyamg.smoothed_aggregation_solver(A1).aspreconditioner(cycle="V")
-    if M2 is None:
-        M2 = pyamg.smoothed_aggregation_solver(A2).aspreconditioner(cycle="V")
-
-    E1, status_1 = pyamg.krylov.cg(A1, S1, M=M1, tol=rtol, maxiter=maxiter)
-    E2, status_2 = pyamg.krylov.cg(A2, S2, M=M2, tol=rtol, maxiter=maxiter)
+    E1, status_1, niter_1 = _cg_solve(A1, S1, rtol, maxiter, M1)
+    E2, status_2, niter_2 = _cg_solve(A2, S2, rtol, maxiter, M2)
 
     E = np.zeros((Ny, Nx, 3), dtype=np.float64)
     E[..., 0] = E1[:N].reshape((Ny, Nx), order="C")
     E[..., 1] = E1[N:].reshape((Ny, Nx), order="C")
     E[..., 2] = E2.reshape((Ny, Nx), order="C")
-    return E, int(status_1), int(status_2)
+    return E, int(status_1), int(status_2), niter_1, niter_2
 
 
 # -*- Per-species q/m resolution and moment transformation -*-
@@ -292,12 +357,20 @@ def solve_ohm_1d(
     c2_dx2 = c * c / (delta * delta)
     E = np.empty((L.shape[0], 3), dtype=np.float64)
     E[:, 0] = S[:, 0] / L
-    E[:, 1], status_y = _solve_ohm_1d_core(L, S[:, 1], c2_dx2, rtol, maxiter, M)
-    E[:, 2], status_z = _solve_ohm_1d_core(L, S[:, 2], c2_dx2, rtol, maxiter, M)
+    E[:, 1], status_y, niter_y = _solve_ohm_1d_core(
+        L, S[:, 1], c2_dx2, rtol, maxiter, M
+    )
+    E[:, 2], status_z, niter_z = _solve_ohm_1d_core(
+        L, S[:, 2], c2_dx2, rtol, maxiter, M
+    )
 
     if not return_info:
         return E
-    return E, {"status_yz": (status_y, status_z), "niter": maxiter}
+    return E, {
+        "status_yz": (status_y, status_z),
+        "niter": max(niter_y, niter_z),
+        "niter_yz": (niter_y, niter_z),
+    }
 
 
 def solve_ohm_2d(
@@ -310,15 +383,19 @@ def solve_ohm_2d(
     maxiter=1000,
     M1=None,
     M2=None,
+    base1=None,
+    base2=None,
     return_info=False,
 ):
     """Solve the 2D periodic generalized Ohm's law in the x-y plane.
 
     The ``(E_x, E_y)`` equations are coupled through a ``2N x 2N`` block
     matrix (``N = N_x N_y``); ``E_z`` is decoupled in an ``N x N``
-    matrix. Both are solved by CG with optional pyamg AMG preconditioning.
+    matrix. Both are solved by CG with optional external preconditioning.
 
     ``L`` has shape ``(Ny, Nx)``, ``S`` has shape ``(Ny, Nx, 3)``.
+    ``base1`` and ``base2`` may be supplied from :func:`build_ohm_bases_from_grid`
+    to reuse the Lambda-independent stencil across repeated solves.
     """
     L = np.asarray(L, dtype=np.float64)
     S = np.asarray(S, dtype=np.float64)
@@ -329,8 +406,8 @@ def solve_ohm_2d(
 
     c2_dx2 = c * c / (delta * delta)
     c2_dx4 = c2_dx2 / 4.0
-    E, status_1, status_2 = _solve_ohm_2d_core(
-        L, S, c2_dx2, c2_dx4, rtol, maxiter, M1, M2
+    E, status_1, status_2, niter_1, niter_2 = _solve_ohm_2d_core(
+        L, S, c2_dx2, c2_dx4, rtol, maxiter, M1, M2, base1, base2
     )
 
     if not return_info:
@@ -338,8 +415,8 @@ def solve_ohm_2d(
     return E, {
         "status_1": status_1,
         "status_2": status_2,
-        "niter_1": maxiter,
-        "niter_2": maxiter,
+        "niter_1": niter_1,
+        "niter_2": niter_2,
     }
 
 
