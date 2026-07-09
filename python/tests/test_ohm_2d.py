@@ -204,6 +204,7 @@ def test_solve_ohm_2d_default_vs_precomputed_base():
     """Default path matches the path with precomputed base matrices."""
     Nx, Ny = 10, 8
     delta = 1.0
+    c = 1.0
 
     x = np.arange(Nx)
     y = np.arange(Ny)
@@ -214,10 +215,28 @@ def test_solve_ohm_2d_default_vs_precomputed_base():
     rng = np.random.default_rng(123)
     S = rng.normal(size=(Ny, Nx, 3))
 
-    E_default = ohm.solve_ohm_2d(L, S, delta)
-    E_precomp = ohm.solve_ohm_2d(L, S, delta)
+    base1, base2 = ohm.build_ohm_bases_from_grid(Nx, Ny, c, delta)
+
+    E_default = ohm.solve_ohm_2d(L, S, delta, c=c)
+    E_precomp = ohm.solve_ohm_2d(L, S, delta, c=c, base1=base1, base2=base2)
 
     np.testing.assert_allclose(E_default, E_precomp, rtol=1e-11, atol=1e-12)
+
+
+def test_solve_ohm_2d_rejects_bad_precomputed_base_shape():
+    """solve_ohm_2d validates supplied base-matrix shapes."""
+    Nx, Ny = 10, 8
+    delta = 1.0
+    L = np.ones((Ny, Nx))
+    S = np.zeros((Ny, Nx, 3))
+
+    base1, base2 = ohm.build_ohm_bases_from_grid(Nx, Ny, c=1.0, delta=delta)
+
+    with pytest.raises(ValueError, match="base shape"):
+        ohm.solve_ohm_2d(L, S, delta, base1=base1[:-1, :-1], base2=base2)
+
+    with pytest.raises(ValueError, match="base shape"):
+        ohm.solve_ohm_2d(L, S, delta, base1=base1, base2=base2[:-1, :-1])
 
 
 # -*- general species support (3-species synthetic) -*-
