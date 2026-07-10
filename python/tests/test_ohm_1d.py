@@ -157,17 +157,17 @@ def test_transform_moments_general_species():
     qm = np.array([-1.0, 0.5, 0.1])
     qm2 = qm**2
 
-    M = ohm.transform_moments(um, qm)
+    L, G, P, R = ohm.transform_moments(um, qm)
 
     expected_Lambda = (um[..., 0] * qm2).sum(axis=-1)
     expected_Gamma_x = (um[..., 1] * qm2).sum(axis=-1)
     expected_Pxx = (um[..., 5] * qm).sum(axis=-1)
     expected_Pzz = (um[..., 7] * qm).sum(axis=-1)
 
-    np.testing.assert_allclose(M[..., 0], expected_Lambda)
-    np.testing.assert_allclose(M[..., 1], expected_Gamma_x)
-    np.testing.assert_allclose(M[..., 4], expected_Pxx)
-    np.testing.assert_allclose(M[..., 6], expected_Pzz)
+    np.testing.assert_allclose(L, expected_Lambda)
+    np.testing.assert_allclose(G[..., 0], expected_Gamma_x)
+    np.testing.assert_allclose(P[..., 0], expected_Pxx)
+    np.testing.assert_allclose(P[..., 2], expected_Pzz)
 
 
 # -*- CG status reporting -*-
@@ -208,7 +208,6 @@ def test_ohm_public_api_exported():
         "calc_e_ohm_1d",
         "calc_e_ohm_2d",
         "transform_moments",
-        "qm_per_species_from_config",
     ]:
         assert hasattr(picnix, name), f"picnix.{name} not exported"
 
@@ -219,21 +218,18 @@ def test_ohm_public_api_exported():
 class _MockRun:
     """Minimal picnix.Run stub for testing calc_e_ohm_1d / _2d."""
 
-    def __init__(self, uf, um, config):
+    def __init__(self, uf, um, config, qm):
         self._uf = uf
         self._um = um
         self.config = config
+        self.qm = qm
 
     def read_at(self, prefix, step):
         return {"uf": self._uf, "um": self._um}
 
 
 def test_calc_e_ohm_1d_dispatch():
-    """calc_e_ohm_1d returns shape (Nx, 3) and finite values for a 1D run.
-
-    Builds a 1D picnix-shaped snapshot (nc=1, ny=1, nx=N) and verifies
-    the result has shape (Nx, 3) and finite values.
-    """
+    """calc_e_ohm_1d returns shape (Nx, 3) and finite values for a 1D run."""
     Nx = 32
     Ns = 2
     delta = 0.1
@@ -255,73 +251,10 @@ def test_calc_e_ohm_1d_dispatch():
             "Ny": 1,
             "Nx": Nx,
             "delh": delta,
-            "mime": 25.0,
-            "wp": 1.0,
-            "nppc": 100,
         }
     }
-    run = _MockRun(uf, um, config)
+    qm = np.array([-1.0, 1.0 / 25.0])
+    run = _MockRun(uf, um, config, qm)
     E_ohm = picnix.calc_e_ohm_1d(run, 0, c=1.0)
     assert E_ohm.shape == (Nx, 3)
     assert np.all(np.isfinite(E_ohm))
-
-
-# -*- _resolve_qm priority order -*-
-
-
-def test_resolve_qm_explicit_arg_wins():
-    """Explicit qm_per_species argument overrides everything else."""
-
-    class _Run:
-        qm = [-2.0, -2.0, 0.5]
-        config = {"parameter": {"Ns": 3}}
-
-    explicit = [-7.0, -7.0, 7.0]
-    out = ohm._resolve_qm(_Run(), explicit)
-    np.testing.assert_array_equal(out, explicit)
-
-
-def test_resolve_qm_profile_field_used_when_no_explicit():
-    """run.qm is used when qm_per_species is not given."""
-
-    class _Run:
-        qm = [-1.0, -1.0, 0.01]
-        config = {"parameter": {"Ns": 3, "mime": 100.0, "wp": 1.0, "nppc": 100}}
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_array_equal(out, [-1.0, -1.0, 0.01])
-
-
-def test_resolve_qm_falls_back_to_config_when_no_profile_qm():
-    """Old profiles (no qm) fall back to qm_per_species_from_config."""
-
-    class _Run:
-        qm = None
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
-
-
-def test_resolve_qm_handles_missing_qm_attribute():
-    """If run has no qm attribute at all, fall back to config inference."""
-
-    class _Run:
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])

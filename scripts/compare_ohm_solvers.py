@@ -54,11 +54,7 @@ def average_2d_periodic(values, decimate):
     return filtered[decimate // 2 :: decimate, decimate // 2 :: decimate]
 
 
-def build_source(B, M, delta, c):
-    gamma = M[..., 1:4]
-    pxx, pyy = M[..., 4], M[..., 5]
-    pxy, pyz, pzx = M[..., 7], M[..., 8], M[..., 9]
-
+def build_source(B, G, P, R, delta, c):
     def ddx(values):
         return (np.roll(values, -1, axis=1) - np.roll(values, 1, axis=1)) / (
             2.0 * delta
@@ -70,9 +66,20 @@ def build_source(B, M, delta, c):
         )
 
     div_pi = np.stack(
-        [ddx(pxx) + ddy(pxy), ddx(pxy) + ddy(pyy), ddx(pzx) + ddy(pyz)], axis=-1
+        [
+            ddx(P[..., 0]) + ddy(P[..., 3]),
+            ddx(P[..., 3]) + ddy(P[..., 1]),
+            ddx(P[..., 5]) + ddy(P[..., 4]),
+        ],
+        axis=-1,
     )
-    return -np.cross(gamma, B, axis=-1) / c + div_pi
+    S = -np.cross(G, B, axis=-1) / c + div_pi
+
+    dR_dx = ddx(R)
+    dR_dy = ddy(R)
+    S[..., 0] -= c * c * dR_dx
+    S[..., 1] -= c * c * dR_dy
+    return S
 
 
 def divergence(E, delta):
@@ -142,24 +149,26 @@ def main():
         uf = average_2d_periodic(data["uf"][0], args.decimate)
         um = average_2d_periodic(data["um"][0], args.decimate)
         delta = float(run.delh) * args.decimate
-        M = ohm.transform_moments(um, qm)
-        rho = np.sum(um[..., :, 0] * qm, axis=-1)
-        source = build_source(uf[..., 3:6], M, delta, c)
-        S_reduced = ohm._build_reduced_rhs_2d(source, rho, delta, c)
+        L, G, P, R = ohm.transform_moments(um, qm)
+        source = build_source(uf[..., 3:6], G, P, R, delta, c)
         E_pic = uf[..., :3]
 
         times = {}
         results = {}
         for precond in args.preconditioner:
-            pc = None if precond == "none" else "fft"
             label = f"ohm-{precond}"
+            precond_op = None
+            if precond == "fft":
+                precond_op = ohm._build_fft_preconditioner_2d(
+                    L.shape, delta, c, float(np.mean(L))
+                )
             begin = time.perf_counter()
             E, info = ohm.solve_ohm_2d(
-                M[..., 0],
-                S_reduced,
+                L,
+                source,
                 delta,
                 c=c,
-                preconditioner=pc,
+                M=precond_op,
                 rtol=args.rtol,
                 maxiter=args.maxiter,
                 return_info=True,
@@ -167,17 +176,17 @@ def main():
             times[label] = time.perf_counter() - begin
             results[label] = (E, info)
 
-        pic_gauss = np.linalg.norm(divergence(E_pic, delta) - rho) / max(
-            np.linalg.norm(rho), np.finfo(np.float64).eps
+        pic_gauss = np.linalg.norm(divergence(E_pic, delta) - R) / max(
+            np.linalg.norm(R), np.finfo(np.float64).eps
         )
         print(
             f"step={step} grid={E_pic.shape[:2]} read={read_time:.3f}s "
-            f"rho_std={rho.std():.3e} pic_gauss={pic_gauss:.3e}"
+            f"rho_std={R.std():.3e} pic_gauss={pic_gauss:.3e}"
         )
         for precond in args.preconditioner:
             label = f"ohm-{precond}"
             elapsed, (E, info) = times[label], results[label]
-            print_result(label, elapsed, E, info, E_pic, rho, delta)
+            print_result(label, elapsed, E, info, E_pic, R, delta)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,9 @@
-# !/usr/bin/env python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import numpy as np
 import pytest
+from scipy.sparse.linalg import LinearOperator
 
 import picnix
 from picnix import ohm
@@ -48,7 +49,7 @@ def _manufactured_case(nx=12, ny=10, *, variable_lambda=True):
     S = reduced_rhs.copy()
     S[..., 0] += c * c * d_rho_dx
     S[..., 1] += c * c * d_rho_dy
-    return L, S, rho, E, delta, c, A
+    return L, S, rho, E, delta, c
 
 
 # -*- public API exports -*-
@@ -62,7 +63,6 @@ def test_ohm_public_api_exported():
         "calc_e_ohm_1d",
         "calc_e_ohm_2d",
         "transform_moments",
-        "qm_per_species_from_config",
     ]:
         assert hasattr(picnix, name), f"picnix.{name} not exported"
 
@@ -101,15 +101,18 @@ def test_solve_ohm_2d_preconditioner_validation():
     L = np.ones((6, 8))
     S = np.zeros((6, 8, 3))
 
-    with pytest.raises(ValueError, match="unknown preconditioner"):
-        ohm.solve_ohm_2d(L, S, 1.0, preconditioner="invalid")
-    with pytest.raises(TypeError, match="must be"):
-        ohm.solve_ohm_2d(L, S, 1.0, preconditioner=np.eye(L.size))
+    with pytest.raises(TypeError, match="must be a LinearOperator"):
+        ohm.solve_ohm_2d(L, S, 1.0, M="invalid")
+    with pytest.raises(TypeError, match="must be a LinearOperator"):
+        ohm.solve_ohm_2d(L, S, 1.0, M=np.eye(L.size))
 
-    matrix = ohm._assemble_ohm_matrix_2d(L, 1.0)
-    matrix.data[0] = np.nan
-    with pytest.raises(ValueError, match="finite values"):
-        ohm.solve_ohm_2d(L, S, 1.0, matrix=matrix)
+    wrong_shape = LinearOperator(
+        (L.size - 1, L.size - 1),
+        matvec=lambda v: v,
+        dtype=np.float64,
+    )
+    with pytest.raises(ValueError, match="preconditioner shape"):
+        ohm.solve_ohm_2d(L, S, 1.0, M=wrong_shape)
 
 
 # -*- source term construction -*-
@@ -124,13 +127,16 @@ def test_build_source_2d_uses_ny_nx_axes_for_pressure_gradients():
     xx = np.broadcast_to(x, (ny, nx))
     yy = np.broadcast_to(y[:, None], (ny, nx))
     B = np.zeros((ny, nx, 3))
-    M = np.zeros((ny, nx, 10))
+    G = np.zeros((ny, nx, 3))
+    P = np.zeros((ny, nx, 6))
 
-    M[..., 4] = xx**2 + 10 * yy
-    M[..., 5] = 3 * yy**2 - xx
-    M[..., 7] = 2 * xx + 5 * yy**2
-    M[..., 8] = yy**2 + 7 * xx
-    M[..., 9] = 4 * xx**2 - 3 * yy
+    P[..., 0] = xx**2 + 10 * yy
+    P[..., 1] = 3 * yy**2 - xx
+    P[..., 3] = 2 * xx + 5 * yy**2
+    P[..., 4] = yy**2 + 7 * xx
+    P[..., 5] = 4 * xx**2 - 3 * yy
+
+    R = np.zeros((ny, nx))
 
     def ddx(values):
         return (np.roll(values, -1, axis=-1) - np.roll(values, 1, axis=-1)) / (
@@ -144,19 +150,16 @@ def test_build_source_2d_uses_ny_nx_axes_for_pressure_gradients():
 
     expected = np.stack(
         [
-            ddx(M[..., 4]) + ddy(M[..., 7]),
-            ddx(M[..., 7]) + ddy(M[..., 5]),
-            ddx(M[..., 9]) + ddy(M[..., 8]),
+            ddx(P[..., 0]) + ddy(P[..., 3]),
+            ddx(P[..., 3]) + ddy(P[..., 1]),
+            ddx(P[..., 5]) + ddy(P[..., 4]),
         ],
         axis=-1,
     )
-    np.testing.assert_allclose(ohm._build_source_2d(B, M, delta, c=1.0), expected)
+    np.testing.assert_allclose(ohm._build_source_2d(B, G, P, R, delta, c=1.0), expected)
 
 
-# -*- reduced RHS (grad-rho correction) -*-
-
-
-def test_reduced_rhs_2d_charge_gradient_sign_and_components():
+def test_build_source_2d_charge_gradient_sign_and_components():
     nx, ny = 9, 7
     delta = 0.25
     c = 2.0
@@ -165,17 +168,20 @@ def test_reduced_rhs_2d_charge_gradient_sign_and_components():
     rho = np.sin(2.0 * np.pi * x / nx)[None, :]
     rho = np.broadcast_to(rho, (ny, nx)).copy()
     rho += 0.4 * np.cos(2.0 * np.pi * y[:, None] / ny)
-    S = np.full((ny, nx, 3), 0.3)
+    B = np.zeros((ny, nx, 3))
+    G = np.zeros((ny, nx, 3))
+    P = np.zeros((ny, nx, 6))
 
     d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
-    rhs = ohm._build_reduced_rhs_2d(S, rho, delta, c)
+    S_reduced = ohm._build_source_2d(B, G, P, rho, delta, c)
 
-    np.testing.assert_allclose(rhs[..., 0], S[..., 0] - c * c * d_rho_dx)
-    np.testing.assert_allclose(rhs[..., 1], S[..., 1] - c * c * d_rho_dy)
-    np.testing.assert_array_equal(rhs[..., 2], S[..., 2])
+    np.testing.assert_allclose(S_reduced[..., 0], -c * c * d_rho_dx)
+    np.testing.assert_allclose(S_reduced[..., 1], -c * c * d_rho_dy)
+    np.testing.assert_array_equal(S_reduced[..., 2], np.zeros_like(S_reduced[..., 2]))
 
-    constant_rhs = ohm._build_reduced_rhs_2d(S, np.ones_like(rho), delta, c)
-    np.testing.assert_array_equal(constant_rhs, S)
+    constant_rho = np.ones_like(rho)
+    constant_reduced = ohm._build_source_2d(B, G, P, constant_rho, delta, c)
+    np.testing.assert_array_equal(constant_reduced, np.zeros_like(constant_reduced))
 
 
 # -*- Fourier verification (Ez) -*-
@@ -279,11 +285,16 @@ class TestExEyFourier:
 
 
 def test_manufactured_solution_fft_preconditioning():
-    L, S, rho, expected, delta, c, _ = _manufactured_case(variable_lambda=True)
+    L, S, rho, expected, delta, c = _manufactured_case(variable_lambda=True)
 
-    S_reduced = ohm._build_reduced_rhs_2d(S, rho, delta, c)
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = S.copy()
+    S_reduced[..., 0] -= c * c * d_rho_dx
+    S_reduced[..., 1] -= c * c * d_rho_dy
+
+    M = ohm._build_fft_preconditioner_2d(L.shape, delta, c, float(np.mean(L)))
     solved, info = ohm.solve_ohm_2d(
-        L, S_reduced, delta, c=c, preconditioner="fft", rtol=1.0e-10, return_info=True
+        L, S_reduced, delta, c=c, M=M, rtol=1.0e-10, return_info=True
     )
 
     np.testing.assert_allclose(solved, expected, rtol=2.0e-9, atol=2.0e-10)
@@ -293,15 +304,19 @@ def test_manufactured_solution_fft_preconditioning():
 
 
 def test_manufactured_solution_unpreconditioned_cg():
-    L, S, rho, expected, delta, c, _ = _manufactured_case(variable_lambda=True)
+    L, S, rho, expected, delta, c = _manufactured_case(variable_lambda=True)
 
-    S_reduced = ohm._build_reduced_rhs_2d(S, rho, delta, c)
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = S.copy()
+    S_reduced[..., 0] -= c * c * d_rho_dx
+    S_reduced[..., 1] -= c * c * d_rho_dy
+
     solved, info = ohm.solve_ohm_2d(
         L,
         S_reduced,
         delta,
         c=c,
-        preconditioner=None,
+        M=None,
         rtol=1.0e-10,
         return_info=True,
     )
@@ -312,16 +327,20 @@ def test_manufactured_solution_unpreconditioned_cg():
     assert info["preconditioner"] == "none"
 
 
-def test_defaults_to_fft_preconditioning():
-    L, S, rho, expected, delta, c, _ = _manufactured_case(variable_lambda=True)
+def test_defaults_to_no_preconditioning():
+    L, S, rho, expected, delta, c = _manufactured_case(variable_lambda=True)
 
-    S_reduced = ohm._build_reduced_rhs_2d(S, rho, delta, c)
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = S.copy()
+    S_reduced[..., 0] -= c * c * d_rho_dx
+    S_reduced[..., 1] -= c * c * d_rho_dy
+
     solved, info = ohm.solve_ohm_2d(
         L, S_reduced, delta, c=c, rtol=1.0e-10, return_info=True
     )
 
     np.testing.assert_allclose(solved, expected, rtol=2.0e-9, atol=2.0e-10)
-    assert info["preconditioner"] == "fft"
+    assert info["preconditioner"] == "none"
 
 
 def test_cg_uses_relative_tolerance_for_small_rhs():
@@ -333,66 +352,6 @@ def test_cg_uses_relative_tolerance_for_small_rhs():
     np.testing.assert_allclose(solved, S, rtol=1.0e-10, atol=0.0)
     assert info["status"] == (0, 0, 0)
     assert max(info["relative_residual"]) < 1.0e-10
-
-
-# -*- base / matrix reuse -*-
-
-
-def test_reuses_base_and_matrix():
-    L, S, rho, expected, delta, c, A = _manufactured_case(variable_lambda=True)
-    ny, nx = L.shape
-    laplacian = ohm._build_laplacian_2d(nx, ny, delta, c=c)
-    S_reduced = ohm._build_reduced_rhs_2d(S, rho, delta, c)
-
-    solved_base, _ = ohm.solve_ohm_2d(
-        L, S_reduced, delta, c=c, base=laplacian, rtol=1.0e-10, return_info=True
-    )
-    solved_matrix, _ = ohm.solve_ohm_2d(
-        L,
-        S_reduced,
-        delta,
-        c=c,
-        matrix=A,
-        validate_matrix=False,
-        rtol=1.0e-10,
-        return_info=True,
-    )
-
-    np.testing.assert_allclose(solved_base, expected, rtol=2.0e-9, atol=2.0e-10)
-    np.testing.assert_allclose(solved_matrix, expected, rtol=2.0e-9, atol=2.0e-10)
-
-    with pytest.raises(ValueError, match="matrix does not match"):
-        ohm.solve_ohm_2d(2.0 * L, S_reduced, delta, c=c, matrix=A, rtol=1.0e-10)
-    with pytest.raises(ValueError, match="base does not match"):
-        ohm.solve_ohm_2d(L, S_reduced, delta, c=2.0 * c, base=laplacian, rtol=1.0e-10)
-
-    transposed_S = np.transpose(S_reduced, (1, 0, 2))
-    with pytest.raises(ValueError, match="matrix does not match"):
-        ohm.solve_ohm_2d(L.T, transposed_S, delta, c=c, matrix=A, rtol=1.0e-10)
-
-    corrupted = A.tolil(copy=True)
-    row = nx + 1
-    corrupted[row, row + 1] += 0.25
-    corrupted[row, row + 3] -= 0.25
-    with pytest.raises(ValueError, match="matrix does not match"):
-        ohm.solve_ohm_2d(
-            L, S_reduced, delta, c=c, matrix=corrupted.tocsr(), rtol=1.0e-10
-        )
-
-
-def test_reuses_reaction_only_matrix_when_c_is_zero():
-    L = np.full((6, 8), 2.0)
-    rng = np.random.default_rng(4)
-    S = rng.normal(size=(*L.shape, 3))
-    laplacian = ohm._build_laplacian_2d(8, 6, 1.0, c=0.0)
-    matrix = ohm._assemble_ohm_matrix_2d(L, 1.0, c=0.0)
-
-    solved_matrix = ohm.solve_ohm_2d(L, S, 1.0, c=0.0, matrix=matrix)
-    solved_base = ohm.solve_ohm_2d(L, S, 1.0, c=0.0, base=laplacian)
-
-    expected = S / L[..., None]
-    np.testing.assert_allclose(solved_matrix, expected, rtol=1.0e-13, atol=1.0e-13)
-    np.testing.assert_allclose(solved_base, expected, rtol=1.0e-13, atol=1.0e-13)
 
 
 # -*- CG convergence on manufactured case -*-
@@ -435,10 +394,11 @@ def test_solve_ohm_2d_return_info_status_ok():
 class _MockRun:
     """Minimal picnix.Run stub for testing calc_e_ohm_1d / _2d."""
 
-    def __init__(self, uf, um, config):
+    def __init__(self, uf, um, config, qm):
         self._uf = uf
         self._um = um
         self.config = config
+        self.qm = qm
 
     def read_at(self, prefix, step):
         return {"uf": self._uf, "um": self._um}
@@ -467,19 +427,17 @@ def test_calc_e_ohm_2d_dispatch():
             "Ny": Ny,
             "Nx": Nx,
             "delh": delta,
-            "mime": 25.0,
-            "wp": 1.0,
-            "nppc": 100,
         }
     }
-    run = _MockRun(uf, um, config)
+    qm = np.array([-1.0, 1.0 / 25.0])
+    run = _MockRun(uf, um, config, qm)
     E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0)
     assert E_ohm.shape == (Ny, Nx, 3)
     assert np.all(np.isfinite(E_ohm))
 
 
-def test_calc_e_ohm_2d_explicit_qm_required_for_3_species():
-    """For a 3-species run with no [[parameter.particle]], explicit qm is required."""
+def test_calc_e_ohm_2d_with_3_species():
+    """A 3-species run with run.qm set works."""
     Nx, Ny = 8, 8
     Ns = 3
     delta = 0.5
@@ -500,104 +458,8 @@ def test_calc_e_ohm_2d_explicit_qm_required_for_3_species():
             "delh": delta,
         }
     }
-    run = _MockRun(uf, um, config)
-
-    with pytest.raises(ValueError, match="Cannot infer qm"):
-        picnix.calc_e_ohm_2d(run, 0, c=1.0)
-
     qm = np.array([-1.0, 0.04, 0.04])
-    E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0, qm_per_species=qm)
-    assert E_ohm.shape == (Ny, Nx, 3)
-    assert np.all(np.isfinite(E_ohm))
-
-
-# -*- _resolve_qm priority order -*-
-
-
-def test_resolve_qm_2d_explicit_arg_wins():
-    """Explicit qm_per_species argument overrides everything else."""
-
-    class _Run:
-        qm = [-2.0, -2.0, 0.5]
-        config = {"parameter": {"Ns": 3}}
-
-    explicit = [-7.0, -7.0, 7.0]
-    out = ohm._resolve_qm(_Run(), explicit)
-    np.testing.assert_array_equal(out, explicit)
-
-
-def test_resolve_qm_2d_profile_field_used_when_no_explicit():
-    """run.qm is used when qm_per_species is not given."""
-
-    class _Run:
-        qm = [-1.0, -1.0, 0.01]
-        config = {"parameter": {"Ns": 3, "mime": 100.0, "wp": 1.0, "nppc": 100}}
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_array_equal(out, [-1.0, -1.0, 0.01])
-
-
-def test_resolve_qm_2d_falls_back_to_config_when_no_profile_qm():
-    """Old profiles (no qm) fall back to qm_per_species_from_config."""
-
-    class _Run:
-        qm = None
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
-
-
-def test_resolve_qm_2d_handles_missing_qm_attribute():
-    """If run has no qm attribute at all, fall back to config inference."""
-
-    class _Run:
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
-
-
-def test_calc_e_ohm_2d_uses_profile_qm_for_3_species():
-    """A 3-species run with run.qm set works without an explicit override."""
-
-    Nx, Ny = 8, 8
-    Ns = 3
-    delta = 0.5
-
-    um = np.zeros((1, Ny, Nx, Ns, 14))
-    um[..., 0, 0] = 1.0
-    um[..., 1, 0] = 1.0
-    um[..., 2, 0] = 1.0
-
-    uf = np.zeros((1, Ny, Nx, 6))
-    uf[..., 3] = 0.5
-
-    config = {
-        "parameter": {
-            "Ns": Ns,
-            "Ny": Ny,
-            "Nx": Nx,
-            "delh": delta,
-        }
-    }
-    run = _MockRun(uf, um, config)
-    run.qm = [-1.0, -1.0, 0.01]
-
+    run = _MockRun(uf, um, config, qm)
     E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0)
     assert E_ohm.shape == (Ny, Nx, 3)
     assert np.all(np.isfinite(E_ohm))
@@ -621,8 +483,7 @@ def test_transform_moments_three_species_consistent_with_2d_solve():
     um[..., 1, 0] = 1.0 / qm[1] ** 2
     um[..., 2, 0] = 1.0 / qm[2] ** 2
 
-    M = ohm.transform_moments(um, qm)
-    L = M[..., 0]
+    L, G, P, R = ohm.transform_moments(um, qm)
     assert np.allclose(L, 3.0)
 
     x = np.arange(Nx) * delta
