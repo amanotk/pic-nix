@@ -65,22 +65,23 @@ def test_solve_ohm_1d_fourier_yz(N, m):
 def test_solve_ohm_1d_fourier_x(N, m):
     """1D periodic Fourier verification for the E_x component.
 
-    In 1D the E_x equation reduces to ``Lambda * E_x = S_x`` (the
-    curl-curl operator vanishes), so ``E_x = cos(kx x)`` has the
-    pointwise source ``S_x = Lambda * E_x`` independent of the wavenumber.
+    All three components now use the same operator
+    ``(Lambda - c^2 d^2/dx^2) E = S``.
     """
     delta = 1.0
+    c = 1.0
     E0 = 0.8
     L_val = 0.5
 
     x = np.arange(N) * delta
     kx = 2 * np.pi * m / (N * delta)
     L = np.full(N, L_val)
+    lam = L_val + 4 * c * c / (delta * delta) * np.sin(np.pi * m / N) ** 2
 
     E_true = np.zeros((N, 3))
     E_true[:, 0] = E0 * np.cos(kx * x)
     S = np.zeros((N, 3))
-    S[:, 0] = L_val * E_true[:, 0]
+    S[:, 0] = lam * E_true[:, 0]
 
     E_sol = ohm.solve_ohm_1d(L, S, delta)
     rel_err = np.max(np.abs(E_sol[:, 0] - E_true[:, 0])) / np.max(np.abs(E_true[:, 0]))
@@ -191,7 +192,7 @@ def test_solve_ohm_1d_return_info_status_ok():
     S[:, 2] = lam * E_true[:, 2]
 
     E_sol, info = ohm.solve_ohm_1d(L, S, delta, return_info=True)
-    assert all(s == 0 for s in info["status_yz"]), f"statuses={info['status_yz']}"
+    assert all(s == 0 for s in info["status"]), f"statuses={info['status']}"
     rel_err = np.max(np.abs(E_sol - E_true)) / np.max(np.abs(E_true))
     assert rel_err < 1e-10
 

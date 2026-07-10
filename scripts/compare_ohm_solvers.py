@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Compare curl-curl and Gauss-reduced Ohm solvers against PIC field data."""
+"""Compare Ohm solver preconditioners against PIC field data."""
 
 import argparse
 import time
 
 import numpy as np
 
-VALID_PRECONDITIONERS = {"fft", "cg", "amg"}
+VALID_PRECONDITIONERS = {"fft", "none"}
 
 
 def parse_args():
@@ -28,8 +28,8 @@ def parse_args():
         nargs="+",
         choices=list(VALID_PRECONDITIONERS),
         default=["fft"],
-        help="Gauss-reduced preconditioners to compare (default: fft). "
-        "Multiple values run each variant.",
+        help="Preconditioners to compare (default: fft). "
+        "'none' runs unpreconditioned CG.",
     )
     return parser.parse_args()
 
@@ -97,12 +97,8 @@ def field_errors(E, reference, rho, delta):
 
 def print_result(name, elapsed, E, info, reference, rho, delta):
     l2, linf, gauss = field_errors(E, reference, rho, delta)
-    if name.startswith("curl-curl"):
-        status = (info["status_1"], info["status_2"])
-        niter = (info["niter_1"], info["niter_2"])
-    else:
-        status = info["status"]
-        niter = info["niter"]
+    status = info["status"]
+    niter = info["niter"]
     print(
         f"  {name:18s} solve={elapsed:7.3f}s status={status} niter={niter} "
         f"rel_l2={np.array2string(l2, precision=3)} "
@@ -149,59 +145,27 @@ def main():
         M = ohm.transform_moments(um, qm)
         rho = np.sum(um[..., :, 0] * qm, axis=-1)
         source = build_source(uf[..., 3:6], M, delta, c)
+        S_reduced = ohm._build_reduced_rhs_2d(source, rho, delta, c)
         E_pic = uf[..., :3]
 
-        begin = time.perf_counter()
-        E_curl, curl_info = ohm.solve_ohm_2d(
-            M[..., 0],
-            source,
-            delta,
-            c=c,
-            rtol=args.rtol,
-            maxiter=args.maxiter,
-            return_info=True,
-        )
-        curl_time = time.perf_counter() - begin
-
-        need_amg = "amg" in args.preconditioner
-        gauss_matrix = None
-        if need_amg:
-            gauss_matrix = ohm.assemble_ohm_gauss_matrix_2d(M[..., 0], delta, c=c)
-
-        reduced_times = {}
-        reduced_results = {}
+        times = {}
+        results = {}
         for precond in args.preconditioner:
-            if precond == "amg":
-                solver = "cg"
-                pc = "amg"
-                mat = gauss_matrix
-            elif precond == "cg":
-                solver = "cg"
-                pc = None
-                mat = None
-            else:  # fft
-                solver = "cg"
-                pc = "fft"
-                mat = None
-
-            label = f"gauss-{precond}"
+            pc = None if precond == "none" else "fft"
+            label = f"ohm-{precond}"
             begin = time.perf_counter()
-            E_reduced, reduced_info = ohm.solve_ohm_2d_gauss_reduced(
+            E, info = ohm.solve_ohm_2d(
                 M[..., 0],
-                source,
-                rho,
+                S_reduced,
                 delta,
                 c=c,
-                solver=solver,
                 preconditioner=pc,
-                matrix=mat,
-                validate_matrix=False,
                 rtol=args.rtol,
                 maxiter=args.maxiter,
                 return_info=True,
             )
-            reduced_times[label] = time.perf_counter() - begin
-            reduced_results[label] = (E_reduced, reduced_info)
+            times[label] = time.perf_counter() - begin
+            results[label] = (E, info)
 
         pic_gauss = np.linalg.norm(divergence(E_pic, delta) - rho) / max(
             np.linalg.norm(rho), np.finfo(np.float64).eps
@@ -210,14 +174,10 @@ def main():
             f"step={step} grid={E_pic.shape[:2]} read={read_time:.3f}s "
             f"rho_std={rho.std():.3e} pic_gauss={pic_gauss:.3e}"
         )
-        print_result("curl-curl", curl_time, E_curl, curl_info, E_pic, rho, delta)
-        for label in args.preconditioner:
-            precond_label = f"gauss-{label}"
-            elapsed, (E, info) = (
-                reduced_times[precond_label],
-                reduced_results[precond_label],
-            )
-            print_result(precond_label, elapsed, E, info, E_pic, rho, delta)
+        for precond in args.preconditioner:
+            label = f"ohm-{precond}"
+            elapsed, (E, info) = times[label], results[label]
+            print_result(label, elapsed, E, info, E_pic, rho, delta)
 
 
 if __name__ == "__main__":
