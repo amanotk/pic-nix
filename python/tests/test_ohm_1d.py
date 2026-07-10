@@ -27,15 +27,15 @@ def test_solve_ohm_1d_shape_validation():
 @pytest.mark.parametrize("N", [8, 16, 32, 64])
 @pytest.mark.parametrize("m", [1, 2, 3])
 def test_solve_ohm_1d_fourier_yz(N, m):
-    """1D periodic Fourier verification for the E_y and E_z components.
+    r"""1D periodic Fourier verification for the E_y and E_z components.
 
     ``E^alpha = E0 * cos(k_x * x)`` (alpha in {y, z}) is an eigenfunction
     of the 1D operator ``(Lambda - c^2 d^2/dx^2)`` with eigenvalue
 
-    .. math::
-
-        \\lambda(k_x) = \\Lambda + \\frac{4 c^2}{\\Delta^2} \\sin^2\\left(\\frac{k_x \\Delta}{2}\\right),
-        \\quad k_x = \\frac{2 \\pi m}{N \\Delta}.
+    ```math
+    \lambda(k_x) = \Lambda + \frac{4 c^2}{\Delta^2} \sin^2\!\left(\frac{k_x \Delta}{2}\right),
+    \quad k_x = \frac{2 \pi m}{N \Delta}.
+    ```
     """
     delta = 1.0
     c = 1.0

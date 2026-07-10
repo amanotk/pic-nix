@@ -12,9 +12,9 @@ field from particle moments, the magnetic field, and charge density:
 with periodic boundary conditions in all spatial directions.  
 All three electric-field components use the same scalar reaction-diffusion
 operator.  The charge-density gradient term comes from applying the
-curl-curl identity ``\nabla\times\nabla\times\boldsymbol{E}
-= \nabla(\nabla\cdot\boldsymbol{E})-\nabla^2\boldsymbol{E}`` and
-substituting Gauss's law ``\nabla\cdot\boldsymbol{E}=\rho``.
+curl-curl identity $\nabla\times\nabla\times\boldsymbol{E}
+= \nabla(\nabla\cdot\boldsymbol{E})-\nabla^2\boldsymbol{E}$ and
+substituting Gauss's law $\nabla\cdot\boldsymbol{E}=\rho$.
 
 The transformed moments are obtained from the per-species moment data
 (``um``) via
@@ -32,7 +32,7 @@ Charge density is reconstructed directly from raw moments as
 
 ## 1D  
 
-In 1D (``\partial/\partial y = \partial/\partial z = 0``) the reduced
+In 1D ($\partial/\partial y = \partial/\partial z = 0$) the reduced
 operator becomes
 
 ```math
@@ -51,20 +51,20 @@ S_z &= -\frac{1}{c}(\Gamma^x B^y - \Gamma^y B^x) + \partial_x \Pi^{xz}.
 ```
 
 All three components are solved identically by the same circulant system
-``(\Lambda - c^2 d^2/dx^2) E^\alpha = S^\alpha - c^2 \delta_{\alpha x} \partial_x \rho``
-discretized on a uniform grid of spacing ``\Delta``.  
+$(\Lambda - c^2 d^2/dx^2) E^\alpha = S^\alpha - c^2 \delta_{\alpha x} \partial_x \rho$
+discretized on a uniform grid of spacing $\Delta$.  
 
-For a constant ``\Lambda``, the Fourier eigenvalue is
+For a constant $\Lambda$, the Fourier eigenvalue is
 
 ```math
 \lambda(k_x) = \Lambda + \frac{4 c^2}{\Delta^2} \sin^2\!\left(\frac{k_x \Delta}{2}\right),
 ```
 
-with ``k_x = 2 \pi m / (N \Delta)``, ``m = 0, \ldots, N-1``.
+with $k_x = 2 \pi m / (N \Delta)$, $m = 0, \ldots, N-1$.
 
 ## 2D  
 
-In 2D in the x-y plane (``\partial/\partial z = 0``)
+In 2D in the x-y plane ($\partial/\partial z = 0$)
 
 ```math
 (\Lambda - c^2 \nabla^2) \, \boldsymbol{E}
@@ -73,9 +73,9 @@ In 2D in the x-y plane (``\partial/\partial z = 0``)
 
 The three components are decoupled and share the same finite-difference
 operator.  The in-plane components receive the charge-density gradient
-correction; ``E_z`` does not.
+correction; $E_z$ does not.
 
-For a constant ``\Lambda``, the Fourier eigenvalue is
+For a constant $\Lambda$, the Fourier eigenvalue is
 
 ```math
 \lambda(\boldsymbol{k})
@@ -86,7 +86,7 @@ For a constant ``\Lambda``, the Fourier eigenvalue is
   \right],
 ```
 
-for the 2D mode ``e^{i (k_x i \Delta + k_y j \Delta)}``.
+for the 2D mode $e^{i (k_x i \Delta + k_y j \Delta)}$.
 
 ## Solver  
 

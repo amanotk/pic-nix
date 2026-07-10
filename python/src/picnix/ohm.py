@@ -1,31 +1,31 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Generalized Ohm's law solver for picnix.
+r"""Generalized Ohm's law solver for picnix.
 
 Solves
 
-.. math::
-
-    (\\Lambda - c^2 \\nabla^2) \\boldsymbol{E}
-    = -\\frac{\\Gamma}{c} \\times \\boldsymbol{B}
-    + \\nabla \\cdot \\Pi - c^2 \\nabla \\rho,
+```math
+(\Lambda - c^2 \nabla^2) \boldsymbol{E}
+= -\frac{\Gamma}{c} \times \boldsymbol{B}
++ \nabla \cdot \Pi - c^2 \nabla \rho,
+```
 
 with periodic boundary conditions, using a scalar reaction-diffusion
 operator for all three electric-field components. The quantities
 
-.. math::
-
-    \\Lambda = \\sum_s \\left(\\frac{q_s}{m_s}\\right)^2
-                   \\int f_s\\, d\\boldsymbol{v}, \\qquad
-    \\Gamma = \\sum_s \\left(\\frac{q_s}{m_s}\\right)^2
-                   \\int \\boldsymbol{v}\\, f_s\\, d\\boldsymbol{v}, \\qquad
-    \\Pi    = \\sum_s \\frac{q_s}{m_s}
-                   \\int \\boldsymbol{v}\\boldsymbol{v}\\, f_s\\, d\\boldsymbol{v},
+```math
+\Lambda = \sum_s \left(\frac{q_s}{m_s}\right)^2
+               \int f_s\, d\boldsymbol{v}, \qquad
+\Gamma = \sum_s \left(\frac{q_s}{m_s}\right)^2
+               \int \boldsymbol{v}\, f_s\, d\boldsymbol{v}, \qquad
+\Pi    = \sum_s \frac{q_s}{m_s}
+               \int \boldsymbol{v}\boldsymbol{v}\, f_s\, d\boldsymbol{v},
+```
 
 are obtained from the per-species moment data emitted by PIC-NIX via
 :func:`transform_moments`, which also returns the charge density
-:math:`\\rho = \\sum_s (q_s/m_s) \\, um_{s,0}`.
+$`\rho = \sum_s (q_s/m_s) \, um_{s,0}`$.
 
 Two low-level solvers are provided:
 
@@ -34,10 +34,10 @@ Two low-level solvers are provided:
 
 Both expect a reduced source term
 
-.. math::
-
-    \\boldsymbol{S}_{\\text{reduced}}
-    = \\boldsymbol{S}_{\\text{original}} - c^2 \\nabla \\rho
+```math
+\boldsymbol{S}_{\text{reduced}}
+= \boldsymbol{S}_{\text{original}} - c^2 \nabla \rho
+```
 
 and solve the same scalar elliptic operator for all components.  The
 high-level helpers :func:`calc_e_ohm_1d` and :func:`calc_e_ohm_2d`
@@ -352,12 +352,12 @@ def solve_ohm_1d(
     min_lambda=0.0,
     return_info=False,
 ):
-    """Solve the 1D periodic reduced Ohm's law.
+    r"""Solve the 1D periodic reduced Ohm's law.
 
-    .. math::
-
-        (\\Lambda - c^2 d^2\\!/dx^2) \\boldsymbol{E}
-        = \\boldsymbol{S}
+    ```math
+    (\Lambda - c^2 d^2\!/dx^2) \boldsymbol{E}
+    = \boldsymbol{S}
+    ```
 
     Parameters
     ----------
@@ -428,12 +428,12 @@ def solve_ohm_2d(
     min_lambda=0.0,
     return_info=False,
 ):
-    """Solve the 2D periodic reduced Ohm's law in the x-y plane.
+    r"""Solve the 2D periodic reduced Ohm's law in the x-y plane.
 
-    .. math::
-
-        (\\Lambda - c^2 \\nabla^2) \\boldsymbol{E}
-        = \\boldsymbol{S}
+    ```math
+    (\Lambda - c^2 \nabla^2) \boldsymbol{E}
+    = \boldsymbol{S}
+    ```
 
     Parameters
     ----------
