@@ -190,19 +190,15 @@ def _build_laplacian_2d(Nx, Ny, delta, *, c=1.0):
     return (-(c * c) / (delta * delta)) * laplacian
 
 
-def _assemble_ohm_matrix_1d(L, delta, *, c=1.0, min_lambda=0.0):
+def _assemble_ohm_matrix_1d(L, delta, *, c=1.0):
     """Assemble ``diag(Lambda) - c^2 d^2/dx^2`` for a periodic 1D grid."""
-    L = _validate_lambda_1d(L, min_lambda)
-    _validate_grid_parameters(delta, c)
     N = L.shape[0]
     D2 = _periodic_second_difference_matrix(N)
     return (-(c * c) / (delta * delta)) * D2 + sparse.diags(L, format="csr")
 
 
-def _assemble_ohm_matrix_2d(L, delta, *, c=1.0, min_lambda=0.0):
+def _assemble_ohm_matrix_2d(L, delta, *, c=1.0):
     """Assemble ``diag(Lambda) - c^2 Laplacian`` for a periodic 2D grid."""
-    L = _validate_lambda_2d(L, min_lambda)
-    _validate_grid_parameters(delta, c)
     Ny, Nx = L.shape
     base = _build_laplacian_2d(Nx, Ny, delta, c=c)
     return base + sparse.diags(L.flatten(order="C"), format="csr")
