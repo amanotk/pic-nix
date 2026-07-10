@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 """Compare Ohm solver preconditioners against PIC field data."""
+
+from __future__ import annotations
 
 import argparse
 import time
@@ -52,34 +56,6 @@ def average_2d_periodic(values, decimate):
 
     filtered = ndimage.uniform_filter(values, size=decimate, axes=(0, 1), mode="wrap")
     return filtered[decimate // 2 :: decimate, decimate // 2 :: decimate]
-
-
-def build_source(B, G, P, R, delta, c):
-    def ddx(values):
-        return (np.roll(values, -1, axis=1) - np.roll(values, 1, axis=1)) / (
-            2.0 * delta
-        )
-
-    def ddy(values):
-        return (np.roll(values, -1, axis=0) - np.roll(values, 1, axis=0)) / (
-            2.0 * delta
-        )
-
-    div_pi = np.stack(
-        [
-            ddx(P[..., 0]) + ddy(P[..., 3]),
-            ddx(P[..., 3]) + ddy(P[..., 1]),
-            ddx(P[..., 5]) + ddy(P[..., 4]),
-        ],
-        axis=-1,
-    )
-    S = -np.cross(G, B, axis=-1) / c + div_pi
-
-    dR_dx = ddx(R)
-    dR_dy = ddy(R)
-    S[..., 0] -= c * c * dR_dx
-    S[..., 1] -= c * c * dR_dy
-    return S
 
 
 def divergence(E, delta):
@@ -149,8 +125,9 @@ def main():
         uf = average_2d_periodic(data["uf"][0], args.decimate)
         um = average_2d_periodic(data["um"][0], args.decimate)
         delta = float(run.delh) * args.decimate
+        B = uf[..., 3:6]
         L, G, P, R = ohm.transform_moments(um, qm)
-        source = build_source(uf[..., 3:6], G, P, R, delta, c)
+        source = ohm._build_source_2d(B, G, P, R, delta, c)
         E_pic = uf[..., :3]
 
         times = {}
