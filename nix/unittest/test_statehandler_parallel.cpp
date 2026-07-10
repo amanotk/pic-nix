@@ -308,7 +308,7 @@ public:
       std::ifstream ifs(statehandler.get_status_filename(prefix));
       json          status = json::parse(ifs);
       REQUIRE(status["status"] == "complete");
-      REQUIRE(status["prefix"] == prefix);
+      REQUIRE(status["prefix"] == std::filesystem::weakly_canonical(prefix).string());
       REQUIRE(status["curstep"] == curstep);
       REQUIRE(status["curtime"] == curtime);
       REQUIRE(status["nprocess"] == nprocess);

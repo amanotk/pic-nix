@@ -172,7 +172,7 @@ public:
 
     if (data.thisrank == 0) {
       json payload = {{"status", status},
-                      {"prefix", prefix},
+                      {"prefix", normalize_prefix(prefix)},
                       {"curstep", data.curstep},
                       {"curtime", data.curtime},
                       {"nprocess", data.nprocess},
@@ -204,6 +204,12 @@ public:
   }
 
 protected:
+  std::string normalize_prefix(const std::string& prefix) const
+  {
+    namespace fs = std::filesystem;
+    return fs::weakly_canonical(fs::path(basedir) / fs::path(prefix)).string();
+  }
+
   std::string get_path_with_basedir(std::string name, bool require_existence = false)
   {
     namespace fs = std::filesystem;
@@ -272,7 +278,7 @@ protected:
     }
 
     if (payload.contains("prefix") == false || payload["prefix"].is_string() == false ||
-        payload["prefix"].get<std::string>() != prefix) {
+        payload["prefix"].get<std::string>() != normalize_prefix(prefix)) {
       ERROR << tfm::format("checkpoint status prefix mismatch: %s", filename);
       return false;
     }
