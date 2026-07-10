@@ -1,6 +1,7 @@
 # Ohm's law solver
 
-A generalized Ohm's law solver is provided in `picnix` to reconstruct the electric field from the particle moment data and the magnetic field. It solve the following equation:
+`picnix` provides a reference curl-curl solver and a Gauss-law-reduced solver for reconstructing the electric field from particle moments, the magnetic field, and charge density.  
+The reference formulation solves:
 
 ```math
     (\Lambda + c^2 \nabla \times \nabla \times) \boldsymbol{E}
@@ -112,11 +113,128 @@ A_{xy} & A_{yy} & 0 \\
 ```
 where $\tilde{A}$ is the Fourier amplitude of $A$.
 
+## Gauss-law-reduced 2D solver
+
+PIC-NIX uses Lorentz-Heaviside units, so Gauss's law is
+
+```math
+\nabla\cdot\boldsymbol E=\rho
+```
+
+without a $4\pi$ factor.  
+Using
+
+```math
+\nabla\times\nabla\times\boldsymbol E
+=\nabla(\nabla\cdot\boldsymbol E)-\nabla^2\boldsymbol E,
+```
+
+the generalized Ohm equation can be reduced to
+
+```math
+\left(\Lambda-c^2\nabla^2\right)\boldsymbol E
+=\boldsymbol S-c^2\nabla\rho.
+```
+
+All three electric-field components therefore use the same scalar reaction-diffusion operator.  
+In 2D, the charge-density correction is applied only to the in-plane components:
+
+```math
+\begin{aligned}
+R_x &= S_x-c^2\partial_x\rho, \\
+R_y &= S_y-c^2\partial_y\rho, \\
+R_z &= S_z.
+\end{aligned}
+```
+
+The implementation uses centered second-order periodic differences for $\nabla_h\rho$.  
+For a uniform spacing $\Delta$, the shared sparse matrix is
+
+```math
+A=\operatorname{diag}(\Lambda)-c^2L_h,
+```
+
+where $L_h$ is the negative-semidefinite periodic five-point Laplacian.  
+The matrix is symmetric positive definite when every value of $\Lambda$ is positive.  
+The solver rejects non-finite and non-positive $\Lambda$ rather than silently applying a floor.  
+The optional `min_lambda` argument can reject an explicitly chosen near-zero range.
+
+### API and methods
+
+The reduced low-level solver requires charge density explicitly:
+
+```python
+import picnix
+
+E, info = picnix.solve_ohm_2d_gauss_reduced(
+    Lambda,
+    S,
+    rho,
+    delta,
+    c=1.0,
+    solver="cg",
+    preconditioner="amg",
+    return_info=True,
+)
+```
+
+Available solver methods are:
+
+- `cg`: production finite-difference CG for spatially varying positive $\Lambda$.  
+- `fft`: exact direct FFT solve for constant $\Lambda$ and periodic boundaries.  
+- `splu`: sparse-LU reference for small problems; fill-in makes it unsuitable for large grids.  
+
+CG uses the FFT constant-coefficient preconditioner by default.  
+Pass `None` for an unpreconditioned CG baseline, `"amg"` for scalar AMG, `"fft"` explicitly, or an external SciPy `LinearOperator`.  
+The AMG hierarchy or FFT `LinearOperator` is built once and reused for all three component solves.  
+Callers performing repeated solves can also reuse a matrix built by `assemble_ohm_gauss_matrix_2d`, a base built by `build_ohm_gauss_base_2d`, or a preconditioner built by `build_ohm_gauss_preconditioner_2d`.  
+A complete matrix is valid only for the same $\Lambda$, grid shape, $\Delta$, and $c$; by default the solver compares it with the complete expected sparse finite-difference operator.  
+The Lambda-independent base can be reused when the grid shape, $\Delta$, and $c$ are unchanged.
+Trusted performance-sensitive callers may set `validate_matrix=False` after validating a reused matrix once; true residuals are still evaluated against the requested finite-difference equation.
+
+With `return_info=True`, diagnostics contain component-wise convergence statuses, iteration counts, final true relative residuals, and solver/preconditioner names.  
+The reported residual is
+
+```math
+\frac{\lVert R_\alpha-AE_\alpha\rVert_2}
+{\max(\lVert R_\alpha\rVert_2,\epsilon)}.
+```
+
+### FFT discretization
+
+The direct FFT method solves the same finite-difference equation as CG; it does not substitute the continuous spectral Laplacian.  
+For constant $\Lambda=\Lambda_0$, its denominator is
+
+```math
+\Lambda_0+\frac{4c^2}{\Delta^2}
+\left[
+\sin^2\left(\frac{k_x\Delta}{2}\right)
++\sin^2\left(\frac{k_y\Delta}{2}\right)
+\right].
+```
+
+For variable $\Lambda$, the FFT option is available only as a constant-coefficient PCG preconditioner.  
+It uses the arithmetic mean of $\Lambda$ by default, or the positive coefficient supplied through `fft_lambda`.  
+It never approximates the variable-coefficient operator itself as diagonal in Fourier space.
+
+### Charge-density caveats
+
+The reduced solver deliberately accepts `rho` as a low-level input.  
+PIC-NIX field diagnostics do not write `uj` or a standalone charge-density array, although charge density can be reconstructed from raw moments as
+
+```python
+rho = np.sum(um[..., :, 0] * qm, axis=-1)
+```
+
+where `qm` is the exact per-species charge-to-mass ratio.  
+No automatic run wrapper is provided yet because diagnostic decimation changes the grid spacing, raw field output may retain staggering, legacy profiles may not contain exact `qm`, and float32 HDF5 conversion can amplify cancellation error in nearly neutral plasmas.  
+Charge-density noise, field/moment time centering, and compatibility between discrete divergence and gradient operators remain physical interpretation concerns.  
+Solving the reduced equation does not by itself guarantee a small Gauss-law residual for inconsistent input data.
+
 ## From a picnix run
 
-For a single snapshot, ``calc_e_ohm_1d`` and ``calc_e_ohm_2d`` read
-the field and moment data, infer per-species ``q_s/m_s`` from the
-config, build the source term, and call the corresponding solver.
+For a single snapshot, `calc_e_ohm_1d` and `calc_e_ohm_2d` read the field and moment data, infer per-species `q_s/m_s` from the config, build the source term, and call the corresponding curl-curl solver.  
+The Gauss-law-reduced solver currently uses only the explicit low-level interface described above.
 
 ```python
 import picnix
@@ -126,11 +244,11 @@ step = run.get_step("field")[-1]
 E_ohm = picnix.calc_e_ohm_1d(run, step, c=1.0)  # or calc_e_ohm_2d
 ```
 
-The return value has shape ``(Nx, 3)`` (1D) or ``(Ny, Nx, 3)`` (2D).
+The return value has shape `(Nx, 3)` (1D) or `(Ny, Nx, 3)` (2D).
 
 ## Limitations
 
 - Periodic boundary conditions only.
-- Uniform grid (``dx == dy == delta``) assumed.
+- Uniform grid (`dx == dy == delta`) assumed.
+- Each 2D grid axis must contain at least three points.
 - 1D and 2D only. 3D solver not provided yet.
-

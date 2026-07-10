@@ -47,7 +47,7 @@ import inspect
 
 import numpy as np
 from scipy import sparse
-from scipy.sparse.linalg import cg
+from scipy.sparse.linalg import LinearOperator, cg, splu
 
 
 _CG_TOL_KWARG = "rtol" if "rtol" in inspect.signature(cg).parameters else "tol"
@@ -56,6 +56,7 @@ _CG_TOL_KWARG = "rtol" if "rtol" in inspect.signature(cg).parameters else "tol"
 __all__ = [
     "solve_ohm_1d",
     "solve_ohm_2d",
+    "solve_ohm_2d_gauss_reduced",
     "calc_e_ohm_1d",
     "calc_e_ohm_2d",
     "transform_moments",
@@ -64,6 +65,9 @@ __all__ = [
     "build_ohm_bases",
     "assemble_matrix_1",
     "assemble_matrix_2",
+    "build_ohm_gauss_base_2d",
+    "assemble_ohm_gauss_matrix_2d",
+    "build_ohm_gauss_preconditioner_2d",
 ]
 
 
@@ -142,6 +146,159 @@ def assemble_matrix_2(Nx, Ny, L, c2_dx2, base=None):
     return base + sparse.diags(L_flat, format="csr")
 
 
+def _validate_grid_parameters(delta, c):
+    if not np.isfinite(delta) or delta <= 0.0:
+        raise ValueError(f"delta must be finite and positive, got {delta}")
+    if not np.isfinite(c):
+        raise ValueError(f"c must be finite, got {c}")
+
+
+def build_ohm_gauss_base_2d(Nx, Ny, delta, *, c=1.0):
+    """Build the Lambda-independent periodic ``-c^2 Laplacian`` matrix."""
+    if Nx < 3 or Ny < 3:
+        raise ValueError(f"Nx and Ny must both be at least 3, got Nx={Nx}, Ny={Ny}")
+    _validate_grid_parameters(delta, c)
+
+    Ix = sparse.eye(Nx, format="csr")
+    Iy = sparse.eye(Ny, format="csr")
+    Dxx = _periodic_second_difference_matrix(Nx)
+    Dyy = _periodic_second_difference_matrix(Ny)
+    laplacian = sparse.kron(Iy, Dxx, format="csr") + sparse.kron(Dyy, Ix, format="csr")
+    return (-(c * c) / (delta * delta)) * laplacian
+
+
+def _validate_lambda_2d(L, min_lambda):
+    L = np.asarray(L, dtype=np.float64)
+    if L.ndim != 2:
+        raise ValueError(f"L must be 2D with shape (Ny, Nx), got {L.shape}")
+    if L.shape[0] < 3 or L.shape[1] < 3:
+        raise ValueError(f"L axes must both contain at least 3 points, got {L.shape}")
+    if not np.all(np.isfinite(L)):
+        raise ValueError("L must contain only finite values")
+    if not np.isfinite(min_lambda) or min_lambda < 0.0:
+        raise ValueError(
+            f"min_lambda must be finite and non-negative, got {min_lambda}"
+        )
+    if np.min(L) <= min_lambda:
+        raise ValueError(f"L must be greater than min_lambda={min_lambda}")
+    return L
+
+
+def assemble_ohm_gauss_matrix_2d(L, delta, *, c=1.0, base=None, min_lambda=0.0):
+    """Assemble ``diag(Lambda) - c^2 Laplacian`` for a periodic 2D grid."""
+    L = _validate_lambda_2d(L, min_lambda)
+    _validate_grid_parameters(delta, c)
+    Ny, Nx = L.shape
+    if base is None:
+        base = build_ohm_gauss_base_2d(Nx, Ny, delta, c=c)
+    else:
+        base = _validate_gauss_base_2d(base, L.shape, delta, c)
+    return base + sparse.diags(L.flatten(order="C"), format="csr")
+
+
+def _validate_gauss_base_2d(base, shape, delta, c):
+    Ny, Nx = shape
+    expected = build_ohm_gauss_base_2d(Nx, Ny, delta, c=c)
+    return _validate_sparse_operator(base, expected, "base")
+
+
+def _validate_gauss_matrix_2d(matrix, L, delta, c):
+    Ny, Nx = L.shape
+    expected = build_ohm_gauss_base_2d(Nx, Ny, delta, c=c)
+    expected = expected + sparse.diags(L.flatten(order="C"), format="csr")
+    return _validate_sparse_operator(matrix, expected, "matrix")
+
+
+def _validate_sparse_operator(operator, expected, name):
+    if not sparse.issparse(operator):
+        raise TypeError(f"{name} must be a SciPy sparse matrix")
+    if operator.shape != expected.shape:
+        raise ValueError(f"{name} shape {operator.shape} must be {expected.shape}")
+    operator_csr = operator.tocsr()
+    if not np.all(np.isfinite(operator_csr.data)):
+        raise ValueError(f"{name} must contain only finite values")
+
+    difference = operator_csr - expected.tocsr()
+    difference.eliminate_zeros()
+    if difference.nnz:
+        scale = max(float(np.max(np.abs(expected.data))), 1.0)
+        if np.max(np.abs(difference.data)) > 1.0e-12 * scale:
+            raise ValueError(
+                f"{name} does not match the requested finite-difference operator"
+            )
+    return operator
+
+
+def _fft_denominator(shape, delta, c, lambda0):
+    Ny, Nx = shape
+    fy = np.fft.fftfreq(Ny)
+    fx = np.fft.rfftfreq(Nx)
+    kappa2 = (4.0 / (delta * delta)) * (
+        np.sin(np.pi * fy[:, None]) ** 2 + np.sin(np.pi * fx[None, :]) ** 2
+    )
+    return lambda0 + c * c * kappa2
+
+
+def _build_fft_preconditioner(shape, delta, c, lambda0):
+    denominator = _fft_denominator(shape, delta, c, lambda0)
+    size = shape[0] * shape[1]
+
+    def matvec(vector):
+        values = np.asarray(vector, dtype=np.float64).reshape(shape, order="C")
+        transformed = np.fft.rfftn(values, axes=(0, 1))
+        result = np.fft.irfftn(transformed / denominator, s=shape, axes=(0, 1))
+        return result.flatten(order="C")
+
+    return LinearOperator((size, size), matvec=matvec, dtype=np.float64)
+
+
+def build_ohm_gauss_preconditioner_2d(
+    L,
+    delta,
+    *,
+    c=1.0,
+    kind="amg",
+    matrix=None,
+    validate_matrix=True,
+    fft_lambda=None,
+    min_lambda=0.0,
+):
+    """Build a reusable AMG or constant-coefficient FFT preconditioner."""
+    L = _validate_lambda_2d(L, min_lambda)
+    _validate_grid_parameters(delta, c)
+    kind = str(kind).lower()
+
+    if kind == "amg":
+        if matrix is None:
+            matrix = assemble_ohm_gauss_matrix_2d(L, delta, c=c, min_lambda=min_lambda)
+        elif validate_matrix:
+            matrix = _validate_gauss_matrix_2d(matrix, L, delta, c)
+        else:
+            expected_shape = (L.size, L.size)
+            if not sparse.issparse(matrix):
+                raise TypeError("matrix must be a SciPy sparse matrix")
+            if matrix.shape != expected_shape:
+                raise ValueError(
+                    f"matrix shape {matrix.shape} must be {expected_shape}"
+                )
+        import pyamg
+
+        return pyamg.smoothed_aggregation_solver(matrix).aspreconditioner(cycle="V")
+
+    if kind == "fft":
+        if matrix is not None:
+            raise ValueError("kind='fft' does not use a sparse matrix")
+        if fft_lambda is None:
+            fft_lambda = float(np.mean(L))
+        if not np.isfinite(fft_lambda) or fft_lambda <= 0.0:
+            raise ValueError(
+                f"fft_lambda must be finite and positive, got {fft_lambda}"
+            )
+        return _build_fft_preconditioner(L.shape, delta, c, fft_lambda)
+
+    raise ValueError(f"unknown preconditioner {kind!r}; expected 'amg' or 'fft'")
+
+
 # -*- Solver cores -*-
 
 
@@ -157,10 +314,57 @@ def _cg_solve(A, b, rtol, maxiter, M):
         b,
         M=M,
         **{_CG_TOL_KWARG: rtol},
+        atol=0.0,
         maxiter=maxiter,
         callback=count_iteration,
     )
     return x, int(status), niter
+
+
+def _build_gauss_reduced_rhs_2d(S, rho, delta, c):
+    """Return ``S - c^2 grad(rho)`` using centered periodic differences."""
+    d_rho_dx = (np.roll(rho, -1, axis=-1) - np.roll(rho, 1, axis=-1)) / (2.0 * delta)
+    d_rho_dy = (np.roll(rho, -1, axis=-2) - np.roll(rho, 1, axis=-2)) / (2.0 * delta)
+    rhs = np.array(S, dtype=np.float64, copy=True)
+    rhs[..., 0] -= c * c * d_rho_dx
+    rhs[..., 1] -= c * c * d_rho_dy
+    return rhs
+
+
+def _apply_gauss_operator_2d(L, values, delta, c):
+    laplacian = (
+        np.roll(values, -1, axis=1)
+        + np.roll(values, 1, axis=1)
+        + np.roll(values, -1, axis=0)
+        + np.roll(values, 1, axis=0)
+        - 4.0 * values
+    ) / (delta * delta)
+    multiplier = L if values.ndim == 2 else L[..., None]
+    return multiplier * values - c * c * laplacian
+
+
+def _relative_residuals(L, rhs, solution, delta, c):
+    eps = np.finfo(np.float64).eps
+    residual = rhs - _apply_gauss_operator_2d(L, solution, delta, c)
+    residuals = []
+    for component in range(3):
+        b = rhs[..., component].flatten(order="C")
+        component_residual = residual[..., component].flatten(order="C")
+        residuals.append(
+            float(np.linalg.norm(component_residual) / max(np.linalg.norm(b), eps))
+        )
+    return tuple(residuals)
+
+
+def _solve_gauss_fft(rhs, L, delta, c, constant_rtol, constant_atol):
+    lambda0 = float(L.flat[0])
+    if not np.allclose(L, lambda0, rtol=constant_rtol, atol=constant_atol):
+        raise ValueError(
+            "solver='fft' requires L to be constant within the requested tolerance"
+        )
+    denominator = _fft_denominator(L.shape, delta, c, lambda0)
+    transformed = np.fft.rfftn(rhs, axes=(0, 1))
+    return np.fft.irfftn(transformed / denominator[..., None], s=L.shape, axes=(0, 1))
 
 
 def _solve_ohm_1d_core(L, S_yz, c2_dx2, rtol, maxiter, M):
@@ -417,6 +621,161 @@ def solve_ohm_2d(
         "status_2": status_2,
         "niter_1": niter_1,
         "niter_2": niter_2,
+    }
+
+
+def solve_ohm_2d_gauss_reduced(
+    L,
+    S,
+    rho,
+    delta,
+    *,
+    c=1.0,
+    solver="cg",
+    preconditioner="fft",
+    rtol=1.0e-12,
+    maxiter=1000,
+    base=None,
+    matrix=None,
+    validate_matrix=True,
+    fft_lambda=None,
+    min_lambda=0.0,
+    constant_rtol=1.0e-12,
+    constant_atol=0.0,
+    return_info=False,
+):
+    """Solve the 2D periodic Gauss-law-reduced generalized Ohm's law.
+
+    This solves ``(Lambda - c^2 Laplacian) E = S - c^2 grad(rho)`` with
+    the same scalar finite-difference operator for all three components.
+    ``solver`` may be ``"cg"``, ``"fft"`` (constant Lambda only), or
+    ``"splu"`` (small-problem reference). For CG, ``preconditioner`` may
+    default to ``"fft"``; it may be set to ``None``, ``"amg"``, or an
+    external ``LinearOperator``. Direct FFT and sparse-LU methods ignore the
+    default FFT preconditioner.
+    A supplied matrix is checked against the requested grid and coefficients
+    unless ``validate_matrix=False`` is selected for a trusted hot path.
+    """
+    L = _validate_lambda_2d(L, min_lambda)
+    S = np.asarray(S, dtype=np.float64)
+    rho = np.asarray(rho, dtype=np.float64)
+    _validate_grid_parameters(delta, c)
+    if S.shape != (*L.shape, 3):
+        raise ValueError(f"S must have shape (Ny, Nx, 3) matching L, got {S.shape}")
+    if rho.shape != L.shape:
+        raise ValueError(f"rho must have shape (Ny, Nx) matching L, got {rho.shape}")
+    if not np.all(np.isfinite(S)):
+        raise ValueError("S must contain only finite values")
+    if not np.all(np.isfinite(rho)):
+        raise ValueError("rho must contain only finite values")
+    if not np.isfinite(rtol) or rtol <= 0.0:
+        raise ValueError(f"rtol must be finite and positive, got {rtol}")
+    if not isinstance(maxiter, (int, np.integer)) or maxiter <= 0:
+        raise ValueError(f"maxiter must be a positive integer, got {maxiter}")
+    if base is not None and matrix is not None:
+        raise ValueError("base and matrix cannot both be supplied")
+    if not np.isfinite(constant_rtol) or constant_rtol < 0.0:
+        raise ValueError("constant_rtol must be finite and non-negative")
+    if not np.isfinite(constant_atol) or constant_atol < 0.0:
+        raise ValueError("constant_atol must be finite and non-negative")
+
+    expected_shape = (L.size, L.size)
+    if matrix is not None:
+        if validate_matrix:
+            matrix = _validate_gauss_matrix_2d(matrix, L, delta, c)
+        else:
+            if not sparse.issparse(matrix):
+                raise TypeError("matrix must be a SciPy sparse matrix")
+            if matrix.shape != expected_shape:
+                raise ValueError(
+                    f"matrix shape {matrix.shape} must be {expected_shape}"
+                )
+
+    solver = str(solver).lower()
+    if solver not in {"cg", "fft", "splu"}:
+        raise ValueError(f"unknown solver {solver!r}; expected 'cg', 'fft', or 'splu'")
+    if solver == "fft" and (base is not None or matrix is not None):
+        raise ValueError("solver='fft' does not use base or matrix")
+
+    rhs = _build_gauss_reduced_rhs_2d(S, rho, delta, c)
+    A = matrix
+    statuses = (0, 0, 0)
+    iterations = (0, 0, 0)
+    preconditioner_name = "none"
+
+    if solver == "fft":
+        if preconditioner not in (None, "none", "fft"):
+            raise ValueError("solver='fft' does not accept a preconditioner")
+        E = _solve_gauss_fft(rhs, L, delta, c, constant_rtol, constant_atol)
+    else:
+        if A is None:
+            A = assemble_ohm_gauss_matrix_2d(
+                L, delta, c=c, base=base, min_lambda=min_lambda
+            )
+
+        if solver == "splu":
+            if preconditioner not in (None, "none", "fft"):
+                raise ValueError("solver='splu' does not accept a preconditioner")
+            factorization = splu(A.tocsc())
+            solution = factorization.solve(rhs.reshape((-1, 3), order="C"))
+            E = solution.reshape((*L.shape, 3), order="C")
+        else:
+            M = None
+            if isinstance(preconditioner, str):
+                preconditioner_name = preconditioner.lower()
+                if preconditioner_name == "none":
+                    preconditioner_name = "none"
+                elif preconditioner_name in {"amg", "fft"}:
+                    M = build_ohm_gauss_preconditioner_2d(
+                        L,
+                        delta,
+                        c=c,
+                        kind=preconditioner_name,
+                        matrix=A if preconditioner_name == "amg" else None,
+                        validate_matrix=validate_matrix,
+                        fft_lambda=fft_lambda,
+                        min_lambda=min_lambda,
+                    )
+                else:
+                    raise ValueError(
+                        f"unknown preconditioner {preconditioner!r}; "
+                        "expected None, 'amg', or 'fft'"
+                    )
+            elif preconditioner is not None:
+                if not isinstance(preconditioner, LinearOperator):
+                    raise TypeError("external preconditioner must be a LinearOperator")
+                if preconditioner.shape != expected_shape:
+                    raise ValueError(
+                        f"preconditioner shape {preconditioner.shape} must be {expected_shape}"
+                    )
+                M = preconditioner
+                preconditioner_name = "external"
+
+            E = np.empty((*L.shape, 3), dtype=np.float64)
+            status_list = []
+            iteration_list = []
+            for component in range(3):
+                solution, status, niter = _cg_solve(
+                    A,
+                    rhs[..., component].flatten(order="C"),
+                    rtol,
+                    maxiter,
+                    M,
+                )
+                E[..., component] = solution.reshape(L.shape, order="C")
+                status_list.append(status)
+                iteration_list.append(niter)
+            statuses = tuple(status_list)
+            iterations = tuple(iteration_list)
+
+    if not return_info:
+        return E
+    return E, {
+        "status": statuses,
+        "niter": iterations,
+        "relative_residual": _relative_residuals(L, rhs, E, delta, c),
+        "solver": solver,
+        "preconditioner": preconditioner_name,
     }
 
 
