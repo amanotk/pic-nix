@@ -93,9 +93,8 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert manifest["verification"]["status"] == "passed"
     assert manifest["verification"]["level"] == "fast"
     assert manifest["verification"]["raw_fingerprint"]["hdf5_files"] == 2
-    assert manifest["verification"]["raw_fingerprint"]["originals"]["files"] == 8
-    raw_files = manifest["verification"]["raw_fingerprint"]["originals"]["raw_files"]
-    assert all(item["step"] == "00000000" for item in raw_files)
+    assert "originals" not in manifest["verification"]["raw_fingerprint"]
+    assert "raw_files" not in manifest["verification"]["raw_fingerprint"]
 
     with h5py.File(output_dir / "field.vds.h5", "r") as h5fp:
         field = h5fp["field/00000000/uf"][...]
@@ -112,6 +111,150 @@ def test_auto_prefix_conversion_writes_manifest_and_vds(tmp_path, monkeypatch):
     assert values.dtype == np.dtype("float32")
     assert ids.dtype == np.dtype("uint64")
     assert ids.tolist() == [100, 101, 110, 111]
+
+
+def test_particle_conversion_writes_bbox_index(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "2",
+        "--overwrite",
+    )
+
+    with h5py.File(input_dir / "hdf5" / "particle.vds.h5", "r") as h5fp:
+        bbox = h5fp["particle_bbox/00000000/up00"]
+        assert bbox.attrs["schema_version"] == "particle-bbox-v1"
+        assert bbox.attrs["group_size"] == 2
+        assert bbox.attrs["position_columns"] == "x=0,y=1,z=2"
+        assert bbox["start"][...].tolist() == [0, 2]
+        assert bbox["stop"][...].tolist() == [2, 4]
+        assert bbox["count"][...].tolist() == [2, 2]
+        np.testing.assert_allclose(bbox["xmin"][...], [1.0, 2.0])
+        np.testing.assert_allclose(bbox["xmax"][...], [7.0, 8.0])
+        np.testing.assert_allclose(bbox["ymin"][...], [2.0, 2.0])
+        np.testing.assert_allclose(bbox["ymax"][...], [8.0, 8.0])
+        np.testing.assert_allclose(bbox["zmin"][...], [3.0, 3.0])
+        np.testing.assert_allclose(bbox["zmax"][...], [9.0, 9.0])
+
+
+def test_index_bbox_command_adds_missing_existing_hdf5_index(tmp_path, monkeypatch):
+    input_dir = make_posix_fixture(tmp_path)
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "2",
+        "--overwrite",
+        "--no-verify",
+    )
+    vds_path = input_dir / "hdf5" / "particle.vds.h5"
+    with h5py.File(vds_path, "r+") as h5fp:
+        del h5fp["particle_bbox"]
+
+    run_converter(
+        monkeypatch,
+        "index-bbox",
+        "--hdf5-dir",
+        input_dir / "hdf5",
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "2",
+    )
+
+    with h5py.File(vds_path, "r") as h5fp:
+        bbox = h5fp["particle_bbox/00000000/up00"]
+        assert bbox["start"][...].tolist() == [0, 2]
+        assert bbox["stop"][...].tolist() == [2, 4]
+
+    with pytest.raises(ValueError, match="incompatible particle bbox"):
+        run_converter(
+            monkeypatch,
+            "index-bbox",
+            "--hdf5-dir",
+            input_dir / "hdf5",
+            "--prefix",
+            "particle",
+            "--bbox-group-size",
+            "3",
+        )
+
+    run_converter(
+        monkeypatch,
+        "index-bbox",
+        "--hdf5-dir",
+        input_dir / "hdf5",
+        "--prefix",
+        "particle",
+        "--bbox-group-size",
+        "3",
+        "--overwrite",
+    )
+    with h5py.File(vds_path, "r") as h5fp:
+        bbox = h5fp["particle_bbox/00000000/up00"]
+        assert bbox.attrs["group_size"] == 3
+        assert bbox["start"][...].tolist() == [0, 3]
+        assert bbox["stop"][...].tolist() == [3, 4]
+
+
+def test_index_bbox_discovers_up_particle_prefix_without_particle_name(
+    tmp_path, monkeypatch
+):
+    input_dir = make_posix_fixture(tmp_path)
+    for node_index in range(2):
+        particle = np.array(
+            [
+                [1.0 + node_index, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0],
+                [7.0 + node_index, 8.0, 9.0, 10.0, 11.0, 12.0, 0.0],
+            ],
+            dtype="<f8",
+        )
+        ids = np.array([300 + node_index * 10, 301 + node_index * 10], dtype="<u8")
+        particle[:, -1] = ids.view("<f8")
+        write_step(
+            input_dir / f"node{node_index:06d}" / "electron",
+            "electron",
+            "00000000",
+            "up00",
+            particle,
+        )
+
+    run_converter(
+        monkeypatch,
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "electron",
+        "--bbox-group-size",
+        "2",
+        "--overwrite",
+        "--no-verify",
+    )
+    vds_path = input_dir / "hdf5" / "electron.vds.h5"
+    with h5py.File(vds_path, "r+") as h5fp:
+        del h5fp["particle_bbox"]
+
+    run_converter(
+        monkeypatch,
+        "index-bbox",
+        "--hdf5-dir",
+        input_dir / "hdf5",
+        "--bbox-group-size",
+        "2",
+    )
+
+    with h5py.File(vds_path, "r") as h5fp:
+        assert h5fp["particle_bbox/00000000/up00/start"][...].tolist() == [0, 2]
 
 
 def test_read_dataset_slab_preserves_singleton_rank1_shape(tmp_path):
@@ -227,6 +370,18 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
     manifest = json.loads(manifest_path.read_text())
     assert manifest["verification"]["status"] == "passed"
 
+    with pytest.raises(ValueError, match="rerun verify --verify-level full"):
+        run_converter(
+            monkeypatch,
+            "remove-original",
+            "--input-dir",
+            input_dir,
+            "--prefix",
+            "field",
+            "--yes",
+        )
+    assert (input_dir / "node000000" / "field" / "00000000.json").exists()
+
     run_converter(
         monkeypatch,
         "remove-original",
@@ -235,6 +390,7 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
         "--prefix",
         "field",
         "--dry-run",
+        "--trust-manifest",
     )
     assert (input_dir / "node000000" / "field" / "00000000.json").exists()
 
@@ -246,6 +402,7 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
         "--prefix",
         "field",
         "--yes",
+        "--trust-manifest",
     )
     assert not (input_dir / "node000000" / "field").exists()
     assert not (input_dir / "node000001" / "field").exists()
@@ -265,6 +422,7 @@ def test_standalone_verify_and_remove_original(tmp_path, monkeypatch):
         "--prefix",
         "particle",
         "--yes",
+        "--trust-manifest",
     )
     assert not (input_dir / "node000000").exists()
     assert not (input_dir / "node000001").exists()
@@ -282,7 +440,16 @@ def test_remove_original_uses_verified_manifest_file_list(tmp_path, monkeypatch)
         "--overwrite",
         "--no-verify",
     )
-    run_converter(monkeypatch, "verify", "--input-dir", input_dir, "--prefix", "field")
+    run_converter(
+        monkeypatch,
+        "verify",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--verify-level",
+        "full",
+    )
 
     def fail_discovery(*args, **kwargs):
         raise AssertionError("remove-original should use the verified manifest")
@@ -307,12 +474,22 @@ def test_remove_original_uses_verified_manifest_file_list(tmp_path, monkeypatch)
     assert (input_dir / "node000000" / "particle").exists()
 
 
-def test_remove_original_rejects_modified_raw_files_after_fast_verify(
+def test_remove_original_rejects_modified_raw_files_after_full_verify(
     tmp_path, monkeypatch
 ):
     input_dir = make_posix_fixture(tmp_path)
 
     run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "field")
+    run_converter(
+        monkeypatch,
+        "verify",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--verify-level",
+        "full",
+    )
     raw_path = input_dir / "node000000" / "field" / "00000000.data"
     raw_path.write_bytes(raw_path.read_bytes() + b"stale")
 
@@ -334,6 +511,16 @@ def test_remove_original_dry_run_skips_file_preflight(tmp_path, monkeypatch):
     input_dir = make_posix_fixture(tmp_path)
 
     run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "field")
+    run_converter(
+        monkeypatch,
+        "verify",
+        "--input-dir",
+        input_dir,
+        "--prefix",
+        "field",
+        "--verify-level",
+        "full",
+    )
 
     def fail_preflight(*args, **kwargs):
         raise AssertionError("dry-run should not stat-check original files")
@@ -368,6 +555,7 @@ def test_remove_original_respects_selected_steps(tmp_path, monkeypatch):
         "--steps",
         "0",
         "--yes",
+        "--trust-manifest",
     )
 
     assert not (input_dir / "node000000" / "field" / "00000000.json").exists()
@@ -392,6 +580,7 @@ def test_remove_original_respects_step_limit(tmp_path, monkeypatch):
         "--step-limit",
         "1",
         "--yes",
+        "--trust-manifest",
     )
 
     assert not (input_dir / "node000000" / "field" / "00000000.json").exists()
@@ -420,6 +609,7 @@ def test_remove_original_preserves_unreferenced_data(tmp_path, monkeypatch):
         "--prefix",
         "field",
         "--yes",
+        "--trust-manifest",
     )
 
     assert not (input_dir / "node000000" / "field" / "00000000.json").exists()

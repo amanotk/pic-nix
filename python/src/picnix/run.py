@@ -27,6 +27,29 @@ from .utils import (
 )
 
 
+def _qm_per_species_legacy(config):
+    """Infer per-species q/m from a picnix config (backward compatibility).
+
+    This exists only to support profiles written by older picnix builds
+    that do not carry the ``qm`` metadata field.  Modern profiles always
+    include ``qm`` so this fallback is rarely triggered.
+    """
+    p = config["parameter"]
+    Ns = p["Ns"]
+
+    if "particle" in p:
+        return np.array([float(p["particle"][s]["qm"]) for s in range(Ns)])
+
+    if "mime" in p and "wp" in p and "nppc" in p:
+        if Ns != 2:
+            return None
+        wp = float(p["wp"])
+        mime = float(p["mime"])
+        return np.array([-wp, +wp / mime])
+
+    return None
+
+
 class Run(object):
     def __init__(self, profile, method=None, config=None):
         self.cache = dict()
@@ -76,6 +99,9 @@ class Run(object):
             with open(config, "r") as fileobj:
                 self.config = json.load(fileobj)
 
+        if self.qm is None:
+            self.qm = _qm_per_species_legacy(self.config)
+
         # store some parameters
         parameter = self.config["parameter"]
         self.Ns = parameter["Ns"]
@@ -94,9 +120,14 @@ class Run(object):
         self.diag_handlers = dict()
 
         for diagnostic in self.config["diagnostic"]:
-            handler = DiagHandler.create_handler(
-                diagnostic, basedir, iomode, self.method
-            )
+            try:
+                handler = DiagHandler.create_handler(
+                    diagnostic, basedir, iomode, self.method
+                )
+            except FileNotFoundError as exc:
+                if "no JSON diagnostic files found" not in str(exc):
+                    raise
+                continue
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler
 
@@ -164,11 +195,17 @@ class Run(object):
 
         return data
 
-    def read_particle_id_at(self, prefix, step, pattern=None):
+    def read_particle_at(self, prefix, step, pattern=None, start=None, stop=None):
         if pattern is None:
             pattern = ".*"
         handler = self.diag_handlers[prefix]
-        return handler.read_particle_id_at(step, pattern)
+        return handler.read_particle_at(step, pattern, start, stop)
+
+    def read_particle_id_at(self, prefix, step, pattern=None, start=None, stop=None):
+        if pattern is None:
+            pattern = ".*"
+        handler = self.diag_handlers[prefix]
+        return handler.read_particle_id_at(step, pattern, start, stop)
 
     def remove_file_at(self, prefix, step, are_you_sure=False):
         handler = self.diag_handlers[prefix]

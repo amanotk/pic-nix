@@ -32,7 +32,10 @@ class DiagStorage:
             return None
         return self.time[index]
 
-    def read_particle_id_at(self, step, pattern):
+    def read_particle_at(self, step, pattern, start=None, stop=None):
+        return {}
+
+    def read_particle_id_at(self, step, pattern, start=None, stop=None):
         return {}
 
 
@@ -49,6 +52,10 @@ class JsonDiagStorage(DiagStorage):
 
     def setup(self):
         self.file = self.get_file_array()
+        if self.file.ndim != 2 or self.file.shape[1] == 0:
+            raise FileNotFoundError(
+                f"no JSON diagnostic files found for prefix {self.prefix!r} in {self.basedir}"
+            )
         self.step = np.arange(self.file.shape[1], dtype=np.int32)
         self.time = np.arange(self.file.shape[1], dtype=np.float64)
         for i, filename in enumerate(self.file[0, :]):
@@ -147,6 +154,82 @@ class JsonDiagStorage(DiagStorage):
                 result[key][chunk_slice, ...] = chunk_data[key]
         return result
 
+    @staticmethod
+    def normalize_range(start, stop, size):
+        return slice(start, stop).indices(size)[:2]
+
+    @staticmethod
+    def read_particle_rows(dataset, meta, name, start, stop):
+        byteorder = meta["byteorder"]
+        layout = meta["layout"]
+        datafile = Path(meta["dirname"]) / meta["datafile"]
+        offset = dataset[name]["offset"]
+        dtype = np.dtype(byteorder + dataset[name]["datatype"])
+        shape = tuple(dataset[name]["shape"])
+        if layout == 0:
+            shape = shape[::-1]
+        if len(shape) != 2:
+            raise ValueError(f"particle dataset {name!r} must be 2-D, got {shape}")
+        row_shape = shape[1:]
+        row_count = stop - start
+        row_size = int(np.prod(row_shape))
+        with open(datafile, "rb") as fp:
+            fp.seek(offset + start * row_size * dtype.itemsize)
+            values = np.fromfile(fp, dtype, row_count * row_size)
+        return values.reshape((row_count, *row_shape))
+
+    @staticmethod
+    def particle_dataset_shape(dataset, meta, name):
+        shape = tuple(dataset[name]["shape"])
+        if meta["layout"] == 0:
+            shape = shape[::-1]
+        return shape
+
+    def read_particle_range_at(self, step, pattern, start, stop, include_id):
+        if self.name != "particle":
+            return {}
+        all_json = self.find_json_at_step(step)
+        if all_json is None:
+            return {}
+        dims, _, names = self.prepare_read(all_json, pattern)
+        json_contents, dims = self.read_json_files(all_json, names, dims)
+        result = {}
+        for name in names:
+            shapes = [
+                self.particle_dataset_shape(dataset, meta, name)
+                for dataset, meta in json_contents
+            ]
+            total = int(np.sum([shape[0] for shape in shapes]))
+            range_start, range_stop = self.normalize_range(start, stop, total)
+            if range_start >= range_stop:
+                dtype = np.dtype(
+                    json_contents[0][1]["byteorder"]
+                    + json_contents[0][0][name]["datatype"]
+                )
+                result[name] = (
+                    np.empty((0,), dtype=np.uint64)
+                    if include_id
+                    else np.empty((0, shapes[0][1] - 1), dtype=dtype)
+                )
+                continue
+            chunks = []
+            address = np.zeros((len(shapes) + 1,), dtype=np.int64)
+            address[1:] = np.cumsum([shape[0] for shape in shapes])
+            for i, (dataset, meta) in enumerate(json_contents):
+                local_start = max(range_start, address[i]) - address[i]
+                local_stop = min(range_stop, address[i + 1]) - address[i]
+                if local_start >= local_stop:
+                    continue
+                rows = self.read_particle_rows(
+                    dataset, meta, name, int(local_start), int(local_stop)
+                )
+                if include_id:
+                    chunks.append(reinterpret_particle_id(rows[:, -1]))
+                else:
+                    chunks.append(rows[:, :-1])
+            result[name] = np.concatenate(chunks, axis=0)
+        return result
+
     def read_raw_at(self, step, pattern):
         all_json = self.find_json_at_step(step)
         if all_json is None:
@@ -162,14 +245,11 @@ class JsonDiagStorage(DiagStorage):
             return data
         return {name: values[:, :-1] for name, values in data.items()}
 
-    def read_particle_id_at(self, step, pattern):
-        if self.name != "particle":
-            return {}
-        data = self.read_raw_at(step, pattern)
-        return {
-            name: reinterpret_particle_id(values[:, -1])
-            for name, values in data.items()
-        }
+    def read_particle_at(self, step, pattern, start=None, stop=None):
+        return self.read_particle_range_at(step, pattern, start, stop, include_id=False)
+
+    def read_particle_id_at(self, step, pattern, start=None, stop=None):
+        return self.read_particle_range_at(step, pattern, start, stop, include_id=True)
 
 
 class Hdf5VdsDiagStorage(DiagStorage):
@@ -219,7 +299,29 @@ class Hdf5VdsDiagStorage(DiagStorage):
                 data[name] = dataset[...]
         return data
 
-    def read_particle_id_at(self, step, pattern):
+    @staticmethod
+    def normalize_range(start, stop, size):
+        return slice(start, stop).indices(size)[:2]
+
+    def read_particle_at(self, step, pattern, start=None, stop=None):
+        if self.name != "particle":
+            return {}
+        group_name = self.step_group_name(step)
+        if group_name is None:
+            return {}
+        data = {}
+        with h5py.File(self.vds_path, "r") as h5fp:
+            group = h5fp[self.prefix][group_name]
+            for name, dataset in group.items():
+                if name.endswith("_id") or not re.match(pattern, name):
+                    continue
+                range_start, range_stop = self.normalize_range(
+                    start, stop, dataset.shape[0]
+                )
+                data[name] = dataset[range_start:range_stop, ...]
+        return data
+
+    def read_particle_id_at(self, step, pattern, start=None, stop=None):
         if self.name != "particle":
             return {}
         group_name = self.step_group_name(step)
@@ -233,7 +335,10 @@ class Hdf5VdsDiagStorage(DiagStorage):
                     continue
                 base = name[: -len("_id")]
                 if re.match(pattern, base):
-                    data[base] = dataset[...]
+                    range_start, range_stop = self.normalize_range(
+                        start, stop, dataset.shape[0]
+                    )
+                    data[base] = dataset[range_start:range_stop]
         return data
 
 

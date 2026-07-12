@@ -49,13 +49,15 @@ def write_particle_step(path, stem, values, ids):
 
 def make_run_fixture(tmp_path):
     data_dir = tmp_path / "data"
-    values0 = np.array([[1, 2, 3, 4, 5, 6]], dtype="<f8")
-    values1 = np.array([[7, 8, 9, 10, 11, 12]], dtype="<f8")
-    write_particle_step(
-        data_dir / "node000000" / "particle", "00000000", values0, np.array([100])
+    values0 = np.array([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], dtype="<f8")
+    values1 = np.array(
+        [[13, 14, 15, 16, 17, 18], [19, 20, 21, 22, 23, 24]], dtype="<f8"
     )
     write_particle_step(
-        data_dir / "node000001" / "particle", "00000000", values1, np.array([200])
+        data_dir / "node000000" / "particle", "00000000", values0, np.array([100, 101])
+    )
+    write_particle_step(
+        data_dir / "node000001" / "particle", "00000000", values1, np.array([200, 201])
     )
 
     config = {
@@ -113,9 +115,22 @@ def test_run_reads_raw_particle_values_and_ids(tmp_path):
     assert run.get_time_at("particle", 0) == 1.25
     np.testing.assert_allclose(
         run.read_at("particle", 0)["up00"],
-        np.array([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], dtype="<f8"),
+        np.array(
+            [
+                [1, 2, 3, 4, 5, 6],
+                [7, 8, 9, 10, 11, 12],
+                [13, 14, 15, 16, 17, 18],
+                [19, 20, 21, 22, 23, 24],
+            ],
+            dtype="<f8",
+        ),
     )
-    assert run.read_particle_id_at("particle", 0)["up00"].tolist() == [100, 200]
+    assert run.read_particle_id_at("particle", 0)["up00"].tolist() == [
+        100,
+        101,
+        200,
+        201,
+    ]
 
 
 def test_run_prefers_hdf5_particle_values_and_ids(tmp_path, monkeypatch):
@@ -127,9 +142,72 @@ def test_run_prefers_hdf5_particle_values_and_ids(tmp_path, monkeypatch):
     assert run.get_diag_handler("particle").storage.kind == "hdf5-vds"
     np.testing.assert_allclose(
         run.read_at("particle", 0)["up00"],
-        np.array([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], dtype=np.float32),
+        np.array(
+            [
+                [1, 2, 3, 4, 5, 6],
+                [7, 8, 9, 10, 11, 12],
+                [13, 14, 15, 16, 17, 18],
+                [19, 20, 21, 22, 23, 24],
+            ],
+            dtype=np.float32,
+        ),
     )
-    assert run.read_particle_id_at("particle", 0)["up00"].tolist() == [100, 200]
+    assert run.read_particle_id_at("particle", 0)["up00"].tolist() == [
+        100,
+        101,
+        200,
+        201,
+    ]
+
+
+def test_run_reads_raw_particle_ranges_across_nodes(tmp_path):
+    profile, _ = make_run_fixture(tmp_path)
+
+    run = Run(str(profile))
+
+    np.testing.assert_allclose(
+        run.read_particle_at("particle", 0, start=1, stop=3)["up00"],
+        np.array([[7, 8, 9, 10, 11, 12], [13, 14, 15, 16, 17, 18]], dtype="<f8"),
+    )
+    assert run.read_particle_id_at("particle", 0, start=1, stop=3)["up00"].tolist() == [
+        101,
+        200,
+    ]
+    assert run.read_particle_id_at("particle", 0, stop=2)["up00"].tolist() == [
+        100,
+        101,
+    ]
+    assert run.read_particle_id_at("particle", 0, start=-2)["up00"].tolist() == [
+        200,
+        201,
+    ]
+
+
+def test_run_reads_hdf5_particle_ranges_across_nodes(tmp_path, monkeypatch):
+    profile, data_dir = make_run_fixture(tmp_path)
+    convert_particle(monkeypatch, data_dir)
+
+    run = Run(str(profile))
+
+    np.testing.assert_allclose(
+        run.read_particle_at("particle", 0, start=1, stop=3)["up00"],
+        np.array(
+            [[7, 8, 9, 10, 11, 12], [13, 14, 15, 16, 17, 18]],
+            dtype=np.float32,
+        ),
+    )
+    assert run.read_particle_id_at("particle", 0, start=1, stop=3)["up00"].tolist() == [
+        101,
+        200,
+    ]
+    assert run.read_particle_id_at("particle", 0, stop=2)["up00"].tolist() == [
+        100,
+        101,
+    ]
+    assert run.read_particle_id_at("particle", 0, start=-2)["up00"].tolist() == [
+        200,
+        201,
+    ]
 
 
 def test_run_rejects_invalid_existing_hdf5_vds(tmp_path):
