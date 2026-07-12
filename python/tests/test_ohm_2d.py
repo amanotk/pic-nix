@@ -3,8 +3,68 @@
 
 import numpy as np
 import pytest
+from scipy.sparse.linalg import LinearOperator
+
 import picnix
 from picnix import ohm
+
+
+# -*- helpers -*-
+
+
+def _periodic_gradient(values, delta):
+    dx = (np.roll(values, -1, axis=-1) - np.roll(values, 1, axis=-1)) / (2.0 * delta)
+    dy = (np.roll(values, -1, axis=-2) - np.roll(values, 1, axis=-2)) / (2.0 * delta)
+    return dx, dy
+
+
+def _manufactured_case(nx=12, ny=10, *, variable_lambda=True):
+    delta = 0.4
+    c = 1.7
+    x = np.arange(nx) * delta
+    y = np.arange(ny) * delta
+    xx = np.broadcast_to(x, (ny, nx))
+    yy = np.broadcast_to(y[:, None], (ny, nx))
+
+    if variable_lambda:
+        L = 1.2 + 0.15 * np.cos(2.0 * np.pi * xx / (nx * delta))
+        L += 0.1 * np.sin(2.0 * np.pi * yy / (ny * delta))
+    else:
+        L = np.full((ny, nx), 1.2)
+
+    E = np.empty((ny, nx, 3))
+    E[..., 0] = np.cos(2.0 * np.pi * xx / (nx * delta))
+    E[..., 1] = 0.7 * np.sin(4.0 * np.pi * yy / (ny * delta))
+    E[..., 2] = 0.4 * np.cos(
+        2.0 * np.pi * xx / (nx * delta) + 2.0 * np.pi * yy / (ny * delta)
+    )
+    rho = 0.3 * np.sin(2.0 * np.pi * xx / (nx * delta))
+    rho += 0.2 * np.cos(2.0 * np.pi * yy / (ny * delta))
+
+    A = ohm._assemble_ohm_matrix_2d(L, delta, c=c)
+    reduced_rhs = np.empty_like(E)
+    for component in range(3):
+        reduced_rhs[..., component] = (A @ E[..., component].ravel()).reshape(L.shape)
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S = reduced_rhs.copy()
+    S[..., 0] += c * c * d_rho_dx
+    S[..., 1] += c * c * d_rho_dy
+    return L, S, rho, E, delta, c
+
+
+# -*- public API exports -*-
+
+
+def test_ohm_public_api_exported():
+    """All public names are accessible from the picnix top-level namespace."""
+    for name in [
+        "solve_ohm_1d",
+        "solve_ohm_2d",
+        "calc_e_ohm_1d",
+        "calc_e_ohm_2d",
+        "transform_moments",
+    ]:
+        assert hasattr(picnix, name), f"picnix.{name} not exported"
 
 
 # -*- shape and argument validation -*-
@@ -20,7 +80,45 @@ def test_solve_ohm_2d_shape_validation():
         ohm.solve_ohm_2d(np.ones((8, 8)), np.zeros((7, 8, 3)), 1.0)
 
 
-def test_build_source_term_2d_uses_ny_nx_axes_for_pressure_gradients():
+def test_solve_ohm_2d_lambda_and_value_validation():
+    L = np.ones((6, 8))
+    S = np.zeros((6, 8, 3))
+
+    for bad_L in [np.full_like(L, np.nan), np.zeros_like(L), -np.ones_like(L)]:
+        with pytest.raises(ValueError, match="L must"):
+            ohm.solve_ohm_2d(bad_L, S, 1.0)
+
+    bad_S = S.copy()
+    bad_S[0, 0, 0] = np.inf
+    with pytest.raises(ValueError, match="S must contain only finite"):
+        ohm.solve_ohm_2d(L, bad_S, 1.0)
+
+    with pytest.raises(ValueError, match="min_lambda"):
+        ohm.solve_ohm_2d(L, S, 1.0, min_lambda=1.0)
+
+
+def test_solve_ohm_2d_preconditioner_validation():
+    L = np.ones((6, 8))
+    S = np.zeros((6, 8, 3))
+
+    with pytest.raises(TypeError, match="must be a LinearOperator"):
+        ohm.solve_ohm_2d(L, S, 1.0, M="invalid")
+    with pytest.raises(TypeError, match="must be a LinearOperator"):
+        ohm.solve_ohm_2d(L, S, 1.0, M=np.eye(L.size))
+
+    wrong_shape = LinearOperator(
+        (L.size - 1, L.size - 1),
+        matvec=lambda v: v,
+        dtype=np.float64,
+    )
+    with pytest.raises(ValueError, match="preconditioner shape"):
+        ohm.solve_ohm_2d(L, S, 1.0, M=wrong_shape)
+
+
+# -*- source term construction -*-
+
+
+def test_build_source_2d_uses_ny_nx_axes_for_pressure_gradients():
     """Pressure divergence uses x=axis -1 and y=axis -2 for (Ny, Nx) arrays."""
     nx, ny = 7, 5
     delta = 0.25
@@ -29,13 +127,16 @@ def test_build_source_term_2d_uses_ny_nx_axes_for_pressure_gradients():
     xx = np.broadcast_to(x, (ny, nx))
     yy = np.broadcast_to(y[:, None], (ny, nx))
     B = np.zeros((ny, nx, 3))
-    M = np.zeros((ny, nx, 10))
+    G = np.zeros((ny, nx, 3))
+    P = np.zeros((ny, nx, 6))
 
-    M[..., 4] = xx**2 + 10 * yy
-    M[..., 5] = 3 * yy**2 - xx
-    M[..., 7] = 2 * xx + 5 * yy**2
-    M[..., 8] = yy**2 + 7 * xx
-    M[..., 9] = 4 * xx**2 - 3 * yy
+    P[..., 0] = xx**2 + 10 * yy
+    P[..., 1] = 3 * yy**2 - xx
+    P[..., 3] = 2 * xx + 5 * yy**2
+    P[..., 4] = yy**2 + 7 * xx
+    P[..., 5] = 4 * xx**2 - 3 * yy
+
+    R = np.zeros((ny, nx))
 
     def ddx(values):
         return (np.roll(values, -1, axis=-1) - np.roll(values, 1, axis=-1)) / (
@@ -49,54 +150,49 @@ def test_build_source_term_2d_uses_ny_nx_axes_for_pressure_gradients():
 
     expected = np.stack(
         [
-            ddx(M[..., 4]) + ddy(M[..., 7]),
-            ddx(M[..., 7]) + ddy(M[..., 5]),
-            ddx(M[..., 9]) + ddy(M[..., 8]),
+            ddx(P[..., 0]) + ddy(P[..., 3]),
+            ddx(P[..., 3]) + ddy(P[..., 1]),
+            ddx(P[..., 5]) + ddy(P[..., 4]),
         ],
         axis=-1,
     )
-    np.testing.assert_allclose(ohm._build_source_term_2d(B, M, delta), expected)
+    np.testing.assert_allclose(ohm._build_source_2d(B, G, P, R, delta, c=1.0), expected)
 
 
-# -*- matrix symmetry and base shape validation -*-
+def test_build_source_2d_charge_gradient_sign_and_components():
+    nx, ny = 9, 7
+    delta = 0.25
+    c = 2.0
+    x = np.arange(nx)
+    y = np.arange(ny)
+    rho = np.sin(2.0 * np.pi * x / nx)[None, :]
+    rho = np.broadcast_to(rho, (ny, nx)).copy()
+    rho += 0.4 * np.cos(2.0 * np.pi * y[:, None] / ny)
+    B = np.zeros((ny, nx, 3))
+    G = np.zeros((ny, nx, 3))
+    P = np.zeros((ny, nx, 6))
 
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = ohm._build_source_2d(B, G, P, rho, delta, c)
 
-@pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
-def test_assembled_matrices_are_symmetric(Nx, Ny):
-    """A1 and A2 should be symmetric for the 2D periodic system."""
-    c2_dx2 = c2_dx4 = 1.0
+    np.testing.assert_allclose(S_reduced[..., 0], -c * c * d_rho_dx)
+    np.testing.assert_allclose(S_reduced[..., 1], -c * c * d_rho_dy)
+    np.testing.assert_array_equal(S_reduced[..., 2], np.zeros_like(S_reduced[..., 2]))
 
-    x = np.arange(Nx)
-    y = np.arange(Ny)
-    xx = np.broadcast_to(x, (Ny, Nx))
-    yy = np.broadcast_to(y[:, None], (Ny, Nx))
-    L = 1.0 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
-
-    A_1, A_2 = ohm._build_ohm_matrices_2d(Nx, Ny, L, c2_dx2, c2_dx4)
-
-    asym1 = (A_1 - A_1.T).tocoo()
-    asym2 = (A_2 - A_2.T).tocoo()
-    if asym1.nnz:
-        assert np.max(np.abs(asym1.data)) < 1e-14
-    if asym2.nnz:
-        assert np.max(np.abs(asym2.data)) < 1e-14
+    constant_rho = np.ones_like(rho)
+    constant_reduced = ohm._build_source_2d(B, G, P, constant_rho, delta, c)
+    np.testing.assert_array_equal(constant_reduced, np.zeros_like(constant_reduced))
 
 
 # -*- Fourier verification (Ez) -*-
 
 
 class TestEzFourier:
-    """2D Ez Fourier verification with periodic boundary conditions.
+    """2D Ez Fourier verification against the scalar reduced operator.
 
     Manufactures ``E^z = E0 cos(k_x x + k_y y)`` with
-    ``k_x = 2 pi m_x / (N_x Delta)``, ``k_y = 2 pi m_y / (N_y Delta)`` and
-    the source ``S^z = A_{zz} E^z`` where
-
-    .. math::
-
-        A_{zz} = \\Lambda + 4 \\frac{c^2}{\\Delta^2}
-        \\left[\\sin^2\\left(\\frac{k_x \\Delta}{2}\\right) +
-              \\sin^2\\left(\\frac{k_y \\Delta}{2}\\right)\\right].
+    ``S^z = (Lambda - c^2 Laplacian) E^z``, i.e. the reduced
+    source term.
     """
 
     @pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
@@ -110,7 +206,6 @@ class TestEzFourier:
         ky = 2 * np.pi * my / Ly
         L_val = 0.5
         c = 1.0
-        c2 = c * c
 
         Ez0 = 0.8
         x = np.arange(Nx) * delta
@@ -121,7 +216,7 @@ class TestEzFourier:
         E_true = np.zeros((Ny, Nx, 3))
         E_true[..., 2] = Ez0 * np.cos(kx * xx + ky * yy)
 
-        eigenvalue = L_val + 4 * c2 / (delta * delta) * (
+        eigenvalue = L_val + 4 * c * c / (delta * delta) * (
             np.sin(kx * delta / 2) ** 2 + np.sin(ky * delta / 2) ** 2
         )
 
@@ -135,28 +230,19 @@ class TestEzFourier:
         assert rel_err < 1e-10, f"Ez rel_err={rel_err:.2e}"
 
 
-# -*- Fourier verification (Ex/Ey coupled) -*-
+# -*- Fourier verification (Ex/Ey) -*-
 
 
 class TestExEyFourier:
-    """2D Ex/Ey coupled Fourier verification with periodic boundary conditions.
+    """2D Ex / Ey Fourier verification against the scalar reduced operator.
 
-    Manufactures ``E^x = E^x_0 cos(k_x x + k_y y)`` and
-    ``E^y = E^y_0 cos(k_x x + k_y y)`` with the source
-
-    .. math::
-
-        \\begin{pmatrix} S^x \\\\ S^y \\end{pmatrix} =
-        \\begin{pmatrix} A_{xx} & A_{xy} \\\\
-                          A_{xy} & A_{yy} \\end{pmatrix}
-        \\begin{pmatrix} E^x \\\\ E^y \\end{pmatrix},
-
-    with ``A_{xx}``, ``A_{yy}``, ``A_{xy}`` as in the 2D doc.
+    Both Ex and Ey now use the same scalar operator, so the test is
+    identical for each component.
     """
 
     @pytest.mark.parametrize("Nx,Ny", [(8, 8), (12, 16), (16, 12)])
     @pytest.mark.parametrize("mx,my", [(1, 1), (2, 3), (3, 2)])
-    def test_ex_ey_coupled_fourier_periodic(self, Nx, Ny, mx, my):
+    def test_ex_ey_fourier_periodic(self, Nx, Ny, mx, my):
         delta = 1.0
         Lx = Nx * delta
         Ly = Ny * delta
@@ -165,8 +251,6 @@ class TestExEyFourier:
         ky = 2 * np.pi * my / Ly
         L_val = 0.5
         c = 1.0
-        c2 = c * c
-        c2_dx2 = c2 / (delta * delta)
 
         Ex0, Ey0 = 1.0, 0.5
         x = np.arange(Nx) * delta
@@ -174,17 +258,17 @@ class TestExEyFourier:
         xx = np.broadcast_to(x, (Ny, Nx))
         yy = np.broadcast_to(y[:, None], (Ny, Nx))
 
+        eigenvalue = L_val + 4 * c * c / (delta * delta) * (
+            np.sin(kx * delta / 2) ** 2 + np.sin(ky * delta / 2) ** 2
+        )
+
         E_true = np.zeros((Ny, Nx, 3))
         E_true[..., 0] = Ex0 * np.cos(kx * xx + ky * yy)
         E_true[..., 1] = Ey0 * np.cos(kx * xx + ky * yy)
 
-        A_xx = L_val + 4 * c2_dx2 * np.sin(ky * delta / 2) ** 2
-        A_yy = L_val + 4 * c2_dx2 * np.sin(kx * delta / 2) ** 2
-        A_xy = -c2_dx2 * np.sin(kx * delta) * np.sin(ky * delta)
-
         S = np.zeros((Ny, Nx, 3))
-        S[..., 0] = A_xx * E_true[..., 0] + A_xy * E_true[..., 1]
-        S[..., 1] = A_xy * E_true[..., 0] + A_yy * E_true[..., 1]
+        S[..., 0] = eigenvalue * E_true[..., 0]
+        S[..., 1] = eigenvalue * E_true[..., 1]
 
         E_solved = ohm.solve_ohm_2d(L_val * np.ones((Ny, Nx)), S, delta)
         rel_err_ex = np.max(np.abs(E_solved[..., 0] - E_true[..., 0])) / np.max(
@@ -197,96 +281,77 @@ class TestExEyFourier:
         assert rel_err_ey < 1e-10, f"Ey rel_err={rel_err_ey:.2e}"
 
 
-# -*- precomputed base equivalence -*-
+# -*- manufactured solution tests -*-
 
 
-def test_solve_ohm_2d_default_vs_precomputed_base():
-    """Default path matches the path with precomputed base matrices."""
-    Nx, Ny = 10, 8
-    delta = 1.0
-    c = 1.0
+def test_manufactured_solution_fft_preconditioning():
+    L, S, rho, expected, delta, c = _manufactured_case(variable_lambda=True)
 
-    x = np.arange(Nx)
-    y = np.arange(Ny)
-    xx = np.broadcast_to(x, (Ny, Nx))
-    yy = np.broadcast_to(y[:, None], (Ny, Nx))
-    L = 0.5 + 0.1 * np.cos(2 * np.pi * xx / Nx) + 0.05 * np.sin(2 * np.pi * yy / Ny)
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = S.copy()
+    S_reduced[..., 0] -= c * c * d_rho_dx
+    S_reduced[..., 1] -= c * c * d_rho_dy
 
-    rng = np.random.default_rng(123)
-    S = rng.normal(size=(Ny, Nx, 3))
-
-    base1, base2 = ohm.build_ohm_bases_from_grid(Nx, Ny, c, delta)
-
-    E_default = ohm.solve_ohm_2d(L, S, delta, c=c)
-    E_precomp = ohm.solve_ohm_2d(L, S, delta, c=c, base1=base1, base2=base2)
-
-    np.testing.assert_allclose(E_default, E_precomp, rtol=1e-11, atol=1e-12)
-
-
-def test_solve_ohm_2d_rejects_bad_precomputed_base_shape():
-    """solve_ohm_2d validates supplied base-matrix shapes."""
-    Nx, Ny = 10, 8
-    delta = 1.0
-    L = np.ones((Ny, Nx))
-    S = np.zeros((Ny, Nx, 3))
-
-    base1, base2 = ohm.build_ohm_bases_from_grid(Nx, Ny, c=1.0, delta=delta)
-
-    with pytest.raises(ValueError, match="base shape"):
-        ohm.solve_ohm_2d(L, S, delta, base1=base1[:-1, :-1], base2=base2)
-
-    with pytest.raises(ValueError, match="base shape"):
-        ohm.solve_ohm_2d(L, S, delta, base1=base1, base2=base2[:-1, :-1])
-
-
-# -*- general species support (3-species synthetic) -*-
-
-
-def test_transform_moments_three_species_consistent_with_2d_solve():
-    """End-to-end: build um for 3 species, transform, solve, check Fourier.
-
-    Synthetic 3-species setup with qm = [-1, +0.04, +0.04] (one electron,
-    two ion species). Construct um such that the transformed Lambda is
-    spatially constant, then drive a manufactured Ez solution.
-    """
-    Ns = 3
-    Nx, Ny = 8, 8
-    delta = 1.0
-    c = 1.0
-    m = 1
-
-    qm = np.array([-1.0, 0.04, 0.04])
-
-    um = np.zeros((Ny, Nx, Ns, 14))
-    um[..., 0, 0] = 1.0
-    um[..., 1, 0] = 1.0 / qm[1] ** 2
-    um[..., 2, 0] = 1.0 / qm[2] ** 2
-
-    M = ohm.transform_moments(um, qm)
-    L = M[..., 0]
-    assert np.allclose(L, 3.0)
-
-    x = np.arange(Nx) * delta
-    y = np.arange(Ny) * delta
-    xx = np.broadcast_to(x, (Ny, Nx))
-    yy = np.broadcast_to(y[:, None], (Ny, Nx))
-    kx = 2 * np.pi * m / (Nx * delta)
-    ky = 2 * np.pi * m / (Ny * delta)
-
-    Ez0 = 0.6
-    E_true = np.zeros((Ny, Nx, 3))
-    E_true[..., 2] = Ez0 * np.cos(kx * xx + ky * yy)
-    eig = 3.0 + 4 * c * c / (delta * delta) * (
-        np.sin(kx * delta / 2) ** 2 + np.sin(ky * delta / 2) ** 2
+    M = ohm._build_fft_preconditioner_2d(L.shape, delta, c, float(np.mean(L)))
+    solved, info = ohm.solve_ohm_2d(
+        L, S_reduced, delta, c=c, M=M, rtol=1.0e-10, return_info=True
     )
-    S = np.zeros((Ny, Nx, 3))
-    S[..., 2] = eig * E_true[..., 2]
 
-    E_sol = ohm.solve_ohm_2d(L, S, delta)
-    rel_err = np.max(np.abs(E_sol[..., 2] - E_true[..., 2])) / np.max(
-        np.abs(E_true[..., 2])
+    np.testing.assert_allclose(solved, expected, rtol=2.0e-9, atol=2.0e-10)
+    assert info["status"] == (0, 0, 0)
+    assert max(info["relative_residual"]) < 2.0e-9
+    assert info["preconditioner"] == "fft"
+
+
+def test_manufactured_solution_unpreconditioned_cg():
+    L, S, rho, expected, delta, c = _manufactured_case(variable_lambda=True)
+
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = S.copy()
+    S_reduced[..., 0] -= c * c * d_rho_dx
+    S_reduced[..., 1] -= c * c * d_rho_dy
+
+    solved, info = ohm.solve_ohm_2d(
+        L,
+        S_reduced,
+        delta,
+        c=c,
+        M=None,
+        rtol=1.0e-10,
+        return_info=True,
     )
-    assert rel_err < 1e-10, f"3-species Ez rel_err={rel_err:.2e}"
+
+    np.testing.assert_allclose(solved, expected, rtol=2.0e-9, atol=2.0e-10)
+    assert info["status"] == (0, 0, 0)
+    assert max(info["relative_residual"]) < 2.0e-9
+    assert info["preconditioner"] == "none"
+
+
+def test_defaults_to_no_preconditioning():
+    L, S, rho, expected, delta, c = _manufactured_case(variable_lambda=True)
+
+    d_rho_dx, d_rho_dy = _periodic_gradient(rho, delta)
+    S_reduced = S.copy()
+    S_reduced[..., 0] -= c * c * d_rho_dx
+    S_reduced[..., 1] -= c * c * d_rho_dy
+
+    solved, info = ohm.solve_ohm_2d(
+        L, S_reduced, delta, c=c, rtol=1.0e-10, return_info=True
+    )
+
+    np.testing.assert_allclose(solved, expected, rtol=2.0e-9, atol=2.0e-10)
+    assert info["preconditioner"] == "none"
+
+
+def test_cg_uses_relative_tolerance_for_small_rhs():
+    L = np.ones((6, 8))
+    S = np.full((*L.shape, 3), 1.0e-14)
+
+    solved, info = ohm.solve_ohm_2d(L, S, 1.0, rtol=1.0e-10, return_info=True)
+
+    np.testing.assert_allclose(solved, S, rtol=1.0e-10, atol=0.0)
+    assert info["status"] == (0, 0, 0)
+    assert max(info["relative_residual"]) < 1.0e-10
 
 
 # -*- CG convergence on manufactured case -*-
@@ -318,22 +383,22 @@ def test_solve_ohm_2d_return_info_status_ok():
     E_sol, info = ohm.solve_ohm_2d(
         L_val * np.ones((Ny, Nx)), S, delta, return_info=True
     )
-    assert info["status_1"] == 0
-    assert info["status_2"] == 0
+    assert info["status"] == (0, 0, 0)
     rel_err = np.max(np.abs(E_sol - E_true)) / np.max(np.abs(E_true))
     assert rel_err < 1e-10
 
 
-# -*- calc_e_ohm_2d smoke test with a mock run -*-
+# -*- calc_e_ohm_2d smoke test -*-
 
 
 class _MockRun:
     """Minimal picnix.Run stub for testing calc_e_ohm_1d / _2d."""
 
-    def __init__(self, uf, um, config):
+    def __init__(self, uf, um, config, qm):
         self._uf = uf
         self._um = um
         self.config = config
+        self.qm = qm
 
     def read_at(self, prefix, step):
         return {"uf": self._uf, "um": self._um}
@@ -362,19 +427,17 @@ def test_calc_e_ohm_2d_dispatch():
             "Ny": Ny,
             "Nx": Nx,
             "delh": delta,
-            "mime": 25.0,
-            "wp": 1.0,
-            "nppc": 100,
         }
     }
-    run = _MockRun(uf, um, config)
+    qm = np.array([-1.0, 1.0 / 25.0])
+    run = _MockRun(uf, um, config, qm)
     E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0)
     assert E_ohm.shape == (Ny, Nx, 3)
     assert np.all(np.isfinite(E_ohm))
 
 
-def test_calc_e_ohm_2d_explicit_qm_required_for_3_species():
-    """For a 3-species run with no [[parameter.particle]], explicit qm is required."""
+def test_calc_e_ohm_2d_with_3_species():
+    """A 3-species run with run.qm set works."""
     Nx, Ny = 8, 8
     Ns = 3
     delta = 0.5
@@ -395,106 +458,52 @@ def test_calc_e_ohm_2d_explicit_qm_required_for_3_species():
             "delh": delta,
         }
     }
-    run = _MockRun(uf, um, config)
+    qm = np.array([-1.0, 0.04, 0.04])
+    run = _MockRun(uf, um, config, qm)
+    E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0)
+    assert E_ohm.shape == (Ny, Nx, 3)
+    assert np.all(np.isfinite(E_ohm))
 
-    with pytest.raises(ValueError, match="Cannot infer qm"):
-        picnix.calc_e_ohm_2d(run, 0, c=1.0)
+
+# -*- 3-species transform + solve -*-
+
+
+def test_transform_moments_three_species_consistent_with_2d_solve():
+    """End-to-end: build um for 3 species, transform, solve, check Fourier."""
+    Ns = 3
+    Nx, Ny = 8, 8
+    delta = 1.0
+    c = 1.0
+    m = 1
 
     qm = np.array([-1.0, 0.04, 0.04])
-    E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0, qm_per_species=qm)
-    assert E_ohm.shape == (Ny, Nx, 3)
-    assert np.all(np.isfinite(E_ohm))
 
-
-# -*- _resolve_qm priority order -*-
-
-
-def test_resolve_qm_2d_explicit_arg_wins():
-    """Explicit qm_per_species argument overrides everything else."""
-
-    class _Run:
-        qm = [-2.0, -2.0, 0.5]
-        config = {"parameter": {"Ns": 3}}
-
-    explicit = [-7.0, -7.0, 7.0]
-    out = ohm._resolve_qm(_Run(), explicit)
-    np.testing.assert_array_equal(out, explicit)
-
-
-def test_resolve_qm_2d_profile_field_used_when_no_explicit():
-    """run.qm is used when qm_per_species is not given."""
-
-    class _Run:
-        qm = [-1.0, -1.0, 0.01]
-        config = {"parameter": {"Ns": 3, "mime": 100.0, "wp": 1.0, "nppc": 100}}
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_array_equal(out, [-1.0, -1.0, 0.01])
-
-
-def test_resolve_qm_2d_falls_back_to_config_when_no_profile_qm():
-    """Old profiles (no qm) fall back to qm_per_species_from_config."""
-
-    class _Run:
-        qm = None
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
-
-
-def test_resolve_qm_2d_handles_missing_qm_attribute():
-    """If run has no qm attribute at all, fall back to config inference."""
-
-    class _Run:
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
-
-
-def test_calc_e_ohm_2d_uses_profile_qm_for_3_species():
-    """A 3-species run with run.qm set works without an explicit override."""
-
-    Nx, Ny = 8, 8
-    Ns = 3
-    delta = 0.5
-
-    um = np.zeros((1, Ny, Nx, Ns, 14))
+    um = np.zeros((Ny, Nx, Ns, 14))
     um[..., 0, 0] = 1.0
-    um[..., 1, 0] = 1.0
-    um[..., 2, 0] = 1.0
+    um[..., 1, 0] = 1.0 / qm[1] ** 2
+    um[..., 2, 0] = 1.0 / qm[2] ** 2
 
-    uf = np.zeros((1, Ny, Nx, 6))
-    uf[..., 3] = 0.5
+    L, G, P, R = ohm.transform_moments(um, qm)
+    assert np.allclose(L, 3.0)
 
-    # config is intentionally ambiguous (no [[parameter.particle]]); without
-    # the profile qm field, calc_e_ohm_2d would raise.
-    config = {
-        "parameter": {
-            "Ns": Ns,
-            "Ny": Ny,
-            "Nx": Nx,
-            "delh": delta,
-        }
-    }
-    run = _MockRun(uf, um, config)
-    run.qm = [-1.0, -1.0, 0.01]
+    x = np.arange(Nx) * delta
+    y = np.arange(Ny) * delta
+    xx = np.broadcast_to(x, (Ny, Nx))
+    yy = np.broadcast_to(y[:, None], (Ny, Nx))
+    kx = 2 * np.pi * m / (Nx * delta)
+    ky = 2 * np.pi * m / (Ny * delta)
 
-    E_ohm = picnix.calc_e_ohm_2d(run, 0, c=1.0)
-    assert E_ohm.shape == (Ny, Nx, 3)
-    assert np.all(np.isfinite(E_ohm))
+    Ez0 = 0.6
+    E_true = np.zeros((Ny, Nx, 3))
+    E_true[..., 2] = Ez0 * np.cos(kx * xx + ky * yy)
+    eig = 3.0 + 4 * c * c / (delta * delta) * (
+        np.sin(kx * delta / 2) ** 2 + np.sin(ky * delta / 2) ** 2
+    )
+    S = np.zeros((Ny, Nx, 3))
+    S[..., 2] = eig * E_true[..., 2]
+
+    E_sol = ohm.solve_ohm_2d(L, S, delta)
+    rel_err = np.max(np.abs(E_sol[..., 2] - E_true[..., 2])) / np.max(
+        np.abs(E_true[..., 2])
+    )
+    assert rel_err < 1e-10, f"3-species Ez rel_err={rel_err:.2e}"
