@@ -10,6 +10,19 @@ The code should be formatted via the `ruff` command before making a commit.
 
 ### Markdown
 Markdown documents should be human-friendly (i.e., not only for AIs) with proper indentation and line breaks. The line breaks should be placed by double spaces `  ` at the end of the line.
+
+Math in docstrings and markdown files should use GitHub-compatible syntax:
+- **Inline math**: Use `` $`...`$ `` (dollar-backtick) when the expression contains underscores, backticks, or other markdown-sensitive characters; use plain `$...$` for simple expressions like `$x = 1$`.
+- **Display math**: Use a fenced code block with the `math` language tag:
+
+  ````markdown
+  ```math
+  \int f(\boldsymbol{v}) \, d\boldsymbol{v}
+  ```
+  ````
+
+  Avoid RST-style `.. math::` directives and `:math:` roles — they do not render on GitHub.
+- When using the backtick form, LaTeX special characters do not need `\`-escaping from markdown (e.g. write `V_{s}` not `V\_{s}`).
   
 ## Git Workflow & Branching Policy
 Follow these rules for any Git-related operations.  

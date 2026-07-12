@@ -112,11 +112,35 @@ void Application::initialize(int argc, char** argv)
 
 void Application::finalize()
 {
+  float64 shutdown_begin = nix::wall_clock();
+  json    log            = {{"unixtime", shutdown_begin}, {"curtime", curtime}};
+
+  logger->append(curstep, "shutdown_begin", log);
   logger->flush();
 
   if (argparser->get_save() != "") {
+    std::string prefix                = argparser->get_save();
+    float64     checkpoint_save_begin = nix::wall_clock();
+    log = {{"prefix", prefix}, {"unixtime", checkpoint_save_begin}, {"curtime", curtime}};
+    logger->append(curstep, "checkpoint_save_begin", log);
+    logger->flush();
+
     statehandler->save(get_interface(), argparser->get_save());
+
+    float64 checkpoint_save_end = nix::wall_clock();
+    log                         = {{"prefix", prefix},
+                                   {"elapsed", checkpoint_save_end - checkpoint_save_begin},
+                                   {"unixtime", checkpoint_save_end},
+                                   {"curtime", curtime}};
+    logger->append(curstep, "checkpoint_save_end", log);
+    logger->flush();
   }
+
+  float64 shutdown_end = nix::wall_clock();
+  log                  = {
+      {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
+  logger->append(curstep, "shutdown_end", log);
+  logger->flush();
 
   finalize_mpi();
 }
@@ -317,7 +341,8 @@ void Application::setup_chunks_init()
 void Application::setup_chunks()
 {
   if (argparser->get_load() != "") {
-    statehandler->load(get_interface(), argparser->get_load());
+    bool status = statehandler->load(get_interface(), argparser->get_load());
+    assert_mpi(status == true, "invalid checkpoint status");
   } else {
     setup_chunks_init();
   }

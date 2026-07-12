@@ -35,8 +35,13 @@ public:
   template <typename PtrInterface>
   bool save(PtrInterface interface, std::string prefix)
   {
+    write_status(interface, prefix, "in_progress", false);
+
     save_application(interface, prefix);
     save_chunkvec(interface, prefix);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    write_status(interface, prefix, "complete", true);
 
     return true;
   }
@@ -97,7 +102,16 @@ public:
   template <typename PtrInterface>
   bool load(PtrInterface interface, std::string prefix)
   {
-    load_application(interface, prefix);
+    if (validate_status(interface, prefix) == false) {
+      return false;
+    }
+
+    bool status = load_application(interface, prefix);
+    MPI_Allreduce(MPI_IN_PLACE, &status, 1, MPI_CXX_BOOL, MPI_LAND, MPI_COMM_WORLD);
+    if (status == false) {
+      return false;
+    }
+
     load_chunkvec(interface, prefix);
 
     return true;
@@ -146,7 +160,56 @@ public:
     return true;
   }
 
+  std::string get_status_filename(std::string prefix)
+  {
+    return get_path_with_basedir(prefix) + ".status.json";
+  }
+
+  template <typename PtrInterface>
+  bool write_status(PtrInterface interface, std::string prefix, std::string status, bool atomic)
+  {
+    auto data = interface->get_data();
+
+    if (data.thisrank == 0) {
+      json payload = {{"status", status},
+                      {"prefix", normalize_prefix(prefix)},
+                      {"curstep", data.curstep},
+                      {"curtime", data.curtime},
+                      {"nprocess", data.nprocess},
+                      {"timestamp", nix::wall_clock()},
+                      {"application", prefix + ".msgpack"},
+                      {"chunks", prefix}};
+
+      write_status_payload(prefix, payload, atomic);
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    return true;
+  }
+
+  template <typename PtrInterface>
+  bool validate_status(PtrInterface interface, std::string prefix)
+  {
+    auto data   = interface->get_data();
+    bool status = true;
+
+    if (data.thisrank == 0) {
+      status = validate_status_payload(prefix, data.nprocess);
+    }
+
+    MPI_Bcast(&status, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
+
+    return status;
+  }
+
 protected:
+  std::string normalize_prefix(const std::string& prefix) const
+  {
+    namespace fs = std::filesystem;
+    return fs::weakly_canonical(fs::path(basedir) / fs::path(prefix)).string();
+  }
+
   std::string get_path_with_basedir(std::string name, bool require_existence = false)
   {
     namespace fs = std::filesystem;
@@ -170,6 +233,63 @@ protected:
     }
 
     return full_path.string();
+  }
+
+  void write_status_payload(std::string prefix, json& payload, bool atomic)
+  {
+    namespace fs = std::filesystem;
+
+    fs::path filename = get_status_filename(prefix);
+    fs::path tmpname  = filename;
+    tmpname += ".tmp";
+    fs::path output = atomic ? tmpname : filename;
+
+    std::ofstream ofs(output);
+    ofs << payload.dump(2) << std::endl;
+    ofs.flush();
+    ofs.close();
+
+    if (atomic == true) {
+      fs::rename(tmpname, filename);
+    }
+  }
+
+  bool validate_status_payload(std::string prefix, int nprocess)
+  {
+    std::string   filename = get_status_filename(prefix);
+    std::ifstream ifs(filename);
+
+    if (ifs.is_open() == false) {
+      DEBUG0 << tfm::format("checkpoint status file not found: %s; treating as legacy checkpoint",
+                            filename);
+      return true;
+    }
+
+    json payload = json::parse(ifs, nullptr, false);
+    if (payload.is_discarded()) {
+      ERROR << tfm::format("failed to parse checkpoint status file: %s", filename);
+      return false;
+    }
+
+    if (payload.contains("status") == false || payload["status"].is_string() == false ||
+        payload["status"].get<std::string>() != "complete") {
+      ERROR << tfm::format("checkpoint is not complete: %s", filename);
+      return false;
+    }
+
+    if (payload.contains("prefix") == false || payload["prefix"].is_string() == false ||
+        payload["prefix"].get<std::string>() != normalize_prefix(prefix)) {
+      ERROR << tfm::format("checkpoint status prefix mismatch: %s", filename);
+      return false;
+    }
+
+    if (payload.contains("nprocess") == false || payload["nprocess"].is_number_integer() == false ||
+        payload["nprocess"].get<int>() != nprocess) {
+      ERROR << tfm::format("checkpoint status nprocess mismatch: %s", filename);
+      return false;
+    }
+
+    return true;
   }
 
   template <typename PtrInterface>

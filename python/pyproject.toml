@@ -32,6 +32,7 @@ picnix-loadchecker = "picnix.loadchecker:main"
 picnix-log-analyze = "picnix.log_analyzer:main"
 picnix-memory-estimator = "picnix.memory_estimator:main"
 picnix-msgpack-printer = "picnix.msgpack_printer:main"
+picnix-ohm-compare = "picnix.ohm_compare:main"
 picnix-syncdir = "picnix.syncdir:main"
 
 [tool.hatch.build.targets.wheel]

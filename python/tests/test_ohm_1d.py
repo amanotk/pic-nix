@@ -27,15 +27,15 @@ def test_solve_ohm_1d_shape_validation():
 @pytest.mark.parametrize("N", [8, 16, 32, 64])
 @pytest.mark.parametrize("m", [1, 2, 3])
 def test_solve_ohm_1d_fourier_yz(N, m):
-    """1D periodic Fourier verification for the E_y and E_z components.
+    r"""1D periodic Fourier verification for the E_y and E_z components.
 
     ``E^alpha = E0 * cos(k_x * x)`` (alpha in {y, z}) is an eigenfunction
     of the 1D operator ``(Lambda - c^2 d^2/dx^2)`` with eigenvalue
 
-    .. math::
-
-        \\lambda(k_x) = \\Lambda + \\frac{4 c^2}{\\Delta^2} \\sin^2\\left(\\frac{k_x \\Delta}{2}\\right),
-        \\quad k_x = \\frac{2 \\pi m}{N \\Delta}.
+    ```math
+    \lambda(k_x) = \Lambda + \frac{4 c^2}{\Delta^2} \sin^2\!\left(\frac{k_x \Delta}{2}\right),
+    \quad k_x = \frac{2 \pi m}{N \Delta}.
+    ```
     """
     delta = 1.0
     c = 1.0
@@ -65,22 +65,23 @@ def test_solve_ohm_1d_fourier_yz(N, m):
 def test_solve_ohm_1d_fourier_x(N, m):
     """1D periodic Fourier verification for the E_x component.
 
-    In 1D the E_x equation reduces to ``Lambda * E_x = S_x`` (the
-    curl-curl operator vanishes), so ``E_x = cos(kx x)`` has the
-    pointwise source ``S_x = Lambda * E_x`` independent of the wavenumber.
+    All three components now use the same operator
+    ``(Lambda - c^2 d^2/dx^2) E = S``.
     """
     delta = 1.0
+    c = 1.0
     E0 = 0.8
     L_val = 0.5
 
     x = np.arange(N) * delta
     kx = 2 * np.pi * m / (N * delta)
     L = np.full(N, L_val)
+    lam = L_val + 4 * c * c / (delta * delta) * np.sin(np.pi * m / N) ** 2
 
     E_true = np.zeros((N, 3))
     E_true[:, 0] = E0 * np.cos(kx * x)
     S = np.zeros((N, 3))
-    S[:, 0] = L_val * E_true[:, 0]
+    S[:, 0] = lam * E_true[:, 0]
 
     E_sol = ohm.solve_ohm_1d(L, S, delta)
     rel_err = np.max(np.abs(E_sol[:, 0] - E_true[:, 0])) / np.max(np.abs(E_true[:, 0]))
@@ -156,17 +157,17 @@ def test_transform_moments_general_species():
     qm = np.array([-1.0, 0.5, 0.1])
     qm2 = qm**2
 
-    M = ohm.transform_moments(um, qm)
+    L, G, P, R = ohm.transform_moments(um, qm)
 
     expected_Lambda = (um[..., 0] * qm2).sum(axis=-1)
     expected_Gamma_x = (um[..., 1] * qm2).sum(axis=-1)
     expected_Pxx = (um[..., 5] * qm).sum(axis=-1)
     expected_Pzz = (um[..., 7] * qm).sum(axis=-1)
 
-    np.testing.assert_allclose(M[..., 0], expected_Lambda)
-    np.testing.assert_allclose(M[..., 1], expected_Gamma_x)
-    np.testing.assert_allclose(M[..., 4], expected_Pxx)
-    np.testing.assert_allclose(M[..., 6], expected_Pzz)
+    np.testing.assert_allclose(L, expected_Lambda)
+    np.testing.assert_allclose(G[..., 0], expected_Gamma_x)
+    np.testing.assert_allclose(P[..., 0], expected_Pxx)
+    np.testing.assert_allclose(P[..., 2], expected_Pzz)
 
 
 # -*- CG status reporting -*-
@@ -191,7 +192,7 @@ def test_solve_ohm_1d_return_info_status_ok():
     S[:, 2] = lam * E_true[:, 2]
 
     E_sol, info = ohm.solve_ohm_1d(L, S, delta, return_info=True)
-    assert all(s == 0 for s in info["status_yz"]), f"statuses={info['status_yz']}"
+    assert all(s == 0 for s in info["status"]), f"statuses={info['status']}"
     rel_err = np.max(np.abs(E_sol - E_true)) / np.max(np.abs(E_true))
     assert rel_err < 1e-10
 
@@ -207,7 +208,6 @@ def test_ohm_public_api_exported():
         "calc_e_ohm_1d",
         "calc_e_ohm_2d",
         "transform_moments",
-        "qm_per_species_from_config",
     ]:
         assert hasattr(picnix, name), f"picnix.{name} not exported"
 
@@ -218,21 +218,18 @@ def test_ohm_public_api_exported():
 class _MockRun:
     """Minimal picnix.Run stub for testing calc_e_ohm_1d / _2d."""
 
-    def __init__(self, uf, um, config):
+    def __init__(self, uf, um, config, qm):
         self._uf = uf
         self._um = um
         self.config = config
+        self.qm = qm
 
     def read_at(self, prefix, step):
         return {"uf": self._uf, "um": self._um}
 
 
 def test_calc_e_ohm_1d_dispatch():
-    """calc_e_ohm_1d returns shape (Nx, 3) and finite values for a 1D run.
-
-    Builds a 1D picnix-shaped snapshot (nc=1, ny=1, nx=N) and verifies
-    the result has shape (Nx, 3) and finite values.
-    """
+    """calc_e_ohm_1d returns shape (Nx, 3) and finite values for a 1D run."""
     Nx = 32
     Ns = 2
     delta = 0.1
@@ -254,73 +251,10 @@ def test_calc_e_ohm_1d_dispatch():
             "Ny": 1,
             "Nx": Nx,
             "delh": delta,
-            "mime": 25.0,
-            "wp": 1.0,
-            "nppc": 100,
         }
     }
-    run = _MockRun(uf, um, config)
+    qm = np.array([-1.0, 1.0 / 25.0])
+    run = _MockRun(uf, um, config, qm)
     E_ohm = picnix.calc_e_ohm_1d(run, 0, c=1.0)
     assert E_ohm.shape == (Nx, 3)
     assert np.all(np.isfinite(E_ohm))
-
-
-# -*- _resolve_qm priority order -*-
-
-
-def test_resolve_qm_explicit_arg_wins():
-    """Explicit qm_per_species argument overrides everything else."""
-
-    class _Run:
-        qm = [-2.0, -2.0, 0.5]
-        config = {"parameter": {"Ns": 3}}
-
-    explicit = [-7.0, -7.0, 7.0]
-    out = ohm._resolve_qm(_Run(), explicit)
-    np.testing.assert_array_equal(out, explicit)
-
-
-def test_resolve_qm_profile_field_used_when_no_explicit():
-    """run.qm is used when qm_per_species is not given."""
-
-    class _Run:
-        qm = [-1.0, -1.0, 0.01]
-        config = {"parameter": {"Ns": 3, "mime": 100.0, "wp": 1.0, "nppc": 100}}
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_array_equal(out, [-1.0, -1.0, 0.01])
-
-
-def test_resolve_qm_falls_back_to_config_when_no_profile_qm():
-    """Old profiles (no qm) fall back to qm_per_species_from_config."""
-
-    class _Run:
-        qm = None
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])
-
-
-def test_resolve_qm_handles_missing_qm_attribute():
-    """If run has no qm attribute at all, fall back to config inference."""
-
-    class _Run:
-        config = {
-            "parameter": {
-                "Ns": 2,
-                "mime": 25.0,
-                "wp": 1.0,
-                "nppc": 100,
-            }
-        }
-
-    out = ohm._resolve_qm(_Run(), None)
-    np.testing.assert_allclose(out, [-1.0, 1.0 / 25.0])

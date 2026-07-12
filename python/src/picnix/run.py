@@ -27,6 +27,29 @@ from .utils import (
 )
 
 
+def _qm_per_species_legacy(config):
+    """Infer per-species q/m from a picnix config (backward compatibility).
+
+    This exists only to support profiles written by older picnix builds
+    that do not carry the ``qm`` metadata field.  Modern profiles always
+    include ``qm`` so this fallback is rarely triggered.
+    """
+    p = config["parameter"]
+    Ns = p["Ns"]
+
+    if "particle" in p:
+        return np.array([float(p["particle"][s]["qm"]) for s in range(Ns)])
+
+    if "mime" in p and "wp" in p and "nppc" in p:
+        if Ns != 2:
+            return None
+        wp = float(p["wp"])
+        mime = float(p["mime"])
+        return np.array([-wp, +wp / mime])
+
+    return None
+
+
 class Run(object):
     def __init__(self, profile, method=None, config=None):
         self.cache = dict()
@@ -75,6 +98,9 @@ class Run(object):
         elif config.endswith(".json"):
             with open(config, "r") as fileobj:
                 self.config = json.load(fileobj)
+
+        if self.qm is None:
+            self.qm = _qm_per_species_legacy(self.config)
 
         # store some parameters
         parameter = self.config["parameter"]
