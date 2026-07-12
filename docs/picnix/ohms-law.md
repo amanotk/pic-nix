@@ -102,26 +102,29 @@ and solve
 (\Lambda - c^2 \nabla^2) \boldsymbol{E} = \boldsymbol{S}_{\text{reduced}}.
 ```
 
-The charge-density gradient is not computed inside the solver; callers
-are responsible for reducing the source.  The high-level helpers
-``calc_e_ohm_1d`` and ``calc_e_ohm_2d`` handle this automatically.
+The charge-density gradient is computed inside `_build_source_1d` / `_build_source_2d`;
+callers get the reduced source directly.  The high-level helpers
+`calc_e_ohm_1d` and `calc_e_ohm_2d` handle this automatically via
+`transform_moments`.
 
-The default solver uses conjugate gradient preconditioned by a
-constant-coefficient FFT (`preconditioner="fft"`).  Pass
-`preconditioner=None` for unpreconditioned CG.
+The default solver uses conjugate gradient.  Pass an FFT preconditioner
+via the `M` argument (build with `_build_fft_preconditioner_2d`) or
+pass `M=None` for unpreconditioned CG.
 
-### API  
+### API
 
 ```python
 import picnix
+from picnix import ohm
 
 # Low-level (pre-reduced source):
 E = picnix.solve_ohm_2d(Lambda, S_reduced, delta, c=1.0)
 
-# or with info:
+# or with FFT-preconditioned CG and info:
+M_prec = ohm._build_fft_preconditioner_2d(Lambda.shape, delta, c, float(np.mean(Lambda)))
 E, info = picnix.solve_ohm_2d(
     Lambda, S_reduced, delta, c=1.0,
-    preconditioner="fft", rtol=1e-12, return_info=True
+    M=M_prec, rtol=1e-12, return_info=True
 )
 ```
 
@@ -134,26 +137,16 @@ preconditioner name.  The reported residual is
 {\max(\lVert R_\alpha \rVert_2, \epsilon)}.
 ```
 
-Callers performing repeated solves can reuse the Lambda-independent
-Laplacian base or the full matrix to avoid redundant construction:
-
-```python
-# Reuse the same Laplacian base across different Lambda profiles
-laplacian = picnix.ohm._build_laplacian_2d(Nx, Ny, delta, c=c)
-E1 = picnix.solve_ohm_2d(L1, S1, delta, c=c, base=laplacian)
-E2 = picnix.solve_ohm_2d(L2, S2, delta, c=c, base=laplacian)
-```
-
 ## Charge-density computation  
 
 PIC-NIX field diagnostics do not write ``uj`` or a standalone
-charge-density array, so ``rho`` must be reconstructed from raw moments:
+charge-density array; ``rho`` is returned by ``transform_moments(um, qm)``
+alongside Lambda, Gamma, and Pi.  For direct use without the high-level
+helpers, compute it manually:
 
 ```python
-rnho = np.sum(um[..., :, 0] * qm, axis=-1)
+rho = np.sum(um[..., :, 0] * qm, axis=-1)
 ```
-
-where ``qm`` is the exact per-species charge-to-mass ratio.  
 
 No automatic run wrapper is provided at the low level because diagnostic
 decimation changes the grid spacing, raw field output may retain
@@ -168,9 +161,9 @@ data.
 ## From a picnix run  
 
 For a single snapshot, ``calc_e_ohm_1d`` and ``calc_e_ohm_2d`` read the
-field and moment data, infer per-species ``q_s/m_s`` from the config,
-compute charge density from raw moments, build the source term, reduce
-it, and solve:
+field and moment data, use ``run.qm`` (resolved at init time from profile
+metadata or config), and build the reduced source automatically via
+``transform_moments``:
 
 ```python
 import picnix
@@ -182,11 +175,9 @@ E_ohm = picnix.calc_e_ohm_1d(run, step, c=1.0)  # or calc_e_ohm_2d
 
 The return value has shape ``(Nx, 3)`` (1D) or ``(Ny, Nx, 3)`` (2D).  
 
-If the profile does not carry per-species ``qm``, pass it explicitly:
-
-```python
-E_ohm = picnix.calc_e_ohm_2d(run, step, c=1.0, qm_per_species=qm)
-```
+If the profile does not carry per-species ``qm`` and cannot be inferred
+from the config, ``Run`` leaves ``qm=None``; use the ``picnix-ohm-compare``
+CLI with ``--qm`` to provide it explicitly when needed.
 
 ## Limitations  
 

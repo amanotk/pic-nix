@@ -54,7 +54,8 @@ def average_2d_periodic(values, decimate):
 
     from scipy import ndimage
 
-    filtered = ndimage.uniform_filter(values, size=decimate, axes=(0, 1), mode="wrap")
+    filtered = ndimage.uniform_filter1d(values, size=decimate, axis=0, mode="wrap")
+    filtered = ndimage.uniform_filter1d(filtered, size=decimate, axis=1, mode="wrap")
     return filtered[decimate // 2 :: decimate, decimate // 2 :: decimate]
 
 

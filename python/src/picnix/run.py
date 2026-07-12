@@ -42,9 +42,7 @@ def _qm_per_species_legacy(config):
 
     if "mime" in p and "wp" in p and "nppc" in p:
         if Ns != 2:
-            raise ValueError(
-                "mime/wp/nppc qm inference only valid for Ns=2 (electron-ion)"
-            )
+            return None
         wp = float(p["wp"])
         mime = float(p["mime"])
         return np.array([-wp, +wp / mime])
