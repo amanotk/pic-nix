@@ -195,11 +195,17 @@ class Run(object):
 
         return data
 
-    def read_particle_id_at(self, prefix, step, pattern=None):
+    def read_particle_at(self, prefix, step, pattern=None, start=None, stop=None):
         if pattern is None:
             pattern = ".*"
         handler = self.diag_handlers[prefix]
-        return handler.read_particle_id_at(step, pattern)
+        return handler.read_particle_at(step, pattern, start, stop)
+
+    def read_particle_id_at(self, prefix, step, pattern=None, start=None, stop=None):
+        if pattern is None:
+            pattern = ".*"
+        handler = self.diag_handlers[prefix]
+        return handler.read_particle_id_at(step, pattern, start, stop)
 
     def remove_file_at(self, prefix, step, are_you_sure=False):
         handler = self.diag_handlers[prefix]

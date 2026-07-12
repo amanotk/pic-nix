@@ -34,9 +34,12 @@ STEP_WIDTH = 8
 NODE_RE = re.compile(r"node\d+$")
 JSON_RE = re.compile(r"\d+\.json$")
 SKIP_PREFIXES = {"hdf5"}
-COMMANDS = {"convert", "verify", "remove-original"}
+COMMANDS = {"convert", "verify", "remove-original", "index-bbox"}
 REMOVE_CONFIRMATION = "remove original diagnostics"
 NODE_METADATA_FILES = ("history.txt",)
+BBOX_SCHEMA_VERSION = "particle-bbox-v1"
+BBOX_FIELDS = ("start", "stop", "count", "xmin", "xmax", "ymin", "ymax", "zmin", "zmax")
+BBOX_INT_FIELDS = {"start", "stop", "count"}
 
 
 class SerialComm:
@@ -72,15 +75,21 @@ def parse_args(argv=None):
 
     parser = argparse.ArgumentParser(
         prog="picnix-hdf5-convert",
-        usage="picnix-hdf5-convert [convert|verify|remove-original] --input-dir INPUT_DIR [options]",
+        usage="picnix-hdf5-convert [convert|verify|remove-original|index-bbox] --input-dir INPUT_DIR [options]",
         description="Convert PIC-NIX posix/mpiio diagnostics to HDF5 + VDS",
         epilog=(
             "Commands: convert is the default and runs verification unless --no-verify is set; "
             "verify checks existing HDF5 output and stamps manifest.json; "
+            "index-bbox ensures particle bbox metadata exists in particle VDS files; "
             "remove-original interactively deletes verified original .json/.data files."
         ),
     )
-    parser.add_argument("--input-dir", type=Path, required=True)
+    parser.add_argument("--input-dir", type=Path)
+    parser.add_argument(
+        "--hdf5-dir",
+        type=Path,
+        help="HDF5 output directory for index-bbox (default: <input-dir>/hdf5)",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -143,6 +152,12 @@ def parse_args(argv=None):
         default=1024.0,
         help="approximate maximum data buffer per dataset batch in MiB",
     )
+    parser.add_argument(
+        "--bbox-group-size",
+        type=int,
+        default=1_000_000,
+        help="particle rows per bbox index group (default: 1000000)",
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument(
         "--resume",
@@ -172,12 +187,20 @@ def parse_args(argv=None):
     )
     args = parser.parse_args(argv)
     args.command = command
+    if args.input_dir is None and args.hdf5_dir is None:
+        parser.error("--input-dir is required unless --hdf5-dir is provided")
+    if args.input_dir is None and args.command != "index-bbox":
+        parser.error("--input-dir is required for convert, verify, and remove-original")
+    if args.hdf5_dir is not None and args.command != "index-bbox":
+        parser.error("--hdf5-dir is only valid for index-bbox")
     if args.overwrite and args.resume:
         parser.error("--overwrite and --resume are mutually exclusive")
-    if args.command != "convert" and (args.overwrite or args.resume or args.no_verify):
-        parser.error(
-            "--overwrite, --resume, and --no-verify are only valid for convert"
-        )
+    if args.command != "convert" and (args.resume or args.no_verify):
+        parser.error("--resume and --no-verify are only valid for convert")
+    if args.command not in ("convert", "index-bbox") and args.overwrite:
+        parser.error("--overwrite is only valid for convert and index-bbox")
+    if args.command != "convert" and args.no_vds:
+        parser.error("--no-vds is only valid for convert")
     if args.command != "remove-original" and (
         args.dry_run or args.yes or args.trust_manifest
     ):
@@ -188,6 +211,8 @@ def parse_args(argv=None):
         parser.error(
             "default verification requires VDS output; use --no-verify with --no-vds"
         )
+    if args.bbox_group_size <= 0:
+        parser.error("--bbox-group-size must be positive")
     return args
 
 
@@ -489,6 +514,185 @@ def convert_particle_id(raw_id, dtype):
     return np.ascontiguousarray(raw_id).view(np.uint64).astype(dtype, copy=False)
 
 
+def bbox_position_columns(value_shape):
+    if len(value_shape) != 2 or value_shape[1] < 2:
+        raise ValueError(
+            f"particle bbox requires at least x/y columns, got {value_shape}"
+        )
+    if value_shape[1] >= 3:
+        return "x=0,y=1,z=2"
+    return "x=0,y=1,z=none,z_value=0"
+
+
+class ParticleBBoxBuilder:
+    def __init__(self, group_size, value_shape):
+        self.group_size = int(group_size)
+        self.position_columns = bbox_position_columns(value_shape)
+        self.records = {field: [] for field in BBOX_FIELDS}
+        self.current_start = 0
+        self.current_count = 0
+        self.reset_current_bounds()
+
+    def reset_current_bounds(self):
+        self.xmin = np.inf
+        self.xmax = -np.inf
+        self.ymin = np.inf
+        self.ymax = -np.inf
+        self.zmin = np.inf
+        self.zmax = -np.inf
+
+    def append(self, values):
+        if values.shape[0] == 0:
+            return
+        cursor = 0
+        while cursor < values.shape[0]:
+            available = self.group_size - self.current_count
+            take = min(available, values.shape[0] - cursor)
+            chunk = values[cursor : cursor + take]
+            self.xmin = min(self.xmin, float(np.min(chunk[:, 0])))
+            self.xmax = max(self.xmax, float(np.max(chunk[:, 0])))
+            self.ymin = min(self.ymin, float(np.min(chunk[:, 1])))
+            self.ymax = max(self.ymax, float(np.max(chunk[:, 1])))
+            if values.shape[1] >= 3:
+                self.zmin = min(self.zmin, float(np.min(chunk[:, 2])))
+                self.zmax = max(self.zmax, float(np.max(chunk[:, 2])))
+            else:
+                self.zmin = min(self.zmin, 0.0)
+                self.zmax = max(self.zmax, 0.0)
+
+            self.current_count += take
+            cursor += take
+            if self.current_count == self.group_size:
+                self.finalize_current()
+
+    def finalize_current(self):
+        if self.current_count == 0:
+            return
+        start = self.current_start
+        stop = start + self.current_count
+        self.records["start"].append(start)
+        self.records["stop"].append(stop)
+        self.records["count"].append(self.current_count)
+        self.records["xmin"].append(self.xmin)
+        self.records["xmax"].append(self.xmax)
+        self.records["ymin"].append(self.ymin)
+        self.records["ymax"].append(self.ymax)
+        self.records["zmin"].append(self.zmin)
+        self.records["zmax"].append(self.zmax)
+        self.current_start = stop
+        self.current_count = 0
+        self.reset_current_bounds()
+
+    def finish(self):
+        self.finalize_current()
+        columns = {}
+        for field in BBOX_FIELDS:
+            dtype = np.int64 if field in BBOX_INT_FIELDS else np.float64
+            columns[field] = np.array(self.records[field], dtype=dtype)
+        return {"position_columns": self.position_columns, "columns": columns}
+
+
+def create_particle_bbox_from_dataset(dataset, group_size, max_buffer_bytes):
+    builder = ParticleBBoxBuilder(group_size, dataset.shape)
+    if dataset.shape[0] == 0:
+        return builder.finish()
+    row_bytes = (
+        int(np.prod(dataset.shape[1:])) * dataset.dtype.itemsize
+        if len(dataset.shape) > 1
+        else dataset.dtype.itemsize
+    )
+    rows_per_chunk = max(1, max_buffer_bytes // max(1, row_bytes))
+    for start in range(0, dataset.shape[0], rows_per_chunk):
+        stop = min(dataset.shape[0], start + rows_per_chunk)
+        builder.append(dataset[start:stop, ...])
+    return builder.finish()
+
+
+def bbox_group_path(stem, species):
+    return f"/particle_bbox/{stem}/{species}"
+
+
+def bbox_group_compatible(group, group_size, position_columns):
+    if group.attrs.get("schema_version") != BBOX_SCHEMA_VERSION:
+        return False
+    if int(group.attrs.get("group_size", -1)) != int(group_size):
+        return False
+    if group.attrs.get("position_columns") != position_columns:
+        return False
+    lengths = []
+    for field in BBOX_FIELDS:
+        if field not in group:
+            return False
+        lengths.append(group[field].shape[0])
+    return len(set(lengths)) <= 1
+
+
+def write_particle_bbox_group(h5fp, stem, species, bbox, group_size, overwrite=False):
+    parent = h5fp.require_group("particle_bbox").require_group(stem)
+    if species in parent:
+        group = parent[species]
+        if bbox_group_compatible(group, group_size, bbox["position_columns"]):
+            return "existing"
+        if not overwrite:
+            raise ValueError(
+                f"incompatible particle bbox already exists at {bbox_group_path(stem, species)}"
+            )
+        del parent[species]
+    group = parent.create_group(species)
+    for field in BBOX_FIELDS:
+        group.create_dataset(field, data=bbox["columns"][field])
+    group.attrs["schema_version"] = BBOX_SCHEMA_VERSION
+    group.attrs["group_size"] = int(group_size)
+    group.attrs["position_columns"] = bbox["position_columns"]
+    return "created"
+
+
+def existing_particle_bbox_group(h5fp, stem, species):
+    path = bbox_group_path(stem, species)
+    if path in h5fp:
+        return h5fp[path]
+    return None
+
+
+def ensure_particle_bbox_index(
+    vds_path, prefix, group_size, max_buffer_bytes, overwrite=False
+):
+    results = {"created": 0, "existing": 0}
+    with h5py.File(vds_path, "r+", libver="latest") as h5fp:
+        if h5fp.attrs.get("picnix_hdf5_layout") != "prefix-vds-v1":
+            raise ValueError(f"invalid VDS layout: {vds_path}")
+        if h5fp.attrs.get("prefix") != prefix:
+            raise ValueError(f"VDS prefix mismatch: {vds_path}")
+        root = h5fp[prefix]
+        for stem, step_group in root.items():
+            if not isinstance(step_group, h5py.Group):
+                continue
+            for species, dataset in step_group.items():
+                if species.endswith("_id") or not isinstance(dataset, h5py.Dataset):
+                    continue
+                if len(dataset.shape) != 2:
+                    continue
+                position_columns = bbox_position_columns(dataset.shape)
+                existing = existing_particle_bbox_group(h5fp, stem, species)
+                if existing is not None:
+                    if bbox_group_compatible(existing, group_size, position_columns):
+                        results["existing"] += 1
+                        continue
+                    if not overwrite:
+                        raise ValueError(
+                            "incompatible particle bbox already exists at "
+                            f"{bbox_group_path(stem, species)}"
+                        )
+                bbox = create_particle_bbox_from_dataset(
+                    dataset, group_size, max_buffer_bytes
+                )
+                status = write_particle_bbox_group(
+                    h5fp, stem, species, bbox, group_size, overwrite=overwrite
+                )
+                results[status] = results.get(status, 0) + 1
+    return results
+
+
 def add_timing(timing, key, elapsed):
     timing[key] = timing.get(key, 0.0) + elapsed
 
@@ -568,12 +772,14 @@ def write_particle_blocks(
     id_group = blocks_group.require_group("id")
     value_paths = []
     id_paths = []
+    bbox_builder = ParticleBBoxBuilder(args.bbox_group_size, value_shape)
     offset = 0
     for block_index, raw_batch in enumerate(batches):
         block_name = f"block{block_index:06d}"
         t0 = time.perf_counter()
         value_batch = raw_batch[:, :-1].astype(value_dtype, copy=False)
         id_batch = convert_particle_id(raw_batch[:, -1], id_dtype)
+        bbox_builder.append(value_batch)
         add_timing(timing, "assemble", time.perf_counter() - t0)
 
         t0 = time.perf_counter()
@@ -618,6 +824,7 @@ def write_particle_blocks(
     group.create_virtual_dataset(name, value_layout)
     group.create_virtual_dataset(f"{name}_id", id_layout)
     add_timing(timing, "internal_vds", time.perf_counter() - t0)
+    return bbox_builder.finish()
 
 
 def copy_step_attrs(group, stem, prefix, iomode, kind, meta, source_count):
@@ -710,6 +917,7 @@ def write_step_file(args, stem, iomode, nodes):
     kind = detect_kind(args.prefix, names)
     if kind == "particle":
         id_dtype = dtype_choice(args.particle_id_dtype)
+        bbox_indices = {}
         output_datasets = {}
         for name, (raw_shape, _) in shape_dtype.items():
             value_shape = particle_value_shape(raw_shape)
@@ -724,6 +932,7 @@ def write_step_file(args, stem, iomode, nodes):
             }
     else:
         id_dtype = None
+        bbox_indices = None
         output_datasets = {
             name: {
                 "shape": tuple(shape),
@@ -754,7 +963,7 @@ def write_step_file(args, stem, iomode, nodes):
 
             if kind == "particle":
                 value_dtype = dtype_choice(args.particle_dtype, raw_dtype)
-                write_particle_blocks(
+                bbox_indices[name] = write_particle_blocks(
                     group,
                     name,
                     particle_value_shape(shape),
@@ -782,6 +991,7 @@ def write_step_file(args, stem, iomode, nodes):
         "timing": timing,
         "kind": kind,
         "datasets": output_datasets,
+        "bbox": bbox_indices,
     }
 
 
@@ -814,6 +1024,10 @@ def create_prefix_vds(args, step_infos):
                 )
                 layout[...] = source
                 step_group.create_virtual_dataset(name, layout)
+            for species, bbox in sorted((info.get("bbox") or {}).items()):
+                write_particle_bbox_group(
+                    h5fp, info["stem"], species, bbox, args.bbox_group_size
+                )
     return vds_path
 
 
@@ -1328,6 +1542,13 @@ def convert_prefix(args, prefix, comm):
     vds_path = None
     if rank == 0 and not args.no_vds:
         vds_path = create_prefix_vds(args, step_infos)
+        if any(item.get("kind") == "particle" for item in step_infos):
+            ensure_particle_bbox_index(
+                vds_path,
+                prefix,
+                args.bbox_group_size,
+                max(1, int(args.max_buffer_mib * 1024 * 1024)),
+            )
     comm.barrier()
 
     elapsed = time.perf_counter() - t0
@@ -1725,15 +1946,89 @@ def remove_original(args):
         )
 
 
+def discover_bbox_prefixes(hdf5_dir):
+    prefixes = []
+    for path in sorted(hdf5_dir.glob("*.vds.h5")):
+        prefix = path.name[: -len(".vds.h5")]
+        with h5py.File(path, "r") as h5fp:
+            if h5fp.attrs.get("picnix_hdf5_layout") != "prefix-vds-v1":
+                continue
+            if h5fp.attrs.get("prefix") != prefix or prefix not in h5fp:
+                continue
+            root = h5fp[prefix]
+            for item in root.values():
+                if not isinstance(item, h5py.Group):
+                    continue
+                names = [name for name in item if not name.endswith("_id")]
+                if names and detect_kind(prefix, names) == "particle":
+                    prefixes.append(prefix)
+                break
+    return prefixes
+
+
+def index_bbox(args):
+    hdf5_dir = args.hdf5_dir if args.hdf5_dir is not None else args.output_dir
+    prefixes = (
+        args.prefix if args.prefix is not None else discover_bbox_prefixes(hdf5_dir)
+    )
+    if not prefixes:
+        raise FileNotFoundError(f"no particle VDS files found in {hdf5_dir}")
+
+    max_buffer_bytes = max(1, int(args.max_buffer_mib * 1024 * 1024))
+    print("\nPIC-NIX particle bbox indexing")
+    print("==============================")
+    print(f"hdf5-dir:         {hdf5_dir}")
+    print(f"prefixes:         {', '.join(prefixes)}")
+    print(f"group size:       {args.bbox_group_size}")
+    if args.overwrite:
+        print("overwrite:        enabled")
+
+    total_created = 0
+    total_existing = 0
+    for prefix in prefixes:
+        vds_path = hdf5_dir / f"{prefix}.vds.h5"
+        if not vds_path.exists():
+            raise FileNotFoundError(f"VDS file not found: {vds_path}")
+        result = ensure_particle_bbox_index(
+            vds_path,
+            prefix,
+            args.bbox_group_size,
+            max_buffer_bytes,
+            overwrite=args.overwrite,
+        )
+        total_created += result.get("created", 0)
+        total_existing += result.get("existing", 0)
+        print(
+            f"  {prefix}: created {result.get('created', 0)}, "
+            f"existing {result.get('existing', 0)}"
+        )
+
+    print(f"created groups:   {total_created}")
+    print(f"existing groups:  {total_existing}")
+
+
 def main():
     args = parse_args()
     comm = get_comm()
     rank = comm.Get_rank()
 
-    args.input_dir = args.input_dir.resolve()
-    if args.output_dir is None:
+    if args.input_dir is not None:
+        args.input_dir = args.input_dir.resolve()
+    if args.hdf5_dir is not None:
+        args.hdf5_dir = args.hdf5_dir.resolve()
+    if args.output_dir is None and args.input_dir is not None:
         args.output_dir = args.input_dir / "hdf5"
+    if args.output_dir is None:
+        args.output_dir = args.hdf5_dir
     args.output_dir = args.output_dir.resolve()
+
+    if args.command == "index-bbox":
+        if comm.Get_size() != 1:
+            raise RuntimeError(
+                "index-bbox must be run in a normal single-process shell"
+            )
+        index_bbox(args)
+        return
 
     if args.command == "verify":
         if rank == 0:

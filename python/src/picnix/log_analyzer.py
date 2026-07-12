@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from pathlib import Path
 
 import msgpack
 import numpy as np
+import tqdm
 
 from picnix import DEFAULT_LOG_PREFIX
 
@@ -16,12 +18,41 @@ from picnix import DEFAULT_LOG_PREFIX
 PHASES = ("diagnostic", "push", "rebalance")
 DEFAULT_MAX_PLOT_POINTS = 5000
 DEFAULT_PLOT_BINS = 100
+READ_CHUNK_BYTES = 1024 * 1024
+
+
+def iter_msgpack_records(filename, progress=False):
+    path = Path(filename)
+    progress_bar = None
+    if progress:
+        progress_bar = tqdm.tqdm(
+            total=path.stat().st_size,
+            unit="B",
+            unit_scale=True,
+            desc=f"Reading {path.name}",
+            file=sys.stderr,
+        )
+
+    try:
+        with path.open("rb") as fp:
+            unpacker = msgpack.Unpacker(raw=False, strict_map_key=False)
+            while True:
+                chunk = fp.read(READ_CHUNK_BYTES)
+                if not chunk:
+                    break
+                unpacker.feed(chunk)
+                if progress_bar is not None:
+                    progress_bar.update(len(chunk))
+                for record in unpacker:
+                    if isinstance(record, dict):
+                        yield record
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
 
 
 def read_msgpack_stream(filename):
-    with Path(filename).open("rb") as fp:
-        unpacker = msgpack.Unpacker(fp, raw=False, strict_map_key=False)
-        return [record for record in unpacker if isinstance(record, dict)]
+    return list(iter_msgpack_records(filename))
 
 
 def resolve_log_filename(filename):
@@ -152,38 +183,47 @@ def format_seconds(value):
     return f"{value:.6g}"
 
 
+def format_summary_value(value):
+    value = float(value)
+    if value == 0.0:
+        return "0.000"
+    if abs(value) >= 100000.0 or abs(value) < 0.001:
+        return f"{value:.3e}"
+    return f"{value:.3f}"
+
+
 def format_report(rows, log_filename, top=10):
     phase_summary = summarize_phases(rows)
     rebalance_summary = summarize_rebalance(rows)
 
     lines = [f"Log: {log_filename}", f"Records: {len(rows)}", "", "Phase Summary"]
     lines.append(
-        "phase        total[s]   percent   mean[ms]   median[ms]   p90[ms]   p99[ms]   max[ms]   count"
+        "phase             total[s]   percent     mean[ms]   median[ms]      p90[ms]      p99[ms]      max[ms]      count"
     )
     for phase in PHASES:
         item = phase_summary[phase]
         lines.append(
             f"{phase:<12}"
-            f"{format_seconds(item['total']):>9}"
+            f"{format_seconds(item['total']):>14}"
             f"{item['percent']:>9.2f}"
-            f"{1000.0 * item['mean']:>11.3f}"
-            f"{1000.0 * item['median']:>13.3f}"
-            f"{1000.0 * item['p90']:>10.3f}"
-            f"{1000.0 * item['p99']:>10.3f}"
-            f"{1000.0 * item['max']:>10.3f}"
-            f"{item['count']:>8}"
+            f"{format_summary_value(1000.0 * item['mean']):>13}"
+            f"{format_summary_value(1000.0 * item['median']):>13}"
+            f"{format_summary_value(1000.0 * item['p90']):>12}"
+            f"{format_summary_value(1000.0 * item['p99']):>12}"
+            f"{format_summary_value(1000.0 * item['max']):>12}"
+            f"{item['count']:>11}"
         )
 
     lines.extend(["", "Rebalance Summary"])
-    lines.append("kind       total[s]   mean[ms]   max[ms]   count")
+    lines.append("kind            total[s]     mean[ms]      max[ms]      count")
     for kind in ("active", "inactive"):
         item = rebalance_summary[kind]
         lines.append(
             f"{kind:<10}"
-            f"{format_seconds(item['total']):>9}"
-            f"{1000.0 * item['mean']:>11.3f}"
-            f"{1000.0 * item['max']:>10.3f}"
-            f"{item['count']:>8}"
+            f"{format_seconds(item['total']):>14}"
+            f"{format_summary_value(1000.0 * item['mean']):>13}"
+            f"{format_summary_value(1000.0 * item['max']):>12}"
+            f"{item['count']:>11}"
         )
 
     if top > 0:
@@ -461,6 +501,11 @@ def build_parser():
         default=10,
         help="number of worst phase timings to print (default: 10)",
     )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="disable msgpack read progress bar",
+    )
     return parser
 
 
@@ -469,7 +514,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     log_filename = resolve_log_filename(args.input)
-    records = read_msgpack_stream(log_filename)
+    records = iter_msgpack_records(
+        log_filename, progress=not args.no_progress and sys.stderr.isatty()
+    )
     rows = extract_timing_rows(records)
 
     if not rows:
