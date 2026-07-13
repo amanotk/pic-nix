@@ -38,6 +38,8 @@ public:
     BaseMaxwell maxwell(data);
     float64     efderr = 0.0;
     float64     bfderr = 0.0;
+    int64       ecount = 0;
+    int64       bcount = 0;
 
     int xbuffer[2] = {0, 0};
     int ybuffer[2] = {0, 0};
@@ -74,18 +76,19 @@ public:
     // calculate divergence error
     //
     if (dimension == 1) {
-      maxwell.get_diverror_1d(data.uf, data.uj, efderr, bfderr, xbuffer);
+      maxwell.get_diverror_1d(data.uf, data.uj, efderr, bfderr, ecount, bcount, xbuffer);
     }
 
     if (dimension == 2) {
-      maxwell.get_diverror_2d(data.uf, data.uj, efderr, bfderr, xbuffer, ybuffer);
+      maxwell.get_diverror_2d(data.uf, data.uj, efderr, bfderr, ecount, bcount, xbuffer, ybuffer);
     }
 
     if (dimension == 3) {
-      maxwell.get_diverror_3d(data.uf, data.uj, efderr, bfderr, xbuffer, ybuffer, zbuffer);
+      maxwell.get_diverror_3d(data.uf, data.uj, efderr, bfderr, ecount, bcount, xbuffer, ybuffer,
+                              zbuffer);
     }
 
-    return std::make_pair(efderr, bfderr);
+    return std::make_tuple(efderr, bfderr, ecount, bcount);
   }
 
   void push_efd(int dimension, T_chunk& chunk, const T_data& data, float64 delt) const

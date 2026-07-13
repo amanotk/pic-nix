@@ -148,39 +148,43 @@ private:
 
   float64 compute_divergence_error()
   {
-    const auto& chunkvec  = this->get_internal_data().chunkvec;
-    float64     local_efd = 0.0;
-    float64     local_bfd = 0.0;
-    int         local_cnt = 0;
+    const auto& chunkvec     = this->get_internal_data().chunkvec;
+    float64     local_efd    = 0.0;
+    float64     local_bfd    = 0.0;
+    int64       local_ecount = 0;
+    int64       local_bcount = 0;
 
     for (auto& chunk_ptr : chunkvec) {
       auto* chunk = dynamic_cast<PicChunk*>(chunk_ptr.get());
       REQUIRE(chunk != nullptr);
       auto data = chunk->get_internal_data();
 
-      float64 efd = 0.0;
-      float64 bfd = 0.0;
-      chunk->get_diverror(efd, bfd);
+      float64 efd    = 0.0;
+      float64 bfd    = 0.0;
+      int64   ecount = 0;
+      int64   bcount = 0;
+      chunk->get_diverror(efd, bfd, ecount, bcount);
       local_efd += efd;
       local_bfd += bfd;
-
-      // count interior cells
-      auto dims = chunk->get_dims();
-      local_cnt += dims[0] * dims[1] * dims[2];
+      local_ecount += ecount;
+      local_bcount += bcount;
     }
 
-    float64 global_efd = 0.0;
-    float64 global_bfd = 0.0;
-    int     global_cnt = 0;
+    float64 global_efd    = 0.0;
+    float64 global_bfd    = 0.0;
+    int64   global_ecount = 0;
+    int64   global_bcount = 0;
     MPI_Allreduce(&local_efd, &global_efd, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&local_bfd, &global_bfd, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&local_cnt, &global_cnt, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_ecount, &global_ecount, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_bcount, &global_bcount, 1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
 
-    float64 rms_efd = std::sqrt(global_efd / static_cast<float64>(global_cnt));
-    float64 rms_bfd = std::sqrt(global_bfd / static_cast<float64>(global_cnt));
+    float64 rms_efd = std::sqrt(global_efd / static_cast<float64>(global_ecount));
+    float64 rms_bfd = std::sqrt(global_bfd / static_cast<float64>(global_bcount));
 
     // check only div(E) error here
-    REQUIRE(global_cnt > 0);
+    REQUIRE(global_ecount > 0);
+    REQUIRE(global_bcount > 0);
     return rms_efd;
   }
 

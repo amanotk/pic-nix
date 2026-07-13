@@ -596,6 +596,76 @@ TEST_CASE("PicChunk pack/unpack round-trip")
   require_allclose(udata.up[0]->pcount, data.up[0]->pcount, 0.0, 0.0);
 }
 
+TEST_CASE("Maxwell divergence excludes staggered physical-boundary stencils")
+{
+  nix::Dims3D dims    = {1, 8, 8};
+  nix::Bool3D has_dim = {false, true, true};
+
+  const SmokeOptions options = {"scalar", 2, "Boris", "MC"};
+  PicChunk           chunk(dims, has_dim, 0);
+  setup_chunk(chunk, dims, options, 0.0);
+
+  auto data = chunk.get_internal_data();
+  std::fill(data.uf.begin(), data.uf.end(), 0.0);
+  std::fill(data.uj.begin(), data.uj.end(), 0.0);
+
+  const int nb = data.boundary_margin;
+
+  // These values contaminate only the old shared loop bounds.
+  data.uf(data.Lbz, data.Lby, data.Lbx + nb - 1, 3) = 1.0;
+  data.uf(data.Lbz, data.Lby, data.Ubx - nb + 1, 0) = 1.0;
+
+  float64 efd        = 0.0;
+  float64 bfd        = 0.0;
+  int64   ecount     = 0;
+  int64   bcount     = 0;
+  int     xbuffer[2] = {nb, nb};
+  int     ybuffer[2] = {0, 0};
+
+  pic_engine::BaseMaxwell maxwell(data);
+  maxwell.get_diverror_2d(data.uf, data.uj, efd, bfd, ecount, bcount, xbuffer, ybuffer);
+
+  REQUIRE(efd == Catch::Approx(0.0));
+  REQUIRE(bfd == Catch::Approx(0.0));
+  REQUIRE(ecount == 24);
+  REQUIRE(bcount == 24);
+}
+
+TEST_CASE("Maxwell 3D divergence excludes staggered x-boundary stencils")
+{
+  nix::Dims3D dims    = {8, 8, 8};
+  nix::Bool3D has_dim = {true, true, true};
+
+  const SmokeOptions options = {"scalar", 2, "Boris", "MC"};
+  PicChunk           chunk(dims, has_dim, 0);
+  setup_chunk(chunk, dims, options, 0.0);
+
+  auto data = chunk.get_internal_data();
+  std::fill(data.uf.begin(), data.uf.end(), 0.0);
+  std::fill(data.uj.begin(), data.uj.end(), 0.0);
+
+  const int nb = data.boundary_margin;
+
+  data.uf(data.Lbz, data.Lby, data.Lbx + nb - 1, 3) = 1.0;
+  data.uf(data.Lbz, data.Lby, data.Ubx - nb + 1, 0) = 1.0;
+
+  float64 efd        = 0.0;
+  float64 bfd        = 0.0;
+  int64   ecount     = 0;
+  int64   bcount     = 0;
+  int     xbuffer[2] = {nb, nb};
+  int     ybuffer[2] = {0, 0};
+  int     zbuffer[2] = {0, 0};
+
+  pic_engine::BaseMaxwell maxwell(data);
+  maxwell.get_diverror_3d(data.uf, data.uj, efd, bfd, ecount, bcount, xbuffer, ybuffer, zbuffer);
+
+  REQUIRE(efd == Catch::Approx(0.0));
+  REQUIRE(bfd == Catch::Approx(0.0));
+  REQUIRE(ecount == 192);
+  REQUIRE(bcount == 192);
+}
+
 TEST_CASE("PicChunk integration smoke 1D")
 {
   nix::Dims3D dims    = {1, 1, 8};

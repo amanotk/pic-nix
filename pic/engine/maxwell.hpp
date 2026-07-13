@@ -61,26 +61,34 @@ public:
   }
 
   template <typename T_field, typename T_current>
-  void get_diverror_1d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int xbuffer[2])
+  void get_diverror_1d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int64& ecount,
+                       int64& bcount, int xbuffer[2])
   {
-    const int     iz  = this->lbz;
-    const int     iy  = this->lby;
-    const int     lbx = this->lbx + xbuffer[0];
-    const int     ubx = this->ubx - xbuffer[1];
-    const float64 rdx = 1 / dx;
-    const float64 rdy = 1 / dy;
-    const float64 rdz = 1 / dz;
+    const int     iz    = this->lbz;
+    const int     iy    = this->lby;
+    const int     lbx_e = this->lbx + xbuffer[0];
+    const int     ubx_e = this->ubx - xbuffer[1] - (xbuffer[1] > 0);
+    const int     lbx_b = this->lbx + xbuffer[0] + (xbuffer[0] > 0);
+    const int     ubx_b = this->ubx - xbuffer[1];
+    const float64 rdx   = 1 / dx;
 
-    efd = 0;
-    bfd = 0;
+    efd    = 0;
+    bfd    = 0;
+    ecount = 0;
+    bcount = 0;
 
-    for (int ix = lbx; ix <= ubx; ix++) {
+    for (int ix = lbx_e; ix <= ubx_e; ix++) {
       // div(E) - rho
       float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx - uj(iz, iy, ix, 0);
       efd += div_e * div_e;
+      ecount++;
+    }
+
+    for (int ix = lbx_b; ix <= ubx_b; ix++) {
       // div(B)
       float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx;
       bfd += div_b * div_b;
+      bcount++;
     }
   }
 
@@ -203,31 +211,43 @@ public:
   }
 
   template <typename T_field, typename T_current>
-  void get_diverror_2d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int xbuffer[2],
-                       int ybuffer[2])
+  void get_diverror_2d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int64& ecount,
+                       int64& bcount, int xbuffer[2], int ybuffer[2])
   {
-    const int     iz  = this->lbz;
-    const int     lbx = this->lbx + xbuffer[0];
-    const int     ubx = this->ubx - xbuffer[1];
-    const int     lby = this->lby + ybuffer[0];
-    const int     uby = this->uby - ybuffer[1];
-    const float64 rdx = 1 / dx;
-    const float64 rdy = 1 / dy;
-    const float64 rdz = 1 / dz;
+    const int     iz    = this->lbz;
+    const int     lbx_e = this->lbx + xbuffer[0];
+    const int     ubx_e = this->ubx - xbuffer[1] - (xbuffer[1] > 0);
+    const int     lby_e = this->lby + ybuffer[0];
+    const int     uby_e = this->uby - ybuffer[1] - (ybuffer[1] > 0);
+    const int     lbx_b = this->lbx + xbuffer[0] + (xbuffer[0] > 0);
+    const int     ubx_b = this->ubx - xbuffer[1];
+    const int     lby_b = this->lby + ybuffer[0] + (ybuffer[0] > 0);
+    const int     uby_b = this->uby - ybuffer[1];
+    const float64 rdx   = 1 / dx;
+    const float64 rdy   = 1 / dy;
 
-    efd = 0;
-    bfd = 0;
+    efd    = 0;
+    bfd    = 0;
+    ecount = 0;
+    bcount = 0;
 
-    for (int iy = lby; iy <= uby; iy++) {
-      for (int ix = lbx; ix <= ubx; ix++) {
+    for (int iy = lby_e; iy <= uby_e; iy++) {
+      for (int ix = lbx_e; ix <= ubx_e; ix++) {
         // div(E) - rho
         float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
                         (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy - uj(iz, iy, ix, 0);
         efd += div_e * div_e;
+        ecount++;
+      }
+    }
+
+    for (int iy = lby_b; iy <= uby_b; iy++) {
+      for (int ix = lbx_b; ix <= ubx_b; ix++) {
         // div(B)
         float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
                         (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy;
         bfd += div_b * div_b;
+        bcount++;
       }
     }
   }
@@ -352,35 +372,52 @@ public:
   }
 
   template <typename T_field, typename T_current>
-  void get_diverror_3d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int xbuffer[2],
-                       int ybuffer[2], int zbuffer[2])
+  void get_diverror_3d(T_field& uf, T_current& uj, float64& efd, float64& bfd, int64& ecount,
+                       int64& bcount, int xbuffer[2], int ybuffer[2], int zbuffer[2])
   {
-    const int     lbx = this->lbx + xbuffer[0];
-    const int     ubx = this->ubx - xbuffer[1];
-    const int     lby = this->lby + ybuffer[0];
-    const int     uby = this->uby - ybuffer[1];
-    const int     lbz = this->lbz + zbuffer[0];
-    const int     ubz = this->ubz - zbuffer[1];
-    const float64 rdx = 1 / dx;
-    const float64 rdy = 1 / dy;
-    const float64 rdz = 1 / dz;
+    const int     lbx_e = this->lbx + xbuffer[0];
+    const int     ubx_e = this->ubx - xbuffer[1] - (xbuffer[1] > 0);
+    const int     lby_e = this->lby + ybuffer[0];
+    const int     uby_e = this->uby - ybuffer[1] - (ybuffer[1] > 0);
+    const int     lbz_e = this->lbz + zbuffer[0];
+    const int     ubz_e = this->ubz - zbuffer[1] - (zbuffer[1] > 0);
+    const int     lbx_b = this->lbx + xbuffer[0] + (xbuffer[0] > 0);
+    const int     ubx_b = this->ubx - xbuffer[1];
+    const int     lby_b = this->lby + ybuffer[0] + (ybuffer[0] > 0);
+    const int     uby_b = this->uby - ybuffer[1];
+    const int     lbz_b = this->lbz + zbuffer[0] + (zbuffer[0] > 0);
+    const int     ubz_b = this->ubz - zbuffer[1];
+    const float64 rdx   = 1 / dx;
+    const float64 rdy   = 1 / dy;
+    const float64 rdz   = 1 / dz;
 
-    efd = 0;
-    bfd = 0;
+    efd    = 0;
+    bfd    = 0;
+    ecount = 0;
+    bcount = 0;
 
-    for (int iz = lbz; iz <= ubz; iz++) {
-      for (int iy = lby; iy <= uby; iy++) {
-        for (int ix = lbx; ix <= ubx; ix++) {
+    for (int iz = lbz_e; iz <= ubz_e; iz++) {
+      for (int iy = lby_e; iy <= uby_e; iy++) {
+        for (int ix = lbx_e; ix <= ubx_e; ix++) {
           // div(E) - rho
           float64 div_e = (uf(iz, iy, ix + 1, 0) - uf(iz, iy, ix, 0)) * rdx +
                           (uf(iz, iy + 1, ix, 1) - uf(iz, iy, ix, 1)) * rdy +
                           (uf(iz + 1, iy, ix, 2) - uf(iz, iy, ix, 2)) * rdz - uj(iz, iy, ix, 0);
           efd += div_e * div_e;
+          ecount++;
+        }
+      }
+    }
+
+    for (int iz = lbz_b; iz <= ubz_b; iz++) {
+      for (int iy = lby_b; iy <= uby_b; iy++) {
+        for (int ix = lbx_b; ix <= ubx_b; ix++) {
           // div(B)
           float64 div_b = (uf(iz, iy, ix, 3) - uf(iz, iy, ix - 1, 3)) * rdx +
                           (uf(iz, iy, ix, 4) - uf(iz, iy - 1, ix, 4)) * rdy +
                           (uf(iz, iy, ix, 5) - uf(iz - 1, iy, ix, 5)) * rdz;
           bfd += div_b * div_b;
+          bcount++;
         }
       }
     }
