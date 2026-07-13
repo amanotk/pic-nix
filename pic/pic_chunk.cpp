@@ -471,10 +471,10 @@ void PicChunk::get_energy(float64& efd, float64& bfd, float64 particle[])
   }
 }
 
-void PicChunk::get_diverror(float64& efd, float64& bfd)
+void PicChunk::get_diverror(float64& efd, float64& bfd, int64& ecount, int64& bcount)
 {
   pic_engine::Maxwell<this_type> maxwell;
-  std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
+  std::tie(efd, bfd, ecount, bcount) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
 void PicChunk::sort_particle(ParticleVec& particle)

@@ -123,7 +123,7 @@ public:
 
   virtual void get_energy(float64& efd, float64& bfd, float64 particle[]);
 
-  virtual void get_diverror(float64& efd, float64& bfd);
+  virtual void get_diverror(float64& efd, float64& bfd, int64& ecount, int64& bcount);
 
   virtual void sort_particle(ParticleVec& particle);
 
