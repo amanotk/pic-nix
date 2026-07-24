@@ -19,7 +19,7 @@ A separate repository for `nix` can be found [here](https://github.com/amanotk/n
 ## Requirements
 
 - C++ compiler supporting C++17 or later
-- CMake version 3.14 or later
+- CMake version 3.20 or later
 - MPI library (OpenMPI, MPICH, etc.)
 
 ## Build
@@ -38,11 +38,12 @@ The code can be compiled with `cmake`.
 The simplest way is to use a pre-configured cache file provided in the `cmake` directory:
 
 ```
-$ cmake -S . -B build -C cmake/linux-gcc.cmake
+$ cmake -S . -B build -C cmake/linux-gcc.cmake -DCMAKE_BUILD_TYPE=Release
 $ cmake --build build
 ```
 
 This uses `mpicxx` with a `g++` backend and OpenMP enabled.  
+The `-DCMAKE_BUILD_TYPE=Release` enables optimizations and disables assertions.  
 See [DEVELOPMENT.md](DEVELOPMENT.md) for manual configuration and advanced options.  
 Please also refer to [CMake Reference Documentation](https://cmake.org/cmake/help/latest/).
 

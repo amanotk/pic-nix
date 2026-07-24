@@ -2,6 +2,7 @@
 #ifndef _PIC_CHUNK_HPP_
 #define _PIC_CHUNK_HPP_
 
+#include "nix/array_types.hpp"
 #include "pic.hpp"
 
 #include "nix/chunk.hpp"
@@ -36,14 +37,14 @@ public:
     float64 (&xlim)[3];
     float64 (&ylim)[3];
     float64 (&zlim)[3];
-    std::vector<float64>&    load;
-    xt::xtensor<float64, 3>& phi;
-    xt::xtensor<float64, 4>& uf;
-    xt::xtensor<float64, 4>& uj;
-    xt::xtensor<float64, 5>& um;
-    xt::xtensor<float64, 5>& ff;
-    ParticleVec&             up;
-    json&                    option;
+    std::vector<float64>&  load;
+    nix::Array3D<float64>& phi;
+    nix::Array4D<float64>& uf;
+    nix::Array4D<float64>& uj;
+    nix::Array5D<float64>& um;
+    nix::Array5D<float64>& ff;
+    ParticleVec&           up;
+    json&                  option;
   };
 
   /// @brief return internal data struct
@@ -80,14 +81,14 @@ protected:
   int order;     ///< order of shape function
   int dimension; ///< dimension of the simulation
 
-  int                     Ns;  ///< number of particle species
-  float64                 cc;  ///< speed of light
-  xt::xtensor<float64, 3> phi; ///< electrostatic potential
-  xt::xtensor<float64, 4> uf;  ///< electromagnetic field
-  xt::xtensor<float64, 4> uj;  ///< current density
-  xt::xtensor<float64, 5> um;  ///< particle moment
-  xt::xtensor<float64, 5> ff;  ///< electric field for Friedmann filter
-  ParticleVec             up;  ///< list of particles
+  int                   Ns;  ///< number of particle species
+  float64               cc;  ///< speed of light
+  nix::Array3D<float64> phi; ///< electrostatic potential
+  nix::Array4D<float64> uf;  ///< electromagnetic field
+  nix::Array4D<float64> uj;  ///< current density
+  nix::Array5D<float64> um;  ///< particle moment
+  nix::Array5D<float64> ff;  ///< electric field for Friedmann filter
+  ParticleVec           up;  ///< list of particles
 
 public:
   PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id = 0);

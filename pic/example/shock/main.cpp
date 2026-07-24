@@ -465,11 +465,11 @@ public:
       float64 flux   = nppc * std::abs(u0) / sqrt(1 + u0 * u0 * rc * rc) * delt / delx;
 
       // number of injection particles
-      size_t              nz           = dims[0] + 2 * boundary_margin;
-      size_t              ny           = dims[1] + 2 * boundary_margin;
-      int                 np_inj_total = 0;
-      xt::xtensor<int, 2> np_inj({nz, ny});
-      std::vector<int64>  id64(Ns, lastid);
+      size_t             nz           = dims[0] + 2 * boundary_margin;
+      size_t             ny           = dims[1] + 2 * boundary_margin;
+      int                np_inj_total = 0;
+      nix::Array2D<int>  np_inj({nz, ny});
+      std::vector<int64> id64(Ns, lastid);
 
       // reset random number generator
       reset_random_number();
