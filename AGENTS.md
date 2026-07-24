@@ -29,7 +29,13 @@ Follow these rules for any Git-related operations.
 The human user primarily manages branch switching, but these rules apply when you are asked to perform Git tasks.  
 
 ### 0. General Rule
-- Do not create commits unless the user explicitly asks you to.  
+- **Never commit or push without explicit approval.** A clear affirmative
+  phrase like "yes", "do it", "commit", or "push" is required before acting.
+- Silence, a description of changes, or "looks good" is NOT approval.
+- Before committing, show the planned commit message and ask "Ready to
+  commit?", then wait for an explicit yes.
+- If you create new files that should be committed, ask the user first.
+- Follow the commit message style used in this repository.
 
 ### 1. Branch Structure
 - `main`: Stable production branch. Never commit directly.  
@@ -38,12 +44,14 @@ The human user primarily manages branch switching, but these rules apply when yo
 - `experimental/*`: For research, validation, or risky changes.  
 
 ### 2. Workflow & PR (Mandatory)
-- Direct local merging is prohibited unless explicitly instructed by the user.  
-- When a task is complete, push the working branch and create a Pull Request from `feature/*` to `develop`.  
-- In the PR description, include:  
-  1. What was changed.  
-  2. Why the changes were made.  
-  3. Manual tests/checks performed.  
+- Direct local merging is prohibited unless explicitly instructed by the user.
+- When a task is complete (and after receiving explicit approval to push),
+  push the working branch and create a Pull Request from `feature/*` to
+  `develop`.
+- In the PR description, include:
+  1. What was changed.
+  2. Why the changes were made.
+  3. Manual tests/checks performed.
 
 ### 3. Merging Policy (GitHub UI)
 - `feature/*` -> `develop`: Use **Squash and Merge**. Keep the resulting commit message clean and descriptive.  
