@@ -80,8 +80,20 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+### Tool preference (mandatory)
+For any question about the codebase, **graphify tools take priority over grep/glob/file reads** because they return scoped, structured results and require fewer follow-up tool calls.
+
+| Graphify tool (`graphify <cmd>`) | When to use | Example |
+|---|---|---|
+| `query "<question>"` | Understanding concepts, architecture, functionality | "how does the Maxwell solver work?" |
+| `path "<A>" "<B>"` | Finding relationships between components | "how does chunkmap connect to the balancer?" |
+| `explain "<concept>"` | Focused explanation of a specific symbol or module | "what is PicChunk?" |
+| `update .` | After any code modification | `graphify update .` |
+
+Use `grep`/`glob` for **exact text/pattern tasks** (e.g. "find all callsites of `solve_poisson`", "rename `Foo` to `Bar`", "which files have `#include <petsc.h>`"). After graphify identifies relevant files or symbols, read the scoped source files to verify implementation details, especially for debugging, code review, behavioral questions, or uncommitted changes that may not yet be reflected in the graph. For broad discovery of concepts, architecture, or file relationships, graphify is always preferred over raw source browsing.
+
+### Rules
+- For codebase questions, **first** run `graphify query "<question>"` when graphify-out/graph.json exists. These return a scoped subgraph, much smaller than GRAPH_REPORT.md or raw grep output.
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
