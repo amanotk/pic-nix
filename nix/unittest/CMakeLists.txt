@@ -6,7 +6,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
 
 set(INCLUDE_DIRS
 	${CMAKE_BINARY_DIR}/nix
-	${CMAKE_BINARY_DIR}/nix/thirdparty
 	${CMAKE_CURRENT_SOURCE_DIR}/..
 	)
 set(LIBRARY_DIRS
@@ -86,6 +85,11 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
 	)
 	add_test(NAME ${target} COMMAND ${target})
 endforeach()
+
+# tests that need mdspan
+target_link_libraries(test_esirkepov PRIVATE std::mdspan)
+target_link_libraries(test_interp PRIVATE std::mdspan)
+target_link_libraries(test_primitives PRIVATE std::mdspan)
 
 add_executable(test_application test_application.cpp)
 target_include_directories(test_application PRIVATE ${INCLUDE_DIRS})

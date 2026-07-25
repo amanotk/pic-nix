@@ -91,8 +91,8 @@ public:
 
       // meta data
       {
-        std::string name = tfm::format("up%02d", is);
-        std::string desc = tfm::format("particle species %02d", is);
+        std::string name = fmt::format("up{:02d}", is);
+        std::string desc = fmt::format("particle species {:02d}", is);
 
         const int size    = ParticleType::get_particle_size();
         const int Np      = nbyte / size;

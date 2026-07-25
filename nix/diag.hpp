@@ -182,7 +182,7 @@ public:
         return true;
       }
 
-      ERROR << tfm::format("Failed to create directory: %s", dirpath.string());
+      ERROR << fmt::format("Failed to create directory: {}", dirpath.string());
 
       return false;
     }
@@ -200,11 +200,11 @@ public:
       fs::path dirname = fs::path(basedir) / fs::path(prefix) / "";
       return dirname.string();
     } else if (info->iomode == "posix") {
-      std::string nodedir = tfm::format("node%06d", info->inter_rank);
+      std::string nodedir = fmt::format("node{:06d}", info->inter_rank);
       fs::path    dirname = fs::path(basedir) / fs::path(nodedir) / fs::path(prefix) / "";
       return dirname.string();
     } else {
-      ERROR << tfm::format("Unknown I/O mode: %s", info->iomode);
+      ERROR << fmt::format("Unknown I/O mode: {}", info->iomode);
       return "";
     }
   }

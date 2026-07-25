@@ -3,7 +3,7 @@
 #define _LOGGER_HPP_
 
 #include "nix.hpp"
-#include "tinyformat.hpp"
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 NIX_NAMESPACE_BEGIN

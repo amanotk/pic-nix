@@ -16,8 +16,10 @@ if(NOT DEFINED PICNIX_DIR)
   set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
-# xsimd for xtensor
-add_compile_definitions(XTENSOR_USE_XSIMD)
+# dependency management
+option(PICNIX_USE_SYSTEM_LIBS "Prefer system-installed libraries over FetchContent" ON)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/nix/cmake")
+include(Dependencies)
 
 # MPI_THREAD_MULTIPLE
 option(MPI_THREAD_MULTIPLE "Enable MPI_THREAD_MULTIPLE" ON)

@@ -8,7 +8,6 @@ set(INCLUDE_DIRS
   ${CMAKE_CURRENT_LIST_DIR}/../..
   ${CMAKE_CURRENT_LIST_DIR}/..
   ${CMAKE_CURRENT_LIST_DIR}/../../nix
-  ${CMAKE_CURRENT_LIST_DIR}/../../nix/thirdparty
   )
 
 # helpers

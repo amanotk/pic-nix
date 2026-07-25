@@ -59,15 +59,46 @@ jobs:
             sudo apt-get install -y libpetsc-real-dev || sudo apt-get install -y libpetsc-dev petsc-dev
           fi
 
-      - name: Install Catch2 v3
+      - name: Install C++ dependencies
         run: |
+          scripts/install_dependencies.sh "$HOME/usr"
           scripts/install_catch2v3.sh "$HOME/usr"
 
       - name: Build and test
         run: |
-          export PICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
+          export DEPS="$HOME/usr"
           cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
+            -DCMAKE_PREFIX_PATH="$DEPS" \
+            -DPICNIX_USE_SYSTEM_LIBS=ON \
+            -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
             -DPICNIX_ENABLE_PETSC=${{ matrix.petsc }} \
-            -DPICNIX_CATCH2_CONFIG="$PICNIX_CATCH2_CONFIG"
+            -DPICNIX_CATCH2_CONFIG="$DEPS/lib/cmake/Catch2/Catch2Config.cmake"
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+  fetchcontent-test:
+    runs-on: ubuntu-24.04
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake g++ openmpi-bin libopenmpi-dev
+
+      - name: Install Catch2 v3
+        run: |
+          scripts/install_catch2v3.sh "$HOME/usr"
+
+      - name: Build and test (FetchContent mode)
+        run: |
+          export DEPS="$HOME/usr"
+          cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
+            -DPICNIX_USE_SYSTEM_LIBS=OFF \
+            -DPICNIX_CATCH2_CONFIG="$DEPS/lib/cmake/Catch2/Catch2Config.cmake"
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure

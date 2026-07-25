@@ -5,7 +5,6 @@ if(PICNIX_ENABLE_PETSC)
 
   set(UNITTEST_INCLUDE_DIRS
           ${NIX_DIR}
-          ${NIX_DIR}/thirdparty
           ${CMAKE_CURRENT_SOURCE_DIR}/..
   )
 

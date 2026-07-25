@@ -3,8 +3,8 @@
 #define _MPISTREAM_HPP_
 
 #include "debug.hpp"
-#include "tinyformat.hpp"
 #include <filesystem>
+#include <fmt/format.h>
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
@@ -13,7 +13,7 @@
 #include "nix.hpp"
 
 // format for temporary stdout and stderr files
-static constexpr char filename_format[] = "%06d";
+static constexpr char filename_format[] = "{:06d}";
 static constexpr char dev_null[]        = "/dev/null";
 
 ///
@@ -205,7 +205,7 @@ public:
       for (int level = 0; level < directory_level; level++) {
         int max_file_level = std::pow(max_file_per_dir, directory_level - level);
 
-        path = path / tfm::format(filename_format, (thisrank / max_file_level) * max_file_level);
+        path = path / fmt::format(filename_format, (thisrank / max_file_level) * max_file_level);
 
         if (thisrank % max_file_level == 0 && fs::exists(path) == false) {
           status = status & fs::create_directory(path.string());
@@ -232,9 +232,9 @@ public:
     for (int level = 0; level < directory_level; level++) {
       int max_file_level = std::pow(max_file_per_dir, directory_level - level);
 
-      path = path / tfm::format(filename_format, (thisrank / max_file_level) * max_file_level);
+      path = path / fmt::format(filename_format, (thisrank / max_file_level) * max_file_level);
     }
-    path = path / tfm::format(filename_format, thisrank);
+    path = path / fmt::format(filename_format, thisrank);
 
     return path.string();
   }

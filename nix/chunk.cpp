@@ -251,7 +251,7 @@ void Chunk::set_mpi_communicator(int mode, int iz, int iy, int ix, MPI_Comm& com
   if (mode >= 0 && mode < mpibufvec.size()) {
     mpibufvec[mode]->comm(iz, iy, ix) = comm;
   } else {
-    ERROR << tfm::format("invalid index %d for mpibufvec", mode);
+    ERROR << fmt::format("invalid index {} for mpibufvec", mode);
   }
 }
 void Chunk::set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int elembyte)

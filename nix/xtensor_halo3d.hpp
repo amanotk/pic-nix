@@ -400,7 +400,7 @@ public:
       }
 
       if (is_all_packed == false) {
-        ERROR << tfm::format("Some particles are not properly packed!");
+        ERROR << fmt::format("Some particles are not properly packed!");
       }
     }
   }
@@ -499,7 +499,7 @@ public:
 
     // check message size
     if (recvcnt < Ns * head_byte) {
-      ERROR << tfm::format("Received message smaller than the header size: %d", recvcnt);
+      ERROR << fmt::format("Received message smaller than the header size: {}", recvcnt);
       return false;
     }
 
@@ -525,7 +525,7 @@ public:
 
     // check consistency
     if (recvcnt != 0) {
-      ERROR << tfm::format("Unexpected message perhaps with wrong headers?");
+      ERROR << fmt::format("Unexpected message perhaps with wrong headers?");
       return false;
     }
 

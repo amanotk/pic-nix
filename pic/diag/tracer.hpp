@@ -65,8 +65,8 @@ public:
 
       // meta data
       {
-        std::string name = tfm::format("up%02d", species);
-        std::string desc = tfm::format("tracer particle species %02d", species);
+        std::string name = fmt::format("up{:02d}", species);
+        std::string desc = fmt::format("tracer particle species {:02d}", species);
 
         const int size    = ParticleType::get_particle_size();
         const int Np      = nbyte / size;

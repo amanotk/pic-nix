@@ -121,14 +121,14 @@ public:
     } else if (ext == ".toml") {
       root = toml_to_json(toml::parse(filename));
     } else {
-      std::cerr << tfm::format("Unknown file extension `%s`\n", ext);
+      std::cerr << fmt::format("Unknown file extension `{}`\n", ext);
       exit(1);
     }
 
     bool status = validate(root);
 
     if (status == false && exit_on_error == true) {
-      std::cerr << tfm::format("Failed to parse `%s`\n", filename);
+      std::cerr << fmt::format("Failed to parse `{}`\n", filename);
       exit(1);
     }
 
@@ -172,7 +172,7 @@ public:
 
     for (auto section : mandatory_sections) {
       if (object[section].is_null()) {
-        std::cerr << tfm::format("Configuration misses `%s` section\n", section);
+        std::cerr << fmt::format("Configuration misses `{}` section\n", section);
         status = false;
       }
     }
@@ -189,7 +189,7 @@ public:
 
     for (auto key : mandatory_parameters) {
       if (parameter[key].is_null()) {
-        std::cerr << tfm::format("Configuration misses `%s` parameter\n", key);
+        std::cerr << fmt::format("Configuration misses `{}` parameter\n", key);
         status = false;
       }
     }
@@ -208,9 +208,9 @@ public:
     bool status = (nz % cz == 0) && (ny % cy == 0) && (nx % cx == 0);
 
     if (status == false) {
-      std::cerr << tfm::format("Number of grid must be divisible by number of chunk\n");
-      std::cerr << tfm::format("Nx, Ny, Nz = [%4d, %4d, %4d]\n", nx, ny, nz);
-      std::cerr << tfm::format("Cx, Cy, Cz = [%4d, %4d, %4d]\n", cx, cy, cz);
+      std::cerr << fmt::format("Number of grid must be divisible by number of chunk\n");
+      std::cerr << fmt::format("Nx, Ny, Nz = [{:4d}, {:4d}, {:4d}]\n", nx, ny, nz);
+      std::cerr << fmt::format("Cx, Cy, Cz = [{:4d}, {:4d}, {:4d}]\n", cx, cy, cz);
     }
 
     return status;

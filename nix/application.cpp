@@ -37,7 +37,7 @@ bool Application::from_json(json& state)
   consistency &= current_state["configuration"]["parameter"] == state["configuration"]["parameter"];
 
   if (consistency == false) {
-    ERROR << tfm::format("Trying to load inconsistent state");
+    ERROR << fmt::format("Trying to load inconsistent state");
   } else {
     curstep = state["curstep"].get<int>();
     curtime = state["curtime"].get<float64>();
@@ -51,36 +51,36 @@ int Application::main()
 {
 
   initialize(cl_argc, cl_argv);
-  DEBUG1 << tfm::format("initialize");
+  DEBUG1 << fmt::format("initialize");
 
   setup_chunks();
-  DEBUG1 << tfm::format("setup_chunks");
+  DEBUG1 << fmt::format("setup_chunks");
 
   save_profile();
 
   while (is_push_needed()) {
 
     diagnostic();
-    DEBUG1 << tfm::format("step[%s] diagnostic", format_step(curstep));
+    DEBUG1 << fmt::format("step[{}] diagnostic", format_step(curstep));
 
     push();
-    DEBUG1 << tfm::format("step[%s] push", format_step(curstep));
+    DEBUG1 << fmt::format("step[{}] push", format_step(curstep));
 
     rebalance();
-    DEBUG1 << tfm::format("step[%s] rebalance", format_step(curstep));
+    DEBUG1 << fmt::format("step[{}] rebalance", format_step(curstep));
 
     take_log();
-    DEBUG1 << tfm::format("step[%s] logging", format_step(curstep));
+    DEBUG1 << fmt::format("step[{}] logging", format_step(curstep));
 
     increment_time();
 
     if (get_available_etime() < 0) {
-      DEBUG1 << tfm::format("step[%s] run out of time", format_step(curstep));
+      DEBUG1 << fmt::format("step[{}] run out of time", format_step(curstep));
       break;
     }
   }
 
-  DEBUG1 << tfm::format("finalize");
+  DEBUG1 << fmt::format("finalize");
   finalize();
 
   return 0;
@@ -138,7 +138,7 @@ void Application::finalize()
 
   float64 shutdown_end = nix::wall_clock();
   log                  = {
-      {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
+                       {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
   logger->append(curstep, "shutdown_end", log);
   logger->flush();
 
@@ -164,7 +164,7 @@ void Application::initialize_mpi(int* argc, char*** argv)
     }
 
     if (thread_provided < thread_required) {
-      ERROR << tfm::format("Your MPI does not support required thread level!");
+      ERROR << fmt::format("Your MPI does not support required thread level!");
       if (is_mpi_init_called_by_me) {
         MPI_Finalize();
       }
@@ -199,7 +199,7 @@ void Application::initialize_mpi(int* argc, char*** argv)
     } else if (config["mpistream"] == false) {
 
     } else {
-      ERROR << tfm::format("Ignore invalid configuration for mpistream\n");
+      ERROR << fmt::format("Ignore invalid configuration for mpistream\n");
     }
   }
 }
@@ -278,9 +278,9 @@ void Application::setup_chunks_init()
     const int numchunk_global = cdims[3];
 
     if (numchunk_global < nprocess) {
-      ERROR << tfm::format("Number of processes should not exceed number of chunks");
-      ERROR << tfm::format("* number of processes = %8d", nprocess);
-      ERROR << tfm::format("* number of chunks    = %8d", numchunk_global);
+      ERROR << fmt::format("Number of processes should not exceed number of chunks");
+      ERROR << fmt::format("* number of processes = {:8d}", nprocess);
+      ERROR << fmt::format("* number of chunks    = {:8d}", numchunk_global);
       finalize();
       exit(-1);
     }
@@ -307,8 +307,8 @@ void Application::setup_chunks_init()
     bool is_3d = has_dim[0] == true && has_dim[1] == true && has_dim[2] == true;
 
     if (is_1d == false && is_2d == false && is_3d == false) {
-      ERROR << tfm::format("Invalid dimension");
-      ERROR << tfm::format("* has_dim = %d %d %d", has_dim[0], has_dim[1], has_dim[2]);
+      ERROR << fmt::format("Invalid dimension");
+      ERROR << fmt::format("* has_dim = {} {} {}", has_dim[0], has_dim[1], has_dim[2]);
       finalize();
       exit(-1);
     }

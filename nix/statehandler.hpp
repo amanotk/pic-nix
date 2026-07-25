@@ -75,7 +75,7 @@ public:
     int thisrank = data.thisrank;
     int nprocess = data.nprocess;
 
-    DEBUG2 << tfm::format("start saving chunkvec with prefix %s", prefix);
+    DEBUG2 << fmt::format("start saving chunkvec with prefix {}", prefix);
 
     std::string path = get_path_with_basedir(prefix);
 
@@ -94,7 +94,7 @@ public:
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    DEBUG2 << tfm::format("finish saving chunkvec with prefix %s", prefix);
+    DEBUG2 << fmt::format("finish saving chunkvec with prefix {}", prefix);
 
     return true;
   }
@@ -139,7 +139,7 @@ public:
     int thisrank = data.thisrank;
     int nprocess = data.nprocess;
 
-    DEBUG2 << tfm::format("start loading chunkvec with prefix %s", prefix);
+    DEBUG2 << fmt::format("start loading chunkvec with prefix {}", prefix);
 
     std::string path = get_path_with_basedir(prefix, true);
 
@@ -155,7 +155,7 @@ public:
       load_chunkvec_content(interface, filename, id, size, offset);
     }
 
-    DEBUG2 << tfm::format("finish loading chunkvec with prefix %s", prefix);
+    DEBUG2 << fmt::format("finish loading chunkvec with prefix {}", prefix);
 
     return true;
   }
@@ -260,32 +260,32 @@ protected:
     std::ifstream ifs(filename);
 
     if (ifs.is_open() == false) {
-      DEBUG0 << tfm::format("checkpoint status file not found: %s; treating as legacy checkpoint",
+      DEBUG0 << fmt::format("checkpoint status file not found: {}; treating as legacy checkpoint",
                             filename);
       return true;
     }
 
     json payload = json::parse(ifs, nullptr, false);
     if (payload.is_discarded()) {
-      ERROR << tfm::format("failed to parse checkpoint status file: %s", filename);
+      ERROR << fmt::format("failed to parse checkpoint status file: {}", filename);
       return false;
     }
 
     if (payload.contains("status") == false || payload["status"].is_string() == false ||
         payload["status"].get<std::string>() != "complete") {
-      ERROR << tfm::format("checkpoint is not complete: %s", filename);
+      ERROR << fmt::format("checkpoint is not complete: {}", filename);
       return false;
     }
 
     if (payload.contains("prefix") == false || payload["prefix"].is_string() == false ||
         payload["prefix"].get<std::string>() != normalize_prefix(prefix)) {
-      ERROR << tfm::format("checkpoint status prefix mismatch: %s", filename);
+      ERROR << fmt::format("checkpoint status prefix mismatch: {}", filename);
       return false;
     }
 
     if (payload.contains("nprocess") == false || payload["nprocess"].is_number_integer() == false ||
         payload["nprocess"].get<int>() != nprocess) {
-      ERROR << tfm::format("checkpoint status nprocess mismatch: %s", filename);
+      ERROR << fmt::format("checkpoint status nprocess mismatch: {}", filename);
       return false;
     }
 
@@ -350,7 +350,7 @@ protected:
         ofs.seekp(offset[i], std::ios::beg);
         ofs.write(reinterpret_cast<const char*>(buffer.get()), size[i]);
       } else {
-        ERROR << tfm::format("Error in writing Chunk ID %08d", id[i]);
+        ERROR << fmt::format("Error in writing Chunk ID {:08d}", id[i]);
       }
     }
 
@@ -423,7 +423,7 @@ protected:
       if (size[i] == chunk->unpack(buffer.get(), 0) && id[i] == chunk->get_id()) {
         data.chunkvec.push_back(std::move(chunk));
       } else {
-        ERROR << tfm::format("Error in reading Chunk ID %08d", id[i]);
+        ERROR << fmt::format("Error in reading Chunk ID {:08d}", id[i]);
       }
     }
 

@@ -155,11 +155,12 @@ DEFINE_MEMBER(void, print_assignment)
   std::vector<float64> rankload = get_rankload(boundary, chunkload);
   float64              meanload = std::accumulate(chunkload.begin(), chunkload.end(), 0.0) / Nr;
 
-  tfm::format(out, "*** mean load = %12.5e ***\n", meanload);
+  out << fmt::format("*** mean load = {:12.5e} ***\n", meanload);
   for (int i = 0; i < Nr; i++) {
     int     numchunk  = boundary[i + 1] - boundary[i];
     float64 deviation = (rankload[i] - meanload) / meanload * 100;
-    tfm::format(out, "load[%4d] = %12.5e (%4d : %+7.2f %%)\n", i, rankload[i], numchunk, deviation);
+    out << fmt::format("load[{:4d}] = {:12.5e} ({:4d} : {:+7.2f} %)\n", i, rankload[i], numchunk,
+                       deviation);
   }
 }
 
@@ -201,4 +202,3 @@ DEFINE_MEMBER(bool, is_boundary_optimum)(const std::vector<int>& boundary)
 }
 
 NIX_NAMESPACE_END
-
