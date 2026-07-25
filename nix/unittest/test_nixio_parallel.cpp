@@ -3,6 +3,9 @@
 #include "nixio.hpp"
 #include <fstream>
 #include <iostream>
+#include <random>
+#include <xtensor/xadapt.hpp>
+#include <xtensor/xarray.hpp>
 #include <xtensor/xtensor.hpp>
 
 #include <catch2/catch_test_macros.hpp>
