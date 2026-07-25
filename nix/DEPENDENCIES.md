@@ -57,17 +57,17 @@ System mode (`PICNIX_USE_SYSTEM_LIBS=ON`) instead, or ensure a populated
 
 ## Pinned Versions
 
-| Library | Version | CMake target |
-|---------|---------|--------------|
-| fmt | 11.1.4 | `fmt::fmt` |
-| nlohmann/json | 3.10.5 | `nlohmann_json::nlohmann_json` |
-| toml11 | 4.0.1 | `toml11::toml11` |
-| plog | 1.1.10 | `plog::plog` |
-| xtl | 0.7.7 | `xtl` |
-| xsimd | 12.1.1 | `xsimd` |
-| xtensor | 0.24.7 | `xtensor` |
-| mdspan | 0.6.0 | `std::mdspan` |
-| Catch2 | 3.5.4 | `Catch2::Catch2` (test only) |
+| Library | Version | Repository | CMake target |
+|---------|---------|------------|--------------|
+| Catch2 | 3.5.4 | <https://github.com/catchorg/Catch2> | `Catch2::Catch2` (test only) |
+| fmt | 11.1.4 | <https://github.com/fmtlib/fmt> | `fmt::fmt` |
+| nlohmann/json | 3.10.5 | <https://github.com/nlohmann/json> | `nlohmann_json::nlohmann_json` |
+| toml11 | 4.0.1 | <https://github.com/ToruNiina/toml11> | `toml11::toml11` |
+| plog | 1.1.10 | <https://github.com/SergiusTheBest/plog> | `plog::plog` |
+| xtl | 0.7.7 | <https://github.com/xtensor-stack/xtl> | `xtl` |
+| xsimd | 12.1.1 | <https://github.com/xtensor-stack/xsimd> | `xsimd` |
+| xtensor | 0.24.7 | <https://github.com/xtensor-stack/xtensor> | `xtensor` |
+| mdspan | 0.6.0 | <https://github.com/kokkos/mdspan> | `std::mdspan` |
 
 xtensor is installed with a patch for LLVM 19 compatibility
 (`nix/cmake/patches/xtensor-0.24.7-llvm19.patch`).
