@@ -65,6 +65,9 @@ cmake --build build
 The `CMAKE_PREFIX_PATH` variable tells CMake to look for dependencies in the specified directory.  
 Other options (`-C`, `-DCMAKE_BUILD_TYPE`) are the same as in the Easiest Way above.
 
+For cross-compilation, use the same CMake initial-cache or toolchain option when installing dependencies and building PIC-NIX.  
+See [Cross-compilation](nix/DEPENDENCIES.md#cross-compilation) for details and a Fugaku example.
+
 ## Run
 
 You can now execute `main.out` using `mpiexec` (or `mpirun`).  

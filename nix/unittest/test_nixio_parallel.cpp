@@ -1,9 +1,12 @@
 // -*- C++ -*-
 
 #include "nixio.hpp"
-#include "xtensorall.hpp"
 #include <fstream>
 #include <iostream>
+#include <random>
+#include <xtensor/xadapt.hpp>
+#include <xtensor/xarray.hpp>
+#include <xtensor/xtensor.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -11,7 +14,6 @@
 
 using nixio::float32;
 using nixio::float64;
-
 
 static const char          filename[] = "test_nixio_parallel_data.dat";
 static const size_t        Nx         = 4;

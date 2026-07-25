@@ -1,10 +1,10 @@
 // -*- C++ -*-
 
 #include "chunk.hpp"
-#include "xtensor_halo3d.hpp"
+#include "xtensor/xtensor_halo3d.hpp"
 
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 using namespace nix;
@@ -50,10 +50,10 @@ void set_neighbor_ranks(TestChunk& chunk, int dirz, int diry, int dirx)
 
 TEST_CASE("XtensorHaloField3D pack/unpack +x")
 {
-  const Dims3D dims{4, 4, 4};
-  const int                nb      = GENERATE(1, 2, 3);
-  const int                ncomp   = 2;
-  const float64            invalid = -1.0;
+  const Dims3D  dims{4, 4, 4};
+  const int     nb      = GENERATE(1, 2, 3);
+  const int     ncomp   = 2;
+  const float64 invalid = -1.0;
 
   TestChunk chunk(dims, nb);
   // Only +x neighbor is active for this test.
@@ -108,10 +108,10 @@ TEST_CASE("XtensorHaloField3D pack/unpack +x")
 
 TEST_CASE("XtensorHaloCurrent3D pack/unpack +x adds to boundary")
 {
-  const Dims3D dims{4, 4, 4};
-  const int                nb       = GENERATE(1, 2, 3);
-  const int                ncomp    = 3;
-  const float64            halo_val = 2.5;
+  const Dims3D  dims{4, 4, 4};
+  const int     nb       = GENERATE(1, 2, 3);
+  const int     ncomp    = 3;
+  const float64 halo_val = 2.5;
 
   TestChunk chunk(dims, nb);
   // Only +x neighbor is active for this test.

@@ -2,10 +2,10 @@
 #ifndef _XTENSOR_PARTICLE_HPP_
 #define _XTENSOR_PARTICLE_HPP_
 
+#include "array_types.hpp"
 #include "nix.hpp"
 #include "particle.hpp"
 #include "primitives.hpp"
-#include "xtensorall.hpp"
 
 NIX_NAMESPACE_BEGIN
 

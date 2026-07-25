@@ -2,8 +2,8 @@
 #ifndef _XTENSOR_PACKER3D_HPP_
 #define _XTENSOR_PACKER3D_HPP_
 
+#include "array_types.hpp"
 #include "nix.hpp"
-#include "xtensorall.hpp"
 
 NIX_NAMESPACE_BEGIN
 
