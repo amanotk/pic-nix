@@ -3,7 +3,10 @@
 #define _ARRAY_TYPES_HPP_
 
 #include "nix.hpp"
-#include "xtensorall.hpp"
+#include <xtensor/xarray.hpp>
+#include <xtensor/xbuilder.hpp>
+#include <xtensor/xtensor.hpp>
+#include <xtensor/xview.hpp>
 
 #include <array>
 #include <cstddef>

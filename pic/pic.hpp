@@ -8,10 +8,9 @@
 #include "nix/debug.hpp"
 #include "nix/diag.hpp"
 
-#include "nix/xtensor_halo3d.hpp"
-#include "nix/xtensor_packer3d.hpp"
-#include "nix/xtensor_particle.hpp"
-#include "nix/xtensorall.hpp"
+#include "nix/xtensor/xtensor_halo3d.hpp"
+#include "nix/xtensor/xtensor_packer3d.hpp"
+#include "nix/xtensor/xtensor_particle.hpp"
 
 using namespace nix::typedefs;
 using namespace nix::primitives;

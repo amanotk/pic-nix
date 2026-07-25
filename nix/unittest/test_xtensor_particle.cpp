@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-#include "xtensor_particle.hpp"
+#include "xtensor/xtensor_particle.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -365,4 +365,3 @@ TEST_CASE("SortParticle3D")
   // check result
   REQUIRE(check_sort3d(particle, Nx, Ny, Nz) == true);
 }
-

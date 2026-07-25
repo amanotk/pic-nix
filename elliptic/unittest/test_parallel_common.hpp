@@ -3,9 +3,10 @@
 
 #include "array_types.hpp"
 #include "nix.hpp"
-#include "xtensorall.hpp"
 #include <algorithm>
 #include <vector>
+#include <xtensor/xio.hpp>
+#include <xtensor/xtensor.hpp>
 
 #include "chunk_accessor.hpp"
 

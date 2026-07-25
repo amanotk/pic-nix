@@ -2,10 +2,10 @@
 #ifndef _XTENSOR_HALO3D_HPP_
 #define _XTENSOR_HALO3D_HPP_
 
+#include "array_types.hpp"
 #include "halo3d.hpp"
 #include "nix.hpp"
 #include "xtensor_particle.hpp"
-#include "xtensorall.hpp"
 
 NIX_NAMESPACE_BEGIN
 
