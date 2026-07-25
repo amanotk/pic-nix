@@ -178,12 +178,11 @@ cmake -S . -B build \
 ## Catch2 v3 Setup
 
 Prefer an external Catch2 v3 install and point CMake at its config file.
-A helper script installs all C++ dependencies (including Catch2) into a
+A single script installs all C++ dependencies (including Catch2) into a
 custom prefix:
 
 ```sh
 scripts/install_dependencies.sh "$HOME/usr"
-scripts/install_catch2v3.sh "$HOME/usr"
 ```
 
 Then configure with the explicit prefix:

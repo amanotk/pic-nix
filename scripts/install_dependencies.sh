@@ -5,8 +5,8 @@ usage() {
   cat <<'EOF'
 Usage: scripts/install_dependencies.sh [install_prefix]
 
-Install all PIC-NIX C++ dependencies (except Catch2 and cmdline) into the
-given prefix. Default prefix is "$HOME/usr".
+Install all PIC-NIX C++ dependencies (including Catch2) into the given prefix.
+Default prefix is "$HOME/usr".
 
 After installation, configure the project with:
 
@@ -105,10 +105,14 @@ install_header_pkg mdspan \
   -DMDSPAN_ENABLE_TESTS=OFF -DMDSPAN_ENABLE_EXAMPLES=OFF \
   -DMDSPAN_ENABLE_BENCHMARKS=OFF -DMDSPAN_CXX_STANDARD=17
 
+# ── Catch2 ───────────────────────────────────────────────────────────────
+install_header_pkg Catch2 \
+  https://github.com/catchorg/Catch2.git v3.5.4
+
 # ── done ────────────────────────────────────────────────────────────────
 cat <<EOF
 
-All dependencies installed to $PREFIX.
+All dependencies (including Catch2) installed to $PREFIX.
 
 Configure pic-nix with:
 

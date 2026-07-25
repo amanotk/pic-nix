@@ -62,7 +62,6 @@ jobs:
       - name: Install C++ dependencies
         run: |
           scripts/install_dependencies.sh "$HOME/usr"
-          scripts/install_catch2v3.sh "$HOME/usr"
 
       - name: Build and test
         run: |
@@ -90,9 +89,9 @@ jobs:
           sudo apt-get install -y \
             cmake g++ openmpi-bin libopenmpi-dev
 
-      - name: Install Catch2 v3
+      - name: Install dependencies
         run: |
-          scripts/install_catch2v3.sh "$HOME/usr"
+          scripts/install_dependencies.sh "$HOME/usr"
 
       - name: Build and test (FetchContent mode)
         run: |
