@@ -93,14 +93,14 @@ public:
       // initial call
       if (this->is_initial_step(data.curstep, config) == true) {
         // header
-        msg += tfm::format("# %8s %13s", "step", "time");
-        msg += tfm::format(" %13s", "div(E)");
-        msg += tfm::format(" %13s", "div(B)");
-        msg += tfm::format(" %13s", "E^2/2");
-        msg += tfm::format(" %13s", "B^2/2");
+        msg += fmt::format("# {:>8} {:>13}", "step", "time");
+        msg += fmt::format(" {:>13}", "div(E)");
+        msg += fmt::format(" {:>13}", "div(B)");
+        msg += fmt::format(" {:>13}", "E^2/2");
+        msg += fmt::format(" {:>13}", "B^2/2");
         for (int is = 0; is < Ns; is++) {
-          std::string label = tfm::format("Particle #%02d", is);
-          msg += tfm::format(" %13s", label);
+          std::string label = fmt::format("Particle #{:02d}", is);
+          msg += fmt::format(" {:>13}", label);
         }
         msg += "\n";
 
@@ -108,13 +108,13 @@ public:
         std::filesystem::remove(filename);
       }
 
-      msg += tfm::format("  %8s %13.6e", nix::format_step(data.curstep), data.curtime);
-      msg += tfm::format(" %13.6e", history[0]);
-      msg += tfm::format(" %13.6e", history[1]);
-      msg += tfm::format(" %13.6e", history[2]);
-      msg += tfm::format(" %13.6e", history[3]);
+      msg += fmt::format("  {:>8} {:13.6e}", nix::format_step(data.curstep), data.curtime);
+      msg += fmt::format(" {:13.6e}", history[0]);
+      msg += fmt::format(" {:13.6e}", history[1]);
+      msg += fmt::format(" {:13.6e}", history[2]);
+      msg += fmt::format(" {:13.6e}", history[3]);
       for (int is = 0; is < Ns; is++) {
-        msg += tfm::format(" %13.6e", history[is + 4]);
+        msg += fmt::format(" {:13.6e}", history[is + 4]);
       }
       msg += "\n";
 

@@ -6,12 +6,35 @@ include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
 
 set(INCLUDE_DIRS
 	${CMAKE_BINARY_DIR}/nix
-	${CMAKE_BINARY_DIR}/nix/thirdparty
 	${CMAKE_CURRENT_SOURCE_DIR}/..
 	)
 set(LIBRARY_DIRS
 	${CMAKE_BINARY_DIR}/nix
 	)
+
+if(NOT DEFINED MPIEXEC)
+	find_program(MPIEXEC NAMES mpiexec mpirun REQUIRED)
+endif()
+
+set(MPI_TEST_TIMEOUT 300)
+
+function(add_mpi_test name target nproc tmpdir)
+	file(MAKE_DIRECTORY ${tmpdir})
+	add_test(NAME ${name}_prepare
+		COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir}
+	)
+	add_test(NAME ${name}
+		COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> ${ARGN}
+	)
+	set_tests_properties(${name}
+		PROPERTIES
+			DEPENDS ${name}_prepare
+			LABELS MPI
+			PROCESSORS ${nproc}
+			TIMEOUT ${MPI_TEST_TIMEOUT}
+			WORKING_DIRECTORY ${tmpdir}
+	)
+endfunction()
 
 #
 # serial testing
@@ -63,6 +86,11 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
 	add_test(NAME ${target} COMMAND ${target})
 endforeach()
 
+# tests that need mdspan
+target_link_libraries(test_esirkepov PRIVATE std::mdspan)
+target_link_libraries(test_interp PRIVATE std::mdspan)
+target_link_libraries(test_primitives PRIVATE std::mdspan)
+
 add_executable(test_application test_application.cpp)
 target_include_directories(test_application PRIVATE ${INCLUDE_DIRS})
 target_link_directories(test_application PRIVATE ${LIBRARY_DIRS})
@@ -72,9 +100,8 @@ target_link_libraries(test_application PRIVATE
 	nix
 	std::filesystem
 )
-add_test(NAME test_application
-	COMMAND mpiexec -n 1 ./test_application
-	)
+set(NIX_APPLICATION_TMPDIR ${CMAKE_CURRENT_BINARY_DIR}/tmp_application_np1)
+add_mpi_test(test_application test_application 1 ${NIX_APPLICATION_TMPDIR})
 
 #
 # parallel testing
@@ -98,18 +125,22 @@ foreach(target IN ITEMS ${PARALLEL_EXECS})
 	)
 endforeach()
 
-add_test(NAME test_nixio_parallel
-	COMMAND mpiexec -n 8 ./test_nixio_parallel -X 2 -Y 2 -Z 2 "[np=8]"
-	)
+set(NIX_NIXIO_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_nixio_parallel_np8)
+add_mpi_test(test_nixio_parallel test_nixio_parallel 8 ${NIX_NIXIO_TMPDIR_NP8}
+	-X 2 -Y 2 -Z 2 "[np=8]"
+)
 
-add_test(NAME test_balancer_parallel
-	COMMAND mpiexec -n 8 ./test_balancer_parallel "[np=8]"
-	)
+set(NIX_BALANCER_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_balancer_parallel_np8)
+add_mpi_test(test_balancer_parallel test_balancer_parallel 8 ${NIX_BALANCER_TMPDIR_NP8}
+	"[np=8]"
+)
 
-add_test(NAME test_mpistream_parallel
-	COMMAND mpiexec -n 8 ./test_mpistream_parallel "[np=8]"
-	)
+set(NIX_MPISTREAM_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_mpistream_parallel_np8)
+add_mpi_test(test_mpistream_parallel test_mpistream_parallel 8 ${NIX_MPISTREAM_TMPDIR_NP8}
+	"[np=8]"
+)
 
-add_test(NAME test_statehandler_parallel
-	COMMAND mpiexec -n 8 ./test_statehandler_parallel "[np=8]"
-	)
+set(NIX_STATEHANDLER_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_statehandler_parallel_np8)
+add_mpi_test(test_statehandler_parallel test_statehandler_parallel 8 ${NIX_STATEHANDLER_TMPDIR_NP8}
+	"[np=8]"
+)

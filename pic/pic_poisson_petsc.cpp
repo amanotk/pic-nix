@@ -78,7 +78,7 @@ protected:
     } else if (is_3d) {
       elliptic::build_poisson_matrix_3d(matrix, dm_obj, diag_3d, ofdx, ofdy, ofdz);
     } else {
-      ERROR << tfm::format("Invalid global dimensions for PicPoisson: %d %d %d", dims[0], dims[1],
+      ERROR << fmt::format("Invalid global dimensions for PicPoisson: {} {} {}", dims[0], dims[1],
                            dims[2]);
       MPI_Abort(MPI_COMM_WORLD, -1);
     }

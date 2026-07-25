@@ -31,6 +31,9 @@ The human user primarily manages branch switching, but these rules apply when yo
 ### 0. General Rule
 - **Never commit or push without explicit approval.** A clear affirmative
   phrase like "yes", "do it", "commit", or "push" is required before acting.
+  - "yes" to a commit proposal means commit only, not push.
+  - Push requires a separate explicit request (e.g. "push it", "push now").
+  - Do not assume push permission from prior approvals in the session.
 - Silence, a description of changes, or "looks good" is NOT approval.
 - Before committing, show the planned commit message and ask "Ready to
   commit?", then wait for an explicit yes.
@@ -73,7 +76,7 @@ The human user primarily manages branch switching, but these rules apply when yo
 - `scripts/` : Repository maintenance and developer helper scripts  
 
 ## Third-Party Code
-The code under `nix/thirdparty/` should not be modified unless explicitly instructed.  
+The vendored single-header `nix/cmdline.hpp` should not be modified unless explicitly instructed.  
 
 ## Testing
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  

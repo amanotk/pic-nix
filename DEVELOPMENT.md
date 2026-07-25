@@ -152,7 +152,7 @@ uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subdir
 ## Language Server
 
 Generate the compilation database whenever you configure so `clangd`/your
-LSP can resolve MPI headers and `nix/thirdparty` includes:
+LSP can resolve MPI headers and `nix/` includes:
 
 ```sh
 cmake -S . -B build \
@@ -178,20 +178,55 @@ cmake -S . -B build \
 ## Catch2 v3 Setup
 
 Prefer an external Catch2 v3 install and point CMake at its config file.
-Use the helper script to install Catch2 v3 into a custom prefix:
+A single script installs all C++ dependencies (including Catch2) into a
+custom prefix:
 
 ```sh
-scripts/install_catch2v3.sh "$HOME/usr"
+scripts/install_dependencies.sh "$HOME/usr"
 ```
 
-Then configure tests with the explicit config path:
+Then configure with the explicit prefix:
 
 ```sh
 cmake -S . -B build \
   -DBUILD_TESTING=ON \
   -DCMAKE_CXX_COMPILER=mpicxx \
-  -DPICNIX_CATCH2_CONFIG="$HOME/usr/lib/cmake/Catch2/Catch2Config.cmake"
+  -DCMAKE_PREFIX_PATH="$HOME/usr" \
+  -DPICNIX_USE_SYSTEM_LIBS=ON
 ```
+
+For an offline build (no network access during configure):
+
+```sh
+cmake -S . -B build \
+  -DCMAKE_PREFIX_PATH="$HOME/usr" \
+  -DPICNIX_USE_SYSTEM_LIBS=ON \
+  -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+```
+
+For a FetchContent-based build (automatic downloads, no pre-install needed):
+
+```sh
+cmake -S . -B build -DPICNIX_USE_SYSTEM_LIBS=OFF
+```
+
+## Dependency Management
+
+Third-party libraries are managed through `nix/cmake/Dependencies.cmake`.
+Two modes are supported:
+
+| Mode | CMake option | Behaviour |
+|------|-------------|-----------|
+| System | `PICNIX_USE_SYSTEM_LIBS=ON` (default) | Try installed packages via `find_package`, FetchContent fallback |
+| FetchContent | `PICNIX_USE_SYSTEM_LIBS=OFF` | Always fetch pinned versions from GitHub |
+
+Pinned dependency versions are listed in `nix/DEPENDENCIES.md`.
+
+xtensor 0.24.7 is patched for LLVM 19 compatibility
+(`nix/cmake/patches/xtensor-0.24.7-llvm19.patch`).  The patch uses
+the portable `__cpp_template_template_args` feature-test macro instead
+of GCC-specific version guards.  It is applied automatically in both
+FetchContent mode and the install script.
 
 ## Smoke Test Golden Data
 

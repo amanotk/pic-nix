@@ -18,6 +18,11 @@ if(NOT EXISTS "${NIX_DIR}/nix.hpp")
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  list(APPEND CMAKE_MODULE_PATH "${NIX_DIR}/cmake")
+  include(Dependencies)
+endif()
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   option(BUILD_TESTING "Build tests" OFF)
   include(CTest)
 endif()
@@ -34,7 +39,6 @@ endif()
 set(ELLIPTIC_INCLUDE_DIRS
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${NIX_DIR}
-  ${NIX_DIR}/thirdparty
 )
 
 set(ELLIPTIC_SOURCES
@@ -52,6 +56,7 @@ endif()
 
 add_library(elliptic STATIC ${ELLIPTIC_SOURCES})
 target_include_directories(elliptic PUBLIC ${ELLIPTIC_INCLUDE_DIRS})
+target_link_libraries(elliptic PUBLIC picnix::dependencies)
 if(PICNIX_ENABLE_PETSC)
   target_link_libraries(elliptic PUBLIC PkgConfig::PETSC)
 endif()

@@ -12,19 +12,20 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # filesystem
 find_package(Filesystem REQUIRED)
 
-# xsimd for xtensor
-add_compile_definitions(XTENSOR_USE_XSIMD)
+# external dependencies
+include(Dependencies)
 
 # build static library
 add_library(nix STATIC application.cpp balancer.cpp nixio.cpp sfc.cpp chunk.cpp chunkmap.cpp)
 
 # include directory
 target_include_directories(nix PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(nix PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty)
+target_link_libraries(nix PUBLIC picnix::dependencies)
 
 set(NIX_BUILD_TESTING_DEFAULT OFF)
 if(DEFINED BUILD_TESTING)

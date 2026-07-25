@@ -1,5 +1,9 @@
 include(FetchContent)
 
+if(NOT DEFINED PICNIX_USE_SYSTEM_LIBS)
+  set(PICNIX_USE_SYSTEM_LIBS ON)
+endif()
+
 set(PICNIX_CATCH2_CONFIG "" CACHE FILEPATH "Full path to Catch2Config.cmake")
 if(NOT PICNIX_CATCH2_CONFIG AND DEFINED ENV{PICNIX_CATCH2_CONFIG})
   set(PICNIX_CATCH2_CONFIG "$ENV{PICNIX_CATCH2_CONFIG}" CACHE FILEPATH
@@ -18,7 +22,9 @@ if(PICNIX_CATCH2_CONFIG)
   endif()
 endif()
 
-find_package(Catch2 3 CONFIG QUIET)
+if(PICNIX_USE_SYSTEM_LIBS)
+  find_package(Catch2 3 CONFIG QUIET)
+endif()
 
 if(NOT Catch2_FOUND)
   message(STATUS "Catch2 v3 not found; fetching from upstream.")
