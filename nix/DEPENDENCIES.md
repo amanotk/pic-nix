@@ -41,6 +41,26 @@ cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/usr"
 The install script lives under `scripts/` in the pic-nix repository — copy or
 symlink it when building `nix` standalone.
 
+### Cross-compilation
+
+Pass the same CMake initial-cache or toolchain option to the dependency
+installer and the PIC-NIX build.  This is required for compiled dependencies
+such as fmt and Catch2; making them static does not make host-built objects
+compatible with a different target architecture.
+Relative cache and toolchain paths passed to the installer are resolved from
+the directory where the script is invoked.
+
+For example, from the pic-nix repository root:
+
+```sh
+scripts/install_dependencies.sh "$HOME/usr-fugaku" \
+  -C cmake/fugaku-llvm22-cross.cmake
+cmake -S . -B build \
+  -C cmake/fugaku-llvm22-cross.cmake \
+  -DCMAKE_PREFIX_PATH="$HOME/usr-fugaku" \
+  -DPICNIX_USE_SYSTEM_LIBS=ON
+```
+
 ## Offline Build
 
 ```sh

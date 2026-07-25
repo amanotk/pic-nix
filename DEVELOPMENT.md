@@ -210,6 +210,11 @@ For a FetchContent-based build (automatic downloads, no pre-install needed):
 cmake -S . -B build -DPICNIX_USE_SYSTEM_LIBS=OFF
 ```
 
+For cross-compilation, pass the same initial-cache or toolchain option after
+the install prefix so compiled dependencies use the target compiler.  See
+[`nix/DEPENDENCIES.md`](nix/DEPENDENCIES.md#cross-compilation) for the Fugaku
+example.
+
 ## Dependency Management
 
 Third-party libraries are managed through `nix/cmake/Dependencies.cmake`.
