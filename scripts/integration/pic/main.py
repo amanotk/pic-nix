@@ -69,6 +69,7 @@ def cmd_build(args):
         str(compiler["cache"]),
         "-DCMAKE_BUILD_TYPE=Release",
         "-DBUILD_TESTING=OFF",
+        "-DPICNIX_USE_SYSTEM_LIBS=OFF",
     ]
     _run(configure_cmd, cwd=REPO_ROOT)
 

@@ -115,7 +115,7 @@ json ChunkMap::to_json()
 void ChunkMap::from_json(json& obj)
 {
   if (obj["ndim"].get<int>() != 3) {
-    ERROR << tfm::format("Invalid input to ChunkMap::load_json");
+    ERROR << fmt::format("Invalid input to ChunkMap::load_json");
   }
 
   size           = obj["size"].get<int>();

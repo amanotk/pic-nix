@@ -2,8 +2,8 @@
 #ifndef _DEBUG_HPP_
 #define _DEBUG_HPP_
 
-#include "tinyformat.hpp"
 #include <cstring>
+#include <fmt/format.h>
 #include <iomanip>
 #include <plog/Appenders/ConsoleAppender.h>
 #include <plog/Formatters/TxtFormatter.h>

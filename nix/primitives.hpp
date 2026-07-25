@@ -2,6 +2,7 @@
 #ifndef _PARTICLE_PRIMITIVES_HPP_
 #define _PARTICLE_PRIMITIVES_HPP_
 
+#include "array_utils.hpp"
 #include "nix.hpp"
 #include "xsimd/xsimd.hpp"
 

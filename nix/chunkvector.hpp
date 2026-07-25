@@ -86,7 +86,7 @@ public:
 
     // check local number of chunks
     if (size() > MAX_CHUNK_PER_RANK) {
-      ERROR << tfm::format("Number of chunk per rank should not exceed %8d", MAX_CHUNK_PER_RANK);
+      ERROR << fmt::format("Number of chunk per rank should not exceed {:8d}", MAX_CHUNK_PER_RANK);
       status = status & false;
     } else {
       status = status & true;

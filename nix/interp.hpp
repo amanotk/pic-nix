@@ -2,6 +2,7 @@
 #ifndef _INTERP_HPP_
 #define _INTERP_HPP_
 
+#include "array_utils.hpp"
 #include "nix.hpp"
 #include "xsimd/xsimd.hpp"
 

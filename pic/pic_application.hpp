@@ -4,6 +4,7 @@
 
 #include "nix/application.hpp"
 
+#include "nix/array_types.hpp"
 #include "pic.hpp"
 
 #include "elliptic/elliptic.hpp"
@@ -37,7 +38,7 @@ class PicApplication : public nix::Application
 public:
   using this_type  = PicApplication;
   using base_type  = nix::Application;
-  using MpiCommVec = xt::xtensor_fixed<MPI_Comm, xt::xshape<NumBoundaryMode, 3, 3, 3>>;
+  using MpiCommVec = nix::FixedArray4D<MPI_Comm, NumBoundaryMode, 3, 3, 3>;
 
   using PtrPoissonSolver    = std::unique_ptr<elliptic::Solver>;
   using PtrPoissonInterface = std::shared_ptr<elliptic::SolverInterface>;

@@ -2,17 +2,25 @@
 set(PROJECT_NAME "pic_unittest")
 project(${PROJECT_NAME} CXX)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../../nix/cmake/Catch2Setup.cmake)
 
 set(INCLUDE_DIRS
   ${CMAKE_CURRENT_LIST_DIR}/../..
   ${CMAKE_CURRENT_LIST_DIR}/..
   ${CMAKE_CURRENT_LIST_DIR}/../../nix
-  ${CMAKE_CURRENT_LIST_DIR}/../../nix/thirdparty
   )
 
 # helpers
+if(NOT DEFINED MPIEXEC)
+  find_program(MPIEXEC NAMES mpiexec mpirun REQUIRED)
+endif()
+
+set(MPI_TEST_TIMEOUT 300)
+
 function(add_mpi_test name target nproc tmpdir)
+  set(workdir ${tmpdir}_cwd)
+  file(MAKE_DIRECTORY ${workdir})
+  file(MAKE_DIRECTORY ${tmpdir})
   add_test(NAME ${name}_prepare
     COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir}
   )
@@ -21,7 +29,12 @@ function(add_mpi_test name target nproc tmpdir)
       ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> ${ARGN}
   )
   set_tests_properties(${name}
-    PROPERTIES DEPENDS ${name}_prepare
+    PROPERTIES
+      DEPENDS ${name}_prepare
+      LABELS MPI
+      PROCESSORS ${nproc}
+      TIMEOUT ${MPI_TEST_TIMEOUT}
+      WORKING_DIRECTORY ${workdir}
   )
 endfunction()
 
@@ -69,8 +82,6 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
   )
   add_test(NAME ${target} COMMAND ${target})
 endforeach()
-
-set(MPIEXEC mpiexec)
 
 # PicApplicationInterface smoke / application tests (Catch2, MPI)
 add_executable(test_pic_application test_pic_application.cpp)

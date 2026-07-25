@@ -1,10 +1,12 @@
 #ifndef _TEST_PARALLEL_COMMON_HPP_
 #define _TEST_PARALLEL_COMMON_HPP_
 
+#include "array_types.hpp"
 #include "nix.hpp"
-#include "xtensorall.hpp"
 #include <algorithm>
 #include <vector>
+#include <xtensor/xio.hpp>
+#include <xtensor/xtensor.hpp>
 
 #include "chunk_accessor.hpp"
 
@@ -19,15 +21,15 @@ using MockChunkVec = std::vector<std::shared_ptr<MockChunk>>;
 class MockChunk
 {
 protected:
-  int                     Nb;
-  int                     Lbx;
-  int                     Ubx;
-  int                     Lby;
-  int                     Uby;
-  int                     Lbz;
-  int                     Ubz;
-  xt::xtensor<float64, 3> src;
-  xt::xtensor<float64, 3> sol;
+  int              Nb;
+  int              Lbx;
+  int              Ubx;
+  int              Lby;
+  int              Uby;
+  int              Lbz;
+  int              Ubz;
+  Array3D<float64> src;
+  Array3D<float64> sol;
 
   // Members mimicking nix::Chunk
   int id;
@@ -37,14 +39,14 @@ protected:
 
 public:
   struct DataContainer {
-    int&                     Lbx;
-    int&                     Ubx;
-    int&                     Lby;
-    int&                     Uby;
-    int&                     Lbz;
-    int&                     Ubz;
-    xt::xtensor<float64, 3>& src;
-    xt::xtensor<float64, 3>& sol;
+    int&              Lbx;
+    int&              Ubx;
+    int&              Lby;
+    int&              Uby;
+    int&              Lbz;
+    int&              Ubz;
+    Array3D<float64>& src;
+    Array3D<float64>& sol;
   };
 
   MockChunk() : Nb(2), id(0)

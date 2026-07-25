@@ -90,7 +90,7 @@ void PicApplication::initialize(int argc, char** argv)
 void PicApplication::initialize_diagnostic()
 {
   if (cfgparser->get_diagnostic().is_array() == false) {
-    ERROR << tfm::format("Invalid diagnostic");
+    ERROR << fmt::format("Invalid diagnostic");
   }
 
   base_type::initialize_diagnostic();
@@ -164,7 +164,7 @@ void PicApplication::setup_chunks_init()
       }
     }
     if (!is_up_valid) {
-      ERROR << tfm::format("Per-species q/m extraction failed: up is null for some species");
+      ERROR << fmt::format("Per-species q/m extraction failed: up is null for some species");
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
 

@@ -1,10 +1,10 @@
 // -*- C++ -*-
 
-#include "xtensor_packer3d.hpp"
-#include "xtensor_particle.hpp"
+#include "xtensor/xtensor_packer3d.hpp"
+#include "xtensor/xtensor_particle.hpp"
 
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <cstdint>
@@ -326,4 +326,3 @@ TEST_CASE("XtensorPacker3D pack_tracer packs negative IDs only")
   REQUIRE(std::memcmp(out + Particle::get_particle_size(), &particle->xu(2, 0),
                       Particle::get_particle_size()) == 0);
 }
-

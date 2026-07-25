@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.20)
 
 # project (standalone build)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -22,6 +22,7 @@ endif()
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests" FORCE)
   add_subdirectory(${PICNIX_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
+  add_subdirectory(${PICNIX_DIR}/elliptic ${CMAKE_CURRENT_BINARY_DIR}/elliptic)
 endif()
 
 # build static library
@@ -41,10 +42,9 @@ add_library(pic STATIC ${PIC_SOURCES})
 
 # include directory
 target_include_directories(pic PRIVATE ${PICNIX_DIR})
-target_include_directories(pic PRIVATE ${PICNIX_DIR}/nix)
-target_include_directories(pic PRIVATE ${PICNIX_DIR}/nix/thirdparty)
 target_include_directories(pic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(pic PUBLIC elliptic)
+target_link_libraries(pic PUBLIC elliptic nix)
+target_link_libraries(pic PRIVATE std::mdspan)
 target_compile_definitions(pic PUBLIC PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
 if(BUILD_TESTING)

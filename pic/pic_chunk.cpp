@@ -12,7 +12,7 @@ PicChunk::PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id)
     bool is_1d = has_dim[0] == false && has_dim[1] == false && has_dim[2] == true;
 
     if (is_1d != true && is_2d != true && is_3d != true) {
-      ERROR << tfm::format("Invalid dimension: %d %d %d", dims[0], dims[1], dims[2]);
+      ERROR << fmt::format("Invalid dimension: {} {} {}", dims[0], dims[1], dims[2]);
       MPI_Abort(MPI_COMM_WORLD, -1);
     } else if (is_1d == true) {
       dimension = 1;
@@ -195,7 +195,7 @@ void PicChunk::setup(json& config)
     }
 
     if (is_success == false) {
-      ERROR << tfm::format("Invalid vectorization mode (see below):");
+      ERROR << fmt::format("Invalid vectorization mode (see below):");
       std::cerr << std::setw(2) << vectorization << std::endl;
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
@@ -212,8 +212,8 @@ void PicChunk::setup(json& config)
     bool is_z_valid = has_dim[0] == false || dims[0] >= nb;
 
     if (is_x_valid == false || is_y_valid == false || is_z_valid == false) {
-      ERROR << tfm::format("Number of grid points smaller than the minimum (%2d) "
-                           "for the chosen shape order (%2d) of shape function ",
+      ERROR << fmt::format("Number of grid points smaller than the minimum ({:2d}) "
+                           "for the chosen shape order ({:2d}) of shape function ",
                            nb, order);
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
@@ -233,7 +233,7 @@ void PicChunk::setup(json& config)
     } else if (pusher == "HigueraCary") {
       option["pusher"] = pic_engine::PusherHigueraCary;
     } else {
-      ERROR << tfm::format("Invalid pusher: %s", pusher);
+      ERROR << fmt::format("Invalid pusher: {}", pusher);
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
   }
@@ -247,7 +247,7 @@ void PicChunk::setup(json& config)
     } else if (interpolation == pic_engine::InterpName[pic_engine::InterpWT]) {
       option["interpolation"] = pic_engine::InterpWT;
     } else {
-      ERROR << tfm::format("Invalid interpolation: %s", interpolation);
+      ERROR << fmt::format("Invalid interpolation: {}", interpolation);
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
   }
@@ -261,7 +261,7 @@ void PicChunk::setup(json& config)
     } else if (seed_type == "fixed") {
       option["random_seed"] = this->myid; // chunk ID
     } else {
-      ERROR << tfm::format("Invalid seed type: %s", seed_type);
+      ERROR << fmt::format("Invalid seed type: {}", seed_type);
       MPI_Abort(MPI_COMM_WORLD, -1);
     }
   }
@@ -327,7 +327,7 @@ void PicChunk::set_boundary_pack(int mode)
     break;
   }
   default:
-    ERROR << tfm::format("No such boundary mode exists!");
+    ERROR << fmt::format("No such boundary mode exists!");
     break;
   }
 }
@@ -361,7 +361,7 @@ void PicChunk::set_boundary_unpack(int mode)
     break;
   }
   default:
-    ERROR << tfm::format("No such boundary mode exists!");
+    ERROR << fmt::format("No such boundary mode exists!");
     break;
   }
 
@@ -398,7 +398,7 @@ void PicChunk::set_boundary_begin(int mode)
     break;
   }
   default:
-    ERROR << tfm::format("No such boundary mode exists!");
+    ERROR << fmt::format("No such boundary mode exists!");
     break;
   }
 }
@@ -432,7 +432,7 @@ void PicChunk::set_boundary_end(int mode)
     break;
   }
   default:
-    ERROR << tfm::format("No such boundary mode exists!");
+    ERROR << fmt::format("No such boundary mode exists!");
     break;
   }
 }
@@ -471,10 +471,10 @@ void PicChunk::get_energy(float64& efd, float64& bfd, float64 particle[])
   }
 }
 
-void PicChunk::get_diverror(float64& efd, float64& bfd)
+void PicChunk::get_diverror(float64& efd, float64& bfd, int64& ecount, int64& bcount)
 {
   pic_engine::Maxwell<this_type> maxwell;
-  std::tie(efd, bfd) = maxwell.get_diverror(dimension, *this, get_internal_data());
+  std::tie(efd, bfd, ecount, bcount) = maxwell.get_diverror(dimension, *this, get_internal_data());
 }
 
 void PicChunk::sort_particle(ParticleVec& particle)
@@ -489,27 +489,27 @@ void PicChunk::set_boundary_field(int mode)
 {
 
   if (get_nb_rank(-1, 0, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+    ERROR << fmt::format("Non-periodic boundary condition has not been implemented!");
   }
 
   if (get_nb_rank(+1, 0, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+    ERROR << fmt::format("Non-periodic boundary condition has not been implemented!");
   }
 
   if (get_nb_rank(0, -1, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+    ERROR << fmt::format("Non-periodic boundary condition has not been implemented!");
   }
 
   if (get_nb_rank(0, +1, 0) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+    ERROR << fmt::format("Non-periodic boundary condition has not been implemented!");
   }
 
   if (get_nb_rank(0, 0, -1) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+    ERROR << fmt::format("Non-periodic boundary condition has not been implemented!");
   }
 
   if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-    ERROR << tfm::format("Non-periodic boundary condition has not been implemented!");
+    ERROR << fmt::format("Non-periodic boundary condition has not been implemented!");
   }
 }
 
