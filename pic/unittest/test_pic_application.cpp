@@ -672,20 +672,26 @@ TEST_CASE("pic_application_writes_complete_checkpoint_status", "[np=1][np=8]")
 
   REQUIRE(app.main() == 0);
 
+  int status_valid = 1;
   if (rank == 0) {
-    std::ifstream status_file(checkpoint.string() + ".status.json");
-    json          status = json::parse(status_file);
+    std::error_code ec;
+    std::ifstream   status_file(checkpoint.string() + ".status.json");
+    json            status                = json::parse(status_file, nullptr, false);
+    const auto      normalized_checkpoint = std::filesystem::weakly_canonical(checkpoint, ec);
 
-    REQUIRE(status["status"] == "complete");
-    REQUIRE(status["prefix"] == checkpoint.string());
-    REQUIRE(status["nprocess"] == nprocess);
-    REQUIRE(status.contains("curstep") == true);
-    REQUIRE(status.contains("curtime") == true);
-    REQUIRE(status.contains("timestamp") == true);
+    status_valid =
+        !ec && status_file.is_open() && status.is_object() && status.contains("status") &&
+        status.contains("prefix") && status.contains("nprocess") && status.contains("curstep") &&
+        status.contains("curtime") && status.contains("timestamp") &&
+        status["status"] == "complete" && status["prefix"] == normalized_checkpoint.string() &&
+        status["nprocess"] == nprocess;
   }
+  MPI_Bcast(&status_valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   cleanup_checkpoint(checkpoint, rank);
   cleanup_config_and_tmpdir(config_path, rank);
+
+  REQUIRE(status_valid == 1);
 }
 
 TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")

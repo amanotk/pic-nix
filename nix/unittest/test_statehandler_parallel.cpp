@@ -4,6 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <system_error>
+
 bool require_mpi_size(int expected);
 
 using namespace nix;
@@ -304,18 +306,25 @@ public:
 
     bool save = statehandler.save(get_interface(), prefix);
 
+    int status_valid = 1;
     if (thisrank == 0) {
-      std::ifstream ifs(statehandler.get_status_filename(prefix));
-      json          status = json::parse(ifs);
-      REQUIRE(status["status"] == "complete");
-      REQUIRE(status["prefix"] == std::filesystem::weakly_canonical(prefix).string());
-      REQUIRE(status["curstep"] == curstep);
-      REQUIRE(status["curtime"] == curtime);
-      REQUIRE(status["nprocess"] == nprocess);
+      std::error_code ec;
+      std::ifstream   ifs(statehandler.get_status_filename(prefix));
+      json            status            = json::parse(ifs, nullptr, false);
+      const auto      normalized_prefix = std::filesystem::weakly_canonical(prefix, ec);
+
+      status_valid =
+          !ec && ifs.is_open() && status.is_object() && status.contains("status") &&
+          status.contains("prefix") && status.contains("curstep") && status.contains("curtime") &&
+          status.contains("nprocess") && status["status"] == "complete" &&
+          status["prefix"] == normalized_prefix.string() && status["curstep"] == curstep &&
+          status["curtime"] == curtime && status["nprocess"] == nprocess;
     }
+    MPI_Bcast(&status_valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     bool load = statehandler.load(get_interface(), prefix);
 
+    REQUIRE(status_valid == 1);
     REQUIRE(save == true);
     REQUIRE(load == true);
     REQUIRE(validate_chunkvec(numchunk) == true);
