@@ -60,10 +60,18 @@ The human user primarily manages branch switching, but these rules apply when yo
 - `feature/*` -> `develop`: Use **Squash and Merge**. Keep the resulting commit message clean and descriptive.  
 - `develop` -> `main`: Use a regular merge commit (**Create a merge commit**).  
 
+  After a release PR is merged, synchronize `main` back into `develop` with
+  a local merge commit and push it directly to `develop`.  This back-merge
+  does **not** go through a PR — it is the only routine direct push to
+  `develop` and should contain the release merge history only, not new
+  feature or fix work.  
+
 ### 4. Safety & Responsibilities
 - Check the current branch (`git branch --show-current`) before starting work.  
 - If on the wrong branch (especially `main`), stop and notify the user before making changes.  
-- Never push directly to `main` or `develop` unless explicitly instructed.  
+- Never push directly to `main` or `develop` unless explicitly instructed
+  (the back-merge from `main` into `develop` after a release is the only
+  routine exception — see Merging Policy above).  
 - Never force-push to `main` or `develop`. Avoid force-push entirely unless explicitly instructed.  
 - Do not rebase or rewrite published history unless explicitly instructed.  
 - If the local branch is behind its remote, prefer fast-forward updates (`git pull --ff-only`) unless the user asks for another strategy.  
