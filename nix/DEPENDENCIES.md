@@ -48,7 +48,8 @@ installer and the PIC-NIX build.  This is required for compiled dependencies
 such as fmt and Catch2; making them static does not make host-built objects
 compatible with a different target architecture.
 Relative cache and toolchain paths passed to the installer are resolved from
-the directory where the script is invoked.
+the directory where the script is invoked.  The installer translates
+`--toolchain` to `CMAKE_TOOLCHAIN_FILE` for compatibility with CMake 3.20.
 
 For example, from the pic-nix repository root:
 

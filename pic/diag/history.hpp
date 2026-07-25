@@ -4,6 +4,8 @@
 
 #include "pic_diag.hpp"
 
+#include <limits>
+
 ///
 /// @brief Diagnostic for time history
 ///
@@ -83,12 +85,12 @@ public:
       std::string filename = dirname + "history.txt";
       std::string msg      = "";
 
-      if (div_e_count_global > 0) {
-        history[0] = std::sqrt(history[0] / static_cast<float64>(div_e_count_global));
-      }
-      if (div_b_count_global > 0) {
-        history[1] = std::sqrt(history[1] / static_cast<float64>(div_b_count_global));
-      }
+      history[0] = div_e_count_global > 0
+                       ? std::sqrt(history[0] / static_cast<float64>(div_e_count_global))
+                       : std::numeric_limits<float64>::quiet_NaN();
+      history[1] = div_b_count_global > 0
+                       ? std::sqrt(history[1] / static_cast<float64>(div_b_count_global))
+                       : std::numeric_limits<float64>::quiet_NaN();
 
       // initial call
       if (this->is_initial_step(data.curstep, config) == true) {

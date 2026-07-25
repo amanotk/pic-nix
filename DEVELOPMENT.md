@@ -233,6 +233,22 @@ the portable `__cpp_template_template_args` feature-test macro instead
 of GCC-specific version guards.  It is applied automatically in both
 FetchContent mode and the install script.
 
+## v0.5.0 C++ Migration Notes
+
+- CMake 3.20 or newer is required.
+- Include `nix/xtensor/xtensor_halo3d.hpp`,
+  `nix/xtensor/xtensor_packer3d.hpp`, and
+  `nix/xtensor/xtensor_particle.hpp` instead of their former paths directly
+  under `nix/`.
+- `nix/xtensorall.hpp` was removed.  Include `nix/array_types.hpp` for the
+  project array aliases, or include the required upstream xtensor headers
+  directly.
+- Array aliases and fixed-size arrays are declared in `nix/array_types.hpp`;
+  backend-neutral helpers are declared in `nix/array_utils.hpp`.
+- `PicChunk::get_diverror` now returns separate valid sample counts for
+  electric and magnetic divergence through its `ecount` and `bcount`
+  arguments.
+
 ## Smoke Test Golden Data
 
 `pic/unittest/test_pic_chunk.cpp` writes smoke test golden data to

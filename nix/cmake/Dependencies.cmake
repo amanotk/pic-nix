@@ -39,6 +39,31 @@ endif()
 include(FetchContent)
 set(_picnix_fetch_dependencies)
 
+function(_picnix_make_dependencies_available)
+  # Keep third-party build options local so embedding projects are unaffected.
+  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+  set(JSON_BuildTests OFF)
+  set(BUILD_TESTS OFF)
+  set(DOWNLOAD_GTEST OFF)
+  set(BUILD_BENCHMARK OFF)
+  set(BUILD_EXAMPLES OFF)
+  set(XSIMD_SKIP_INSTALL ON)
+  set(TOML11_BUILD_TESTS OFF)
+  set(TOML11_BUILD_EXAMPLES OFF)
+  set(PLOG_BUILD_SAMPLES OFF)
+  set(PLOG_BUILD_TESTS OFF)
+  set(PLOG_INSTALL OFF)
+  set(MDSPAN_ENABLE_TESTS OFF)
+  set(MDSPAN_ENABLE_EXAMPLES OFF)
+  set(MDSPAN_ENABLE_BENCHMARKS OFF)
+  set(MDSPAN_ENABLE_COMP_BENCH OFF)
+  set(FMT_TEST OFF)
+  set(FMT_DOC OFF)
+  set(FMT_INSTALL OFF)
+
+  FetchContent_MakeAvailable(${ARGV})
+endfunction()
+
 # --- nlohmann_json ---
 if(NOT TARGET nlohmann_json::nlohmann_json)
   FetchContent_Declare(
@@ -47,7 +72,6 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
     GIT_TAG        4f8fba14066156b73f1189a2b8bd568bde5284c5  # v3.10.5
   )
   list(APPEND _picnix_fetch_dependencies nlohmann_json)
-  set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 endif()
 
 # --- xtl ---
@@ -58,8 +82,6 @@ if(NOT TARGET xtl)
     GIT_TAG        a7c1c5444dfc57f76620391af4c94785ff82c8d6  # 0.7.7
   )
   list(APPEND _picnix_fetch_dependencies xtl)
-  set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  set(DOWNLOAD_GTEST OFF CACHE BOOL "" FORCE)
 endif()
 
 # --- xsimd ---
@@ -70,10 +92,6 @@ if(NOT TARGET xsimd)
     GIT_TAG        c1247bffa8fc36de7380a5cd42673a3b32f74c97  # 12.1.1
   )
   list(APPEND _picnix_fetch_dependencies xsimd)
-  set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  set(BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
-  set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(XSIMD_SKIP_INSTALL ON CACHE BOOL "" FORCE)
 endif()
 
 # --- xtensor ---
@@ -86,9 +104,6 @@ if(NOT TARGET xtensor)
       "${CMAKE_CURRENT_LIST_DIR}/patches/apply_patch.cmake"
   )
   list(APPEND _picnix_fetch_dependencies xtensor)
-  set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  set(BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
-  set(DOWNLOAD_GTEST OFF CACHE BOOL "" FORCE)
 endif()
 
 # --- toml11 ---
@@ -99,8 +114,6 @@ if(NOT TARGET toml11::toml11)
     GIT_TAG        7c336a52a0100b24a57be811873db9b5fce9f45a  # v4.0.1
   )
   list(APPEND _picnix_fetch_dependencies toml11)
-  set(TOML11_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  set(TOML11_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 endif()
 
 # --- plog ---
@@ -111,9 +124,6 @@ if(NOT TARGET plog::plog)
     GIT_TAG        e21baecd4753f14da64ede979c5a19302618b752  # 1.1.10
   )
   list(APPEND _picnix_fetch_dependencies plog)
-  set(PLOG_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
-  set(PLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  set(PLOG_INSTALL OFF CACHE BOOL "" FORCE)
 endif()
 
 # --- mdspan ---
@@ -124,10 +134,6 @@ if(NOT TARGET std::mdspan)
     GIT_TAG        9ceface91483775a6c74d06ebf717bbb2768452f  # mdspan-0.6.0
   )
   list(APPEND _picnix_fetch_dependencies mdspan)
-  set(MDSPAN_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-  set(MDSPAN_ENABLE_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(MDSPAN_ENABLE_BENCHMARKS OFF CACHE BOOL "" FORCE)
-  set(MDSPAN_ENABLE_COMP_BENCH OFF CACHE BOOL "" FORCE)
 endif()
 
 # --- fmt ---
@@ -138,15 +144,12 @@ if(NOT TARGET fmt::fmt)
     GIT_TAG        123913715afeb8a437e6388b4473fcc4753e1c9a  # 11.1.4
   )
   list(APPEND _picnix_fetch_dependencies fmt)
-  set(FMT_TEST OFF CACHE BOOL "" FORCE)
-  set(FMT_DOC OFF CACHE BOOL "" FORCE)
-  set(FMT_INSTALL OFF CACHE BOOL "" FORCE)
 endif()
 
 # ── populate in dependency order ─────────────────────────────────────
 # Declarations above are ordered so xtl and xsimd precede xtensor.
 if(_picnix_fetch_dependencies)
-  FetchContent_MakeAvailable(
+  _picnix_make_dependencies_available(
     ${_picnix_fetch_dependencies}
   )
 endif()
