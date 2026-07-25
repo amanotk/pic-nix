@@ -2,7 +2,7 @@
 set(PROJECT_NAME "pic_unittest")
 project(${PROJECT_NAME} CXX)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/../../nix/cmake/Catch2Setup.cmake)
 
 set(INCLUDE_DIRS
   ${CMAKE_CURRENT_LIST_DIR}/../..

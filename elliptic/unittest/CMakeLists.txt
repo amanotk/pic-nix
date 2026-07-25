@@ -1,7 +1,7 @@
 if(PICNIX_ENABLE_PETSC)
   enable_testing()
 
-  include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/Catch2Setup.cmake)
+  include(${CMAKE_CURRENT_LIST_DIR}/../../nix/cmake/Catch2Setup.cmake)
 
   set(UNITTEST_INCLUDE_DIRS
           ${NIX_DIR}

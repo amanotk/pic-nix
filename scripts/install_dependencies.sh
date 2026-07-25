@@ -47,7 +47,7 @@ absolute_path() {
 CMAKE_CONFIGURE_ARGS=()
 while (( $# > 0 )); do
   case "$1" in
-    -C | --toolchain)
+    -C)
       if (( $# < 2 )); then
         echo "Missing path after $1" >&2
         exit 2
@@ -55,8 +55,16 @@ while (( $# > 0 )); do
       CMAKE_CONFIGURE_ARGS+=("$1" "$(absolute_path "$2")")
       shift 2
       ;;
+    --toolchain)
+      if (( $# < 2 )); then
+        echo "Missing path after $1" >&2
+        exit 2
+      fi
+      CMAKE_CONFIGURE_ARGS+=("-DCMAKE_TOOLCHAIN_FILE=$(absolute_path "$2")")
+      shift 2
+      ;;
     --toolchain=*)
-      CMAKE_CONFIGURE_ARGS+=("--toolchain=$(absolute_path "${1#*=}")")
+      CMAKE_CONFIGURE_ARGS+=("-DCMAKE_TOOLCHAIN_FILE=$(absolute_path "${1#*=}")")
       shift
       ;;
     -DCMAKE_TOOLCHAIN_FILE=*)

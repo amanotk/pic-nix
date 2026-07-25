@@ -128,8 +128,8 @@ void setup_chunk(PicChunk& chunk, const nix::Dims3D& dims, const SmokeOptions& o
 
 std::string smoke_tag_for_options(const SmokeOptions& options)
 {
-  return options.vectorization + "_o" + std::to_string(options.order) + "_" + options.pusher +
-         "_" + options.interpolation;
+  return options.vectorization + "_o" + std::to_string(options.order) + "_" + options.pusher + "_" +
+         options.interpolation;
 }
 
 std::vector<SmokeOptions> make_smoke_options()
@@ -159,9 +159,9 @@ float64 sinusoidal_mode1(float64 coord, float64 min, float64 length)
 void apply_sinusoidal_field(PicChunk::DataContainer& data, const nix::Bool3D& has_dim,
                             const std::array<float64, 6>& field)
 {
-  const float64 ex = field[0];
-  const float64 ey = field[1];
-  const float64 ez = field[2];
+  const float64 ex     = field[0];
+  const float64 ey     = field[1];
+  const float64 ez     = field[2];
   const float64 bx_amp = field[3];
   const float64 by_amp = field[4];
   const float64 bz_amp = field[5];
@@ -177,15 +177,12 @@ void apply_sinusoidal_field(PicChunk::DataContainer& data, const nix::Bool3D& ha
   for (size_t iz = 0; iz < shape[0]; iz++) {
     for (size_t iy = 0; iy < shape[1]; iy++) {
       for (size_t ix = 0; ix < shape[2]; ix++) {
-        const float64 x =
-            xmin + (static_cast<float64>(ix) - data.Lbx + 0.5) * data.delx;
-        const float64 y =
-            ymin + (static_cast<float64>(iy) - data.Lby + 0.5) * data.dely;
-        const float64 z =
-            zmin + (static_cast<float64>(iz) - data.Lbz + 0.5) * data.delz;
-        const float64 bx = has_dim[2] ? bx_amp * sinusoidal_mode1(x, xmin, lx) : 0.0;
-        const float64 by = has_dim[1] ? by_amp * sinusoidal_mode1(y, ymin, ly) : 0.0;
-        const float64 bz = has_dim[0] ? bz_amp * sinusoidal_mode1(z, zmin, lz) : 0.0;
+        const float64 x        = xmin + (static_cast<float64>(ix) - data.Lbx + 0.5) * data.delx;
+        const float64 y        = ymin + (static_cast<float64>(iy) - data.Lby + 0.5) * data.dely;
+        const float64 z        = zmin + (static_cast<float64>(iz) - data.Lbz + 0.5) * data.delz;
+        const float64 bx       = has_dim[2] ? bx_amp * sinusoidal_mode1(x, xmin, lx) : 0.0;
+        const float64 by       = has_dim[1] ? by_amp * sinusoidal_mode1(y, ymin, ly) : 0.0;
+        const float64 bz       = has_dim[0] ? bz_amp * sinusoidal_mode1(z, zmin, lz) : 0.0;
         data.uf(iz, iy, ix, 0) = ex;
         data.uf(iz, iy, ix, 1) = ey;
         data.uf(iz, iy, ix, 2) = ez;
@@ -346,7 +343,7 @@ void run_smoke_step(PicChunk& chunk, float64 delt)
 }
 
 void compare_smoke(const std::string& case_tag, const std::string& option_tag,
-                   const SmokeFieldDiagnostics& field_diag,
+                   const SmokeFieldDiagnostics&    field_diag,
                    const SmokeParticleDiagnostics& particle_diag)
 {
   const auto field_golden_path    = smoke_field_golden_path(case_tag);
@@ -391,8 +388,7 @@ void compare_smoke(const std::string& case_tag, const std::string& option_tag,
     FAIL("Missing smoke golden data for options; set PICNIX_UPDATE_GOLDEN=1 to generate it");
   }
 
-  const SmokeFieldDiagnostics    expected_field =
-      smoke_field_from_json(field_payload.at(option_tag));
+  const SmokeFieldDiagnostics expected_field = smoke_field_from_json(field_payload.at(option_tag));
   const SmokeParticleDiagnostics expected_particle =
       smoke_particle_from_json(particle_payload.at(option_tag));
 
@@ -446,7 +442,7 @@ void compare_smoke_diagnostics(const SmokeDiagnostics& actual, const SmokeDiagno
 
 SmokeState capture_smoke_state(const PicChunk::DataContainer& data)
 {
-  SmokeState state = {};
+  SmokeState state    = {};
   state.diag.field    = compute_smoke_field(data);
   state.diag.particle = compute_smoke_particle(data);
   state.uf            = copy_flat(data.uf);
@@ -512,7 +508,7 @@ SmokeState run_smoke_case(const SmokeCase& smoke_case, const SmokeOptions& optio
 
 void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
 {
-  const auto options = make_smoke_options();
+  const auto                        options = make_smoke_options();
   std::map<std::string, SmokeState> scalar_results;
   for (const auto& option : options) {
     const std::string tag = smoke_tag_for_options(option);
@@ -520,15 +516,15 @@ void run_smoke_case_full_sweep(const SmokeCase& smoke_case)
     const bool compare_golden = option.vectorization == "scalar";
     SmokeState diag           = run_smoke_case(smoke_case, option, compare_golden);
     if (option.vectorization == "scalar") {
-      const std::string key = std::to_string(option.order) + "_" + option.pusher + "_" +
-                              option.interpolation;
+      const std::string key =
+          std::to_string(option.order) + "_" + option.pusher + "_" + option.interpolation;
       scalar_results[key] = diag;
       continue;
     }
     if (option.vectorization == "vector") {
-      const std::string key = std::to_string(option.order) + "_" + option.pusher + "_" +
-                              option.interpolation;
-      auto              it  = scalar_results.find(key);
+      const std::string key =
+          std::to_string(option.order) + "_" + option.pusher + "_" + option.interpolation;
+      auto it = scalar_results.find(key);
       if (it == scalar_results.end()) {
         FAIL("Missing scalar reference for vectorization option: " + tag);
       }
@@ -544,7 +540,7 @@ TEST_CASE("PicChunk pack/unpack round-trip")
   nix::Bool3D has_dim = {false, false, true};
 
   const SmokeOptions options = {"scalar", 1, "Boris", "MC"};
-  PicChunk chunk(dims, has_dim, 0);
+  PicChunk           chunk(dims, has_dim, 0);
   setup_chunk(chunk, dims, options, 0.0);
 
   auto data = chunk.get_internal_data();
@@ -629,6 +625,34 @@ TEST_CASE("Maxwell divergence excludes staggered physical-boundary stencils")
   REQUIRE(bfd == Catch::Approx(0.0));
   REQUIRE(ecount == 24);
   REQUIRE(bcount == 24);
+}
+
+TEST_CASE("Maxwell divergence is undefined without valid stencils")
+{
+  nix::Dims3D dims    = {1, 1, 2};
+  nix::Bool3D has_dim = {false, false, true};
+
+  const SmokeOptions options = {"scalar", 2, "Boris", "MC"};
+  PicChunk           chunk(dims, has_dim, 0);
+  setup_chunk(chunk, dims, options, 0.0);
+
+  auto data = chunk.get_internal_data();
+  std::fill(data.uf.begin(), data.uf.end(), 0.0);
+  std::fill(data.uj.begin(), data.uj.end(), 0.0);
+
+  float64 efd        = 0.0;
+  float64 bfd        = 0.0;
+  int64   ecount     = 0;
+  int64   bcount     = 0;
+  int     xbuffer[2] = {data.boundary_margin, data.boundary_margin};
+
+  pic_engine::BaseMaxwell maxwell(data);
+  maxwell.get_diverror_1d(data.uf, data.uj, efd, bfd, ecount, bcount, xbuffer);
+
+  REQUIRE(efd == Catch::Approx(0.0));
+  REQUIRE(bfd == Catch::Approx(0.0));
+  REQUIRE(ecount == 0);
+  REQUIRE(bcount == 0);
 }
 
 TEST_CASE("Maxwell 3D divergence excludes staggered x-boundary stencils")
