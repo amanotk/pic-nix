@@ -152,7 +152,7 @@ uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subdir
 ## Language Server
 
 Generate the compilation database whenever you configure so `clangd`/your
-LSP can resolve MPI headers and `nix/thirdparty` includes:
+LSP can resolve MPI headers and `nix/` includes:
 
 ```sh
 cmake -S . -B build \
@@ -221,7 +221,7 @@ Two modes are supported:
 | System | `PICNIX_USE_SYSTEM_LIBS=ON` (default) | Try installed packages via `find_package`, FetchContent fallback |
 | FetchContent | `PICNIX_USE_SYSTEM_LIBS=OFF` | Always fetch pinned versions from GitHub |
 
-Pinned dependency versions are listed in `nix/thirdparty/Readme.md`.
+Pinned dependency versions are listed in `nix/DEPENDENCIES.md`.
 
 xtensor 0.24.7 is patched for LLVM 19 compatibility
 (`nix/cmake/patches/xtensor-0.24.7-llvm19.patch`).  The patch uses

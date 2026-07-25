@@ -25,7 +25,6 @@ add_library(nix STATIC application.cpp balancer.cpp nixio.cpp sfc.cpp chunk.cpp 
 
 # include directory
 target_include_directories(nix PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(nix PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty)
 target_link_libraries(nix PUBLIC picnix::dependencies)
 
 set(NIX_BUILD_TESTING_DEFAULT OFF)

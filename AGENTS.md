@@ -73,7 +73,7 @@ The human user primarily manages branch switching, but these rules apply when yo
 - `scripts/` : Repository maintenance and developer helper scripts  
 
 ## Third-Party Code
-The code under `nix/thirdparty/` should not be modified unless explicitly instructed.  
+The vendored single-header `nix/cmdline.hpp` should not be modified unless explicitly instructed.  
 
 ## Testing
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  
