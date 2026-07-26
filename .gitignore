@@ -12,6 +12,7 @@
 __pycache__
 # typical build directories
 build*
+thirdparty/
 # VSCode settings
 .vscode
 # Local notes

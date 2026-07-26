@@ -15,6 +15,7 @@ GEMINI.md
 
 # Build and cache output
 build*/
+thirdparty/
 .ruff_cache/
 __pycache__/
 *.o
