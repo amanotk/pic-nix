@@ -62,6 +62,8 @@
   reallocation, plus domain-ID preservation after local-domain reordering.
 - Added a deterministic centered-phi pseudocolor render smoke test that checks
   for a nonempty image.
+- Added explicit Blueprint physical-bound assertions for render origin,
+  spacing, vertex dimensions, and computed upper bounds.
 - Implemented the optional Ascent CMake option, MPI/C language discovery,
   `ascent::ascent_mpi` validation/linking, conditional registration, skeletal
   scheduling diagnostic, and generic pre-MPI shutdown hook.
@@ -87,6 +89,7 @@
 | Python regression suite | In-situ plus existing Ohm tests | 64/64 passed | PASS |
 | Pointer refresh/domain reorder | Field and particle reallocations plus ID preservation | Passed | PASS |
 | Visualization smoke | Centered phi pseudocolor image | Nonempty image produced | PASS |
+| Visualization bounds | Blueprint origin, spacing, and upper bounds | Passed | PASS |
 | Ascent-enabled focused CTest | Blueprint, runtime, extract, render, and 8-rank app | 10/10 passed | PASS |
 | Ascent-disabled focused CTest | Application, domain view, and 8-rank app | 5/5 passed | PASS |
 | Ascent-enabled configure/build | External Ascent 0.9.5 | Successful with tests enabled | PASS |

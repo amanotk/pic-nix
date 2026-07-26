@@ -601,7 +601,7 @@ Tasks:
 - [x] Render a deterministic field such as `x + 2*y + 3*z`.
 - [x] Check successful completion, nonempty image, and Blueprint validity;
   global bounds remain to be asserted.
-- [ ] Check global bounds in the visualization smoke test.
+- [x] Check global bounds in the visualization smoke test.
 - [x] Avoid pixel comparisons; assert nonempty output and metadata instead.
 - [ ] Record wall time and centered-buffer memory overhead for a representative
   local multi-chunk case.  
@@ -620,8 +620,8 @@ Likely files:
 - deterministic test config/actions/extract files  
 - optional CTest fixtures/scripts  
 
-**Status:** in_progress; pointer-refresh, two-rank extract, and render smoke
-gates pass. Global-bounds assertion and performance measurements remain.  
+**Status:** in_progress; pointer-refresh, two-rank extract, render smoke, and
+global-bounds gates pass. Performance measurements remain.  
 
 ### Phase 8: Documentation, CI, and Full Verification
 
