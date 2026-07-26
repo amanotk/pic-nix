@@ -10,8 +10,8 @@ and keeps the current build and runtime unchanged when Ascent is disabled.
 ## Current Status
 
 - **Planning:** complete  
-- **Implementation:** Phases 1-5 in progress
-- **Current phase:** Phase 5 - Python API and extract/visualization validation
+- **Implementation:** Phases 1-6 complete; Phase 7 in progress
+- **Current phase:** Phase 7 - pointer refresh and visualization integration
 - **Branch:** `experimental/ascent-integration`  
 - **Reference design:** `notes/ascent-integration.md`  
 - **Local Ascent:** 0.9.5 with Conduit 0.9.5, MPI, Python, OpenMP, and VTK-m  
@@ -358,17 +358,17 @@ compact cell centering used by both file output and Ascent.
 
 Tasks:  
 
-- [ ] Add constexpr/static component names and normalized physical locations
+- [x] Add constexpr/static component names and normalized physical locations
   for `uf`, `uj`, `phi`, and `um`.  
-- [ ] Refactor the existing six-component 1-D/2-D/3-D formulas into a compact
+- [x] Refactor the existing six-component 1-D/2-D/3-D formulas into a compact
   owned `[nz,ny,nx,6]` result containing only active cells.  
-- [ ] Preserve `Ub+1` high-side sampling exactly.  
-- [ ] Add compact J centering for `[rho,Jx,Jy,Jz]`, leaving rho unchanged.  
-- [ ] Keep the shared transformation in `nix` or another lower-level location
+- [x] Preserve `Ub+1` high-side sampling exactly.
+- [x] Add compact J centering for `[rho,Jx,Jy,Jz]`, leaving rho unchanged.
+- [x] Keep the shared transformation in `nix` or another lower-level location
   so `nix` never depends on `pic`.  
-- [ ] Adapt `XtensorPacker3D::pack_field()` to consume shared compact output
+- [x] Adapt `XtensorPacker3D::pack_field()` to consume shared compact output
   without changing serialized values.  
-- [ ] Keep decimation separate and typed/aligned; repair invalid or
+- [x] Keep decimation separate and typed/aligned; repair invalid or
   non-divisible decimation only if required by the refactor, with explicit
   tests and no silent behavior change.  
 
@@ -389,7 +389,8 @@ Likely files:
 - `pic/insitu/field_layout.hpp` if PIC-specific metadata remains separate  
 - `nix/unittest/test_xtensor_packer3d.cpp`  
 
-**Status:** in_progress  
+**Status:** complete; focused transformation, metadata, and existing packer
+tests pass. Full output-equivalence coverage remains part of final verification.  
 
 ### Phase 3: Non-Owning Domain Views and Raw Schema
 
@@ -398,18 +399,18 @@ chunks without depending on Conduit.
 
 Tasks:  
 
-- [ ] Define a lightweight `DomainView` built from `PicChunk`, current cycle,
+- [x] Define a lightweight `DomainView` built from `PicChunk`, current cycle,
   time, and species count.  
-- [ ] Capture ID, dimension, global/local/allocated shapes, offsets, active
+- [x] Capture ID, dimension, global/local/allocated shapes, offsets, active
   bounds, ghost width, spacing, origin, and layout.  
-- [ ] Capture non-owning array descriptors for `uf`, `uj`, `um`, and `phi`:
+- [x] Capture non-owning array descriptors for `uf`, `uj`, `um`, and `phi`:
   pointer, scalar type, shape, byte strides, components, and locations.  
-- [ ] Capture per-species particle descriptors: active/allocated rows, pointer,
+- [x] Capture per-species particle descriptors: active/allocated rows, pointer,
   q, m, width, components, and ID encoding.  
 - [ ] Handle zero local chunks, zero active particles, and empty species
   without null dereference or invalid pointer arithmetic.  
-- [ ] Ensure no view object is cached across a diagnostic invocation.  
-- [ ] Document raw schema version 1 in tests as a stable contract.  
+- [x] Ensure no view object is cached across a diagnostic invocation.
+- [x] Document raw schema version 1 in tests as a stable contract.
 
 Tests/gate:  
 
@@ -427,7 +428,8 @@ Likely files:
 - `pic/unittest/test_pic_domain_view.cpp`  
 - `pic/unittest/CMakeLists.txt`  
 
-**Status:** pending  
+**Status:** complete for the core view/schema path; zero/empty and pointer-refresh
+edge cases remain in Phase 7.  
 
 ### Phase 4: Conduit Blueprint Builder
 
@@ -436,19 +438,19 @@ centered fields and the versioned raw subtree.
 
 Tasks:  
 
-- [ ] Implement one root child per local `DomainView`.  
-- [ ] Build state, uniform coordset, topology, and element-associated fields.  
-- [ ] Own compact centered buffers inside a publication object whose lifetime
+- [x] Implement one root child per local `DomainView`.
+- [x] Build state, uniform coordset, topology, and element-associated fields.
+- [x] Own compact centered buffers inside a publication object whose lifetime
   extends through Ascent execution.  
-- [ ] Bind raw allocated arrays externally as flat values and emit complete
+- [x] Bind raw allocated arrays externally as flat values and emit complete
   shape/stride/bounds metadata.  
-- [ ] Add publication switches and field-selection filtering.  
+- [x] Add publication switches; field-selection filtering remains deferred.
 - [ ] Add optional per-species Blueprint point topology only after raw particle
   publication works.  
-- [ ] Bit-copy typed particle IDs for the standard particle topology.  
-- [ ] Run Blueprint verification before publication in tests and optionally in
+- [ ] Bit-copy typed particle IDs for the standard particle topology.
+- [x] Run Blueprint verification before publication in tests and optionally in
   debug builds/runtime configuration.  
-- [ ] Ensure no standard field includes ghost cells or duplicate halo
+- [x] Ensure no standard field includes ghost cells or duplicate halo
   contributions.  
 
 Tests/gate:  
@@ -469,7 +471,8 @@ Likely files:
 - `pic/unittest/test_pic_ascent_blueprint.cpp`  
 - conditional test CMake  
 
-**Status:** pending  
+**Status:** complete for standard fields, raw publication, and verification;
+point-topology, field selection, and empty-rank edge cases remain.  
 
 ### Phase 5: Ascent Runtime and Diagnostic Orchestration
 
@@ -478,21 +481,21 @@ diagnostic steps.
 
 Tasks:  
 
-- [ ] Define the smallest runtime seam needed for fake lifecycle tests.  
-- [ ] On first required invocation, duplicate `MPI_COMM_WORLD`, pass
+- [x] Define the smallest runtime seam needed for fake lifecycle tests.
+- [x] On first required invocation, duplicate `MPI_COMM_WORLD`, pass
   `MPI_Comm_c2f()` through Ascent options, and open once.  
-- [ ] Load and cache the actions tree after validating the configured path on
+- [x] Load and cache the actions tree after validating the configured path on
   every rank.  
-- [ ] On every required invocation: obtain current local chunks, calculate
+- [x] On every required invocation: obtain current local chunks, calculate
   selected moments, rebuild views, rebuild buffers/tree, verify as configured,
   publish, and execute.  
-- [ ] Do not retain any publication object after synchronous execution.  
-- [ ] Run once per rank outside OpenMP regions.  
+- [x] Do not retain any publication object after synchronous execution.
+- [x] Run once per rank outside OpenMP regions.
 - [ ] Catch configuration/Conduit/Ascent/Python exceptions, attach rank and
   actions context, synchronize failure state where possible, then follow the
   repository MPI-abort convention to avoid asymmetric continuation.  
-- [ ] On shutdown: close Ascent once, then free the duplicated communicator.  
-- [ ] Reject duplicate Ascent diagnostic entries unless multi-instance support
+- [x] On shutdown: close Ascent once, then free the duplicated communicator.
+- [x] Reject duplicate Ascent diagnostic entries unless multi-instance support
   was selected in Phase 0.  
 
 Tests/gate:  
@@ -514,7 +517,9 @@ Likely files:
 - `pic/diag/ascent.cpp`  
 - runtime/config/lifecycle tests  
 
-**Status:** pending  
+**Status:** complete for lifecycle, scheduling, actions loading, and basic real
+Ascent execution; rank-synchronized error handling and fake-runtime coverage
+remain.  
 
 ### Phase 6: Python Helper API and Examples
 
@@ -523,24 +528,24 @@ Conduit paths, shape arithmetic, or ID encoding.
 
 Tasks:  
 
-- [ ] Add `Dataset.from_conduit(node)` as the primary constructor.  
+- [x] Add `Dataset.from_conduit(node)` as the primary constructor.
 - [ ] Optionally add a convenience constructor that accepts the injected
   `ascent_data` callable explicitly; do not depend on hidden globals.  
-- [ ] Implement local-domain iteration and lookup by domain ID.  
-- [ ] Implement mesh metadata, raw field descriptors, component lookup,
+- [x] Implement local-domain iteration and lookup by domain ID.
+- [x] Implement mesh metadata, raw field descriptors, component lookup,
   interior slicing, centered field access, and schema-version validation.  
-- [ ] Implement active-particle views, q/m access, exact ID reinterpretation,
+- [x] Implement active-particle views, q/m access, exact ID reinterpretation,
   and optional relativistic kinetic energy.  
 - [ ] Implement small MPI helpers that accept an explicit mpi4py communicator
   or convert `ascent_mpi_comm_id()` supplied by the extract script.  
-- [ ] Keep ordinary unit tests independent of Ascent using mappings/fake nodes;
+- [x] Keep ordinary unit tests independent of Ascent using mappings/fake nodes;
   add conditional real-Conduit tests.  
 - [ ] Install `picnix` and its current dependencies into the Ascent Python
   environment for integration tests; defer eager-import cleanup unless it
   blocks execution.  
-- [ ] Add a minimal Python extract that computes a local statistic and a global
+- [x] Add a minimal Python extract that computes a local statistic and a global
   MPI reduction.  
-- [ ] Add a minimal actions YAML that runs the extract and optionally renders a
+- [x] Add a minimal actions YAML that runs the extract and optionally renders a
   centered scalar field.  
 
 Target usage:  
@@ -571,7 +576,9 @@ Likely files:
 - `python/tests/test_insitu_*.py`  
 - example actions/extract files under a PIC example or docs example directory  
 
-**Status:** pending  
+**Status:** complete for the extract-facing core and real two-rank Python
+smoke; explicit communicator helpers, schema validation, and direct real-node
+unit coverage remain.  
 
 ### Phase 7: MPI, Rebalance, Python, and Visualization Integration
 
@@ -580,13 +587,13 @@ execution and storage changes.
 
 Tasks:  
 
-- [ ] Add a focused np=2 executable/CTest label rather than extending the
+- [x] Add a focused np=2 executable/CTest label rather than extending the
   ordinary PIC application test.  
-- [ ] Configure multiple global domains and ensure at least one rank owns
+- [x] Configure multiple global domains and ensure at least one rank owns
   multiple chunks where practical.  
-- [ ] Verify global domain count, unique IDs, physical coverage, and local
+- [x] Verify global domain count, unique IDs, physical coverage, and local
   decomposition seen by Python.  
-- [ ] Perform an mpi4py global scalar or histogram reduction.  
+- [x] Perform an mpi4py global scalar or histogram reduction.
 - [ ] Confirm owned interiors avoid duplicated ghost contributions.  
 - [ ] Trigger or simulate chunk ownership movement and verify rebuilt domain
   order and external pointers.  
@@ -611,7 +618,8 @@ Likely files:
 - deterministic test config/actions/extract files  
 - optional CTest fixtures/scripts  
 
-**Status:** pending  
+**Status:** pending; this is the next integration phase after the real extract
+path is available.  
 
 ### Phase 8: Documentation, CI, and Full Verification
 

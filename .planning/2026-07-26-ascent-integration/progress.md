@@ -3,7 +3,7 @@
 ## Session: 2026-07-26
 
 ### Current Status
-- **Phase:** 5 - Python API and extract/visualization validation
+- **Phase:** 7 - Pointer refresh and visualization integration
 - **Started:** 2026-07-26
 
 ### Actions Taken
@@ -49,6 +49,15 @@
   and optional MPI reduction helpers.
 - Added a Python unit test using a lightweight dictionary representation, so
   the schema adapter is testable without launching Ascent.
+- Updated the plan to mark the core build, transformation, domain-view,
+  Blueprint, runtime, and basic Python adapter work complete.
+- Set the next implementation gate to a real two-rank Ascent Python extract,
+  followed by pointer-refresh and deterministic visualization tests.
+- Added a configured two-rank Ascent Python extract fixture using
+  `Dataset.from_conduit`, explicit Conduit/Ascent Python paths, global domain
+  count validation, centered-phi shape reconstruction, and an MPI reduction.
+- Made `picnix` top-level analysis imports lazy because the Ascent Python
+  environment does not install optional `msgpack` dependencies.
 - Implemented the optional Ascent CMake option, MPI/C language discovery,
   `ascent::ascent_mpi` validation/linking, conditional registration, skeletal
   scheduling diagnostic, and generic pre-MPI shutdown hook.
@@ -69,6 +78,9 @@
 | Ascent-enabled Blueprint/runtime focused CTest | Builder, runtime, and 8-rank lifecycle | 5/5 passed | PASS |
 | Ascent-disabled focused CTest | Application, domain view, and 8-rank lifecycle | 5/5 passed | PASS |
 | Python in-situ adapter | `ruff check` and focused pytest | 1/1 passed; no lint issues | PASS |
+| Plan refresh | Completed phases and next gate recorded | Phase 6 real extract is next | COMPLETE |
+| Real Ascent Python extract | Two ranks, local/global domains, phi reduction | Passed | PASS |
+| Python regression suite | In-situ plus existing Ohm tests | 64/64 passed | PASS |
 | Ascent-enabled configure/build | External Ascent 0.9.5 | Successful with tests enabled | PASS |
 | Lifecycle regression | Shutdown/destruction before MPI finalize | Passed | PASS |
 | Ascent-disabled configure without MPI wrapper | Configure/build | Configure succeeds; build fails because `mpi.h` is unavailable | EXPECTED LIMITATION |
@@ -84,5 +96,9 @@
 | Conduit 0.9.5 rejects `std::string_view` assignments | Converted Blueprint schema strings to `std::string` |
 | Particle test used wrong zero-padding path | Corrected expected species path to `species_000` per schema |
 | Python interior helper assumed an object API | Accepted both Domain metadata objects and mapping representations |
+| Ascent embedded Python lacked Conduit on `PYTHONPATH` | Added the installed Conduit module directory to the CTest environment |
+| Ascent Python environment lacked optional `msgpack` | Made `picnix` analysis-module imports lazy for embedded extracts |
+| Blueprint scalar values arrived flat in Python | Reshaped centered fields using published local cell-shape metadata |
+| Conduit list nodes returned child iterators | Normalized child nodes to Python lists in the schema adapter |
 | Lifecycle test exposed empty diagnostic basedir fixture | Added `basedir = "."` to the test configuration |
 | Default `/usr/bin/c++` build cannot find `mpi.h` | Reconfigured with project MPI wrapper `mpicxx`; full baseline passed |

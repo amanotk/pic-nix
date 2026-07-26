@@ -22,6 +22,8 @@ def _children(node):
 
 
 def _value(node):
+    if hasattr(node, "number_of_children") and node.number_of_children() > 0:
+        return [_value(node[index]) for index in range(node.number_of_children())]
     if hasattr(node, "value"):
         return node.value()
     return node
@@ -32,21 +34,30 @@ def _array(node):
 
 
 class Field:
-    def __init__(self, node):
+    def __init__(self, node, shape=None):
         self.node = node
+        self.shape = tuple(shape) if shape is not None else None
+
+    def _array(self, node):
+        values = _array(node)
+        if self.shape is not None and values.size == np.prod(self.shape):
+            return values.reshape(self.shape)
+        return values
 
     def component(self, name):
         values = _get(self.node, "values")
         if isinstance(values, Mapping):
-            return _array(values[name])
-        return _array(values)
+            return self._array(values[name])
+        return self._array(values)
 
     @property
     def array(self):
         values = _get(self.node, "values")
         if isinstance(values, Mapping):
-            return np.stack([_array(value) for _, value in values.items()], axis=-1)
-        return _array(values)
+            return np.stack(
+                [self._array(value) for _, value in values.items()], axis=-1
+            )
+        return self._array(values)
 
 
 class RawField(Field):
@@ -132,7 +143,8 @@ class Domain:
         return RawField(_get(_get(_get(self.node, "picnix"), "raw"), name))
 
     def centered_field(self, name):
-        return Field(_get(_get(self.node, "fields"), name))
+        shape = _value(_get(self.mesh, "local_cell_shape", []))
+        return Field(_get(_get(self.node, "fields"), name), shape)
 
     def particles(self, species=0):
         name = f"species_{species:03d}" if isinstance(species, int) else species

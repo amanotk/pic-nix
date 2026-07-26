@@ -110,6 +110,40 @@ if(PICNIX_ENABLE_ASCENT)
     1
     ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_runtime_np1
   )
+
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/ascent_two_rank_actions.yaml.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ascent_two_rank_actions.yaml
+    @ONLY
+  )
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/ascent_two_rank_extract.py.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ascent_two_rank_extract.py
+    @ONLY
+  )
+
+  add_executable(test_pic_ascent_extract test_pic_ascent_extract.cpp)
+  target_include_directories(test_pic_ascent_extract PRIVATE ${INCLUDE_DIRS})
+  target_compile_definitions(test_pic_ascent_extract PRIVATE
+    PICNIX_ASCENT_EXTRACT_ACTIONS_FILE="${CMAKE_CURRENT_BINARY_DIR}/ascent_two_rank_actions.yaml"
+  )
+  target_link_libraries(test_pic_ascent_extract PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel
+    pic
+    nix
+    ascent::ascent_mpi
+  )
+
+  add_mpi_test(
+    test_pic_ascent_extract_np2
+    test_pic_ascent_extract
+    2
+    ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_extract_np2
+  )
+  set_tests_properties(test_pic_ascent_extract_np2 PROPERTIES
+    ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python/src:${CONDUIT_PYTHON_MODULE_DIR}"
+  )
 endif()
 
 # PicApplicationInterface smoke / application tests (Catch2, MPI)

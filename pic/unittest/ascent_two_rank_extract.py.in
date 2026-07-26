@@ -1,0 +1,31 @@
+import pathlib
+
+import numpy as np
+from mpi4py import MPI
+
+from picnix.insitu import Dataset
+
+
+comm = MPI.Comm.f2py(ascent_mpi_comm_id())
+dataset = Dataset.from_conduit(ascent_data())
+chunks = list(dataset.local_chunks())
+
+if len(chunks) != 1:
+    raise RuntimeError(f"expected one local domain, found {len(chunks)}")
+
+domain_count = np.array([len(chunks)], dtype=np.int64)
+comm.Allreduce(MPI.IN_PLACE, domain_count, op=MPI.SUM)
+if domain_count[0] != 2:
+    raise RuntimeError(f"unexpected global domain count: {domain_count[0]}")
+
+phi = chunks[0].centered_field("phi").array
+if phi.shape != (1, 1, 2):
+    raise RuntimeError(f"unexpected phi shape: {phi.shape}")
+
+total = np.array([phi.sum()], dtype=np.float64)
+comm.Allreduce(MPI.IN_PLACE, total, op=MPI.SUM)
+if not np.isclose(total[0], 6.0):
+    raise RuntimeError(f"unexpected global phi sum: {total[0]}")
+
+if comm.Get_rank() == 0:
+    pathlib.Path("ascent_two_rank_result.txt").write_text(f"{total[0]:.1f}\n")
