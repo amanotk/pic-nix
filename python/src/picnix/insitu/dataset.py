@@ -9,6 +9,8 @@ SCHEMA_VERSION = 1
 def _get(node, key, default=None):
     if isinstance(node, Mapping):
         return node.get(key, default)
+    if hasattr(node, "has_path") and not node.has_path(key):
+        return default
     try:
         return node[key]
     except (KeyError, IndexError, TypeError):
@@ -21,6 +23,14 @@ def _children(node):
     if hasattr(node, "child_names"):
         return ((name, node[name]) for name in node.child_names())
     raise TypeError("expected a mapping or Conduit node")
+
+
+def _items(node):
+    if isinstance(node, Mapping):
+        return node.items()
+    if hasattr(node, "child_names"):
+        return ((name, node[name]) for name in node.child_names())
+    return ()
 
 
 def _value(node):
@@ -48,17 +58,19 @@ class Field:
 
     def component(self, name):
         values = _get(self.node, "values")
-        if isinstance(values, Mapping):
-            return self._array(values[name])
+        children = dict(_items(values))
+        if children:
+            if name not in children:
+                raise KeyError(name)
+            return self._array(children[name])
         return self._array(values)
 
     @property
     def array(self):
         values = _get(self.node, "values")
-        if isinstance(values, Mapping):
-            return np.stack(
-                [self._array(value) for _, value in values.items()], axis=-1
-            )
+        children = list(_items(values))
+        if children:
+            return np.stack([self._array(value) for _, value in children], axis=-1)
         return self._array(values)
 
 
@@ -74,8 +86,7 @@ class RawField(Field):
         except ValueError as error:
             raise KeyError(name) from error
 
-        values = _array(_get(self.node, "values"))
-        return values[..., index]
+        return self.array()[..., index]
 
     def array(self):
         values = _array(_get(self.node, "values"))
@@ -105,9 +116,29 @@ class ParticleField:
         self.node = node
         self.components = list(_value(_get(node, "components", [])))
 
+    def _array(self):
+        values = _get(self.node, "values")
+        shape_value = _get(self.node, "shape")
+        strides_value = _get(self.node, "strides_bytes")
+        if values is None:
+            return np.empty((0, 7), dtype=np.float64)
+
+        values = _array(values)
+        shape = tuple(_value(shape_value)) if shape_value is not None else values.shape
+        strides = (
+            tuple(_value(strides_value))
+            if strides_value is not None
+            else values.strides
+        )
+        if not shape:
+            shape = (0, 7)
+        if values.shape == shape and values.strides == strides:
+            return values
+        return np.ndarray(shape, dtype=np.float64, buffer=values, strides=strides)
+
     @property
     def allocated(self):
-        return _array(_get(self.node, "values"))
+        return self._array()
 
     @property
     def active(self):
@@ -171,15 +202,8 @@ class Dataset:
         return cls(node)
 
     @classmethod
-    def from_ascent(cls, node=None):
-        if node is None:
-            try:
-                from ascent import ascent_data
-            except ImportError as error:
-                raise RuntimeError(
-                    "Dataset.from_ascent requires Ascent's Python runtime"
-                ) from error
-            node = ascent_data()
+    def from_ascent(cls, node_or_callable):
+        node = node_or_callable() if callable(node_or_callable) else node_or_callable
         return cls(node)
 
     def local_chunks(self):

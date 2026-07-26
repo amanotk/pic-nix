@@ -71,9 +71,12 @@ void add_raw_array(conduit::Node& domain, const char* name, const RawArrayView& 
 void add_raw_particles(conduit::Node& domain, const DomainView& view)
 {
   for (std::size_t species = 0; species < view.particles.size(); species++) {
-    const auto&       particle = view.particles[species];
-    const std::string species_name =
-        std::string("species_") + (species < 10 ? "00" : "") + std::to_string(species);
+    const auto&       particle     = view.particles[species];
+    const std::string species_name = std::string("species_") +
+                                     (species < 10    ? "00"
+                                      : species < 100 ? "0"
+                                                      : "") +
+                                     std::to_string(species);
     auto&             raw   = domain["picnix/particles"][species_name];
     const std::size_t count = std::accumulate(particle.shape.begin(), particle.shape.end(),
                                               std::size_t{1}, std::multiplies<std::size_t>());

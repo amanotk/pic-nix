@@ -53,3 +53,26 @@ def test_dataset_rejects_unknown_schema_version():
 
     with pytest.raises(ValueError, match="unsupported PIC-NIX schema version"):
         Dataset(data)
+
+
+def test_missing_particle_species_is_empty():
+    chunk = next(Dataset(make_dataset()).local_chunks())
+
+    particles = chunk.particles("species_001")
+    assert particles.allocated.shape == (0, 7)
+    assert particles.ids.size == 0
+
+
+def test_from_ascent_requires_explicit_node():
+    with pytest.raises(TypeError):
+        Dataset.from_ascent()
+
+    assert next(Dataset.from_ascent(make_dataset()).local_chunks()).domain_id == 3
+
+
+def test_top_level_wildcard_exports_legacy_names():
+    namespace = {}
+    exec("from picnix import *", namespace)
+    assert "Run" in namespace
+    assert "Tracer" in namespace
+    assert "get_wk_spectrum" in namespace

@@ -19,10 +19,13 @@ set(MPI_TEST_TIMEOUT 300)
 
 function(add_mpi_test name target nproc tmpdir)
   set(workdir ${tmpdir}_cwd)
-  file(MAKE_DIRECTORY ${workdir})
-  file(MAKE_DIRECTORY ${tmpdir})
+  set(prepare_script ${CMAKE_CURRENT_BINARY_DIR}/${name}_prepare.cmake)
+  file(WRITE ${prepare_script}
+    "file(REMOVE_RECURSE \"${tmpdir}\" \"${workdir}\")\n"
+    "file(MAKE_DIRECTORY \"${tmpdir}\" \"${workdir}\")\n"
+  )
   add_test(NAME ${name}_prepare
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir}
+    COMMAND ${CMAKE_COMMAND} -P ${prepare_script}
   )
   add_test(NAME ${name}
     COMMAND ${CMAKE_COMMAND} -E env PICNIX_TMPDIR=${tmpdir}
@@ -41,7 +44,7 @@ endfunction()
 function(add_mpi_test_with_cleanup name target nproc tmpdir)
   add_mpi_test(${name} ${target} ${nproc} ${tmpdir} ${ARGN})
   add_test(NAME ${name}_cleanup
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${tmpdir}
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${tmpdir} ${tmpdir}_cwd
   )
   set_tests_properties(${name}_cleanup
     PROPERTIES DEPENDS ${name}
@@ -90,6 +93,7 @@ endforeach()
 
 if(PICNIX_ENABLE_ASCENT)
   target_link_libraries(test_pic_blueprint_builder PRIVATE ascent::ascent_mpi)
+  set_tests_properties(test_pic_blueprint_builder PROPERTIES LABELS ASCENT)
 
   add_executable(test_pic_ascent_runtime test_pic_ascent_runtime.cpp)
   target_include_directories(test_pic_ascent_runtime PRIVATE ${INCLUDE_DIRS})
@@ -110,7 +114,11 @@ if(PICNIX_ENABLE_ASCENT)
     1
     ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_runtime_np1
   )
+  set_tests_properties(test_pic_ascent_runtime_np1_prepare test_pic_ascent_runtime_np1
+    PROPERTIES LABELS "MPI;ASCENT"
+  )
 
+  if(ASCENT_PYTHON_ENABLED AND CONDUIT_PYTHON_ENABLED)
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/ascent_two_rank_actions.yaml.in
     ${CMAKE_CURRENT_BINARY_DIR}/ascent_two_rank_actions.yaml
@@ -141,10 +149,16 @@ if(PICNIX_ENABLE_ASCENT)
     2
     ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_extract_np2
   )
-  set_tests_properties(test_pic_ascent_extract_np2 PROPERTIES
-    ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python/src:${CONDUIT_PYTHON_MODULE_DIR}"
+  set_tests_properties(test_pic_ascent_extract_np2_prepare test_pic_ascent_extract_np2
+    PROPERTIES LABELS "MPI;ASCENT"
   )
+  set_tests_properties(test_pic_ascent_extract_np2 PROPERTIES
+    ENVIRONMENT_MODIFICATION
+      "PYTHONPATH=path_list_prepend:${PICNIX_DIR}/python/src;PYTHONPATH=path_list_prepend:${CONDUIT_PYTHON_MODULE_DIR}"
+  )
+  endif()
 
+  if(ASCENT_VTKH_ENABLED)
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/ascent_render_actions.yaml.in
     ${CMAKE_CURRENT_BINARY_DIR}/ascent_render_actions.yaml
@@ -170,6 +184,10 @@ if(PICNIX_ENABLE_ASCENT)
     1
     ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_render_np1
   )
+  set_tests_properties(test_pic_ascent_render_np1_prepare test_pic_ascent_render_np1
+    test_pic_ascent_render_np1_cleanup PROPERTIES LABELS "MPI;ASCENT"
+  )
+  endif()
 endif()
 
 # PicApplicationInterface smoke / application tests (Catch2, MPI)
@@ -189,6 +207,20 @@ add_mpi_test(
   8
   ${PIC_IFACE_TMPDIR_NP8}
 )
+
+if(PICNIX_ENABLE_ASCENT)
+  set(PIC_IFACE_ASCENT_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_ascent_np1)
+  add_mpi_test(
+    test_pic_application_ascent_np1
+    test_pic_application
+    1
+    ${PIC_IFACE_ASCENT_TMPDIR_NP1}
+    "PicApplication runs Ascent diagnostic through finalization"
+  )
+  set_tests_properties(test_pic_application_ascent_np1_prepare test_pic_application_ascent_np1
+    PROPERTIES LABELS "MPI;ASCENT"
+  )
+endif()
 
 if(PICNIX_ENABLE_PETSC)
   set(PIC_IFACE_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_np1)

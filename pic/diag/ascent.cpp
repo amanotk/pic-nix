@@ -9,10 +9,16 @@
 #include <mpi.h>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 void AscentDiag::operator()(nix::json& config)
 {
   auto data = interface->get_data();
+  if (config.contains("interval") &&
+      (!config["interval"].is_number_integer() || config["interval"].get<int64_t>() <= 0)) {
+    ERROR << "Ascent diagnostic `interval` must be a positive integer";
+    return;
+  }
   if (!require_diagnostic(data.curstep, config)) {
     return;
   }
@@ -47,10 +53,22 @@ void AscentDiag::operator()(nix::json& config)
     chunks.push_back(static_cast<PicChunk*>(chunk.get()));
   }
 
-  const auto actions_path = std::filesystem::path(info->config_dir) / actions;
-  if (!std::filesystem::is_regular_file(actions_path)) {
-    ERROR << fmt::format("Ascent actions file does not exist: {}", actions_path.string());
+  const auto      actions_path = std::filesystem::path(info->config_dir) / actions;
+  std::error_code path_error;
+  const int       local_actions_valid =
+      std::filesystem::is_regular_file(actions_path, path_error) ? 1 : 0;
+  int global_actions_valid = 0;
+  MPI_Allreduce(&local_actions_valid, &global_actions_valid, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+  if (global_actions_valid == 0) {
+    if (local_actions_valid == 0) {
+      ERROR << fmt::format("Ascent actions file is not readable on rank {}: {}", info->world_rank,
+                           actions_path.string());
+    }
     return;
+  }
+
+  if (options.raw) {
+    interface->calculate_moment();
   }
 
   try {

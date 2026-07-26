@@ -1,180 +1,156 @@
-# Findings & Decisions
+# Findings: Ascent Branch Review
 
-## Requirements
-- Implement the design in `notes/ascent-integration.md` incrementally on
-  `experimental/ascent-integration`.
-- Keep Ascent entirely optional and externally installed; default builds must
-  not discover, compile, or link Ascent or Conduit.
-- Treat one PIC-NIX chunk as one local Blueprint domain and rebuild all
-  external views at each diagnostic invocation.
-- Provide both raw native-layout data for Python analysis and compact,
-  cell-centered Blueprint fields for ordinary visualization.
-- Python extracts are a core requirement, not an optional follow-up.
-- Preserve MPI behavior, support future Fugaku cross-compilation, and close
-  Ascent before MPI finalization.
-- Reuse existing Yee-to-cell-center interpolation rather than duplicating it.
-- Keep the Ascent adapter thin and avoid unnecessary abstraction.
+## Review Scope
 
-## Research Findings
-- The repository graph was updated after adding the installer, but initial
-  broad Graphify queries were polluted by generated documentation JavaScript
-  and did not reliably identify diagnostic or interpolation paths. Continue
-  with scoped source inspection after satisfying the Graphify-first rule.
-- Ascent 0.9.5, Conduit 0.9.5, MPI/Python bindings, and VTK-m rendering have
-  already been built and verified locally under ignored `thirdparty/`.
-- The installed Ascent package exports `ascent::ascent` and
-  `ascent::ascent_mpi`; its Python environment imports `ascent`, `conduit`, and
-  `mpi4py` successfully.
+- Branch: `experimental/ascent-integration`  
+- Base: `origin/experimental/ascent-integration`  
+- Commits reviewed: `1c8e370`, `8e92f94`, `7384d65`, `a5cda82`, `db8e761`  
+- Untracked `.python-version` is unrelated and must remain untouched.  
 
-### Diagnostic lifecycle
+## Confirmed High-Severity Findings
 
-- `nix::Application` owns one vector of `std::unique_ptr<Diag>` objects and
-  dispatches configuration entries by diagnostic name on every step.
-- Scheduling is implemented inside each diagnostic through inclusive
-  `begin`/`end` and phase-aligned `interval`; `interval <= 0` is currently not
-  validated.
-- `PicApplication::initialize_diagnostic()` is the registration point. The
-  Ascent diagnostic must be registered only when the build option is enabled.
-- Diagnostics are constructed before chunks and species are initialized, so
-  Ascent must open lazily on its first scheduled invocation.
-- Current diagnostic objects survive until application destruction, which can
-  occur after `MPI_Finalize()`. Add a generic instance shutdown hook and clear
-  diagnostic objects before shared diagnostic communicators and MPI are
-  finalized.
-- One configured name maps to one registered diagnostic object. Multiple
-  `ascent` entries would share runtime state unless explicitly rejected or
-  keyed separately.
-- Direct source verification confirms the main-loop order is diagnostic,
-  push, rebalance, log, increment. Publication therefore observes ownership
-  resulting from the previous rebalance and must be rebuilt before the next
-  push mutates storage.
-- `Application::finalize()` currently performs checkpoint/log work and then
-  immediately calls `finalize_mpi()`, where diagnostic communicators are freed
-  before optional `MPI_Finalize()`. The new instance shutdown phase belongs
-  immediately before this call.
+### Rank-Asymmetric Actions Validation Can Deadlock
 
-### PIC data and ownership
+`AscentDiag` checks `std::filesystem::is_regular_file()` and returns locally.
+Peers that see the file continue into collective `MPI_Comm_dup()`, while the
+returning rank reaches the application's diagnostic barrier. Node-local or
+inconsistently mounted configuration directories can therefore deadlock.  
 
-- Mesh storage order is `[z, y, x, component...]` with right/C ordering.
-- One chunk has a globally stable chunk ID, global `[z,y,x]` cell offset,
-  local dimensions, spacing, physical limits, active inclusive bounds, and a
-  shape-order-dependent ghost margin.
-- `uf` is `[nz,ny,nx,6]` with components `Ex,Ey,Ez,Bx,By,Bz`; `uj` is
-  `[nz,ny,nx,4]` with `rho,Jx,Jy,Jz`; `um` is
-  `[nz,ny,nx,Ns,14]`; `phi` is `[nz,ny,nx]`.
-- Verified spatial locations:
-  - `Ex/Jx`: x-face; `Ey/Jy`: y-face; `Ez/Jz`: z-face.
-  - `Bx`: x-edge; `By`: y-edge; `Bz`: z-edge.
-  - `rho`, `phi`, and all `um` components: cell center.
-- Existing `XtensorPacker3D` has tested 1-D/2-D/3-D Yee-to-center formulas but
-  allocates a full ghost-padded temporary. Refactor to compact interior output
-  and preserve the old packer behavior through shared code.
-- Current colocation is six-component `uf` specific. Centered current requires
-  a new tested four-component `uj` transformation.
-- Full allocated mesh arrays are contiguous and can be exposed as raw external
-  views with shape/byte-stride metadata and separate active bounds. The
-  ghost-free 3-D interior is not one simple flat contiguous range.
-- Particle `xu` is `[Np_allocated,7]`; only `[0,Np_active)` is active. The final
-  column stores an integer ID as raw bits in a floating slot and must be
-  reinterpreted, never numerically converted.
-- Rebalance, unpack, particle resize/sort/swap, and ordinary field updates can
-  invalidate or change external views. Rebuild the complete Conduit node every
-  scheduled invocation and retain it only through synchronous `execute()`.
-- Moment calculation is lazy and step-cached but can add substantial work;
-  invoke it only when selected publication requires moments.
-- Direct source verification confirms PIC diagnostic registration happens
-  before species initialization, communicator duplication, solver creation,
-  and chunk setup. Runtime construction may occur in the diagnostic object,
-  but `Ascent::open()` and all data binding must remain lazy.
-- `PicApplication::finalize()` frees PIC boundary communicators and the
-  elliptic backend before entering base finalization. The Ascent runtime should
-  therefore own/use a duplicate of `MPI_COMM_WORLD`, not any PIC boundary
-  communicator.
-- Existing 1-D/2-D/3-D formulas read high-side ghost values (`Ub+1`) to center
-  face/edge fields. Compact output must preserve this behavior while writing
-  only owned interior cells.
-- `PicChunk::DataContainer` exposes array references and local numerical
-  metadata but not chunk ID, dimensions, or global offset. A domain-view
-  builder must accept/retain the `PicChunk` itself rather than only the returned
-  data bundle.
-- The 14 moment indices are named only `t,x,y,z,tt,xx,yy,zz,tx,ty,tz,xy,yz,zx`
-  in source. The raw schema should preserve these neutral names/formulas until
-  units and normalization justify stronger physical labels.
+Relevant files:  
 
-### Build, Python, tests, and CI
+- `pic/diag/ascent.cpp`  
+- `pic/insitu/ascent_runtime.cpp`  
+- `nix/application.cpp`  
 
-- Add `PICNIX_ENABLE_ASCENT=OFF` at the root and standalone PIC levels. Keep
-  `find_package(Ascent CONFIG REQUIRED)`, source compilation, headers, links,
-  and registration entirely inside the enabled branch.
-- Ascent 0.9.5 exports `ascent::ascent_mpi`, requires CMake 3.23, and references
-  both `MPI::MPI_C` and `MPI::MPI_CXX`; enabled builds must enable C and find
-  both MPI components.
-- Ascent must remain outside `nix/cmake/Dependencies.cmake` and FetchContent.
-- Keep Ascent-independent transformation, domain-view, schema, and Python
-  helper tests in ordinary CI. Gate Conduit/Blueprint/runtime tests behind the
-  option and isolate the np=2 integration smoke test.
-- The existing `picnix` package eagerly imports analysis modules from
-  `picnix.__init__`, which may pull heavy dependencies into embedded extracts.
-  Decide whether to preserve that behavior initially or make package imports
-  lazy as a separately tested cleanup.
-- Ascent extract globals such as `ascent_data()` exist in the extract script,
-  not automatically in imported module globals. Prefer passing the Conduit
-  node explicitly to `Dataset.from_conduit(...)` over hidden global lookup.
-- A separate optional/scheduled Ascent CI job or pinned container is preferable
-  to multiplying the existing PETSc matrix or rebuilding the stack per job.
-- Direct source verification confirms standalone `pic` currently declares a
-  C++-only project and conditionally appends PETSc sources. The Ascent branch
-  can follow the same source-list pattern but must call `enable_language(C)`
-  before importing Ascent's MPI targets.
-- Direct source verification confirms `picnix.__init__` performs five eager
-  star imports. Keep lazy-import cleanup out of the first C++ milestone; make
-  any Python package import change its own reviewed/tested substep.
+### Raw Moments Are Not Refreshed
 
-### Existing issues relevant to implementation
+Raw publication includes `um`, but `AscentDiag` does not call
+`interface->calculate_moment()`. Moments are refreshed only by diagnostics such
+as history or field output, making Ascent data stale and diagnostic-order
+dependent.  
 
-- A malformed diagnostic entry without `name` returns from the whole dispatch
-  function; unknown names are silently ignored.
-- Existing field decimation can disagree with metadata for non-divisible sizes
-  and can divide by zero for invalid values. Do not silently couple this repair
-  to Ascent unless the shared transformation refactor requires it; add focused
-  regression tests if touched.
-- Current packed-buffer writes may use unaligned `double*` casts and `int`
-  offsets. New centered storage should use typed, aligned owning arrays.
-- PIC chunk packed-size estimation and serialized arrays differ (`um` versus
-  `ff`); this is an independent migration risk, not part of the Ascent scope.
+Relevant files:  
 
-## Technical Decisions
-| Decision | Rationale |
-|----------|-----------|
-| Use an isolated planning directory | Preserves the completed, unrelated root planning files |
-| Inspect source after Graphify | The graph queries returned noisy, insufficiently scoped results |
-| Lazy-open Ascent | Diagnostics are constructed before simulation data exists |
-| Add generic diagnostic shutdown | Ensures close/destruction occurs while MPI remains valid |
-| Raw views expose allocated storage | Enables zero-copy while metadata identifies ghosts and active bounds |
-| Centered fields use owned compact buffers | Blueprint physical cells exclude ghosts and buffers remain valid through execute |
-| Pass Conduit nodes explicitly to Python helpers | Imported modules cannot safely discover extract-injected globals |
-| Keep Ascent outside FetchContent | The dependency stack is large and externally installed |
-| Share centering below the PIC adapter | The existing packer is in `nix`; shared formulas must not introduce a `nix` dependency on `pic` |
+- `pic/diag/ascent.cpp`  
+- `pic/diag/field.hpp`  
+- `pic/pic_application.cpp`  
 
-## Resolved User Decisions
+### Real Conduit Raw Components Are Indexed as Flat Scalars
 
-- Reject duplicate `ascent` diagnostic entries initially.
-- Resolve relative actions paths against the configuration-file directory.
-- Default raw and centered publication on; default particles off.
-- Install the existing `picnix` dependency set into Ascent's Python
-  environment and defer eager-import cleanup.
+The C++ publisher binds raw storage as a flat external leaf. Python
+`RawField.component()` indexes that leaf before reconstructing shape and
+strides. Reproduction against installed Conduit returned scalar `0.0` for a
+component that should have been a multidimensional array.  
 
-## Issues Encountered
-| Issue | Resolution |
-|-------|------------|
-| Graphify query relevance was poor | Use exact symbol searches and scoped reads for implementation-level planning |
-| Existing finalization order is unsafe for Ascent | Plan an application-level shutdown hook before MPI cleanup |
-| Existing colocation does not handle `uj` | Add a separate tested current-centering transformation |
+### Real Conduit Vector Fields Ignore Component Names
 
-## Resources
-- `notes/ascent-integration.md`
-- `scripts/install_ascent.sh`
-- `.planning/2026-07-26-ascent-integration/`
-- `nix/application.*`, `nix/diag.hpp`, `pic/pic_application.*`, `pic/pic_diag.hpp`
-- `pic/pic_chunk.*`, `nix/chunk.*`, `nix/xtensor/xtensor_packer3d.hpp`
-- `pic/CMakeLists.txt`, `pic/unittest/CMakeLists.txt`, `python/pyproject.toml`
+Centered vectors are Conduit object nodes with `x`, `y`, and `z` children, not
+Python `Mapping` objects. `Field.component("x")` therefore ignores the name and
+returns all child arrays with the wrong shape. Reproduction returned `(3, 4)`
+instead of `(1, 2, 2)`.  
+
+### Real Conduit Particle Rows Are Never Reconstructed
+
+Particle values are also flat external leaves. Python slices scalar values
+instead of `[Np_allocated, 7]` rows, and `ids` raises `IndexError`. Null species
+have no `values` leaf and currently produce ambiguous zero-dimensional arrays.  
+
+Relevant Python file for all three data-shape findings:  
+
+- `python/src/picnix/insitu/dataset.py`  
+
+## Confirmed Medium-Severity Findings
+
+### Stale Test Outputs Can Satisfy Assertions
+
+MPI tests write into `${tmpdir}_cwd`, but preparation does not clear that
+directory and cleanup removes `${tmpdir}` instead. Existing build directories
+retain both the extract result and render image.  
+
+### Species Naming Diverges at Index 10
+
+C++ emits `species_10` for species 10, while Python requests `species_010`.
+Indices 10 through 99 cannot be looked up through the documented Python API.  
+
+### `Dataset.from_ascent()` Imports a Nonexistent Symbol
+
+Ascent injects `ascent_data()` into extract globals; it does not export the
+function from the `ascent` package. The installed package reproduces the
+`ImportError`.  
+
+### Wildcard Import Compatibility Regressed
+
+The lazy package resolver resolves `picnix.__all__` from `ohm.__all__`.
+`from picnix import *` now exposes Ohm helpers but drops previous names such as
+`Run`, `Tracer`, and `get_wk_spectrum`.  
+
+### Public Headers Do Not Propagate Ascent Usage Requirements
+
+Ascent-facing headers are reachable through PIC's public include directory,
+but `ascent::ascent_mpi` is linked privately. Consumers including those headers
+do not inherit required include paths and compile definitions.  
+
+### Standalone PIC Uses the Wrong Python Source Path
+
+The test uses `${CMAKE_SOURCE_DIR}/python/src`; standalone PIC makes that
+`<repo>/pic/python/src`. The hard-coded colon path separator is also not
+CMake-portable.  
+
+### Capability Checks Do Not Match Tests
+
+Configuration requires only MPI-enabled Ascent, while tests unconditionally
+require Python/Conduit Python/mpi4py and VTK-h rendering. Valid reduced-capability
+installations fail at test time rather than being rejected or conditionally
+tested.  
+
+### Lifecycle Test Does Not Prove Ordering
+
+The MPI test harness initializes MPI before `Application`, so `Application`
+does not finalize MPI. The test's `MPI_Finalized()` checks remain false even if
+diagnostic shutdown is moved after `finalize_mpi()`.  
+
+### No End-to-End `AscentDiag` Test
+
+Current integration tests call `BlueprintBuilder` and `AscentRuntime` directly.
+Registration, scheduling, relative paths, options, moment refresh, and shutdown
+through `Application::diagnostic()` remain untested.  
+
+### Ascent Tests Lack an `ASCENT` Label
+
+`ctest -L ASCENT -N` selects zero tests, so the planned targeted verification
+command succeeds without testing Ascent.  
+
+## Residual Test Gaps
+
+- No rank-asymmetric actions visibility test.  
+- No rank with zero local domains.  
+- No real-Conduit extract coverage for raw fields, vectors, particles, or IDs.  
+- No nontrivial decimation equivalence test.  
+- No standalone PIC or public-consumer compile test.  
+- No reduced-capability Ascent configure test.  
+- No Ascent-enabled CI job.  
+
+## Existing Passing Baselines
+
+These passing suites are useful regression baselines but do not invalidate the
+findings because their fixtures do not cover the failing representations and
+paths.  
+
+| Suite | Result |
+|-------|--------|
+| Ascent-enabled CTest | 53/53 passed |
+| Ascent-disabled CTest | 45/45 passed |
+| Python tests | 96/96 passed |
+
+## Implementation Decisions for Remediation
+
+- Real Conduit nodes are authoritative for the Python adapter.  
+- Configuration/path validation must be collective before any Ascent
+  collective.  
+- Moment calculation is conditional on publishing `um`.  
+- Species keys use fixed-width three-digit formatting.  
+- Test outputs live only in dedicated directories cleared before each run.  
+- Ascent core, Python extract, and rendering capabilities are checked
+  separately.  
+- Public import compatibility is preserved unless the user approves a breaking
+  change.  

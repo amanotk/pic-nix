@@ -19,6 +19,28 @@ _LAZY_MODULES = {
     "run": ".run",
 }
 
+__all__ = [
+    "DEFAULT_LOG_PREFIX",
+    "DEFAULT_LOAD_PREFIX",
+    "DEFAULT_FIELD_PREFIX",
+    "DEFAULT_PARTICLE_PREFIX",
+    "DEFAULT_TRACER_PREFIX",
+    "Run",
+    "Tracer",
+    "Histogram2D",
+    "get_wk_spectrum",
+    "plot_wk_spectrum",
+    "sort_and_split_particle_id",
+    "is_valid_tracer_hdf5",
+    "convert_tracer_to_hdf5",
+    "remove_tracer_file_after_confirmation",
+    "solve_ohm_1d",
+    "solve_ohm_2d",
+    "calc_e_ohm_1d",
+    "calc_e_ohm_2d",
+    "transform_moments",
+]
+
 
 def __getattr__(name):
     if name in _LAZY_MODULES:

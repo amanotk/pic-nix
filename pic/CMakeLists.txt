@@ -59,6 +59,13 @@ if(PICNIX_ENABLE_ASCENT)
     message(FATAL_ERROR "Ascent was found but ascent::ascent_mpi is unavailable")
   endif()
 
+  if(NOT ASCENT_PYTHON_ENABLED)
+    message(STATUS "Ascent Python extracts will be disabled: Ascent Python support is unavailable")
+  endif()
+  if(NOT ASCENT_VTKH_ENABLED)
+    message(STATUS "Ascent render tests will be disabled: VTK-h support is unavailable")
+  endif()
+
   list(APPEND PIC_SOURCES
     diag/ascent.cpp
     insitu/ascent_runtime.cpp
@@ -76,7 +83,7 @@ target_link_libraries(pic PRIVATE std::mdspan)
 target_compile_definitions(pic PUBLIC PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
 if(PICNIX_ENABLE_ASCENT)
-  target_link_libraries(pic PRIVATE ascent::ascent_mpi)
+  target_link_libraries(pic PUBLIC ascent::ascent_mpi)
   target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=1)
 else()
   target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=0)

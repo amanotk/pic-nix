@@ -81,6 +81,10 @@ for chunk in dataset.local_chunks():
     raw_ex = chunk.raw_field("uf").component("Ex")
 ```
 
+`Dataset.from_ascent(node_or_callable)` is also available when the caller
+wants to make the injected node source explicit; it does not import Ascent
+globals implicitly.  
+
 `picnix.insitu` reconstructs raw shapes and byte strides, applies active-cell
 metadata, exposes centered fields, and reinterprets particle ID bits as
 `int64`.  Install the existing `picnix` dependencies into Ascent's Python
@@ -99,8 +103,7 @@ and use owned buffers valid through synchronous Ascent execution.
 With Ascent enabled, the focused integration checks are:  
 
 ```sh
-ctest --test-dir build-ascent --output-on-failure \
-  -R 'test_pic_ascent_(extract|render|runtime)|test_pic_blueprint_builder'
+ctest --test-dir build-ascent -L ASCENT --output-on-failure
 python -m pytest python/tests
 ```
 
