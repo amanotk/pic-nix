@@ -594,13 +594,15 @@ Tasks:
 - [x] Verify global domain count, unique IDs, physical coverage, and local
   decomposition seen by Python.  
 - [x] Perform an mpi4py global scalar or histogram reduction.
-- [ ] Confirm owned interiors avoid duplicated ghost contributions.  
-- [ ] Trigger or simulate chunk ownership movement and verify rebuilt domain
-  order and external pointers.  
-- [ ] Trigger particle resize/swap and verify active rows and pointers refresh.  
-- [ ] Render a deterministic field such as `x + 2*y + 3*z`.  
-- [ ] Check successful completion, nonempty image, Blueprint validity, and
-  global bounds; do not compare pixels.  
+- [x] Confirm owned interiors avoid duplicated ghost contributions.
+- [x] Trigger or simulate chunk ownership movement and verify rebuilt domain
+  order and external pointers.
+- [x] Trigger particle resize/swap and verify active rows and pointers refresh.
+- [x] Render a deterministic field such as `x + 2*y + 3*z`.
+- [x] Check successful completion, nonempty image, and Blueprint validity;
+  global bounds remain to be asserted.
+- [ ] Check global bounds in the visualization smoke test.
+- [x] Avoid pixel comparisons; assert nonempty output and metadata instead.
 - [ ] Record wall time and centered-buffer memory overhead for a representative
   local multi-chunk case.  
 
@@ -618,8 +620,8 @@ Likely files:
 - deterministic test config/actions/extract files  
 - optional CTest fixtures/scripts  
 
-**Status:** pending; this is the next integration phase after the real extract
-path is available.  
+**Status:** in_progress; pointer-refresh, two-rank extract, and render smoke
+gates pass. Global-bounds assertion and performance measurements remain.  
 
 ### Phase 8: Documentation, CI, and Full Verification
 

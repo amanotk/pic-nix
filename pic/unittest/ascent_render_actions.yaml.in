@@ -1,0 +1,8 @@
+- action: "add_scenes"
+  scenes:
+    picnix_phi:
+      plots:
+        phi_plot:
+          type: "pseudocolor"
+          field: "phi"
+      image_name: "ascent_picnix_phi"

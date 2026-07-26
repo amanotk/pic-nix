@@ -11,14 +11,14 @@
 
 namespace
 {
-std::unique_ptr<PicChunk> make_chunk()
+std::unique_ptr<PicChunk> make_chunk(int id = 7, int x_offset = 0)
 {
-  auto chunk = std::make_unique<PicChunk>(nix::Dims3D{2, 2, 2}, nix::Bool3D{true, true, true}, 7);
+  auto chunk = std::make_unique<PicChunk>(nix::Dims3D{2, 2, 2}, nix::Bool3D{true, true, true}, id);
   chunk->set_boundary_margin(1);
-  const int offset[3] = {0, 0, 0};
-  const int gdims[3]  = {2, 2, 2};
+  const int offset[3] = {0, 0, x_offset};
+  const int gdims[3]  = {2, 2, 4};
   chunk->set_global_context(offset, gdims);
-  chunk->set_coordinate(0.0, 0.0, 0.0);
+  chunk->set_coordinate(static_cast<float64>(x_offset), 0.0, 0.0);
   chunk->allocate();
 
   auto data = chunk->get_internal_data();
@@ -73,4 +73,39 @@ TEST_CASE("BlueprintBuilder publishes a verifiable domain")
   REQUIRE(domain["fields/J/values/z"].as_float64_ptr()[0] == Catch::Approx(13.0));
   REQUIRE(domain["fields/rho/values"].as_float64_ptr()[0] == Catch::Approx(10.0));
   REQUIRE(domain["fields/phi/values"].as_float64_ptr()[0] == Catch::Approx(20.0));
+}
+
+TEST_CASE("BlueprintBuilder refreshes external pointers and preserves domain IDs")
+{
+  auto                         chunk        = make_chunk();
+  const std::vector<PicChunk*> first_chunks = {chunk.get()};
+
+  picnix::insitu::BlueprintOptions options;
+  options.centered        = false;
+  options.particles       = true;
+  auto       first        = picnix::insitu::BlueprintBuilder::build(first_chunks, 0, 0.0, options);
+  const auto first_uf_ptr = first.node["domain_7/picnix/raw/uf/values"].as_float64_ptr();
+  const auto first_particle_ptr =
+      first.node["domain_7/picnix/particles/species_000/values"].as_float64_ptr();
+
+  auto data = chunk->get_internal_data();
+  data.up[0]->allocate(16, true);
+  data.up[0]->set_Np_active(4);
+  data.uf.resize({data.uf.shape(0) + 1, data.uf.shape(1), data.uf.shape(2), data.uf.shape(3)});
+  const std::vector<PicChunk*> refreshed_chunks = {chunk.get()};
+  auto second = picnix::insitu::BlueprintBuilder::build(refreshed_chunks, 1, 0.0, options);
+
+  REQUIRE(second.node["domain_7/picnix/raw/uf/values"].as_float64_ptr() == data.uf.data());
+  REQUIRE(second.node["domain_7/picnix/raw/uf/values"].as_float64_ptr() != first_uf_ptr);
+  REQUIRE(second.node["domain_7/picnix/particles/species_000/values"].as_float64_ptr() ==
+          data.up[0]->xu.data());
+  REQUIRE(second.node["domain_7/picnix/particles/species_000/values"].as_float64_ptr() !=
+          first_particle_ptr);
+  REQUIRE(second.node["domain_7/picnix/particles/species_000/np_allocated"].to_int() == 16);
+
+  auto                         other            = make_chunk(9, 2);
+  const std::vector<PicChunk*> reordered_chunks = {other.get(), chunk.get()};
+  auto reordered = picnix::insitu::BlueprintBuilder::build(reordered_chunks, 2, 0.0, options);
+  REQUIRE(reordered.node.has_path("domain_7"));
+  REQUIRE(reordered.node.has_path("domain_9"));
 }

@@ -144,6 +144,32 @@ if(PICNIX_ENABLE_ASCENT)
   set_tests_properties(test_pic_ascent_extract_np2 PROPERTIES
     ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}/python/src:${CONDUIT_PYTHON_MODULE_DIR}"
   )
+
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/ascent_render_actions.yaml.in
+    ${CMAKE_CURRENT_BINARY_DIR}/ascent_render_actions.yaml
+    @ONLY
+  )
+
+  add_executable(test_pic_ascent_render test_pic_ascent_render.cpp)
+  target_include_directories(test_pic_ascent_render PRIVATE ${INCLUDE_DIRS})
+  target_compile_definitions(test_pic_ascent_render PRIVATE
+    PICNIX_ASCENT_RENDER_ACTIONS_FILE="${CMAKE_CURRENT_BINARY_DIR}/ascent_render_actions.yaml"
+  )
+  target_link_libraries(test_pic_ascent_render PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel
+    pic
+    nix
+    ascent::ascent_mpi
+  )
+
+  add_mpi_test_with_cleanup(
+    test_pic_ascent_render_np1
+    test_pic_ascent_render
+    1
+    ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_render_np1
+  )
 endif()
 
 # PicApplicationInterface smoke / application tests (Catch2, MPI)

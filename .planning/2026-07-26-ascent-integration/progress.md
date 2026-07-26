@@ -58,6 +58,10 @@
   count validation, centered-phi shape reconstruction, and an MPI reduction.
 - Made `picnix` top-level analysis imports lazy because the Ascent Python
   environment does not install optional `msgpack` dependencies.
+- Added Blueprint pointer-refresh coverage after field and particle storage
+  reallocation, plus domain-ID preservation after local-domain reordering.
+- Added a deterministic centered-phi pseudocolor render smoke test that checks
+  for a nonempty image.
 - Implemented the optional Ascent CMake option, MPI/C language discovery,
   `ascent::ascent_mpi` validation/linking, conditional registration, skeletal
   scheduling diagnostic, and generic pre-MPI shutdown hook.
@@ -81,6 +85,10 @@
 | Plan refresh | Completed phases and next gate recorded | Phase 6 real extract is next | COMPLETE |
 | Real Ascent Python extract | Two ranks, local/global domains, phi reduction | Passed | PASS |
 | Python regression suite | In-situ plus existing Ohm tests | 64/64 passed | PASS |
+| Pointer refresh/domain reorder | Field and particle reallocations plus ID preservation | Passed | PASS |
+| Visualization smoke | Centered phi pseudocolor image | Nonempty image produced | PASS |
+| Ascent-enabled focused CTest | Blueprint, runtime, extract, render, and 8-rank app | 10/10 passed | PASS |
+| Ascent-disabled focused CTest | Application, domain view, and 8-rank app | 5/5 passed | PASS |
 | Ascent-enabled configure/build | External Ascent 0.9.5 | Successful with tests enabled | PASS |
 | Lifecycle regression | Shutdown/destruction before MPI finalize | Passed | PASS |
 | Ascent-disabled configure without MPI wrapper | Configure/build | Configure succeeds; build fails because `mpi.h` is unavailable | EXPECTED LIMITATION |
