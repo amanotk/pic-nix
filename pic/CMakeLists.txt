@@ -19,6 +19,10 @@ if(NOT DEFINED PICNIX_ENABLE_PETSC)
   option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" OFF)
 endif()
 
+if(NOT DEFINED PICNIX_ENABLE_ASCENT)
+  option(PICNIX_ENABLE_ASCENT "Enable Ascent in-situ diagnostics" OFF)
+endif()
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests" FORCE)
   add_subdirectory(${PICNIX_DIR}/nix ${CMAKE_CURRENT_BINARY_DIR}/nix)
@@ -38,6 +42,30 @@ if(PICNIX_ENABLE_PETSC)
   list(APPEND PIC_SOURCES pic_poisson_petsc.cpp)
 endif()
 
+if(PICNIX_ENABLE_ASCENT)
+  if(CMAKE_VERSION VERSION_LESS 3.23)
+    message(FATAL_ERROR "PICNIX_ENABLE_ASCENT requires CMake 3.23 or newer")
+  endif()
+
+  enable_language(C)
+  find_package(MPI REQUIRED COMPONENTS C CXX)
+  find_package(Ascent CONFIG REQUIRED)
+
+  if(NOT ASCENT_MPI_ENABLED)
+    message(FATAL_ERROR "PIC-NIX requires an MPI-enabled Ascent installation")
+  endif()
+
+  if(NOT TARGET ascent::ascent_mpi)
+    message(FATAL_ERROR "Ascent was found but ascent::ascent_mpi is unavailable")
+  endif()
+
+  list(APPEND PIC_SOURCES
+    diag/ascent.cpp
+    insitu/ascent_runtime.cpp
+    insitu/blueprint_builder.cpp
+  )
+endif()
+
 add_library(pic STATIC ${PIC_SOURCES})
 
 # include directory
@@ -46,6 +74,13 @@ target_include_directories(pic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(pic PUBLIC elliptic nix)
 target_link_libraries(pic PRIVATE std::mdspan)
 target_compile_definitions(pic PUBLIC PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
+
+if(PICNIX_ENABLE_ASCENT)
+  target_link_libraries(pic PRIVATE ascent::ascent_mpi)
+  target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=1)
+else()
+  target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=0)
+endif()
 
 if(BUILD_TESTING)
   add_subdirectory(unittest)

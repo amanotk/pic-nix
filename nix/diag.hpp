@@ -25,8 +25,10 @@ protected:
     int         inter_rank; // rank of the node
     std::string basedir;    // base directory
     std::string iomode;     // I/O mode
+    std::string config_dir; // configuration file directory
 
-    Info(std::string basedir, std::string iomode) : basedir(basedir), iomode(iomode)
+    Info(std::string basedir, std::string iomode, std::string config_dir)
+        : basedir(basedir), iomode(iomode), config_dir(config_dir)
     {
       MPI_Comm_size(MPI_COMM_WORLD, &world_size);
       MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -84,6 +86,11 @@ public:
   }
 
   virtual ~Diag()
+  {
+  }
+
+  // Release runtime resources while MPI and diagnostic communicators remain valid.
+  virtual void shutdown()
   {
   }
 
@@ -147,9 +154,9 @@ public:
   }
 
   // initialize static info
-  static void initialize(std::string basedir, std::string iomode)
+  static void initialize(std::string basedir, std::string iomode, std::string config_dir)
   {
-    info = std::make_shared<Info>(basedir, iomode);
+    info = std::make_shared<Info>(basedir, iomode, config_dir);
   }
 
   // finalize static info

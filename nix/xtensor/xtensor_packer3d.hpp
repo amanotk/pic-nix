@@ -72,7 +72,7 @@ public:
 
     // colocate field components and decimate
     auto y = colocate_field(x, data);
-    auto v = decimate_field(y, data, size_z, size_y, size_x, size_c);
+    auto v = decimate_compact_field(y, size_z, size_y, size_x, size_c);
 
     // packing
     float64* ptr = reinterpret_cast<float64*>(buffer + address);
@@ -157,24 +157,70 @@ public:
   template <typename Array, typename Data>
   static inline auto colocate_field(Array& x, Data data)
   {
-    bool is_1d = data.Lbz == data.Ubz && data.Lby == data.Uby && data.Lbx != data.Ubx;
-    bool is_2d = data.Lbz == data.Ubz && data.Lby != data.Uby && data.Lbx != data.Ubx;
-    bool is_3d = data.Lbz != data.Ubz && data.Lby != data.Uby && data.Lbx != data.Ubx;
+    const size_t size_z = data.Ubz - data.Lbz + 1;
+    const size_t size_y = data.Uby - data.Lby + 1;
+    const size_t size_x = data.Ubx - data.Lbx + 1;
+    auto         y      = xt::eval(xt::zeros<float64>({size_z, size_y, size_x, size_t(6)}));
 
-    if (is_1d) {
-      return colocate_field_1d(x, data);
+    const bool has_z = size_z > 1;
+    const bool has_y = size_y > 1;
+    const bool has_x = size_x > 1;
+
+    for (size_t oz = 0; oz < size_z; oz++) {
+      for (size_t oy = 0; oy < size_y; oy++) {
+        for (size_t ox = 0; ox < size_x; ox++) {
+          const int iz = data.Lbz + static_cast<int>(oz);
+          const int iy = data.Lby + static_cast<int>(oy);
+          const int ix = data.Lbx + static_cast<int>(ox);
+
+          y(oz, oy, ox, 0) = 0.50 * (x(iz, iy, ix, 0) + x(iz, iy, ix + (has_x ? 1 : 0), 0));
+          y(oz, oy, ox, 1) = 0.50 * (x(iz, iy, ix, 1) + x(iz, iy + (has_y ? 1 : 0), ix, 1));
+          y(oz, oy, ox, 2) = 0.50 * (x(iz, iy, ix, 2) + x(iz + (has_z ? 1 : 0), iy, ix, 2));
+          y(oz, oy, ox, 3) =
+              0.25 * (x(iz, iy, ix, 3) + x(iz + (has_z ? 1 : 0), iy + (has_y ? 1 : 0), ix, 3) +
+                      x(iz, iy + (has_y ? 1 : 0), ix, 3) + x(iz + (has_z ? 1 : 0), iy, ix, 3));
+          y(oz, oy, ox, 4) =
+              0.25 * (x(iz, iy, ix, 4) + x(iz + (has_z ? 1 : 0), iy, ix + (has_x ? 1 : 0), 4) +
+                      x(iz + (has_z ? 1 : 0), iy, ix, 4) + x(iz, iy, ix + (has_x ? 1 : 0), 4));
+          y(oz, oy, ox, 5) =
+              0.25 * (x(iz, iy, ix, 5) + x(iz, iy + (has_y ? 1 : 0), ix + (has_x ? 1 : 0), 5) +
+                      x(iz, iy, ix + (has_x ? 1 : 0), 5) + x(iz, iy + (has_y ? 1 : 0), ix, 5));
+        }
+      }
     }
 
-    if (is_2d) {
-      return colocate_field_2d(x, data);
+    return y;
+  }
+
+  /// calculate compact cell-centered current components
+  template <typename Array, typename Data>
+  static inline auto colocate_current(Array& x, Data data)
+  {
+    const size_t size_z = data.Ubz - data.Lbz + 1;
+    const size_t size_y = data.Uby - data.Lby + 1;
+    const size_t size_x = data.Ubx - data.Lbx + 1;
+    auto         y      = xt::eval(xt::zeros<float64>({size_z, size_y, size_x, size_t(4)}));
+
+    const bool has_z = size_z > 1;
+    const bool has_y = size_y > 1;
+    const bool has_x = size_x > 1;
+
+    for (size_t oz = 0; oz < size_z; oz++) {
+      for (size_t oy = 0; oy < size_y; oy++) {
+        for (size_t ox = 0; ox < size_x; ox++) {
+          const int iz = data.Lbz + static_cast<int>(oz);
+          const int iy = data.Lby + static_cast<int>(oy);
+          const int ix = data.Lbx + static_cast<int>(ox);
+
+          y(oz, oy, ox, 0) = x(iz, iy, ix, 0);
+          y(oz, oy, ox, 1) = 0.50 * (x(iz, iy, ix, 1) + x(iz, iy, ix + (has_x ? 1 : 0), 1));
+          y(oz, oy, ox, 2) = 0.50 * (x(iz, iy, ix, 2) + x(iz, iy + (has_y ? 1 : 0), ix, 2));
+          y(oz, oy, ox, 3) = 0.50 * (x(iz, iy, ix, 3) + x(iz + (has_z ? 1 : 0), iy, ix, 3));
+        }
+      }
     }
 
-    if (is_3d) {
-      return colocate_field_3d(x, data);
-    }
-
-    // must be unreachable
-    assert(false);
+    return y;
   }
 
   /// decimate field
@@ -218,6 +264,38 @@ public:
     return z;
   }
 
+  template <typename Array>
+  static inline auto decimate_compact_field(Array& x, size_t size_z, size_t size_y, size_t size_x,
+                                            size_t size_c)
+  {
+    const size_t  blocksize_z = x.shape(0) / size_z;
+    const size_t  blocksize_y = x.shape(1) / size_y;
+    const size_t  blocksize_x = x.shape(2) / size_x;
+    const float64 factor      = 1.0 / (blocksize_z * blocksize_y * blocksize_x);
+    auto          z           = xt::eval(xt::zeros<float64>({size_z, size_y, size_x, size_c}));
+
+    for (size_t iz_block = 0; iz_block < blocksize_z; iz_block++) {
+      for (size_t iy_block = 0; iy_block < blocksize_y; iy_block++) {
+        for (size_t ix_block = 0; ix_block < blocksize_x; ix_block++) {
+          for (size_t jz = 0; jz < size_z; jz++) {
+            for (size_t jy = 0; jy < size_y; jy++) {
+              for (size_t jx = 0; jx < size_x; jx++) {
+                const size_t iz = jz * blocksize_z + iz_block;
+                const size_t iy = jy * blocksize_y + iy_block;
+                const size_t ix = jx * blocksize_x + ix_block;
+                for (size_t ic = 0; ic < size_c; ic++) {
+                  z(jz, jy, jx, ic) += factor * x(iz, iy, ix, ic);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return z;
+  }
+
   static inline size_t decimate_size(int Lb, int Ub, int decimate)
   {
     int size = static_cast<size_t>(Ub - Lb + 1);
@@ -227,78 +305,6 @@ public:
     } else {
       return size / decimate;
     }
-  }
-
-  template <typename Array, typename Data>
-  static inline auto colocate_field_1d(Array& x, Data data)
-  {
-    auto y = xt::zeros_like(x);
-
-    int iz = data.Lbz;
-    int iy = data.Lby;
-
-    for (int ix = data.Lbx; ix <= data.Ubx; ix++) {
-      // Ex, Ey, Ez
-      y(iz, iy, ix, 0) = 0.50 * (x(iz, iy, ix, 0) + x(iz, iy, ix + 1, 0));
-      y(iz, iy, ix, 1) = x(iz, iy, ix, 1);
-      y(iz, iy, ix, 2) = x(iz, iy, ix, 2);
-      // Bx, By, Bz
-      y(iz, iy, ix, 3) = x(iz, iy, ix, 3);
-      y(iz, iy, ix, 4) = 0.50 * (x(iz, iy, ix, 4) + x(iz, iy, ix + 1, 4));
-      y(iz, iy, ix, 5) = 0.50 * (x(iz, iy, ix, 5) + x(iz, iy, ix + 1, 5));
-    }
-
-    return y;
-  }
-
-  template <typename Array, typename Data>
-  static inline auto colocate_field_2d(Array& x, Data data)
-  {
-    auto y = xt::zeros_like(x);
-
-    int iz = data.Lbz;
-
-    for (int iy = data.Lby; iy <= data.Uby; iy++) {
-      for (int ix = data.Lbx; ix <= data.Ubx; ix++) {
-        // Ex, Ey, Ez
-        y(iz, iy, ix, 0) = 0.50 * (x(iz, iy, ix, 0) + x(iz, iy, ix + 1, 0));
-        y(iz, iy, ix, 1) = 0.50 * (x(iz, iy, ix, 1) + x(iz, iy + 1, ix, 1));
-        y(iz, iy, ix, 2) = x(iz, iy, ix, 2);
-        // Bx, By, Bz
-        y(iz, iy, ix, 3) = 0.50 * (x(iz, iy, ix, 3) + x(iz, iy + 1, ix, 3));
-        y(iz, iy, ix, 4) = 0.50 * (x(iz, iy, ix, 4) + x(iz, iy, ix + 1, 4));
-        y(iz, iy, ix, 5) = 0.25 * (x(iz, iy, ix, 5) + x(iz, iy + 1, ix + 1, 5) +
-                                   x(iz, iy, ix + 1, 5) + x(iz, iy + 1, ix, 5));
-      }
-    }
-
-    return y;
-  }
-
-  template <typename Array, typename Data>
-  static inline auto colocate_field_3d(Array& x, Data data)
-  {
-    auto y = xt::zeros_like(x);
-
-    for (int iz = data.Lbz; iz <= data.Ubz; iz++) {
-      for (int iy = data.Lby; iy <= data.Uby; iy++) {
-        for (int ix = data.Lbx; ix <= data.Ubx; ix++) {
-          // Ex, Ey, Ez
-          y(iz, iy, ix, 0) = 0.50 * (x(iz, iy, ix, 0) + x(iz, iy, ix + 1, 0));
-          y(iz, iy, ix, 1) = 0.50 * (x(iz, iy, ix, 1) + x(iz, iy + 1, ix, 1));
-          y(iz, iy, ix, 2) = 0.50 * (x(iz, iy, ix, 2) + x(iz + 1, iy, ix, 2));
-          // Bx, By, Bz
-          y(iz, iy, ix, 3) = 0.25 * (x(iz, iy, ix, 3) + x(iz + 1, iy + 1, ix, 3) +
-                                     x(iz, iy + 1, ix, 3) + x(iz + 1, iy, ix, 3));
-          y(iz, iy, ix, 4) = 0.25 * (x(iz, iy, ix, 4) + x(iz + 1, iy, ix + 1, 4) +
-                                     x(iz + 1, iy, ix, 4) + x(iz, iy, ix + 1, 4));
-          y(iz, iy, ix, 5) = 0.25 * (x(iz, iy, ix, 5) + x(iz, iy + 1, ix + 1, 5) +
-                                     x(iz, iy, ix + 1, 5) + x(iz, iy + 1, ix, 5));
-        }
-      }
-    }
-
-    return y;
   }
 };
 

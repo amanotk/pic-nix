@@ -14,6 +14,7 @@ option(PICNIX_BUILD_NIX "Build nix module" ON)
 option(PICNIX_BUILD_PIC "Build pic module" ON)
 option(PICNIX_BUILD_ELLIPTIC "Build elliptic module" OFF)
 option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" OFF)
+option(PICNIX_ENABLE_ASCENT "Enable Ascent in-situ diagnostics" OFF)
 
 if(NOT DEFINED PICNIX_DIR)
   set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR})

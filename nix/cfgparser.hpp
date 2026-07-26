@@ -10,7 +10,8 @@ NIX_NAMESPACE_BEGIN
 class CfgParser
 {
 protected:
-  json root;
+  json        root;
+  std::string config_dir;
 
   json toml_to_json(const toml::value& toml_data)
   {
@@ -56,6 +57,11 @@ public:
   json get_diagnostic()
   {
     return root["diagnostic"];
+  }
+
+  std::string get_config_dir() const
+  {
+    return config_dir;
   }
 
   virtual int get_Nx()
@@ -114,6 +120,7 @@ public:
 
     fs::path    path(filename);
     std::string ext = path.extension().string();
+    config_dir      = fs::absolute(path).parent_path().string();
 
     if (ext == ".json") {
       std::ifstream ifs(filename.c_str());

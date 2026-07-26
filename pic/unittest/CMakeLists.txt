@@ -69,7 +69,12 @@ target_compile_definitions(pic_obj_parallel_mpi_only PRIVATE PICNIX_ENABLE_PETSC
 # serial tests
 set(SERIAL_EXECS
   test_pic_chunk
+  test_pic_domain_view
   )
+
+if(PICNIX_ENABLE_ASCENT)
+  list(APPEND SERIAL_EXECS test_pic_blueprint_builder)
+endif()
 
 foreach(target IN ITEMS ${SERIAL_EXECS})
   add_executable(${target} ${target}.cpp)
@@ -82,6 +87,30 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
   )
   add_test(NAME ${target} COMMAND ${target})
 endforeach()
+
+if(PICNIX_ENABLE_ASCENT)
+  target_link_libraries(test_pic_blueprint_builder PRIVATE ascent::ascent_mpi)
+
+  add_executable(test_pic_ascent_runtime test_pic_ascent_runtime.cpp)
+  target_include_directories(test_pic_ascent_runtime PRIVATE ${INCLUDE_DIRS})
+  target_compile_definitions(test_pic_ascent_runtime PRIVATE
+    PICNIX_ASCENT_ACTIONS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/ascent_empty_actions.yaml"
+  )
+  target_link_libraries(test_pic_ascent_runtime PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel
+    pic
+    nix
+    ascent::ascent_mpi
+  )
+
+  add_mpi_test(
+    test_pic_ascent_runtime_np1
+    test_pic_ascent_runtime
+    1
+    ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_runtime_np1
+  )
+endif()
 
 # PicApplicationInterface smoke / application tests (Catch2, MPI)
 add_executable(test_pic_application test_pic_application.cpp)

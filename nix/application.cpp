@@ -142,7 +142,17 @@ void Application::finalize()
   logger->append(curstep, "shutdown_end", log);
   logger->flush();
 
+  finalize_diagnostic();
   finalize_mpi();
+}
+
+void Application::finalize_diagnostic()
+{
+  for (auto& diagnostic : diagvec) {
+    diagnostic->shutdown();
+  }
+
+  diagvec.clear();
 }
 
 void Application::initialize_mpi(int* argc, char*** argv)
@@ -269,7 +279,7 @@ void Application::initialize_workload()
 
 void Application::initialize_diagnostic()
 {
-  Diag::initialize(get_basedir(), get_iomode());
+  Diag::initialize(get_basedir(), get_iomode(), cfgparser->get_config_dir());
 }
 
 void Application::setup_chunks_init()
