@@ -3,6 +3,8 @@ from collections.abc import Mapping
 
 import numpy as np
 
+SCHEMA_VERSION = 1
+
 
 def _get(node, key, default=None):
     if isinstance(node, Mapping):
@@ -154,6 +156,15 @@ class Domain:
 class Dataset:
     def __init__(self, node):
         self.node = node
+        self._validate_schema()
+
+    def _validate_schema(self):
+        for _, domain in _children(self.node):
+            schema = _get(_get(domain, "picnix"), "schema_version")
+            if schema is not None and int(_value(schema)) != SCHEMA_VERSION:
+                raise ValueError(
+                    f"unsupported PIC-NIX schema version: {_value(schema)}"
+                )
 
     @classmethod
     def from_conduit(cls, node):

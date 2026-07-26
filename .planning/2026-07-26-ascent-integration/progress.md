@@ -64,6 +64,11 @@
   for a nonempty image.
 - Added explicit Blueprint physical-bound assertions for render origin,
   spacing, vertex dimensions, and computed upper bounds.
+- Added schema-version rejection, explicit-communicator Python reduction,
+  missing-actions cleanup coverage, empty/null particle coverage, and the
+  `docs/picnix/ascent.md` usage guide.
+- Added rank-aware Ascent configuration/path validation and consistent abort
+  handling for publish/execute exceptions.
 - Implemented the optional Ascent CMake option, MPI/C language discovery,
   `ascent::ascent_mpi` validation/linking, conditional registration, skeletal
   scheduling diagnostic, and generic pre-MPI shutdown hook.
@@ -90,6 +95,8 @@
 | Pointer refresh/domain reorder | Field and particle reallocations plus ID preservation | Passed | PASS |
 | Visualization smoke | Centered phi pseudocolor image | Nonempty image produced | PASS |
 | Visualization bounds | Blueprint origin, spacing, and upper bounds | Passed | PASS |
+| Runtime/config edge cases | Missing actions, invalid schema, empty/null particles | Passed | PASS |
+| Documentation | Build, configuration, schema, Python, and test guide | Added | PASS |
 | Ascent-enabled focused CTest | Blueprint, runtime, extract, render, and 8-rank app | 10/10 passed | PASS |
 | Ascent-disabled focused CTest | Application, domain view, and 8-rank app | 5/5 passed | PASS |
 | Ascent-enabled configure/build | External Ascent 0.9.5 | Successful with tests enabled | PASS |
@@ -97,6 +104,10 @@
 | Ascent-disabled configure without MPI wrapper | Configure/build | Configure succeeds; build fails because `mpi.h` is unavailable | EXPECTED LIMITATION |
 | Ascent-disabled MPI-wrapper build | Build all tests | Successful | PASS |
 | Ascent-disabled CTest | 44 tests | 44/44 passed | PASS |
+| Full enabled CTest | All enabled C++/MPI tests | 53/53 passed | PASS |
+| Full disabled CTest | All Ascent-off C++/MPI tests | 45/45 passed | PASS |
+| Full Python suite | `python/tests` | 96/96 passed | PASS |
+| Render baseline measurement | One-rank, four-cell Ascent render smoke | 0.40 s, 146304 KiB max RSS | RECORDED |
 
 ### Errors
 | Error | Resolution |
@@ -111,5 +122,6 @@
 | Ascent Python environment lacked optional `msgpack` | Made `picnix` analysis-module imports lazy for embedded extracts |
 | Blueprint scalar values arrived flat in Python | Reshaped centered fields using published local cell-shape metadata |
 | Conduit list nodes returned child iterators | Normalized child nodes to Python lists in the schema adapter |
+| Runtime configuration errors needed rank context | Validate paths/types before open and abort consistently after runtime exceptions |
 | Lifecycle test exposed empty diagnostic basedir fixture | Added `basedir = "."` to the test configuration |
 | Default `/usr/bin/c++` build cannot find `mpi.h` | Reconfigured with project MPI wrapper `mpicxx`; full baseline passed |

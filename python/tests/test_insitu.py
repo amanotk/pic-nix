@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from picnix.insitu import Dataset
 
@@ -11,6 +12,7 @@ def make_dataset():
         "domain_3": {
             "state": {"domain_id": 3},
             "picnix": {
+                "schema_version": 1,
                 "mesh": {"active_lower": [1, 1, 1], "active_upper": [2, 3, 4]},
                 "raw": {
                     "uf": {
@@ -43,3 +45,11 @@ def test_dataset_views_and_particle_id_bits():
     assert chunk.raw_field("uf").interior(chunk.mesh).shape == (2, 3, 4, 6)
     assert chunk.centered_field("E").component("x")[0, 0, 0] == 1.0
     assert chunk.particles().ids.tolist() == [-7]
+
+
+def test_dataset_rejects_unknown_schema_version():
+    data = make_dataset()
+    data["domain_3"]["picnix"]["schema_version"] = 2
+
+    with pytest.raises(ValueError, match="unsupported PIC-NIX schema version"):
+        Dataset(data)

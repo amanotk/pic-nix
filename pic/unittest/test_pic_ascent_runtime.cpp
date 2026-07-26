@@ -6,6 +6,8 @@
 
 #include <mpi.h>
 
+#include <stdexcept>
+
 TEST_CASE("AscentRuntime opens, executes, and closes")
 {
   conduit::Node data;
@@ -21,4 +23,14 @@ TEST_CASE("AscentRuntime opens, executes, and closes")
   runtime.shutdown();
 
   REQUIRE(true);
+}
+
+TEST_CASE("AscentRuntime releases its communicator when actions loading fails")
+{
+  conduit::Node                 data;
+  picnix::insitu::AscentRuntime runtime;
+
+  REQUIRE_THROWS_AS(runtime.publish_execute(data, "missing-ascent-actions.yaml"),
+                    std::runtime_error);
+  runtime.shutdown();
 }

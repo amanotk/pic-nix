@@ -109,3 +109,25 @@ TEST_CASE("BlueprintBuilder refreshes external pointers and preserves domain IDs
   REQUIRE(reordered.node.has_path("domain_7"));
   REQUIRE(reordered.node.has_path("domain_9"));
 }
+
+TEST_CASE("BlueprintBuilder handles empty and null particle species")
+{
+  auto chunk = make_chunk();
+  auto data  = chunk->get_internal_data();
+  data.up.clear();
+
+  picnix::insitu::BlueprintOptions options;
+  options.raw                         = true;
+  options.centered                    = false;
+  options.particles                   = true;
+  const std::vector<PicChunk*> chunks = {chunk.get()};
+  auto publication = picnix::insitu::BlueprintBuilder::build(chunks, 0, 0.0, options);
+  REQUIRE(publication.node.has_path("domain_7"));
+  REQUIRE_FALSE(publication.node["domain_7"].has_path("picnix/particles"));
+
+  data.up.resize(1);
+  data.up[0].reset();
+  publication = picnix::insitu::BlueprintBuilder::build(chunks, 1, 0.0, options);
+  REQUIRE(publication.node.has_path("domain_7/picnix/particles/species_000"));
+  REQUIRE(publication.node["domain_7/picnix/particles/species_000/np_active"].to_int() == 0);
+}

@@ -491,7 +491,7 @@ Tasks:
   publish, and execute.  
 - [x] Do not retain any publication object after synchronous execution.
 - [x] Run once per rank outside OpenMP regions.
-- [ ] Catch configuration/Conduit/Ascent/Python exceptions, attach rank and
+- [x] Catch configuration/Conduit/Ascent/Python exceptions, attach rank and
   actions context, synchronize failure state where possible, then follow the
   repository MPI-abort convention to avoid asymmetric continuation.  
 - [x] On shutdown: close Ascent once, then free the duplicated communicator.
@@ -536,7 +536,7 @@ Tasks:
   interior slicing, centered field access, and schema-version validation.  
 - [x] Implement active-particle views, q/m access, exact ID reinterpretation,
   and optional relativistic kinetic energy.  
-- [ ] Implement small MPI helpers that accept an explicit mpi4py communicator
+- [x] Implement small MPI helpers that accept an explicit mpi4py communicator
   or convert `ascent_mpi_comm_id()` supplied by the extract script.  
 - [x] Keep ordinary unit tests independent of Ascent using mappings/fake nodes;
   add conditional real-Conduit tests.  
@@ -576,9 +576,9 @@ Likely files:
 - `python/tests/test_insitu_*.py`  
 - example actions/extract files under a PIC example or docs example directory  
 
-**Status:** complete for the extract-facing core and real two-rank Python
-smoke; explicit communicator helpers, schema validation, and direct real-node
-unit coverage remain.  
+**Status:** complete for the extract-facing core, schema validation, explicit
+communicators, and real two-rank Python smoke. Direct real-node unit coverage
+is exercised through the integration extract.  
 
 ### Phase 7: MPI, Rebalance, Python, and Visualization Integration
 
@@ -599,8 +599,8 @@ Tasks:
   order and external pointers.
 - [x] Trigger particle resize/swap and verify active rows and pointers refresh.
 - [x] Render a deterministic field such as `x + 2*y + 3*z`.
-- [x] Check successful completion, nonempty image, and Blueprint validity;
-  global bounds remain to be asserted.
+- [x] Check successful completion, nonempty image, Blueprint validity, and
+  global bounds.
 - [x] Check global bounds in the visualization smoke test.
 - [x] Avoid pixel comparisons; assert nonempty output and metadata instead.
 - [ ] Record wall time and centered-buffer memory overhead for a representative
@@ -620,8 +620,8 @@ Likely files:
 - deterministic test config/actions/extract files  
 - optional CTest fixtures/scripts  
 
-**Status:** in_progress; pointer-refresh, two-rank extract, render smoke, and
-global-bounds gates pass. Performance measurements remain.  
+**Status:** in_progress; all functional integration gates pass. Performance
+measurements remain.  
 
 ### Phase 8: Documentation, CI, and Full Verification
 
@@ -630,18 +630,18 @@ ordinary project workflow.
 
 Tasks:  
 
-- [ ] Document Ascent-disabled and enabled configure commands, exact
+- [x] Document Ascent-disabled and enabled configure commands, exact
   `Ascent_DIR`, CMake requirement, runtime paths, and Python environment.  
-- [ ] Document diagnostic TOML, actions YAML, MPI behavior, raw schema,
+- [x] Document diagnostic TOML, actions YAML, MPI behavior, raw schema,
   component locations, copies, lifetimes, and limitations.  
-- [ ] Document installing `picnix` into Ascent's Python environment.  
-- [ ] Add a dedicated Ascent page and link it from PIC-NIX docs/README.  
+- [x] Document installing `picnix` into Ascent's Python environment.  
+- [x] Add a dedicated Ascent page and link it from PIC-NIX docs/README.  
 - [ ] Keep existing CI jobs Ascent-free.  
 - [ ] Add a separate optional/manual/scheduled Ascent workflow using a pinned
   container or versioned cached prefix if practical.  
 - [ ] If CI installation remains impractical, document the exact local test
   commands and mark integration coverage as external.  
-- [ ] Run formatting, default tests, enabled unit tests, Python tests, MPI tests,
+- [x] Run formatting, default tests, enabled unit tests, Python tests, MPI tests,
   smoke rendering, and Graphify update.  
 - [ ] Produce final architecture/schema/configuration/test/copy report.  
 
