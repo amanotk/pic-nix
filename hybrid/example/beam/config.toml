@@ -1,0 +1,27 @@
+[[diagnostic]]
+  name = 'none'
+  interval = 1
+
+[application]
+  basedir = ''
+
+  [application.log]
+    interval = 1
+
+  [application.rebalance]
+    interval = 100
+
+  [application.option]
+
+[parameter]
+  Nx = 8
+  Ny = 1
+  Nz = 1
+  Cx = 2
+  Cy = 1
+  Cz = 1
+  Ns = 2
+  cc = 1.0e4
+  gamma = 1.666666666666667
+  delt = 0.01
+  delh = 0.25
