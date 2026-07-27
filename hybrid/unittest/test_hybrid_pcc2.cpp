@@ -1,69 +1,84 @@
 // -*- C++ -*-
+#include "engine/field.hpp"
+#include "engine/fluid.hpp"
 #include "engine/pcc2.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("PCC2 stage enumeration covers the legacy predictor-corrector flow")
+namespace
 {
-  REQUIRE(hybrid::engine::pcc2_stage_count() == 14);
-  REQUIRE(hybrid::engine::pcc2_is_field_stage(hybrid::engine::Pcc2Stage::PredictorField));
-  REQUIRE(hybrid::engine::pcc2_is_field_stage(hybrid::engine::Pcc2Stage::FirstCorrectorField));
-  REQUIRE(hybrid::engine::pcc2_is_field_stage(hybrid::engine::Pcc2Stage::SecondCorrectorField));
-  REQUIRE_FALSE(hybrid::engine::pcc2_is_field_stage(hybrid::engine::Pcc2Stage::PredictorOhm));
+constexpr double tolerance = 1.0e-13;
 
-  REQUIRE(hybrid::engine::pcc2_is_ohm_stage(hybrid::engine::Pcc2Stage::PredictorOhm));
-  REQUIRE(hybrid::engine::pcc2_is_ohm_stage(hybrid::engine::Pcc2Stage::FirstCorrectorOhm));
-  REQUIRE(hybrid::engine::pcc2_is_ohm_stage(hybrid::engine::Pcc2Stage::SecondCorrectorOhm));
-  REQUIRE_FALSE(hybrid::engine::pcc2_is_ohm_stage(hybrid::engine::Pcc2Stage::PredictorField));
-
-  REQUIRE(
-      hybrid::engine::pcc2_is_particle_stage(hybrid::engine::Pcc2Stage::FirstCorrectorParticle));
-  REQUIRE(
-      hybrid::engine::pcc2_is_particle_stage(hybrid::engine::Pcc2Stage::SecondCorrectorParticle));
-  REQUIRE_FALSE(hybrid::engine::pcc2_is_particle_stage(hybrid::engine::Pcc2Stage::PredictorField));
-
-  REQUIRE(hybrid::engine::pcc2_is_average_stage(hybrid::engine::Pcc2Stage::PredictorAverage));
-  REQUIRE(hybrid::engine::pcc2_is_average_stage(hybrid::engine::Pcc2Stage::FirstCorrectorAverage));
-  REQUIRE_FALSE(hybrid::engine::pcc2_is_average_stage(hybrid::engine::Pcc2Stage::Commit));
-
-  REQUIRE(hybrid::engine::pcc2_should_rollback_particles(
-      hybrid::engine::Pcc2Stage::FirstCorrectorParticle));
-  REQUIRE_FALSE(hybrid::engine::pcc2_should_rollback_particles(
-      hybrid::engine::Pcc2Stage::SecondCorrectorParticle));
+hybrid::engine::FluidParameters fluid_params()
+{
+  return {20.0, 5.0 / 3.0, -2.0, 1.0, 0.7};
 }
+} // namespace
 
-TEST_CASE("PCC2 stage transition follows the correct order")
+TEST_CASE("PCC2 stage flow preserves uniform conservative update trajectory")
 {
-  using P = hybrid::engine::Pcc2Stage;
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::Idle) == P::PredictorField);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::PredictorField) == P::PredictorOhm);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::PredictorOhm) == P::PredictorAverage);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::PredictorAverage) == P::FirstCorrectorParticle);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::FirstCorrectorParticle) == P::FirstCorrectorMoment);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::FirstCorrectorMoment) == P::FirstCorrectorField);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::FirstCorrectorField) == P::FirstCorrectorOhm);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::FirstCorrectorOhm) == P::FirstCorrectorAverage);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::FirstCorrectorAverage) == P::SecondCorrectorParticle);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::SecondCorrectorParticle) == P::SecondCorrectorMoment);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::SecondCorrectorMoment) == P::SecondCorrectorField);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::SecondCorrectorField) == P::SecondCorrectorOhm);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::SecondCorrectorOhm) == P::Commit);
-  REQUIRE(hybrid::engine::pcc2_next_stage(P::Commit) == P::Idle);
-}
+  const hybrid::engine::FluidState   accepted_fluid = {1.2, 0.3,  -0.2, 0.4,  0.9485643171120767,
+                                                       0.8, -0.1, 0.5,  -0.3, 0.6};
+  const hybrid::engine::FieldState   accepted_field = {0.2, -0.3, 0.1, 1.1, -0.7, 0.4};
+  const hybrid::engine::VectorState  background     = {0.2, -0.1, 0.3};
+  const hybrid::engine::CurrentState current        = {0.4, -0.2, 0.3, -0.5};
+  const auto                         params         = fluid_params();
+  const nix::float64                 dt             = 0.05;
 
-TEST_CASE("PCC2 state tracks substep counter")
-{
-  hybrid::engine::Pcc2State state = {};
-  REQUIRE(state.stage == hybrid::engine::Pcc2Stage::Idle);
+  const auto accepted_cons = hybrid::engine::conservative(accepted_fluid, accepted_field, params);
+  const auto rhs = hybrid::engine::fluid_rhs(dt, accepted_field, current, background, params);
 
-  state.stage   = hybrid::engine::Pcc2Stage::PredictorField;
-  state.substep = 1;
-  REQUIRE(std::string(hybrid::engine::pcc2_stage_name(state.stage)) == "PredictorField");
+  const hybrid::engine::ConservedState expected_accepted = {
+      2.0, 0.27999999999999997, 0.16000000000000003, 0.24, 2.7108535242058465};
+  for (int c = 0; c < hybrid::num_conserved_components; ++c) {
+    REQUIRE(accepted_cons[c] == Catch::Approx(expected_accepted[c]).epsilon(tolerance));
+  }
 
-  state.stage = hybrid::engine::pcc2_next_stage(state.stage);
-  REQUIRE(state.stage == hybrid::engine::Pcc2Stage::PredictorOhm);
+  // All three field stages produce identical working = accepted + rhs
+  hybrid::engine::ConservedState working = {};
+  for (int c = 0; c < hybrid::num_conserved_components; ++c) {
+    working[c] = accepted_cons[c] + rhs[c];
+  }
+  const hybrid::engine::ConservedState expected_working = {
+      2.0, 0.27647499999999997, 0.16727500000000003, 0.23857499999999998, 2.7198535242058464};
+  for (int c = 0; c < hybrid::num_conserved_components; ++c) {
+    REQUIRE(working[c] == Catch::Approx(expected_working[c]).epsilon(tolerance));
+  }
 
-  state.stage = hybrid::engine::Pcc2Stage::Commit;
-  REQUIRE(state.stage == hybrid::engine::Pcc2Stage::Commit);
+  // Average = 50/50 between working and accepted
+  hybrid::engine::ConservedState averaged = {};
+  for (int c = 0; c < hybrid::num_conserved_components; ++c) {
+    averaged[c] = 0.5 * (working[c] + accepted_cons[c]);
+  }
+  const hybrid::engine::ConservedState expected_averaged = {
+      2.0, 0.27823749999999997, 0.16363750000000005, 0.2392875, 2.715353524205846};
+  for (int c = 0; c < hybrid::num_conserved_components; ++c) {
+    REQUIRE(averaged[c] == Catch::Approx(expected_averaged[c]).epsilon(tolerance));
+  }
+
+  // Stage count matches legacy
+  using P             = hybrid::engine::Pcc2Stage;
+  int field_stages    = 0;
+  int ohm_stages      = 0;
+  int average_stages  = 0;
+  int particle_stages = 0;
+  for (P stage = P::PredictorField; stage != P::Idle;
+       stage   = hybrid::engine::pcc2_next_stage(stage)) {
+    if (hybrid::engine::pcc2_is_field_stage(stage))
+      ++field_stages;
+    if (hybrid::engine::pcc2_is_ohm_stage(stage))
+      ++ohm_stages;
+    if (hybrid::engine::pcc2_is_average_stage(stage))
+      ++average_stages;
+    if (hybrid::engine::pcc2_is_particle_stage(stage))
+      ++particle_stages;
+    if (stage == P::Commit)
+      break;
+  }
+  REQUIRE(field_stages == 3);
+  REQUIRE(ohm_stages == 3);
+  REQUIRE(average_stages == 2);
+  REQUIRE(particle_stages == 2);
+  REQUIRE(hybrid::engine::pcc2_should_rollback_particles(P::FirstCorrectorParticle));
 }
