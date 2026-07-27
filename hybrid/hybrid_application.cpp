@@ -16,6 +16,7 @@
 #include "engine/phasespeed.hpp"
 #include "engine/ssor2.hpp"
 
+#include <array>
 #include <filesystem>
 #include <sstream>
 #include <stdexcept>
@@ -187,8 +188,92 @@ void HybridApplication::migrate_particles()
   }
 }
 
+namespace
+{
+void legacy_periodic_moment_append(HybridChunk::DataContainer& data)
+{
+  const auto exchange_axis = [&](int axis) {
+    const int nb    = data.boundary_margin;
+    const int lower = axis == 0 ? data.Lbz : axis == 1 ? data.Lby : data.Lbx;
+    const int upper = axis == 0 ? data.Ubz : axis == 1 ? data.Uby : data.Ubx;
+
+    std::array<int, 3> lower_begin = {0, 0, 0};
+    std::array<int, 3> lower_end   = {static_cast<int>(data.moment_kinetic.shape()[0]) - 1,
+                                      static_cast<int>(data.moment_kinetic.shape()[1]) - 1,
+                                      static_cast<int>(data.moment_kinetic.shape()[2]) - 1};
+    std::array<int, 3> upper_begin = lower_begin;
+    std::array<int, 3> upper_end   = lower_end;
+    lower_begin[axis]              = lower - nb;
+    lower_end[axis]                = lower + nb - 1;
+    upper_begin[axis]              = upper - nb + 1;
+    upper_end[axis]                = upper + nb;
+
+    const auto pack = [&](const std::array<int, 3>& begin, const std::array<int, 3>& end) {
+      std::vector<nix::float64> buffer;
+      buffer.reserve(static_cast<size_t>(end[0] - begin[0] + 1) *
+                     static_cast<size_t>(end[1] - begin[1] + 1) *
+                     static_cast<size_t>(end[2] - begin[2] + 1) *
+                     static_cast<size_t>(data.num_species) * num_moment_components);
+      for (int iz = begin[0]; iz <= end[0]; ++iz) {
+        for (int iy = begin[1]; iy <= end[1]; ++iy) {
+          for (int ix = begin[2]; ix <= end[2]; ++ix) {
+            for (int species = 0; species < data.num_species; ++species) {
+              for (int component = 0; component < num_moment_components; ++component) {
+                buffer.push_back(data.moment_kinetic(iz, iy, ix, species, component));
+              }
+            }
+          }
+        }
+      }
+      return buffer;
+    };
+
+    const auto lower_buffer = pack(lower_begin, lower_end);
+    const auto upper_buffer = pack(upper_begin, upper_end);
+    const auto unpack_add   = [&](const std::array<int, 3>& begin, const std::array<int, 3>& end,
+                                const std::vector<nix::float64>& buffer) {
+      size_t n = 0;
+      for (int iz = begin[0]; iz <= end[0]; ++iz) {
+        for (int iy = begin[1]; iy <= end[1]; ++iy) {
+          for (int ix = begin[2]; ix <= end[2]; ++ix) {
+            for (int species = 0; species < data.num_species; ++species) {
+              for (int component = 0; component < num_moment_components; ++component) {
+                data.moment_kinetic(iz, iy, ix, species, component) += buffer[n++];
+              }
+            }
+          }
+        }
+      }
+    };
+
+    unpack_add(lower_begin, lower_end, upper_buffer);
+    unpack_add(upper_begin, upper_end, lower_buffer);
+  };
+
+  exchange_axis(0);
+  exchange_axis(1);
+  exchange_axis(2);
+}
+} // namespace
+
 void HybridApplication::update_kinetic_moments()
 {
+  if (nprocess == 1 && chunkvec.size() == 1) {
+    auto& chunk = static_cast<HybridChunk&>(*chunkvec.front());
+    auto  data  = chunk.get_internal_data();
+    engine::deposit_moments(data);
+    legacy_periodic_moment_append(data);
+    for (int pass = 0; pass < 2; ++pass) {
+      engine::filter_moments_once(data);
+      chunk.boundary_pack(data.moment_kinetic, BoundaryMomentCopy);
+      chunk.boundary_begin(data.moment_kinetic, BoundaryMomentCopy);
+      chunk.boundary_end(data.moment_kinetic, BoundaryMomentCopy);
+      chunk.boundary_unpack(data.moment_kinetic, BoundaryMomentCopy);
+    }
+    engine::derive_current(data);
+    return;
+  }
+
   for (auto& chunk_ptr : chunkvec) {
     auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
     auto  data  = chunk.get_internal_data();
