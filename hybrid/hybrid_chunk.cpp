@@ -236,6 +236,8 @@ void HybridChunk::allocate_mpi_buffers()
   set_mpi_buffer(mpibufvec[BoundaryCopy10], 0, 0, sizeof(nix::float64) * num_fluid_components);
   set_mpi_buffer(mpibufvec[BoundaryCopy6], 0, 0, sizeof(nix::float64) * num_field_components);
   set_mpi_buffer(mpibufvec[BoundaryCopy3], 0, 0, sizeof(nix::float64) * num_vector_components);
+  set_mpi_buffer(mpibufvec[BoundaryCopy9], 0, 0,
+                 sizeof(nix::float64) * num_phase_directions * num_phase_branches);
   set_mpi_buffer(mpibufvec[BoundaryMomentAccum], 0, 0,
                  sizeof(nix::float64) * num_species * num_moment_components);
   set_mpi_buffer(mpibufvec[BoundaryMomentCopy], 0, 0,
@@ -274,6 +276,13 @@ void validate_rank4_mode(const nix::Array4D<nix::float64>& array, BoundaryMode m
 void validate_rank5_mode(const nix::Array5D<nix::float64>& array, BoundaryMode mode,
                          int num_species)
 {
+  if (mode == BoundaryCopy9) {
+    if (array.shape()[3] != static_cast<size_t>(num_phase_directions) ||
+        array.shape()[4] != static_cast<size_t>(num_phase_branches)) {
+      throw std::invalid_argument("rank-5 Hybrid boundary shape does not match phase mode");
+    }
+    return;
+  }
   if (mode != BoundaryMomentAccum && mode != BoundaryMomentCopy) {
     throw std::invalid_argument("invalid rank-5 Hybrid boundary mode");
   }
@@ -319,7 +328,7 @@ void HybridChunk::boundary_pack(nix::Array5D<nix::float64>& array, BoundaryMode 
     auto halo = nix::XtensorHaloMoment3D<HybridChunk>(array, *this);
     pack_bc_exchange(mpibufvec[mode], halo);
   } else {
-    auto halo = MomentCopyHalo3D<HybridChunk>(array, *this);
+    auto halo = Rank5CopyHalo3D<HybridChunk>(array, *this);
     pack_bc_exchange(mpibufvec[mode], halo);
   }
 }
@@ -331,7 +340,7 @@ void HybridChunk::boundary_unpack(nix::Array5D<nix::float64>& array, BoundaryMod
     auto halo = nix::XtensorHaloMoment3D<HybridChunk>(array, *this);
     unpack_bc_exchange(mpibufvec[mode], halo);
   } else {
-    auto halo = MomentCopyHalo3D<HybridChunk>(array, *this);
+    auto halo = Rank5CopyHalo3D<HybridChunk>(array, *this);
     unpack_bc_exchange(mpibufvec[mode], halo);
   }
 }
@@ -343,7 +352,7 @@ void HybridChunk::boundary_begin(nix::Array5D<nix::float64>& array, BoundaryMode
     auto halo = nix::XtensorHaloMoment3D<HybridChunk>(array, *this);
     begin_bc_exchange(mpibufvec[mode], halo);
   } else {
-    auto halo = MomentCopyHalo3D<HybridChunk>(array, *this);
+    auto halo = Rank5CopyHalo3D<HybridChunk>(array, *this);
     begin_bc_exchange(mpibufvec[mode], halo);
   }
 }
@@ -355,7 +364,7 @@ void HybridChunk::boundary_end(nix::Array5D<nix::float64>& array, BoundaryMode m
     auto halo = nix::XtensorHaloMoment3D<HybridChunk>(array, *this);
     end_bc_exchange(mpibufvec[mode], halo);
   } else {
-    auto halo = MomentCopyHalo3D<HybridChunk>(array, *this);
+    auto halo = Rank5CopyHalo3D<HybridChunk>(array, *this);
     end_bc_exchange(mpibufvec[mode], halo);
   }
 }

@@ -104,6 +104,10 @@ void run_boundary_test(const HybridTestGrid& grid)
   exchange_copy(*context.chunk, data.background_cell, hybrid::BoundaryCopy3);
   verify_copy(data.background_cell, context, data);
 
+  fill_copy_interior(data.phase_cell, data, get_mpi_rank());
+  exchange_copy(*context.chunk, data.phase_cell, hybrid::BoundaryCopy9);
+  verify_copy(data.phase_cell, context, data);
+
   fill_copy_interior(data.moment_kinetic, data, get_mpi_rank());
   exchange_copy(*context.chunk, data.moment_kinetic, hybrid::BoundaryMomentCopy);
   verify_copy(data.moment_kinetic, context, data);

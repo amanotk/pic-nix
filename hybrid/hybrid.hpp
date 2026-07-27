@@ -74,6 +74,7 @@ enum BoundaryMode {
   BoundaryCopy10,
   BoundaryCopy6,
   BoundaryCopy3,
+  BoundaryCopy9,
   BoundaryMomentAccum,
   BoundaryMomentCopy,
   BoundaryParticle,

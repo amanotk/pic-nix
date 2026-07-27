@@ -387,9 +387,9 @@ void HybridApplication::push()
     for (auto& chunk_ptr : chunkvec) {
       auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
       auto  data  = chunk.get_internal_data();
-      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+      for (int iz = 0; iz < static_cast<int>(data.phase_cell.shape()[0]); ++iz) {
+        for (int iy = 0; iy < static_cast<int>(data.phase_cell.shape()[1]); ++iy) {
+          for (int ix = 0; ix < static_cast<int>(data.phase_cell.shape()[2]); ++ix) {
             engine::FluidState  local_fluid = {};
             engine::FieldState  local_field = {};
             engine::VectorState local_bg    = {};
@@ -427,13 +427,26 @@ void HybridApplication::push()
       }
     }
 
+    for (auto& chunk_ptr : chunkvec) {
+      auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+      auto  data  = chunk.get_internal_data();
+      chunk.boundary_pack(data.phase_cell, BoundaryCopy9);
+      chunk.boundary_begin(data.phase_cell, BoundaryCopy9);
+    }
+    for (auto& chunk_ptr : chunkvec) {
+      auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+      auto  data  = chunk.get_internal_data();
+      chunk.boundary_end(data.phase_cell, BoundaryCopy9);
+      chunk.boundary_unpack(data.phase_cell, BoundaryCopy9);
+    }
+
     // Interpolate phase_cell → phase_face (max of two adjacent cells per direction)
     for (auto& chunk_ptr : chunkvec) {
       auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
       auto  data  = chunk.get_internal_data();
       // x-direction faces
-      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+      for (int iz = 0; iz < static_cast<int>(data.phase_face.shape()[0]); ++iz) {
+        for (int iy = 0; iy < static_cast<int>(data.phase_face.shape()[1]); ++iy) {
           for (int ix = data.Lbx - 1; ix <= data.Ubx; ++ix) {
             const auto left                   = data.phase_cell(iz, iy, ix, 0, 0);
             const auto right                  = data.phase_cell(iz, iy, ix + 1, 0, 0);
@@ -444,9 +457,9 @@ void HybridApplication::push()
         }
       }
       // y-direction faces
-      for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iz = 0; iz < static_cast<int>(data.phase_face.shape()[0]); ++iz) {
         for (int iy = data.Lby - 1; iy <= data.Uby; ++iy) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          for (int ix = 0; ix < static_cast<int>(data.phase_face.shape()[2]); ++ix) {
             data.phase_face(iz, iy, ix, 1, 0) =
                 std::max(data.phase_cell(iz, iy, ix, 1, 0), data.phase_cell(iz, iy + 1, ix, 1, 0));
             data.phase_face(iz, iy, ix, 1, 1) =
@@ -456,8 +469,8 @@ void HybridApplication::push()
       }
       // z-direction faces
       for (int iz = data.Lbz - 1; iz <= data.Ubz; ++iz) {
-        for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+        for (int iy = 0; iy < static_cast<int>(data.phase_face.shape()[1]); ++iy) {
+          for (int ix = 0; ix < static_cast<int>(data.phase_face.shape()[2]); ++ix) {
             data.phase_face(iz, iy, ix, 2, 0) =
                 std::max(data.phase_cell(iz, iy, ix, 2, 0), data.phase_cell(iz + 1, iy, ix, 2, 0));
             data.phase_face(iz, iy, ix, 2, 1) =
@@ -474,102 +487,73 @@ void HybridApplication::push()
         break;
 
       if (engine::pcc2_is_field_stage(stage)) {
-        // --- Field update (push_field) ---
+        // Reconstruct cell states to faces and compute independent directional HLL fluxes.
+        for (auto& chunk_ptr : chunkvec) {
+          auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+          engine::compute_mc2_face_fluxes(data, dt, fluid_parameters);
+          engine::compute_mc2_edge_electric(data);
+        }
+
+        // Edge electric values need two ghost cells for the Lb-1 CT update.
         for (auto& chunk_ptr : chunkvec) {
           auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
           auto  data  = chunk.get_internal_data();
+          chunk.boundary_pack(data.field_flux, BoundaryCopy6);
+          chunk.boundary_begin(data.field_flux, BoundaryCopy6);
+        }
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_end(data.field_flux, BoundaryCopy6);
+          chunk.boundary_unpack(data.field_flux, BoundaryCopy6);
+        }
 
-          // MC2 flux for all 3 directions
-          for (int dir = 0; dir < num_phase_directions; ++dir) {
-            const int Lb1 = (dir == 0) ? data.Lbx - 1 : (dir == 1) ? data.Lby - 1 : data.Lbz - 1;
-            const int Ub1 = (dir == 0) ? data.Ubx + 1 : (dir == 1) ? data.Uby + 1 : data.Ubz + 1;
-            const int Lb2 = (dir == 0) ? data.Lbx : (dir == 1) ? data.Lby : data.Lbz;
-            const int Ub2 = (dir == 0) ? data.Ubx : (dir == 1) ? data.Uby : data.Ubz;
-
-            for (int iz = (dir == 2) ? Lb1 : data.Lbz; iz <= ((dir == 2) ? Ub1 : data.Ubz); ++iz) {
-              for (int iy = (dir == 1) ? Lb1 : data.Lby; iy <= ((dir == 1) ? Ub1 : data.Uby);
-                   ++iy) {
-                for (int ix = (dir == 0) ? Lb1 : data.Lbx; ix <= ((dir == 0) ? Ub1 : data.Ubx);
-                     ++ix) {
-                  // Read fluid/field at left and right cells
-                  const int liz = (dir == 2) ? iz : iz;
-                  const int riz = (dir == 2) ? iz + 1 : iz;
-                  const int liy = (dir == 1) ? iy : iy;
-                  const int riy = (dir == 1) ? iy + 1 : iy;
-                  const int lix = (dir == 0) ? ix : ix;
-                  const int rix = (dir == 0) ? ix + 1 : ix;
-
-                  const nix::float64 phase_max = data.phase_face(iz, iy, ix, dir, 0);
-                  const nix::float64 phase_min = data.phase_face(iz, iy, ix, dir, 1);
-
-                  engine::FluidState  left_f = {}, right_f = {};
-                  engine::FieldState  left_eb = {}, right_eb = {};
-                  engine::VectorState bg = {};
-                  for (int c = 0; c < num_fluid_components; ++c) {
-                    left_f[c]  = data.work_fluid(liz, liy, lix, c);
-                    right_f[c] = data.work_fluid(riz, riy, rix, c);
-                  }
-                  for (int c = 0; c < num_field_components; ++c) {
-                    left_eb[c]  = data.work_field_cell(liz, liy, lix, c);
-                    right_eb[c] = data.work_field_cell(riz, riy, rix, c);
-                  }
-                  for (int c = 0; c < num_vector_components; ++c) {
-                    bg[c] = data.background_cell(liz, liy, lix, c);
-                  }
-
-                  // MC2 reconstruct each component (fluid + relevant field)
-                  // Per legacy, x-dir fluids: uc-1,uc,uc+1 → fl,fr
-                  // For now, simple interpolation (no limiter) since cells are uniform
-                  engine::FluidState fluid_left_rec  = left_f;
-                  engine::FluidState fluid_right_rec = right_f;
-                  engine::FieldState field_left_rec  = left_eb;
-                  engine::FieldState field_right_rec = right_eb;
-
-                  // HLL flux
-                  const auto flux = engine::hll_fluid_flux(
-                      dir, fluid_left_rec, field_left_rec, fluid_right_rec, field_right_rec, bg,
-                      phase_max, phase_min, dt, fluid_parameters);
-
-                  for (int c = 0; c < num_conserved_components; ++c) {
-                    data.fluid_flux(iz, iy, ix, dir, c) = flux.flux[c];
-                  }
-                  for (int c = 0; c < num_field_components; ++c) {
-                    data.solver_field_x(iz, iy, ix, c) = flux.field[c];
-                  }
+        for (auto& chunk_ptr : chunkvec) {
+          auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+          for (int iz = data.Lbz - 1; iz <= data.Ubz; ++iz) {
+            for (int iy = data.Lby - 1; iy <= data.Uby; ++iy) {
+              for (int ix = data.Lbx - 1; ix <= data.Ubx; ++ix) {
+                engine::FieldState baseline = {}, edge = {}, x_minus = {}, y_minus = {},
+                                   z_minus = {};
+                for (int component = 0; component < num_field_components; ++component) {
+                  baseline[component] = data.field_staggered(iz, iy, ix, component);
+                  edge[component]     = data.field_flux(iz, iy, ix, component);
+                  x_minus[component]  = data.field_flux(iz, iy, ix - 1, component);
+                  y_minus[component]  = data.field_flux(iz, iy - 1, ix, component);
+                  z_minus[component]  = data.field_flux(iz - 1, iy, ix, component);
+                }
+                for (int component = 0; component < num_vector_components; ++component) {
+                  data.work_field_staggered(iz, iy, ix, component) = edge[component];
+                }
+                const auto magnetic = engine::constrained_transport_magnetic(
+                    baseline, edge, x_minus, y_minus, z_minus, grid_spacing, light_speed, dt);
+                for (int component = 0; component < num_vector_components; ++component) {
+                  data.work_field_staggered(iz, iy, ix, field_component::magnetic_x + component) =
+                      magnetic[component];
                 }
               }
             }
           }
+        }
 
-          // CT magnetic update and cell-B reconstruction
-          for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-            for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-              for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-                // Copy edge E from flux
-                for (int c = 0; c < 3; ++c) {
-                  data.work_field_staggered(iz, iy, ix, c) = data.solver_field_x(iz, iy, ix, c);
-                }
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_pack(data.work_field_staggered, BoundaryCopy6);
+          chunk.boundary_begin(data.work_field_staggered, BoundaryCopy6);
+        }
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_end(data.work_field_staggered, BoundaryCopy6);
+          chunk.boundary_unpack(data.work_field_staggered, BoundaryCopy6);
+        }
 
-                // Constrained transport for B
-                engine::FieldState base_stag = {};
-                engine::FieldState edge_e    = {};
-                engine::FieldState x_e       = {};
-                engine::FieldState y_e       = {};
-                engine::FieldState z_e       = {};
-                for (int c = 0; c < num_field_components; ++c) {
-                  base_stag[c] = data.field_staggered(iz, iy, ix, c);
-                  edge_e[c]    = data.solver_field_x(iz, iy, ix, c);
-                  x_e[c]       = data.solver_field_x(iz, iy, ix - 1, c);
-                  y_e[c]       = data.solver_field_x(iz, iy - 1, ix, c);
-                  z_e[c]       = data.solver_field_x(iz - 1, iy, ix, c);
-                }
-                const auto new_b = engine::constrained_transport_magnetic(
-                    base_stag, edge_e, x_e, y_e, z_e, grid_spacing, light_speed, dt);
-                data.work_field_staggered(iz, iy, ix, field_component::magnetic_x) = new_b[0];
-                data.work_field_staggered(iz, iy, ix, field_component::magnetic_y) = new_b[1];
-                data.work_field_staggered(iz, iy, ix, field_component::magnetic_z) = new_b[2];
-
-                // Cell-centered B from face values
+        for (auto& chunk_ptr : chunkvec) {
+          auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+          for (int iz = data.Lbz - 1; iz <= data.Ubz + 1; ++iz) {
+            for (int iy = data.Lby - 1; iy <= data.Uby + 1; ++iy) {
+              for (int ix = data.Lbx - 1; ix <= data.Ubx + 1; ++ix) {
                 data.work_field_cell(iz, iy, ix, field_component::magnetic_x) =
                     engine::magnetic_face_to_cell(
                         field_component::magnetic_x,
@@ -585,13 +569,10 @@ void HybridApplication::push()
                         field_component::magnetic_z,
                         data.work_field_staggered(iz, iy, ix, field_component::magnetic_z),
                         data.work_field_staggered(iz - 1, iy, ix, field_component::magnetic_z));
-
-                // Cell-centered E: keep previous SSOR solution as initial guess (do not overwrite)
               }
             }
           }
 
-          // Curl_B
           for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
             for (int iy = data.Lby; iy <= data.Uby; ++iy) {
               for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
@@ -613,7 +594,6 @@ void HybridApplication::push()
             }
           }
 
-          // Conservative update + primitive recovery
           for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
             for (int iy = data.Lby; iy <= data.Uby; ++iy) {
               for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
@@ -650,7 +630,6 @@ void HybridApplication::push()
                 const auto vc = engine::advance_conserved_fluid(
                     uc, fx_minus, fx_plus, fy_minus, fy_plus, fz_minus, fz_plus, rh, flux_spacing);
 
-                // Recover primitive
                 engine::FieldState  work_field = {};
                 engine::VectorState curl_vec   = {};
                 for (int c = 0; c < num_field_components; ++c) {
@@ -669,7 +648,6 @@ void HybridApplication::push()
           }
         }
 
-        // BC halo exchanges for work_fluid and work_field_cell
         for (auto& chunk_ptr : chunkvec) {
           auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
           auto  data  = chunk.get_internal_data();

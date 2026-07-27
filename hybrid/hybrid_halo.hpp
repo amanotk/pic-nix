@@ -11,7 +11,7 @@
 namespace hybrid
 {
 template <typename Chunk>
-class MomentCopyHalo3D : public nix::Halo3D<nix::Array5D<nix::float64>, Chunk, true>
+class Rank5CopyHalo3D : public nix::Halo3D<nix::Array5D<nix::float64>, Chunk, true>
 {
 public:
   using Base = nix::Halo3D<nix::Array5D<nix::float64>, Chunk, true>;
