@@ -147,4 +147,91 @@ if(TARGET hybrid_beam)
 
   add_hybrid_short_run_test(test_hybrid_beam_short_run_np1 1 0.04)
   add_hybrid_short_run_test(test_hybrid_beam_short_run_np2 2 0.04)
+
+  # --- Restart test ---
+  function(add_hybrid_restart_test name nproc)
+    set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
+    set(checkpoint_dir ${tmpdir}/checkpoint)
+    set(save_dir ${tmpdir}/save)
+    set(resume_dir ${tmpdir}/resume)
+    set(direct_dir ${tmpdir}/direct)
+    add_test(NAME ${name}_prepare COMMAND ${CMAKE_COMMAND} -E make_directory ${save_dir} ${resume_dir} ${direct_dir})
+    add_test(
+      NAME ${name}_save
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.01
+        --save ${checkpoint_dir}
+    )
+    add_test(
+      NAME ${name}_resume
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.02
+        --load ${checkpoint_dir}
+    )
+    add_test(
+      NAME ${name}_direct
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.02
+    )
+    set_tests_properties(${name}_save
+      PROPERTIES
+        DEPENDS ${name}_prepare
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${save_dir}
+    )
+    set_tests_properties(${name}_resume
+      PROPERTIES
+        DEPENDS ${name}_save
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${resume_dir}
+    )
+    set_tests_properties(${name}_direct
+      PROPERTIES
+        DEPENDS ${name}_resume
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${direct_dir}
+    )
+  endfunction()
+
+  add_hybrid_restart_test(test_hybrid_beam_restart_np1 1)
+  add_hybrid_restart_test(test_hybrid_beam_restart_np2 2)
+
+  # --- Rebalance path test (interval=1, exercises communicator rebinding) ---
+  function(add_hybrid_rebalance_test name nproc)
+    set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
+    set(rebalance_toml ${tmpdir}/config.toml)
+    add_test(NAME ${name}_prepare COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir})
+    add_test(
+      NAME ${name}_write_config
+      COMMAND
+        ${CMAKE_COMMAND} -E
+        copy ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config_rebalance.toml ${rebalance_toml}
+    )
+    add_test(
+      NAME ${name}_run
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${rebalance_toml} -t 0.02
+    )
+    set_tests_properties(${name}_run
+      PROPERTIES
+        DEPENDS ${name}_write_config
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${tmpdir}
+    )
+  endfunction()
+
+  add_hybrid_rebalance_test(test_hybrid_beam_rebalance_np1 1)
+  add_hybrid_rebalance_test(test_hybrid_beam_rebalance_np2 2)
 endif()
