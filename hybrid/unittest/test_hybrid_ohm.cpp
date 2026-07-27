@@ -113,5 +113,5 @@ TEST_CASE("SSOR2 convergence check uses relative error tolerance")
 {
   REQUIRE_FALSE(hybrid::engine::ssor2_converged(100.0, 1.0, 1.0e-5, 5, 100));
   REQUIRE(hybrid::engine::ssor2_converged(1.0e-12, 1.0, 1.0e-5, 5, 100));
-  REQUIRE(hybrid::engine::ssor2_converged(100.0, 1.0, 1.0e-5, 100, 100));
+  REQUIRE_FALSE(hybrid::engine::ssor2_converged(100.0, 1.0, 1.0e-5, 100, 100));
 }

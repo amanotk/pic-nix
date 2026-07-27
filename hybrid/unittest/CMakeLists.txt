@@ -79,7 +79,8 @@ function(add_hybrid_mpi_test name target nproc)
   )
 endfunction()
 
-foreach(target IN ITEMS test_hybrid_boundary test_hybrid_particle_transfer test_hybrid_moment_parallel)
+foreach(target IN ITEMS test_hybrid_boundary test_hybrid_particle_transfer test_hybrid_moment_parallel
+                        test_hybrid_ssor2_parallel)
   add_executable(${target} ${target}.cpp)
   target_link_libraries(${target} PRIVATE Catch2::Catch2 hybrid_obj_parallel hybrid)
   add_hybrid_mpi_test(${target}_np2 ${target} 2)

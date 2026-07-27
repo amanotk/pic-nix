@@ -11,15 +11,23 @@ constexpr double tolerance = 1.0e-13;
 
 TEST_CASE("fluid_to_moment matches legacy combined fluid moment")
 {
-  const hybrid::engine::FluidState fluid = {1.2, 0.3,  -0.2, 0.4,  0.9485643171120767,
-                                            0.8, -0.1, 0.5,  -0.3, 0.6};
-  const auto                       m     = hybrid::engine::fluid_to_moment(fluid);
-  REQUIRE(m[hybrid::moment_component::density] == Catch::Approx(2.0));
-  REQUIRE(m[hybrid::moment_component::momentum_x] == Catch::Approx(1.2 * 0.3 + 0.8 * (-0.1)));
+  const hybrid::engine::FluidState fluid        = {1.2, 0.3,  -0.2, 0.4,  0.9485643171120767,
+                                                   0.8, -0.1, 0.5,  -0.3, 0.6};
+  const double                     electron_qm  = -2;
+  const double                     ion_qm       = 0.5;
+  const double                     electron_qm2 = nix::math::pi4 * electron_qm * electron_qm;
+  const double                     ion_qm2      = nix::math::pi4 * ion_qm * ion_qm;
+  const auto                       m = hybrid::engine::fluid_to_moment(fluid, ion_qm, electron_qm);
+  REQUIRE(m[hybrid::moment_component::density] ==
+          Catch::Approx(electron_qm2 * 1.2 + ion_qm2 * 0.8));
+  REQUIRE(m[hybrid::moment_component::momentum_x] ==
+          Catch::Approx(electron_qm2 * 1.2 * 0.3 + ion_qm2 * 0.8 * (-0.1)));
   REQUIRE(m[hybrid::moment_component::stress_xx] ==
-          Catch::Approx(1.2 * 0.3 * 0.3 + 0.8 * (-0.1) * (-0.1) + 0.9485643171120767 + 0.6));
+          Catch::Approx(nix::math::pi4 * electron_qm * (1.2 * 0.3 * 0.3 + 0.9485643171120767) +
+                        nix::math::pi4 * ion_qm * (0.8 * (-0.1) * (-0.1) + 0.6)));
   REQUIRE(m[hybrid::moment_component::stress_xy] ==
-          Catch::Approx(1.2 * 0.3 * (-0.2) + 0.8 * (-0.1) * 0.5));
+          Catch::Approx(nix::math::pi4 * electron_qm * 1.2 * 0.3 * (-0.2) +
+                        nix::math::pi4 * ion_qm * 0.8 * (-0.1) * 0.5));
 }
 
 TEST_CASE("accelerated fluid + kinetic moment accumulation fills ohm_moment")
@@ -35,16 +43,28 @@ TEST_CASE("accelerated fluid + kinetic moment accumulation fills ohm_moment")
 
   kin(1, 1, 1, 0, hybrid::moment_component::density)    = 0.1;
   kin(1, 1, 1, 0, hybrid::moment_component::momentum_x) = 0.02;
+  kin(1, 1, 1, 0, hybrid::moment_component::stress_xx)  = 0.03;
   kin(1, 1, 1, 1, hybrid::moment_component::density)    = 0.2;
+  kin(1, 1, 1, 1, hybrid::moment_component::stress_xx)  = 0.04;
 
-  const hybrid::engine::FluidState fluid = {1.0, 0.5, 0, 0, 0.3, 0.7, 0.2, 0, 0, 0.4};
-  hybrid::engine::accumulate_fluid_moment(fluid, ohm, 1, 1, 1);
-  hybrid::engine::accumulate_kinetic_moments(kin, ohm, 1, 1, 1, 2);
+  const hybrid::engine::FluidState fluid       = {1.0, 0.5, 0, 0, 0.3, 0.7, 0.2, 0, 0, 0.4};
+  const double                     electron_qm = -2;
+  const double                     ion_qm      = 0.5;
+  hybrid::engine::accumulate_fluid_moment(fluid, ion_qm, electron_qm, ohm, 1, 1, 1);
+  hybrid::engine::accumulate_kinetic_moments(kin, ohm, 1, 1, 1, {1.5, -0.25});
 
-  REQUIRE(ohm(1, 1, 1, hybrid::moment_component::density) == Catch::Approx(1.7 + 0.1 + 0.2));
+  REQUIRE(
+      ohm(1, 1, 1, hybrid::moment_component::density) ==
+      Catch::Approx(nix::math::pi4 * (4 * 1.0 + 0.25 * 0.7 + 1.5 * 1.5 * 0.1 + 0.25 * 0.25 * 0.2)));
   REQUIRE(ohm(1, 1, 1, hybrid::moment_component::momentum_x) ==
-          Catch::Approx(1.0 * 0.5 + 0.7 * 0.2 + 0.02));
+          Catch::Approx(nix::math::pi4 * (4 * 1.0 * 0.5 + 0.25 * 0.7 * 0.2 + 1.5 * 1.5 * 0.02)));
   REQUIRE(ohm(1, 1, 1, hybrid::moment_component::momentum_y) == Catch::Approx(0.0));
+  REQUIRE(
+      ohm(1, 1, 1, hybrid::moment_component::stress_xx) ==
+      Catch::Approx(nix::math::pi4 * (-2 * (1.0 * 0.5 * 0.5 + 0.3) + 0.5 * (0.7 * 0.2 * 0.2 + 0.4) +
+                                      1.5 * 0.03 - 0.25 * 0.04)));
+  REQUIRE_THROWS_AS(hybrid::engine::accumulate_kinetic_moments(kin, ohm, 1, 1, 1, {1.5}),
+                    std::invalid_argument);
 }
 
 TEST_CASE("solve_ssor2_electric adapts DataContainer arrays to solver workspace")
@@ -56,11 +76,9 @@ TEST_CASE("solve_ssor2_electric adapts DataContainer arrays to solver workspace"
   constexpr int total_ny    = interior_ny + 2;
   constexpr int total_nx    = interior_nx + 2;
 
-  nix::Array4D<nix::float64> field     = xt::zeros<nix::float64>({total_nz, total_ny, total_nx, 6});
-  nix::Array4D<nix::float64> source    = xt::zeros<nix::float64>({total_nz, total_ny, total_nx, 4});
-  nix::Array4D<nix::float64> resistive = xt::zeros<nix::float64>({total_nz, total_ny, total_nx, 3});
-
-  nix::float64 coeff = 1.5;
+  nix::Array4D<nix::float64> field  = xt::zeros<nix::float64>({total_nz, total_ny, total_nx, 6});
+  nix::Array4D<nix::float64> source = xt::zeros<nix::float64>({total_nz, total_ny, total_nx, 4});
+  nix::float64               coeff  = 1.5;
   for (int iz = 0; iz < total_nz; ++iz) {
     for (int iy = 0; iy < total_ny; ++iy) {
       for (int ix = 0; ix < total_nx; ++ix) {
@@ -103,9 +121,11 @@ TEST_CASE("solve_ssor2_electric adapts DataContainer arrays to solver workspace"
     }
   }
 
-  hybrid::engine::solve_ssor2_electric(field, source, resistive, 1, interior_nx, 1, interior_ny, 1,
-                                       interior_nz, 20.0, 0.5, 2.0, 4.0, 100, 1.0e-5);
+  const auto stats =
+      hybrid::engine::solve_ssor2_electric(field, source, 1, interior_nx, 1, interior_ny, 1,
+                                           interior_nz, 20.0, 0.5, 2.0, 4.0, 100, 1.0e-5);
 
+  REQUIRE(stats.converged);
   for (int iz = 1; iz <= interior_nz; ++iz) {
     for (int iy = 1; iy <= interior_ny; ++iy) {
       for (int ix = 1; ix <= interior_nx; ++ix) {

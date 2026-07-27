@@ -8,16 +8,11 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <stdexcept>
 #include <vector>
 
 namespace hybrid::engine
 {
-struct Ssor2Stats {
-  int          iterations = 0;
-  nix::float64 residual   = 0;
-  bool         converged  = false;
-};
-
 struct Ssor2Config {
   int          max_iterations = 100;
   nix::float64 tolerance      = 1.0e-5;
@@ -26,7 +21,6 @@ struct Ssor2Config {
 struct Ssor2Workspace {
   nix::Array4D<nix::float64>& field;
   nix::Array4D<nix::float64>& source;
-  nix::Array4D<nix::float64>& resistive;
   int                         Lbx;
   int                         Ubx;
   int                         Lby;
@@ -132,23 +126,99 @@ ssor2_local_residual(const Ssor2Workspace& workspace, const OhmSolverCoefficient
   return {error_sum, norm_sum};
 }
 
-inline Ssor2Stats solve_ssor2(Ssor2Workspace& workspace, const OhmSolverCoefficients& coeff,
-                              const Ssor2Config& config)
+class LegacySsor2 final : public OhmSolver
 {
-  Ssor2Stats stats = {};
-
-  for (stats.iterations = 1; stats.iterations <= config.max_iterations; ++stats.iterations) {
-    ssor2_forward_sweep(workspace, coeff);
-    ssor2_backward_sweep(workspace, coeff);
-
-    auto [error_sum, norm_sum] = ssor2_local_residual(workspace, coeff);
-    stats.residual             = std::sqrt(error_sum) / (std::sqrt(norm_sum) + 1.0e-32);
-    if (stats.residual < config.tolerance) {
-      stats.converged = true;
-      break;
-    }
+public:
+  LegacySsor2(OhmSolverCoefficients coefficients, Ssor2Config config)
+      : coefficients_(coefficients), config_(config)
+  {
   }
-  return stats;
+
+  OhmSolveStats solve(OhmSolveContext& context) override
+  {
+    OhmSolveStats stats = {};
+    for (int iteration = 1; iteration <= config_.max_iterations; ++iteration) {
+      context.for_each_system([&](OhmSystemView& system) {
+        Ssor2Workspace workspace = {system.electric_field,
+                                    system.source,
+                                    system.Lbx,
+                                    system.Ubx,
+                                    system.Lby,
+                                    system.Uby,
+                                    system.Lbz,
+                                    system.Ubz};
+        ssor2_forward_sweep(workspace, coefficients_);
+      });
+      context.exchange_electric();
+      context.for_each_system([&](OhmSystemView& system) {
+        Ssor2Workspace workspace = {system.electric_field,
+                                    system.source,
+                                    system.Lbx,
+                                    system.Ubx,
+                                    system.Lby,
+                                    system.Uby,
+                                    system.Lbz,
+                                    system.Ubz};
+        ssor2_backward_sweep(workspace, coefficients_);
+      });
+      context.exchange_electric();
+
+      nix::float64 local_error_sum = 0;
+      nix::float64 local_norm_sum  = 0;
+      context.for_each_system([&](OhmSystemView& system) {
+        Ssor2Workspace workspace         = {system.electric_field,
+                                            system.source,
+                                            system.Lbx,
+                                            system.Ubx,
+                                            system.Lby,
+                                            system.Uby,
+                                            system.Lbz,
+                                            system.Ubz};
+        const auto [error_sum, norm_sum] = ssor2_local_residual(workspace, coefficients_);
+        local_error_sum += error_sum;
+        local_norm_sum += norm_sum;
+      });
+      const auto [error_sum, norm_sum] = context.global_reduce(local_error_sum, local_norm_sum);
+      stats.iterations                 = iteration;
+      stats.residual_norm              = std::sqrt(error_sum);
+      stats.source_norm                = std::sqrt(norm_sum);
+      stats.relative_residual          = stats.residual_norm / (stats.source_norm + 1.0e-32);
+      if (!std::isfinite(stats.relative_residual)) {
+        throw std::runtime_error("Hybrid SSOR2 produced a non-finite residual");
+      }
+      if (stats.relative_residual < config_.tolerance) {
+        stats.converged = true;
+      }
+      context.record_iteration(iteration, stats);
+      if (stats.converged) {
+        return stats;
+      }
+    }
+    return stats;
+  }
+
+private:
+  OhmSolverCoefficients coefficients_;
+  Ssor2Config           config_;
+};
+
+inline OhmSolveStats solve_ssor2(Ssor2Workspace& workspace, const OhmSolverCoefficients& coeff,
+                                 const Ssor2Config& config)
+{
+  OhmSolveContext context = {
+      [&](const OhmSystemOperation& operation) {
+        OhmSystemView system = {workspace.field, workspace.source, workspace.Lbx, workspace.Ubx,
+                                workspace.Lby,   workspace.Uby,    workspace.Lbz, workspace.Ubz};
+        operation(system);
+      },
+      []() {},
+      [](nix::float64 error_sum, nix::float64 norm_sum) {
+        return std::pair{error_sum, norm_sum};
+      },
+      [](int, const OhmSolveStats&) {},
+  };
+  LegacySsor2 solver(coeff, config);
+  return solver.solve(context);
 }
 } // namespace hybrid::engine
 

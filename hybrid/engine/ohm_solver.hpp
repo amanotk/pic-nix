@@ -3,9 +3,48 @@
 #define _HYBRID_ENGINE_OHM_SOLVER_HPP_
 
 #include "engine/ohm_source.hpp"
+#include "nix/array_types.hpp"
+
+#include <functional>
+#include <utility>
 
 namespace hybrid::engine
 {
+struct OhmSolveStats {
+  int          iterations        = 0;
+  nix::float64 residual_norm     = 0;
+  nix::float64 source_norm       = 0;
+  nix::float64 relative_residual = 0;
+  bool         converged         = false;
+};
+
+struct OhmSystemView {
+  nix::Array4D<nix::float64>& electric_field;
+  nix::Array4D<nix::float64>& source;
+  int                         Lbx;
+  int                         Ubx;
+  int                         Lby;
+  int                         Uby;
+  int                         Lbz;
+  int                         Ubz;
+};
+
+using OhmSystemOperation = std::function<void(OhmSystemView&)>;
+
+struct OhmSolveContext {
+  std::function<void(const OhmSystemOperation&)> for_each_system;
+  std::function<void()>                          exchange_electric;
+  std::function<std::pair<nix::float64, nix::float64>(nix::float64, nix::float64)> global_reduce;
+  std::function<void(int, const OhmSolveStats&)>                                   record_iteration;
+};
+
+class OhmSolver
+{
+public:
+  virtual ~OhmSolver()                                  = default;
+  virtual OhmSolveStats solve(OhmSolveContext& context) = 0;
+};
+
 struct OhmSolverCoefficients {
   nix::float64 laplacian_x;
   nix::float64 laplacian_y;
@@ -53,9 +92,8 @@ inline nix::float64 ssor2_residual(const OhmSource& src, const nix::float64 eb,
 inline bool ssor2_converged(nix::float64 error_sum, nix::float64 norm_sum, nix::float64 tolerance,
                             int iteration, int max_iterations)
 {
-  if (iteration >= max_iterations) {
-    return true;
-  }
+  static_cast<void>(iteration);
+  static_cast<void>(max_iterations);
   const nix::float64 relative_error = std::sqrt(error_sum) / (std::sqrt(norm_sum) + 1.0e-32);
   return relative_error < tolerance;
 }

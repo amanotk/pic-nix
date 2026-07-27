@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace hybrid
 {
@@ -673,22 +674,15 @@ void HybridApplication::push()
         ++ohm_stage_index;
         bool ssor_converged        = false;
         int  ssor_total_iterations = 0;
+
         for (auto& chunk_ptr : chunkvec) {
-          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-          auto  data  = chunk.get_internal_data();
-
-          // Zero ohm_moment
-          for (int iz = 0; iz < static_cast<int>(data.ohm_moment.shape()[0]); ++iz) {
-            for (int iy = 0; iy < static_cast<int>(data.ohm_moment.shape()[1]); ++iy) {
-              for (int ix = 0; ix < static_cast<int>(data.ohm_moment.shape()[2]); ++ix) {
-                for (int c = 0; c < num_moment_components; ++c) {
-                  data.ohm_moment(iz, iy, ix, c) = 0;
-                }
-              }
-            }
+          auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+          data.ohm_moment.fill(0);
+          std::vector<nix::float64> kinetic_charge_to_mass;
+          kinetic_charge_to_mass.reserve(data.particles.size());
+          for (const auto& particle : data.particles) {
+            kinetic_charge_to_mass.push_back(particle->q / particle->m);
           }
-
-          // Accumulate fluid moments
           for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
             for (int iy = data.Lby; iy <= data.Uby; ++iy) {
               for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
@@ -696,22 +690,31 @@ void HybridApplication::push()
                 for (int c = 0; c < num_fluid_components; ++c) {
                   wf[c] = data.work_fluid(iz, iy, ix, c);
                 }
-                engine::accumulate_fluid_moment(wf, data.ohm_moment, iz, iy, ix);
-              }
-            }
-          }
-
-          // Add kinetic moments
-          for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
-            for (int iy = data.Lby; iy <= data.Uby; ++iy) {
-              for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+                engine::accumulate_fluid_moment(wf, phase_params.ion_charge_to_mass,
+                                                phase_params.electron_charge_to_mass,
+                                                data.ohm_moment, iz, iy, ix);
                 engine::accumulate_kinetic_moments(data.moment_kinetic, data.ohm_moment, iz, iy, ix,
-                                                   data.num_species);
+                                                   kinetic_charge_to_mass);
               }
             }
           }
+        }
 
-          // Construct Ohm source (4 components: coeff, src_x, src_y, src_z)
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_pack(data.ohm_moment, BoundaryCopy10);
+          chunk.boundary_begin(data.ohm_moment, BoundaryCopy10);
+        }
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_end(data.ohm_moment, BoundaryCopy10);
+          chunk.boundary_unpack(data.ohm_moment, BoundaryCopy10);
+        }
+
+        for (auto& chunk_ptr : chunkvec) {
+          auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
           for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
             for (int iy = data.Lby; iy <= data.Uby; ++iy) {
               for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
@@ -744,99 +747,58 @@ void HybridApplication::push()
               }
             }
           }
+        }
 
-          // SSOR2 solve for E-field with sweep-level E-field exchanges
-          for (int ssor_iter = 1; ssor_iter <= ssor2_config.max_iterations; ++ssor_iter) {
-            // Forward sweep
-            for (auto& chunk_ptr : chunkvec) {
-              auto&                  chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto                   data  = chunk.get_internal_data();
-              engine::Ssor2Workspace ws    = {data.work_field_cell,
-                                              data.ohm_source,
-                                              data.resistive_field,
-                                              data.Lbx,
-                                              data.Ubx,
-                                              data.Lby,
-                                              data.Uby,
-                                              data.Lbz,
-                                              data.Ubz};
-              engine::ssor2_forward_sweep(ws, ssor2_coeff);
-            }
-            // E-field exchange after forward sweep (width 1)
-            for (auto& chunk_ptr : chunkvec) {
-              auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto  data  = chunk.get_internal_data();
-              chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
-              chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
-            }
-            for (auto& chunk_ptr : chunkvec) {
-              auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto  data  = chunk.get_internal_data();
-              chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
-              chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
-            }
-
-            // Backward sweep
-            for (auto& chunk_ptr : chunkvec) {
-              auto&                  chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto                   data  = chunk.get_internal_data();
-              engine::Ssor2Workspace ws    = {data.work_field_cell,
-                                              data.ohm_source,
-                                              data.resistive_field,
-                                              data.Lbx,
-                                              data.Ubx,
-                                              data.Lby,
-                                              data.Uby,
-                                              data.Lbz,
-                                              data.Ubz};
-              engine::ssor2_backward_sweep(ws, ssor2_coeff);
-            }
-            // E-field exchange after backward sweep (width 1)
-            for (auto& chunk_ptr : chunkvec) {
-              auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto  data  = chunk.get_internal_data();
-              chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
-              chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
-            }
-            for (auto& chunk_ptr : chunkvec) {
-              auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto  data  = chunk.get_internal_data();
-              chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
-              chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
-            }
-
-            // Local residual
-            nix::float64 error_sum = 0;
-            nix::float64 norm_sum  = 0;
-            for (auto& chunk_ptr : chunkvec) {
-              auto&                  chunk = static_cast<HybridChunk&>(*chunk_ptr);
-              auto                   data  = chunk.get_internal_data();
-              engine::Ssor2Workspace ws    = {data.work_field_cell,
-                                              data.ohm_source,
-                                              data.resistive_field,
-                                              data.Lbx,
-                                              data.Ubx,
-                                              data.Lby,
-                                              data.Uby,
-                                              data.Lbz,
-                                              data.Ubz};
-              auto [le, ln]                = engine::ssor2_local_residual(ws, ssor2_coeff);
-              error_sum += le;
-              norm_sum += ln;
-            }
-
-            const nix::float64 relative_error =
-                std::sqrt(error_sum) / (std::sqrt(norm_sum) + 1.0e-32);
-            ssor_log << "iter=" << ssor_iter << ", error=" << relative_error << "\n";
-            if (relative_error < ssor2_config.tolerance) {
-              ssor_converged = true;
-            }
-            if (relative_error < ssor2_config.tolerance ||
-                ssor_iter >= ssor2_config.max_iterations) {
-              ssor_total_iterations = ssor_iter;
-              break;
-            }
+        const auto exchange_electric = [&]() {
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
           }
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+          }
+        };
+        engine::OhmSolveContext solve_context = {
+            [&](const engine::OhmSystemOperation& operation) {
+              for (auto& chunk_ptr : chunkvec) {
+                auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+                engine::OhmSystemView system = {data.work_field_cell,
+                                                data.ohm_source,
+                                                data.Lbx,
+                                                data.Ubx,
+                                                data.Lby,
+                                                data.Uby,
+                                                data.Lbz,
+                                                data.Ubz};
+                operation(system);
+              }
+            },
+            exchange_electric,
+            [&](nix::float64 error_sum, nix::float64 norm_sum) {
+              const nix::float64 local_residual[2]  = {error_sum, norm_sum};
+              nix::float64       global_residual[2] = {};
+              MPI_Allreduce(local_residual, global_residual, 2, MPI_DOUBLE, MPI_SUM,
+                            MPI_COMM_WORLD);
+              return std::pair{global_residual[0], global_residual[1]};
+            },
+            [&](int iteration, const engine::OhmSolveStats& stats) {
+              ssor_log << "iter=" << iteration << ", error=" << stats.relative_residual << "\n";
+            },
+        };
+        engine::LegacySsor2 solver(ssor2_coeff, ssor2_config);
+        const auto          solve_stats = solver.solve(solve_context);
+        ssor_total_iterations           = solve_stats.iterations;
+        ssor_converged                  = solve_stats.converged;
+        ssor_log << "# Ohm stage " << ohm_stage_index << ": iterations=" << ssor_total_iterations
+                 << " converged=" << (ssor_converged ? "true" : "false") << "\n";
+        if (!ssor_converged) {
+          throw std::runtime_error("Hybrid SSOR2 failed to converge at Ohm stage " +
+                                   std::to_string(ohm_stage_index));
         }
 
         // Final E-field halo exchange after Ohm solve (width 2 per legacy)
@@ -871,9 +833,6 @@ void HybridApplication::push()
             chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
           }
         }
-
-        ssor_log << "# Ohm stage " << ohm_stage_index << ": iterations=" << ssor_total_iterations
-                 << " converged=" << (ssor_converged ? "true" : "false") << "\n";
       }
 
       if (engine::pcc2_is_average_stage(stage)) {
