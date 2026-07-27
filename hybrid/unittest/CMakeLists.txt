@@ -234,4 +234,29 @@ if(TARGET hybrid_beam)
 
   add_hybrid_rebalance_test(test_hybrid_beam_rebalance_np1 1)
   add_hybrid_rebalance_test(test_hybrid_beam_rebalance_np2 2)
+
+  # --- np4 variants (Cx=2,Cy=2,Cz=1) ---
+  function(add_hybrid_np4_test name nproc tmax)
+    set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
+    set(config ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config_np4.toml)
+    add_test(NAME ${name}_prepare COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir})
+    add_test(
+      NAME ${name}
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${config} -t ${tmax}
+    )
+    set_tests_properties(${name}
+      PROPERTIES
+        DEPENDS ${name}_prepare
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 120
+        WORKING_DIRECTORY ${tmpdir}
+    )
+  endfunction()
+
+  add_hybrid_np4_test(test_hybrid_beam_zero_step_np4 4 0)
+  add_hybrid_np4_test(test_hybrid_beam_one_step_np4 4 0.01)
+  add_hybrid_np4_test(test_hybrid_beam_short_run_np4 4 0.04)
 endif()

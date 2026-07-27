@@ -1,0 +1,39 @@
+[[diagnostic]]
+  name = 'none'
+  interval = 1
+
+[application]
+  basedir = ''
+
+  [application.log]
+    interval = 1
+
+  [application.rebalance]
+    interval = 100
+
+  [application.option]
+
+[parameter]
+  Nx = 8
+  Ny = 2
+  Nz = 2
+  Cx = 2
+  Cy = 2
+  Cz = 1
+  Ns = 2
+  cc = 1.0e+4
+  gamma = 1.666666666666667
+  delt = 0.01
+  delh = 0.25
+  Npc = 4
+  Mpc = 16
+  mie = 100.0
+  tie = 1.0
+  chi0 = 0.0
+  betae = 1.0
+  vcpa = 0.70710678118654757
+  vcpe = 0.70710678118654757
+  nb = 0.02
+  vbd = 10.0
+  vbpa = 0.70710678118654757
+  vbpe = 0.70710678118654757
