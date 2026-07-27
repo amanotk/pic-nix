@@ -461,12 +461,137 @@ void HybridChunk::setup(nix::json& config)
 
   allocate();
 
+  // --- Derive beam parameters from config ---
+  const bool         has_beam = config.contains("Npc") && config["Npc"].get<int>() > 0;
+  const int          Npc      = has_beam ? config["Npc"].get<int>() : 0;
+  const nix::float64 mie      = has_beam ? config.value("mie", 100.0) : 100.0;
+  const nix::float64 betae    = has_beam ? config.value("betae", 1.0) : 1.0;
+  const nix::float64 nb       = has_beam ? config.value("nb", 0.02) : 0.02;
+  const nix::float64 vcpa     = has_beam ? config.value("vcpa", 1.0) : 1.0;
+  const nix::float64 vcpe     = has_beam ? config.value("vcpe", 1.0) : 1.0;
+  const nix::float64 vbd      = has_beam ? config.value("vbd", 10.0) : 10.0;
+  const nix::float64 vbpa     = has_beam ? config.value("vbpa", 1.0) : 1.0;
+  const nix::float64 vbpe     = has_beam ? config.value("vbpe", 1.0) : 1.0;
+
+  const nix::float64 roe = 1.0 / mie;
+  const nix::float64 roi = 1.0 - nb;
+  const nix::float64 rob = nb;
+  const nix::float64 pre = betae;
+  const nix::float64 b0  = std::sqrt(nix::math::pi4);
+  const nix::float64 bx  = 1.0 * b0;
+
+  const nix::float64 qe      = -light_speed / std::sqrt(nix::math::pi4);
+  const nix::float64 me      = 1.0 / mie;
+  const nix::float64 qme     = qe / me;
+  const nix::float64 qmk_ion = -qme / mie;
+
+  const std::array<nix::float64, 2> species_mass = {roi / std::max(1, Npc), rob / std::max(1, Npc)};
+  const std::array<nix::float64, 2> species_drift = {-vbd * nb, vbd};
+  const std::array<nix::float64, 2> species_th_pa = {vcpa, vbpa};
+  const std::array<nix::float64, 2> species_th_pe = {vcpe, vbpe};
+
+  // --- Particle initialization (beam config only) ---
   particles.resize(num_species);
-  for (auto& particle : particles) {
-    particle    = std::make_shared<nix::XtensorParticle>(0, *this);
-    particle->q = 0;
-    particle->m = 0;
+  if (has_beam) {
+    const int global_nx = gdims[2];
+    const int global_ny = gdims[1];
+    const int global_nz = gdims[0];
+    const int Np_global = Npc * global_nx * global_ny * global_nz;
+
+    int nprocess        = 1;
+    int thisrank        = 0;
+    int mpi_initialized = 0;
+    MPI_Initialized(&mpi_initialized);
+    if (mpi_initialized) {
+      MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
+      MPI_Comm_rank(MPI_COMM_WORLD, &thisrank);
+    }
+
+    const auto [xmin, xmax] = get_xrange_global();
+    const auto [ymin, ymax] = get_yrange_global();
+    const auto [zmin, zmax] = get_zrange_global();
+
+    for (int species = 0; species < num_species; ++species) {
+      const int Np_per_rank = Np_global / nprocess;
+      particles[species]    = std::make_shared<nix::XtensorParticle>(Np_per_rank, *this);
+      auto& p               = *particles[species];
+      p.q                   = qmk_ion * species_mass[species];
+      p.m                   = species_mass[species];
+      p.Np                  = Np_per_rank;
+
+      const int          ip_start   = thisrank * Np_per_rank;
+      const nix::float64 drift      = species_drift[species];
+      const nix::float64 thermal_pa = species_th_pa[species];
+      const nix::float64 thermal_pe = species_th_pe[species];
+
+      for (int ip = 0; ip < Np_per_rank; ++ip) {
+        const int global_ip = ip + ip_start;
+        const int cell      = global_ip / Npc;
+        const int iz        = cell / (global_ny * global_nx);
+        const int iy        = (cell / global_nx) % global_ny;
+        const int ix        = cell % global_nx;
+        const int local_ip  = global_ip % Npc;
+
+        p.xu(ip, 0) = xmin + delh * (ix + (local_ip + 0.5) / Npc);
+        p.xu(ip, 1) = ymin + delh * (iy + 0.5);
+        p.xu(ip, 2) = zmin + delh * (iz + 0.5);
+
+        const std::array<nix::float64, 4> vx_sample = {1.0, -1.0, 0.0, 0.0};
+        const std::array<nix::float64, 4> vy_sample = {0.0, 0.0, 1.0, -1.0};
+        p.xu(ip, 3)                                 = vx_sample[local_ip] * thermal_pa + drift;
+        p.xu(ip, 4)                                 = vy_sample[local_ip] * thermal_pe;
+        p.xu(ip, 5)                                 = (local_ip < 2 ? thermal_pe : -thermal_pe);
+
+        std::int64_t id = static_cast<std::int64_t>(global_ip);
+        std::memcpy(&p.xu(ip, 6), &id, sizeof(std::int64_t));
+      }
+    }
+  } else {
+    for (auto& particle : particles) {
+      particle    = std::make_shared<nix::XtensorParticle>(0, *this);
+      particle->q = 0;
+      particle->m = 0;
+    }
   }
+
+  // --- Fluid and field initialization ---
+  for (int iz = 0; iz < static_cast<int>(fluid.shape()[0]); ++iz) {
+    for (int iy = 0; iy < static_cast<int>(fluid.shape()[1]); ++iy) {
+      for (int ix = 0; ix < static_cast<int>(fluid.shape()[2]); ++ix) {
+        if (has_beam) {
+          fluid(iz, iy, ix, fluid_component::electron_density)    = roe;
+          fluid(iz, iy, ix, fluid_component::electron_velocity_x) = 0;
+          fluid(iz, iy, ix, fluid_component::electron_velocity_y) = 0;
+          fluid(iz, iy, ix, fluid_component::electron_velocity_z) = 0;
+          fluid(iz, iy, ix, fluid_component::electron_pressure)   = pre;
+          fluid(iz, iy, ix, fluid_component::ion_density)         = 0;
+          fluid(iz, iy, ix, fluid_component::ion_velocity_x)      = 0;
+          fluid(iz, iy, ix, fluid_component::ion_velocity_y)      = 0;
+          fluid(iz, iy, ix, fluid_component::ion_velocity_z)      = 0;
+          fluid(iz, iy, ix, fluid_component::ion_pressure)        = 0;
+
+          field_cell(iz, iy, ix, field_component::electric_x) = 0;
+          field_cell(iz, iy, ix, field_component::electric_y) = 0;
+          field_cell(iz, iy, ix, field_component::electric_z) = 0;
+          field_cell(iz, iy, ix, field_component::magnetic_x) = bx;
+          field_cell(iz, iy, ix, field_component::magnetic_y) = 0;
+          field_cell(iz, iy, ix, field_component::magnetic_z) = 0;
+
+          field_staggered(iz, iy, ix, field_component::electric_x) = 0;
+          field_staggered(iz, iy, ix, field_component::electric_y) = 0;
+          field_staggered(iz, iy, ix, field_component::electric_z) = 0;
+          field_staggered(iz, iy, ix, field_component::magnetic_x) = bx;
+          field_staggered(iz, iy, ix, field_component::magnetic_y) = 0;
+          field_staggered(iz, iy, ix, field_component::magnetic_z) = 0;
+
+          background_cell(iz, iy, ix, 0) = bx;
+          background_cell(iz, iy, ix, 1) = 0;
+          background_cell(iz, iy, ix, 2) = 0;
+        }
+      }
+    }
+  }
+
   allocate_mpi_buffers();
   reset_load();
 }
