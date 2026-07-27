@@ -276,3 +276,85 @@ TEST_CASE("HybridChunk rejects serialization during an active exchange")
   REQUIRE(chunk.exchanges_idle());
   REQUIRE_NOTHROW(chunk.get_size_byte());
 }
+
+TEST_CASE("beam initialization validates particle counts and IDs", "[hybrid][beam]")
+{
+  using namespace hybrid;
+  nix::Dims3D dims    = {4, 2, 2};
+  nix::Bool3D has_dim = {true, true, true};
+  HybridChunk chunk(dims, has_dim, 0);
+
+  chunk.set_boundary_margin(hybrid::boundary_margin);
+
+  nix::json config = {{"delh", 0.25},
+                      {"Ns", 2},
+                      {"cc", 1.0e+4},
+                      {"gamma", 1.666666666666667},
+                      {"Npc", 4},
+                      {"mie", 100.0},
+                      {"betae", 1.0},
+                      {"nb", 0.02},
+                      {"vcpa", 0.70710678118654757},
+                      {"vcpe", 0.70710678118654757},
+                      {"vbd", 10.0},
+                      {"vbpa", 0.70710678118654757},
+                      {"vbpe", 0.70710678118654757},
+                      {"option", {{"cell_load", 1.0}}}};
+
+  int gdims_arr[3] = {static_cast<int>(dims[0]), static_cast<int>(dims[1]),
+                      static_cast<int>(dims[2])};
+  int offset[3]    = {0, 0, 0};
+  chunk.set_global_context(offset, gdims_arr);
+
+  chunk.setup(config);
+
+  auto data = chunk.get_internal_data();
+  REQUIRE(data.num_species == 2);
+  REQUIRE(data.particles.size() == 2);
+
+  const int Npc         = config["Npc"].get<int>();
+  const int local_nx    = static_cast<int>(dims[2]);
+  const int local_ny    = static_cast<int>(dims[1]);
+  const int local_nz    = static_cast<int>(dims[0]);
+  const int expected_np = Npc * local_nx * local_ny * local_nz;
+
+  for (int species = 0; species < data.num_species; ++species) {
+    const auto& p = *data.particles[species];
+    REQUIRE(p.Np == expected_np);
+    REQUIRE(p.Np > 0);
+
+    std::vector<std::int64_t> ids(static_cast<size_t>(p.Np));
+    for (int ip = 0; ip < p.Np; ++ip) {
+      std::memcpy(&ids[static_cast<size_t>(ip)], &p.xu(ip, 6), sizeof(std::int64_t));
+    }
+    std::sort(ids.begin(), ids.end());
+    auto dup = std::adjacent_find(ids.begin(), ids.end());
+    REQUIRE(dup == ids.end());
+
+    REQUIRE(p.q != 0);
+    REQUIRE(p.m != 0);
+
+    const auto [xmin, xmax] = chunk.get_xrange();
+    const auto [ymin, ymax] = chunk.get_yrange();
+    const auto [zmin, zmax] = chunk.get_zrange();
+    for (int ip = 0; ip < p.Np; ++ip) {
+      REQUIRE(p.xu(ip, 0) >= xmin);
+      REQUIRE(p.xu(ip, 0) < xmax);
+      REQUIRE(p.xu(ip, 1) >= ymin);
+      REQUIRE(p.xu(ip, 1) < ymax);
+      REQUIRE(p.xu(ip, 2) >= zmin);
+      REQUIRE(p.xu(ip, 2) < zmax);
+    }
+
+    REQUIRE(p.pindex(p.Ng) == p.Np);
+  }
+
+  for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+    for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+      for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+        REQUIRE(data.fluid(iz, iy, ix, fluid_component::electron_density) > 0);
+        REQUIRE(data.field_cell(iz, iy, ix, field_component::magnetic_x) != 0);
+      }
+    }
+  }
+}

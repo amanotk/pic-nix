@@ -16,6 +16,7 @@
 #include "engine/phasespeed.hpp"
 #include "engine/ssor2.hpp"
 
+#include <sstream>
 #include <type_traits>
 #include <utility>
 
@@ -304,6 +305,9 @@ void HybridApplication::push()
         light_speed, phase_params.spacing_x, phase_params.spacing_y, phase_params.spacing_z);
 
     const engine::Ssor2Config ssor2_config{100, 1.0e-5};
+
+    std::ostringstream ssor_log;
+    int                ohm_stage_index = 0;
 
     const engine::GridSpacing grid_spacing{phase_params.spacing_x, phase_params.spacing_y,
                                            phase_params.spacing_z};
@@ -642,6 +646,9 @@ void HybridApplication::push()
 
       if (engine::pcc2_is_ohm_stage(stage)) {
         // Ohm solve: accumulate moments, construct source, SSOR2, copy E back
+        ++ohm_stage_index;
+        bool ssor_converged        = false;
+        int  ssor_total_iterations = 0;
         for (auto& chunk_ptr : chunkvec) {
           auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
           auto  data  = chunk.get_internal_data();
@@ -796,8 +803,13 @@ void HybridApplication::push()
 
             const nix::float64 relative_error =
                 std::sqrt(error_sum) / (std::sqrt(norm_sum) + 1.0e-32);
+            ssor_log << "iter=" << ssor_iter << ", error=" << relative_error << "\n";
+            if (relative_error < ssor2_config.tolerance) {
+              ssor_converged = true;
+            }
             if (relative_error < ssor2_config.tolerance ||
                 ssor_iter >= ssor2_config.max_iterations) {
+              ssor_total_iterations = ssor_iter;
               break;
             }
           }
@@ -816,6 +828,9 @@ void HybridApplication::push()
           chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
           chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
         }
+
+        ssor_log << "# Ohm stage " << ohm_stage_index << ": iterations=" << ssor_total_iterations
+                 << " converged=" << (ssor_converged ? "true" : "false") << "\n";
       }
 
       if (engine::pcc2_is_average_stage(stage)) {
@@ -918,6 +933,11 @@ void HybridApplication::push()
     {
       int rank = 0;
       MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+      if (rank == 0) {
+        std::system("mkdir -p diagnostics");
+        std::ofstream slog("diagnostics/debug.log");
+        slog << ssor_log.str();
+      }
       for (size_t ic = 0; ic < chunkvec.size(); ++ic) {
         auto& chunk = static_cast<HybridChunk&>(*chunkvec[ic]);
         auto  data  = chunk.get_internal_data();
