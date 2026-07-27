@@ -10,6 +10,7 @@
 #include "engine/moment.hpp"
 #include "engine/ohm_bridge.hpp"
 #include "engine/ohm_source.hpp"
+#include "engine/particle.hpp"
 #include "engine/pcc2.hpp"
 #include "engine/phasespeed.hpp"
 #include "engine/ssor2.hpp"
@@ -574,7 +575,22 @@ void HybridApplication::push()
       }
 
       // BC halo exchanges for work_fluid and work_field_cell
-      restore_accepted_halos(); // FIXME: should exchange work arrays, not accepted arrays
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+        chunk.boundary_pack(data.work_fluid, BoundaryCopy10);
+        chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+        chunk.boundary_begin(data.work_fluid, BoundaryCopy10);
+        chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
+      }
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+        chunk.boundary_end(data.work_fluid, BoundaryCopy10);
+        chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+        chunk.boundary_unpack(data.work_fluid, BoundaryCopy10);
+        chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+      }
     }
 
     if (engine::pcc2_is_ohm_stage(stage)) {
@@ -657,9 +673,20 @@ void HybridApplication::push()
                                      light_speed, phase_params.spacing_x, phase_params.spacing_y,
                                      phase_params.spacing_z, ssor2_config.max_iterations,
                                      ssor2_config.tolerance);
+      }
 
-        // Filter E-field (2 passes, reuse kinetic filter)
-        // For now, skip filtering since the data.work_field_cell E components are the solved values
+      // E-field halo exchange after Ohm solve
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+        chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+        chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
+      }
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+        chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+        chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
       }
     }
 
@@ -686,7 +713,41 @@ void HybridApplication::push()
     }
 
     if (engine::pcc2_is_particle_stage(stage)) {
-      // Placeholder: particle push not yet implemented
+      const bool should_rollback = engine::pcc2_should_rollback_particles(stage);
+
+      // Push particles using averaged work_field_cell
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+        engine::push_particles(data, data.work_field_cell, dt);
+      }
+
+      // Accumulate moments from pushed particles
+      update_kinetic_moments();
+
+      // Rollback on first corrector
+      if (should_rollback) {
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          for (auto& particle : data.particles) {
+            particle->swap();
+          }
+        }
+      }
+
+      // Final particle sort + boundary after second corrector
+      if (!should_rollback) {
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          for (auto& particle : data.particles) {
+            particle->count(0, particle->Np - 1, true, data.order);
+            particle->sort();
+          }
+        }
+        migrate_particles();
+      }
     }
   }
 
