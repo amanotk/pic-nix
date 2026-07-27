@@ -667,15 +667,95 @@ void HybridApplication::push()
           }
         }
 
-        // SSOR2 solve for E-field
-        engine::solve_ssor2_electric(data.work_field_cell, data.ohm_source, data.resistive_field,
-                                     data.Lbx, data.Ubx, data.Lby, data.Uby, data.Lbz, data.Ubz,
-                                     light_speed, phase_params.spacing_x, phase_params.spacing_y,
-                                     phase_params.spacing_z, ssor2_config.max_iterations,
-                                     ssor2_config.tolerance);
+        // SSOR2 solve for E-field with sweep-level E-field exchanges
+        for (int ssor_iter = 1; ssor_iter <= ssor2_config.max_iterations; ++ssor_iter) {
+          // Forward sweep
+          for (auto& chunk_ptr : chunkvec) {
+            auto&                  chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto                   data  = chunk.get_internal_data();
+            engine::Ssor2Workspace ws    = {data.work_field_cell,
+                                            data.ohm_source,
+                                            data.resistive_field,
+                                            data.Lbx,
+                                            data.Ubx,
+                                            data.Lby,
+                                            data.Uby,
+                                            data.Lbz,
+                                            data.Ubz};
+            engine::ssor2_forward_sweep(ws, ssor2_coeff);
+          }
+          // E-field exchange after forward sweep (width 1)
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
+          }
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+          }
+
+          // Backward sweep
+          for (auto& chunk_ptr : chunkvec) {
+            auto&                  chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto                   data  = chunk.get_internal_data();
+            engine::Ssor2Workspace ws    = {data.work_field_cell,
+                                            data.ohm_source,
+                                            data.resistive_field,
+                                            data.Lbx,
+                                            data.Ubx,
+                                            data.Lby,
+                                            data.Uby,
+                                            data.Lbz,
+                                            data.Ubz};
+            engine::ssor2_backward_sweep(ws, ssor2_coeff);
+          }
+          // E-field exchange after backward sweep (width 1)
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
+          }
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+          }
+
+          // Local residual
+          nix::float64 error_sum = 0;
+          nix::float64 norm_sum  = 0;
+          for (auto& chunk_ptr : chunkvec) {
+            auto&                  chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto                   data  = chunk.get_internal_data();
+            engine::Ssor2Workspace ws    = {data.work_field_cell,
+                                            data.ohm_source,
+                                            data.resistive_field,
+                                            data.Lbx,
+                                            data.Ubx,
+                                            data.Lby,
+                                            data.Uby,
+                                            data.Lbz,
+                                            data.Ubz};
+            auto [le, ln]                = engine::ssor2_local_residual(ws, ssor2_coeff);
+            error_sum += le;
+            norm_sum += ln;
+          }
+
+          const nix::float64 relative_error =
+              std::sqrt(error_sum) / (std::sqrt(norm_sum) + 1.0e-32);
+          if (relative_error < ssor2_config.tolerance || ssor_iter >= ssor2_config.max_iterations) {
+            break;
+          }
+        }
       }
 
-      // E-field halo exchange after Ohm solve
+      // Final E-field halo exchange after Ohm solve (width 2 per legacy)
       for (auto& chunk_ptr : chunkvec) {
         auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
         auto  data  = chunk.get_internal_data();
@@ -715,18 +795,34 @@ void HybridApplication::push()
     if (engine::pcc2_is_particle_stage(stage)) {
       const bool should_rollback = engine::pcc2_should_rollback_particles(stage);
 
-      // Push particles using averaged work_field_cell
-      for (auto& chunk_ptr : chunkvec) {
-        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-        auto  data  = chunk.get_internal_data();
-        engine::push_particles(data, data.work_field_cell, dt);
+      // Skip particle stages when there are no active particles
+      bool has_particles = false;
+      for (const auto& chunk_ptr : chunkvec) {
+        auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+        for (const auto& p : data.particles) {
+          if (p->Np > 0) {
+            has_particles = true;
+            break;
+          }
+        }
+        if (has_particles)
+          break;
       }
 
-      // Accumulate moments from pushed particles
-      update_kinetic_moments();
+      if (has_particles) {
+        // Push particles using averaged work_field_cell
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          engine::push_particles(data, data.work_field_cell, dt);
+        }
+
+        // Accumulate moments from pushed particles
+        update_kinetic_moments();
+      }
 
       // Rollback on first corrector
-      if (should_rollback) {
+      if (should_rollback && has_particles) {
         for (auto& chunk_ptr : chunkvec) {
           auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
           auto  data  = chunk.get_internal_data();
@@ -737,7 +833,7 @@ void HybridApplication::push()
       }
 
       // Final particle sort + boundary after second corrector
-      if (!should_rollback) {
+      if (!should_rollback && has_particles) {
         for (auto& chunk_ptr : chunkvec) {
           auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
           auto  data  = chunk.get_internal_data();

@@ -103,4 +103,26 @@ if(TARGET hybrid_beam)
 
   add_hybrid_zero_step_test(test_hybrid_beam_zero_step_np1 1)
   add_hybrid_zero_step_test(test_hybrid_beam_zero_step_np2 2)
+
+  function(add_hybrid_one_step_test name nproc)
+    set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
+    add_test(NAME ${name}_prepare COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir})
+    add_test(
+      NAME ${name}
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.01
+    )
+    set_tests_properties(${name}
+      PROPERTIES
+        DEPENDS ${name}_prepare
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${tmpdir}
+    )
+  endfunction()
+
+  add_hybrid_one_step_test(test_hybrid_beam_one_step_np1 1)
+  add_hybrid_one_step_test(test_hybrid_beam_one_step_np2 2)
 endif()
