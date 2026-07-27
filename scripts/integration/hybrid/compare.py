@@ -421,6 +421,36 @@ def compare_ssor_history(log_path: Path, reference_path: Path) -> None:
         raise DiagnosticError(f"{log_path}: SSOR rounded residual history differs")
 
 
+def validate_ownership_change(before_path: Path, after_path: Path) -> None:
+    """Validate that at least one chunk changed owning MPI rank."""
+    before = load_snapshot(before_path)
+    after = load_snapshot(after_path)
+
+    def ownership(snapshot: dict) -> dict[int, int]:
+        result = {}
+        for chunk_dir in sorted(snapshot["root"].glob("chunk_*")):
+            meta_path = chunk_dir / "meta.json"
+            meta = json.loads(meta_path.read_text())
+            result[int(meta["chunk_id"])] = int(meta["rank"])
+        return result
+
+    # Reload through the raw directories so rank ownership is preserved; load_snapshot
+    # intentionally canonicalizes arrays and particles across chunks.
+    before["root"] = before_path
+    after["root"] = after_path
+    before_owner = ownership(before)
+    after_owner = ownership(after)
+    if before_owner.keys() != after_owner.keys():
+        raise DiagnosticError("ownership snapshots contain different chunk IDs")
+    changed = [
+        chunk_id
+        for chunk_id in before_owner
+        if before_owner[chunk_id] != after_owner[chunk_id]
+    ]
+    if not changed:
+        raise DiagnosticError("no chunk changed owning MPI rank")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -455,6 +485,12 @@ def main() -> int:
     )
     ssor_parser.add_argument("log", type=Path)
     ssor_parser.add_argument("reference", type=Path)
+
+    ownership_parser = subparsers.add_parser(
+        "ownership", help="validate that chunk ownership changed between snapshots"
+    )
+    ownership_parser.add_argument("before", type=Path)
+    ownership_parser.add_argument("after", type=Path)
     args = parser.parse_args()
 
     try:
@@ -482,6 +518,11 @@ def main() -> int:
         if args.command == "ssor":
             compare_ssor_history(args.log, args.reference)
             print("SSOR history matches legacy reference")
+            return 0
+
+        if args.command == "ownership":
+            validate_ownership_change(args.before, args.after)
+            print("chunk ownership changed")
             return 0
 
         print(json.dumps(compute_diagnostics(args.snapshot, args.config), indent=2))

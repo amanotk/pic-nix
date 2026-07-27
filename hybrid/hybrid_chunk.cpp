@@ -447,7 +447,15 @@ void HybridChunk::reset_load()
 {
   const int num_cells = dims[0] * dims[1] * dims[2];
 
-  load[LoadCell]     = option.value("cell_load", 1.0);
+  load[LoadCell] = option.value("cell_load", 1.0);
+  if (option.contains("cell_load_by_chunk")) {
+    const auto& cell_load_by_chunk = option.at("cell_load_by_chunk");
+    const int   id                 = get_id();
+    if (!cell_load_by_chunk.is_array() || id >= static_cast<int>(cell_load_by_chunk.size())) {
+      throw std::invalid_argument("cell_load_by_chunk must include every Hybrid chunk");
+    }
+    load[LoadCell] = cell_load_by_chunk.at(id).get<nix::float64>();
+  }
   load[LoadParticle] = 0;
   for (const auto& particle : particles) {
     load[LoadParticle] += static_cast<nix::float64>(particle->Np) / num_cells;

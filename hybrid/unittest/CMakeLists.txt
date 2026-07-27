@@ -216,7 +216,7 @@ if(TARGET hybrid_beam)
   add_hybrid_short_run_test(test_hybrid_beam_short_run_np2 2 0.04)
 
   # --- Restart test ---
-  function(add_hybrid_restart_test name nproc)
+  function(add_hybrid_restart_test name nproc config)
     set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
     set(checkpoint_dir ${tmpdir}/checkpoint)
     set(save_dir ${tmpdir}/save)
@@ -227,21 +227,21 @@ if(TARGET hybrid_beam)
       NAME ${name}_save
       COMMAND
         ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
-        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.01
+        -c ${config} -t 0.01
         --save ${checkpoint_dir}
     )
     add_test(
       NAME ${name}_resume
       COMMAND
         ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
-        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.02
+        -c ${config} -t 0.02
         --load ${checkpoint_dir}
     )
     add_test(
       NAME ${name}_direct
       COMMAND
         ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
-        -c ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml -t 0.02
+        -c ${config} -t 0.02
     )
     set_tests_properties(${name}_save
       PROPERTIES
@@ -269,8 +269,9 @@ if(TARGET hybrid_beam)
     )
   endfunction()
 
-  add_hybrid_restart_test(test_hybrid_beam_restart_np1 1)
-  add_hybrid_restart_test(test_hybrid_beam_restart_np2 2)
+  add_hybrid_restart_test(test_hybrid_beam_restart_np1 1 ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml)
+  add_hybrid_restart_test(test_hybrid_beam_restart_np2 2 ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml)
+  add_hybrid_restart_test(test_hybrid_beam_restart_np4 4 ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config_np4.toml)
 
   # --- Rebalance path test (interval=1, exercises communicator rebinding) ---
   function(add_hybrid_rebalance_test name nproc)
@@ -301,6 +302,79 @@ if(TARGET hybrid_beam)
 
   add_hybrid_rebalance_test(test_hybrid_beam_rebalance_np1 1)
   add_hybrid_rebalance_test(test_hybrid_beam_rebalance_np2 2)
+
+  # --- Rebalance migration and restart equivalence test ---
+  function(add_hybrid_rebalance_restart_test name nproc)
+    set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
+    set(checkpoint_dir ${tmpdir}/checkpoint)
+    set(fixed_dir ${tmpdir}/fixed)
+    set(save_dir ${tmpdir}/save)
+    set(resume_dir ${tmpdir}/resume)
+    set(direct_dir ${tmpdir}/direct)
+    set(fixed_config ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config_rebalance_skew_fixed.toml)
+    set(rebalance_config ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config_rebalance_skew.toml)
+    add_test(NAME ${name}_prepare COMMAND ${CMAKE_COMMAND} -E make_directory ${fixed_dir} ${save_dir} ${resume_dir} ${direct_dir})
+    add_test(
+      NAME ${name}_fixed
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${fixed_config} -t 0.03
+    )
+    add_test(
+      NAME ${name}_save
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${rebalance_config} -t 0.02
+        --save ${checkpoint_dir}
+    )
+    add_test(
+      NAME ${name}_resume
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${rebalance_config} -t 0.03
+        --load ${checkpoint_dir}
+    )
+    add_test(
+      NAME ${name}_direct
+      COMMAND
+        ${MPIEXEC} -n ${nproc} $<TARGET_FILE:hybrid_beam>
+        -c ${rebalance_config} -t 0.03
+    )
+    set_tests_properties(${name}_fixed
+      PROPERTIES
+        DEPENDS ${name}_prepare
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${fixed_dir}
+    )
+    set_tests_properties(${name}_save
+      PROPERTIES
+        DEPENDS ${name}_fixed
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${save_dir}
+    )
+    set_tests_properties(${name}_resume
+      PROPERTIES
+        DEPENDS ${name}_save
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${resume_dir}
+    )
+    set_tests_properties(${name}_direct
+      PROPERTIES
+        DEPENDS ${name}_resume
+        LABELS MPI
+        PROCESSORS ${nproc}
+        TIMEOUT 60
+        WORKING_DIRECTORY ${direct_dir}
+    )
+  endfunction()
+
+  add_hybrid_rebalance_restart_test(test_hybrid_beam_rebalance_restart_np2 2)
 
   # --- np4 variants (Cx=2,Cy=2,Cz=1) ---
   function(add_hybrid_np4_test name nproc tmax)
@@ -424,7 +498,43 @@ if(TARGET hybrid_beam)
     DEPENDS test_hybrid_beam_one_step_np1
   )
 
-  foreach(nproc IN ITEMS 1 2)
+  set(rebalance_restart_name test_hybrid_beam_rebalance_restart_np2)
+  add_test(
+    NAME ${rebalance_restart_name}_ownership
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} ownership
+      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_0
+      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_3
+  )
+  set_tests_properties(${rebalance_restart_name}_ownership PROPERTIES
+    DEPENDS ${rebalance_restart_name}_direct
+  )
+
+  add_test(
+    NAME ${rebalance_restart_name}_fixed_compare
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} compare
+      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/fixed/diagnostics/snapshots/step_3
+      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_3
+      --atol 1e-5 --rtol 1e-5
+  )
+  set_tests_properties(${rebalance_restart_name}_fixed_compare PROPERTIES
+    DEPENDS "${rebalance_restart_name}_fixed;${rebalance_restart_name}_direct"
+  )
+
+  add_test(
+    NAME ${rebalance_restart_name}_compare
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} compare
+      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/resume/diagnostics/snapshots/step_3
+      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_3
+      --atol 1e-6 --rtol 1e-6
+  )
+  set_tests_properties(${rebalance_restart_name}_compare PROPERTIES
+    DEPENDS "${rebalance_restart_name}_resume;${rebalance_restart_name}_direct"
+  )
+
+  foreach(nproc IN ITEMS 1 2 4)
     set(restart_name test_hybrid_beam_restart_np${nproc})
     add_test(
       NAME ${restart_name}_compare
