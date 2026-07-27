@@ -46,6 +46,10 @@ add_executable(test_hybrid_ohm test_hybrid_ohm.cpp)
 target_link_libraries(test_hybrid_ohm PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
 add_test(NAME test_hybrid_ohm COMMAND test_hybrid_ohm)
 
+add_executable(test_hybrid_ssor2 test_hybrid_ssor2.cpp)
+target_link_libraries(test_hybrid_ssor2 PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
+add_test(NAME test_hybrid_ssor2 COMMAND test_hybrid_ssor2)
+
 function(add_hybrid_mpi_test name target nproc)
   set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
   file(MAKE_DIRECTORY ${tmpdir})
