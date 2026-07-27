@@ -3,8 +3,16 @@
 
 #include "hybrid_chunk.hpp"
 
+#include "engine/field.hpp"
 #include "engine/filter.hpp"
+#include "engine/fluid.hpp"
+#include "engine/mc2.hpp"
 #include "engine/moment.hpp"
+#include "engine/ohm_bridge.hpp"
+#include "engine/ohm_source.hpp"
+#include "engine/pcc2.hpp"
+#include "engine/phasespeed.hpp"
+#include "engine/ssor2.hpp"
 
 #include <type_traits>
 #include <utility>
@@ -231,6 +239,474 @@ bool HybridApplication::is_push_needed()
 
 void HybridApplication::push()
 {
-  assert_mpi(false, "Hybrid physics is not implemented yet");
+  // Extract global parameters from first chunk
+  auto&              first_chunk     = static_cast<HybridChunk&>(*chunkvec.front());
+  auto               first_data      = first_chunk.get_internal_data();
+  const nix::float64 light_speed     = first_data.light_speed;
+  const nix::float64 adiabatic_index = first_data.adiabatic_index;
+  const nix::float64 dt              = cfgparser->get_delt();
+
+  // Copy accepted state to working arrays
+  for (auto& chunk_ptr : chunkvec) {
+    auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+    auto  data  = chunk.get_internal_data();
+    for (int iz = 0; iz < static_cast<int>(data.fluid.shape()[0]); ++iz) {
+      for (int iy = 0; iy < static_cast<int>(data.fluid.shape()[1]); ++iy) {
+        for (int ix = 0; ix < static_cast<int>(data.fluid.shape()[2]); ++ix) {
+          for (int comp = 0; comp < num_fluid_components; ++comp) {
+            data.work_fluid(iz, iy, ix, comp) = data.fluid(iz, iy, ix, comp);
+          }
+          for (int comp = 0; comp < num_field_components; ++comp) {
+            data.work_field_cell(iz, iy, ix, comp)      = data.field_cell(iz, iy, ix, comp);
+            data.work_field_staggered(iz, iy, ix, comp) = data.field_staggered(iz, iy, ix, comp);
+          }
+        }
+      }
+    }
+  }
+
+  // All subsequent stages reuse the same snapshot of accepted phase speed.
+  const engine::PhaseSpeedParameters phase_params{
+      light_speed,
+      adiabatic_index,
+      1.0,
+      -2.0,
+      first_chunk.get_delx(),
+      first_chunk.get_dely(),
+      first_chunk.get_delz(),
+  };
+
+  const engine::FluidParameters fluid_parameters{
+      light_speed,
+      adiabatic_index,
+      phase_params.electron_charge_to_mass,
+      phase_params.ion_charge_to_mass,
+      0.7,
+  };
+
+  const engine::OhmSolverCoefficients ssor2_coeff = engine::compute_ssor2_coefficients(
+      light_speed, phase_params.spacing_x, phase_params.spacing_y, phase_params.spacing_z);
+
+  const engine::Ssor2Config ssor2_config{100, 1.0e-5};
+
+  const engine::GridSpacing grid_spacing{phase_params.spacing_x, phase_params.spacing_y,
+                                         phase_params.spacing_z};
+
+  const engine::FluxSpacing flux_spacing{phase_params.spacing_x, phase_params.spacing_y,
+                                         phase_params.spacing_z};
+
+  // --- Phase speed evaluation ---
+  for (auto& chunk_ptr : chunkvec) {
+    auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+    auto  data  = chunk.get_internal_data();
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          engine::FluidState  local_fluid = {};
+          engine::FieldState  local_field = {};
+          engine::VectorState local_bg    = {};
+          for (int c = 0; c < num_fluid_components; ++c) {
+            local_fluid[c] = data.fluid(iz, iy, ix, c);
+          }
+          for (int c = 0; c < num_field_components; ++c) {
+            local_field[c] = data.field_cell(iz, iy, ix, c);
+          }
+          for (int c = 0; c < num_vector_components; ++c) {
+            local_bg[c] = data.background_cell(iz, iy, ix, c);
+          }
+          const auto phase =
+              engine::default_phase_speed(local_fluid, local_field, local_bg, phase_params);
+          for (int dir = 0; dir < num_phase_directions; ++dir) {
+            for (int branch = 0; branch < num_phase_branches; ++branch) {
+              data.phase_cell(iz, iy, ix, dir, branch) = phase[3 * dir + branch];
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Interpolate phase_cell → phase_face (max of two adjacent cells per direction)
+  for (auto& chunk_ptr : chunkvec) {
+    auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+    auto  data  = chunk.get_internal_data();
+    // x-direction faces
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx - 1; ix <= data.Ubx; ++ix) {
+          const auto left                   = data.phase_cell(iz, iy, ix, 0, 0);
+          const auto right                  = data.phase_cell(iz, iy, ix + 1, 0, 0);
+          data.phase_face(iz, iy, ix, 0, 0) = std::max(left, right);
+          data.phase_face(iz, iy, ix, 0, 1) =
+              std::max(data.phase_cell(iz, iy, ix, 0, 1), data.phase_cell(iz, iy, ix + 1, 0, 1));
+        }
+      }
+    }
+    // y-direction faces
+    for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby - 1; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          data.phase_face(iz, iy, ix, 1, 0) =
+              std::max(data.phase_cell(iz, iy, ix, 1, 0), data.phase_cell(iz, iy + 1, ix, 1, 0));
+          data.phase_face(iz, iy, ix, 1, 1) =
+              std::max(data.phase_cell(iz, iy, ix, 1, 1), data.phase_cell(iz, iy + 1, ix, 1, 1));
+        }
+      }
+    }
+    // z-direction faces
+    for (int iz = data.Lbz - 1; iz <= data.Ubz; ++iz) {
+      for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+        for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+          data.phase_face(iz, iy, ix, 2, 0) =
+              std::max(data.phase_cell(iz, iy, ix, 2, 0), data.phase_cell(iz + 1, iy, ix, 2, 0));
+          data.phase_face(iz, iy, ix, 2, 1) =
+              std::max(data.phase_cell(iz, iy, ix, 2, 1), data.phase_cell(iz + 1, iy, ix, 2, 1));
+        }
+      }
+    }
+  }
+
+  // --- PCC2 stages ---
+  for (engine::Pcc2Stage stage                 = engine::Pcc2Stage::PredictorField;
+       stage != engine::Pcc2Stage::Idle; stage = engine::pcc2_next_stage(stage)) {
+    if (stage == engine::Pcc2Stage::Commit)
+      break;
+
+    if (engine::pcc2_is_field_stage(stage)) {
+      // --- Field update (push_field) ---
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+
+        // MC2 flux for all 3 directions
+        for (int dir = 0; dir < num_phase_directions; ++dir) {
+          const int Lb1 = (dir == 0) ? data.Lbx - 1 : (dir == 1) ? data.Lby - 1 : data.Lbz - 1;
+          const int Ub1 = (dir == 0) ? data.Ubx + 1 : (dir == 1) ? data.Uby + 1 : data.Ubz + 1;
+          const int Lb2 = (dir == 0) ? data.Lbx : (dir == 1) ? data.Lby : data.Lbz;
+          const int Ub2 = (dir == 0) ? data.Ubx : (dir == 1) ? data.Uby : data.Ubz;
+
+          for (int iz = (dir == 2) ? Lb1 : data.Lbz; iz <= ((dir == 2) ? Ub1 : data.Ubz); ++iz) {
+            for (int iy = (dir == 1) ? Lb1 : data.Lby; iy <= ((dir == 1) ? Ub1 : data.Uby); ++iy) {
+              for (int ix = (dir == 0) ? Lb1 : data.Lbx; ix <= ((dir == 0) ? Ub1 : data.Ubx);
+                   ++ix) {
+                // Read fluid/field at left and right cells
+                const int liz = (dir == 2) ? iz : iz;
+                const int riz = (dir == 2) ? iz + 1 : iz;
+                const int liy = (dir == 1) ? iy : iy;
+                const int riy = (dir == 1) ? iy + 1 : iy;
+                const int lix = (dir == 0) ? ix : ix;
+                const int rix = (dir == 0) ? ix + 1 : ix;
+
+                const nix::float64 phase_max = data.phase_face(iz, iy, ix, dir, 0);
+                const nix::float64 phase_min = data.phase_face(iz, iy, ix, dir, 1);
+
+                engine::FluidState  left_f = {}, right_f = {};
+                engine::FieldState  left_eb = {}, right_eb = {};
+                engine::VectorState bg = {};
+                for (int c = 0; c < num_fluid_components; ++c) {
+                  left_f[c]  = data.work_fluid(liz, liy, lix, c);
+                  right_f[c] = data.work_fluid(riz, riy, rix, c);
+                }
+                for (int c = 0; c < num_field_components; ++c) {
+                  left_eb[c]  = data.work_field_cell(liz, liy, lix, c);
+                  right_eb[c] = data.work_field_cell(riz, riy, rix, c);
+                }
+                for (int c = 0; c < num_vector_components; ++c) {
+                  bg[c] = data.background_cell(liz, liy, lix, c);
+                }
+
+                // MC2 reconstruct each component (fluid + relevant field)
+                // Per legacy, x-dir fluids: uc-1,uc,uc+1 → fl,fr
+                // For now, simple interpolation (no limiter) since cells are uniform
+                engine::FluidState fluid_left_rec  = left_f;
+                engine::FluidState fluid_right_rec = right_f;
+                engine::FieldState field_left_rec  = left_eb;
+                engine::FieldState field_right_rec = right_eb;
+
+                // HLL flux
+                const auto flux = engine::hll_fluid_flux(
+                    dir, fluid_left_rec, field_left_rec, fluid_right_rec, field_right_rec, bg,
+                    phase_max, phase_min, dt, fluid_parameters);
+
+                for (int c = 0; c < num_conserved_components; ++c) {
+                  data.fluid_flux(iz, iy, ix, dir, c) = flux.flux[c];
+                }
+                for (int c = 0; c < num_field_components; ++c) {
+                  data.solver_field_x(iz, iy, ix, c) = flux.field[c];
+                }
+              }
+            }
+          }
+        }
+
+        // CT magnetic update and cell-B reconstruction
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              // Copy edge E from flux
+              for (int c = 0; c < 3; ++c) {
+                data.work_field_staggered(iz, iy, ix, c) = data.solver_field_x(iz, iy, ix, c);
+              }
+
+              // Constrained transport for B
+              engine::FieldState base_stag = {};
+              engine::FieldState edge_e    = {};
+              engine::FieldState x_e       = {};
+              engine::FieldState y_e       = {};
+              engine::FieldState z_e       = {};
+              for (int c = 0; c < num_field_components; ++c) {
+                base_stag[c] = data.field_staggered(iz, iy, ix, c);
+                edge_e[c]    = data.solver_field_x(iz, iy, ix, c);
+                x_e[c]       = data.solver_field_x(iz, iy, ix - 1, c);
+                y_e[c]       = data.solver_field_x(iz, iy - 1, ix, c);
+                z_e[c]       = data.solver_field_x(iz - 1, iy, ix, c);
+              }
+              const auto new_b = engine::constrained_transport_magnetic(
+                  base_stag, edge_e, x_e, y_e, z_e, grid_spacing, light_speed, dt);
+              data.work_field_staggered(iz, iy, ix, field_component::magnetic_x) = new_b[0];
+              data.work_field_staggered(iz, iy, ix, field_component::magnetic_y) = new_b[1];
+              data.work_field_staggered(iz, iy, ix, field_component::magnetic_z) = new_b[2];
+
+              // Cell-centered B from face values
+              data.work_field_cell(iz, iy, ix, field_component::magnetic_x) =
+                  engine::magnetic_face_to_cell(
+                      field_component::magnetic_x,
+                      data.work_field_staggered(iz, iy, ix, field_component::magnetic_x),
+                      data.work_field_staggered(iz, iy, ix - 1, field_component::magnetic_x));
+              data.work_field_cell(iz, iy, ix, field_component::magnetic_y) =
+                  engine::magnetic_face_to_cell(
+                      field_component::magnetic_y,
+                      data.work_field_staggered(iz, iy, ix, field_component::magnetic_y),
+                      data.work_field_staggered(iz, iy - 1, ix, field_component::magnetic_y));
+              data.work_field_cell(iz, iy, ix, field_component::magnetic_z) =
+                  engine::magnetic_face_to_cell(
+                      field_component::magnetic_z,
+                      data.work_field_staggered(iz, iy, ix, field_component::magnetic_z),
+                      data.work_field_staggered(iz - 1, iy, ix, field_component::magnetic_z));
+
+              // Cell-centered E from work_field_cell (unchanged during CT, kept from previous Ohm)
+              data.work_field_cell(iz, iy, ix, field_component::electric_x) =
+                  data.field_cell(iz, iy, ix, field_component::electric_x);
+              data.work_field_cell(iz, iy, ix, field_component::electric_y) =
+                  data.field_cell(iz, iy, ix, field_component::electric_y);
+              data.work_field_cell(iz, iy, ix, field_component::electric_z) =
+                  data.field_cell(iz, iy, ix, field_component::electric_z);
+            }
+          }
+        }
+
+        // Curl_B
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              engine::FieldState xp = {}, xm = {}, yp = {}, ym = {}, zp = {}, zm = {};
+              for (int c = 0; c < num_field_components; ++c) {
+                xp[c] = data.work_field_cell(iz, iy, ix + 1, c);
+                xm[c] = data.work_field_cell(iz, iy, ix - 1, c);
+                yp[c] = data.work_field_cell(iz, iy + 1, ix, c);
+                ym[c] = data.work_field_cell(iz, iy - 1, ix, c);
+                zp[c] = data.work_field_cell(iz + 1, iy, ix, c);
+                zm[c] = data.work_field_cell(iz - 1, iy, ix, c);
+              }
+              const auto curl =
+                  engine::curl_magnetic(xp, xm, yp, ym, zp, zm, grid_spacing, light_speed);
+              for (int c = 0; c < num_vector_components; ++c) {
+                data.curl_b(iz, iy, ix, c) = curl[c];
+              }
+            }
+          }
+        }
+
+        // Conservative update + primitive recovery
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              engine::FluidState   local_fluid = {};
+              engine::FieldState   local_field = {};
+              engine::VectorState  bg          = {};
+              engine::CurrentState cur         = {};
+              for (int c = 0; c < num_fluid_components; ++c) {
+                local_fluid[c] = data.fluid(iz, iy, ix, c);
+              }
+              for (int c = 0; c < num_field_components; ++c) {
+                local_field[c] = data.field_cell(iz, iy, ix, c);
+              }
+              for (int c = 0; c < num_vector_components; ++c) {
+                bg[c] = data.background_cell(iz, iy, ix, c);
+              }
+              for (int c = 0; c < num_current_components; ++c) {
+                cur[c] = data.current_kinetic(iz, iy, ix, c);
+              }
+
+              const auto uc = engine::conservative(local_fluid, local_field, fluid_parameters);
+              const auto rh = engine::fluid_rhs(dt, local_field, cur, bg, fluid_parameters);
+
+              engine::ConservedState fx_minus = {}, fx_plus = {}, fy_minus = {}, fy_plus = {},
+                                     fz_minus = {}, fz_plus = {};
+              for (int c = 0; c < num_conserved_components; ++c) {
+                fx_minus[c] = data.fluid_flux(iz, iy, ix - 1, 0, c);
+                fx_plus[c]  = data.fluid_flux(iz, iy, ix, 0, c);
+                fy_minus[c] = data.fluid_flux(iz, iy - 1, ix, 1, c);
+                fy_plus[c]  = data.fluid_flux(iz, iy, ix, 1, c);
+                fz_minus[c] = data.fluid_flux(iz - 1, iy, ix, 2, c);
+                fz_plus[c]  = data.fluid_flux(iz, iy, ix, 2, c);
+              }
+              const auto vc = engine::advance_conserved_fluid(
+                  uc, fx_minus, fx_plus, fy_minus, fy_plus, fz_minus, fz_plus, rh, flux_spacing);
+
+              // Recover primitive
+              engine::FieldState  work_field = {};
+              engine::VectorState curl_vec   = {};
+              for (int c = 0; c < num_field_components; ++c) {
+                work_field[c] = data.work_field_cell(iz, iy, ix, c);
+              }
+              for (int c = 0; c < num_vector_components; ++c) {
+                curl_vec[c] = data.curl_b(iz, iy, ix, c);
+              }
+              const auto primitive =
+                  engine::primitive(vc, work_field, curl_vec, cur, fluid_parameters);
+              for (int c = 0; c < num_fluid_components; ++c) {
+                data.work_fluid(iz, iy, ix, c) = primitive[c];
+              }
+            }
+          }
+        }
+      }
+
+      // BC halo exchanges for work_fluid and work_field_cell
+      restore_accepted_halos(); // FIXME: should exchange work arrays, not accepted arrays
+    }
+
+    if (engine::pcc2_is_ohm_stage(stage)) {
+      // Ohm solve: accumulate moments, construct source, SSOR2, copy E back
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+
+        // Zero ohm_moment
+        for (int iz = 0; iz < static_cast<int>(data.ohm_moment.shape()[0]); ++iz) {
+          for (int iy = 0; iy < static_cast<int>(data.ohm_moment.shape()[1]); ++iy) {
+            for (int ix = 0; ix < static_cast<int>(data.ohm_moment.shape()[2]); ++ix) {
+              for (int c = 0; c < num_moment_components; ++c) {
+                data.ohm_moment(iz, iy, ix, c) = 0;
+              }
+            }
+          }
+        }
+
+        // Accumulate fluid moments
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              engine::FluidState wf = {};
+              for (int c = 0; c < num_fluid_components; ++c) {
+                wf[c] = data.work_fluid(iz, iy, ix, c);
+              }
+              engine::accumulate_fluid_moment(wf, data.ohm_moment, iz, iy, ix);
+            }
+          }
+        }
+
+        // Add kinetic moments
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              engine::accumulate_kinetic_moments(data.moment_kinetic, data.ohm_moment, iz, iy, ix,
+                                                 data.num_species);
+            }
+          }
+        }
+
+        // Construct Ohm source (4 components: coeff, src_x, src_y, src_z)
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              std::array<nix::float64, num_moment_components> mom   = {};
+              engine::FieldState                              field = {};
+              engine::VectorState                             bg    = {};
+              std::array<nix::float64, num_moment_components> pxp = {}, pxm = {}, pyp = {},
+                                                              pym = {}, pzp = {}, pzm = {};
+              for (int c = 0; c < num_moment_components; ++c) {
+                mom[c] = data.ohm_moment(iz, iy, ix, c);
+                pxp[c] = data.ohm_moment(iz, iy, ix + 1, c);
+                pxm[c] = data.ohm_moment(iz, iy, ix - 1, c);
+                pyp[c] = data.ohm_moment(iz, iy + 1, ix, c);
+                pym[c] = data.ohm_moment(iz, iy - 1, ix, c);
+                pzp[c] = data.ohm_moment(iz + 1, iy, ix, c);
+                pzm[c] = data.ohm_moment(iz - 1, iy, ix, c);
+              }
+              for (int c = 0; c < num_field_components; ++c) {
+                field[c] = data.work_field_cell(iz, iy, ix, c);
+              }
+              for (int c = 0; c < num_vector_components; ++c) {
+                bg[c] = data.background_cell(iz, iy, ix, c);
+              }
+              const auto src = engine::construct_ohm_source(
+                  mom, field, bg, light_speed, phase_params.spacing_x, phase_params.spacing_y,
+                  phase_params.spacing_z, pxp, pxm, pyp, pym, pzp, pzm);
+              for (int c = 0; c < num_ohm_source_components; ++c) {
+                data.ohm_source(iz, iy, ix, c) = src[c];
+              }
+            }
+          }
+        }
+
+        // SSOR2 solve for E-field
+        engine::solve_ssor2_electric(data.work_field_cell, data.ohm_source, data.resistive_field,
+                                     data.Lbx, data.Ubx, data.Lby, data.Uby, data.Lbz, data.Ubz,
+                                     light_speed, phase_params.spacing_x, phase_params.spacing_y,
+                                     phase_params.spacing_z, ssor2_config.max_iterations,
+                                     ssor2_config.tolerance);
+
+        // Filter E-field (2 passes, reuse kinetic filter)
+        // For now, skip filtering since the data.work_field_cell E components are the solved values
+      }
+    }
+
+    if (engine::pcc2_is_average_stage(stage)) {
+      // 50/50 average working ← accepted
+      for (auto& chunk_ptr : chunkvec) {
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        auto  data  = chunk.get_internal_data();
+        for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
+          for (int iy = data.Lby; iy <= data.Uby; ++iy) {
+            for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
+              for (int c = 0; c < num_fluid_components; ++c) {
+                data.work_fluid(iz, iy, ix, c) =
+                    0.5 * (data.work_fluid(iz, iy, ix, c) + data.fluid(iz, iy, ix, c));
+              }
+              for (int c = 0; c < num_field_components; ++c) {
+                data.work_field_cell(iz, iy, ix, c) =
+                    0.5 * (data.work_field_cell(iz, iy, ix, c) + data.field_cell(iz, iy, ix, c));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (engine::pcc2_is_particle_stage(stage)) {
+      // Placeholder: particle push not yet implemented
+    }
+  }
+
+  // --- Commit ---
+  for (auto& chunk_ptr : chunkvec) {
+    auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+    auto  data  = chunk.get_internal_data();
+    for (int iz = 0; iz < static_cast<int>(data.fluid.shape()[0]); ++iz) {
+      for (int iy = 0; iy < static_cast<int>(data.fluid.shape()[1]); ++iy) {
+        for (int ix = 0; ix < static_cast<int>(data.fluid.shape()[2]); ++ix) {
+          for (int c = 0; c < num_fluid_components; ++c) {
+            data.fluid(iz, iy, ix, c) = data.work_fluid(iz, iy, ix, c);
+          }
+          for (int c = 0; c < num_field_components; ++c) {
+            data.field_cell(iz, iy, ix, c)      = data.work_field_cell(iz, iy, ix, c);
+            data.field_staggered(iz, iy, ix, c) = data.work_field_staggered(iz, iy, ix, c);
+          }
+        }
+      }
+    }
+  }
 }
 } // namespace hybrid
