@@ -34,6 +34,10 @@ add_executable(test_hybrid_phasespeed test_hybrid_phasespeed.cpp)
 target_link_libraries(test_hybrid_phasespeed PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
 add_test(NAME test_hybrid_phasespeed COMMAND test_hybrid_phasespeed)
 
+add_executable(test_hybrid_mc2 test_hybrid_mc2.cpp)
+target_link_libraries(test_hybrid_mc2 PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
+add_test(NAME test_hybrid_mc2 COMMAND test_hybrid_mc2)
+
 function(add_hybrid_mpi_test name target nproc)
   set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
   file(MAKE_DIRECTORY ${tmpdir})
