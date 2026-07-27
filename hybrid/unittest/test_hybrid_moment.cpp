@@ -6,6 +6,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+#include <cstring>
 #include <numeric>
 
 namespace
@@ -28,11 +30,6 @@ hybrid::HybridChunk make_moment_chunk(int species = 1, bool one_dimensional = fa
   return chunk;
 }
 
-void sort_particle(nix::XtensorParticle& particle)
-{
-  particle.count(0, particle.Np - 1, true, hybrid::particle_order);
-  particle.sort();
-}
 } // namespace
 
 TEST_CASE("single particle deposits the ten legacy raw moments")
@@ -49,8 +46,6 @@ TEST_CASE("single particle deposits the ten legacy raw moments")
   particle.xu(0, 3) = 1.1;
   particle.xu(0, 4) = -2.3;
   particle.xu(0, 5) = 3.7;
-  sort_particle(particle);
-
   hybrid::engine::deposit_moments(data);
   const int                                               iz            = data.Lbz + 2;
   const int                                               iy            = data.Lby + 2;
@@ -76,7 +71,7 @@ TEST_CASE("single particle deposits the ten legacy raw moments")
   }
 }
 
-TEST_CASE("deposition retains the pre-push cell anchor at a chunk boundary")
+TEST_CASE("deposition includes an outbound particle before migration")
 {
   auto  chunk       = make_moment_chunk();
   auto  data        = chunk.get_internal_data();
@@ -84,11 +79,9 @@ TEST_CASE("deposition retains the pre-push cell anchor at a chunk boundary")
   particle.m        = 1;
   particle.q        = 1;
   particle.Np       = 1;
-  particle.xu(0, 0) = particle.xmax - 0.2;
+  particle.xu(0, 0) = particle.xmax + 0.2;
   particle.xu(0, 1) = 2.5;
   particle.xu(0, 2) = 2.5;
-  sort_particle(particle);
-  particle.xu(0, 0) = particle.xmax + 0.2;
 
   hybrid::engine::deposit_moments(data);
   double total_mass = 0;
@@ -99,6 +92,39 @@ TEST_CASE("deposition retains the pre-push cell anchor at a chunk boundary")
   REQUIRE(total_mass == Catch::Approx(1.0).margin(1.0e-14));
   REQUIRE(data.moment_kinetic(data.Lbz + 2, data.Lby + 2, data.Ubx + 2, 0,
                               hybrid::moment_component::density) > 0);
+}
+
+TEST_CASE("deposition preserves unsorted particle buffers and ID association")
+{
+  auto  chunk    = make_moment_chunk();
+  auto  data     = chunk.get_internal_data();
+  auto& particle = *data.particles[0];
+  particle.m     = 1;
+  particle.q     = 1;
+  particle.Np    = 3;
+  particle.xu.fill(0);
+  particle.xv.fill(-7);
+  for (int ip = 0; ip < particle.Np; ++ip) {
+    particle.xu(ip, 0) = 4.5 - ip;
+    particle.xu(ip, 1) = 2.5;
+    particle.xu(ip, 2) = 2.5;
+    particle.xu(ip, 3) = ip + 1;
+    const int64_t id   = 100 + ip;
+    std::memcpy(&particle.xu(ip, 6), &id, sizeof(id));
+  }
+  const auto accepted  = particle.xu;
+  const auto temporary = particle.xv;
+
+  hybrid::engine::deposit_moments(data);
+
+  REQUIRE(xt::all(xt::equal(particle.xu, accepted)));
+  REQUIRE(xt::all(xt::equal(particle.xv, temporary)));
+  double total_mass = 0;
+  for (auto value : xt::view(data.moment_kinetic, xt::all(), xt::all(), xt::all(), 0,
+                             hybrid::moment_component::density)) {
+    total_mass += value;
+  }
+  REQUIRE(total_mass == Catch::Approx(3.0).margin(1.0e-14));
 }
 
 TEST_CASE("kinetic current uses each species charge-to-mass ratio")

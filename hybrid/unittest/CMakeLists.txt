@@ -291,6 +291,30 @@ if(TARGET hybrid_beam)
     DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np2"
   )
 
+  add_test(
+    NAME test_hybrid_beam_one_step_decomposition_np4
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} compare
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np4/diagnostics/snapshots/step_1
+      --atol 1e-5 --rtol 1e-5
+  )
+  set_tests_properties(test_hybrid_beam_one_step_decomposition_np4 PROPERTIES
+    DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np4"
+  )
+
+  add_test(
+    NAME test_hybrid_beam_short_run_decomposition_np4
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} compare
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_short_run_np1/diagnostics/snapshots/step_4
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_short_run_np4/diagnostics/snapshots/step_4
+      --atol 1e-5 --rtol 1e-5
+  )
+  set_tests_properties(test_hybrid_beam_short_run_decomposition_np4 PROPERTIES
+    DEPENDS "test_hybrid_beam_short_run_np1;test_hybrid_beam_short_run_np4"
+  )
+
   foreach(nproc IN ITEMS 1 2)
     set(restart_name test_hybrid_beam_restart_np${nproc})
     add_test(

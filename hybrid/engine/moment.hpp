@@ -17,82 +17,55 @@ inline void deposit_moments(HybridChunk::DataContainer& data)
 
   for (int species = 0; species < data.num_species; ++species) {
     auto& particle = *data.particles[species];
-    if (particle.pindex(particle.Ng) != particle.Np) {
-      throw std::runtime_error("Hybrid moment deposition requires sorted particles");
-    }
+    for (int ip = 0; ip < particle.Np; ++ip) {
+      const Position  position = {particle.xu(ip, 0), particle.xu(ip, 1), particle.xu(ip, 2)};
+      const GridIndex anchor   = particle_cell(particle, position);
+      std::array<nix::float64, 5> weight_x = {};
+      std::array<nix::float64, 5> weight_y = {};
+      std::array<nix::float64, 5> weight_z = {};
+      for (int offset = -2; offset <= 2; ++offset) {
+        const int slot = offset + 2;
+        if (particle.has_xdim) {
+          const nix::float64 coordinate =
+              particle.xmin + particle.delx * (anchor[2] + offset - particle.Lbx + 0.5);
+          weight_x[slot] = shape2(position[0], coordinate, 1.0 / particle.delx);
+        }
+        if (particle.has_ydim) {
+          const nix::float64 coordinate =
+              particle.ymin + particle.dely * (anchor[1] + offset - particle.Lby + 0.5);
+          weight_y[slot] = shape2(position[1], coordinate, 1.0 / particle.dely);
+        }
+        if (particle.has_zdim) {
+          const nix::float64 coordinate =
+              particle.zmin + particle.delz * (anchor[0] + offset - particle.Lbz + 0.5);
+          weight_z[slot] = shape2(position[2], coordinate, 1.0 / particle.delz);
+        }
+      }
+      if (!particle.has_xdim) {
+        weight_x[2] = 1;
+      }
+      if (!particle.has_ydim) {
+        weight_y[2] = 1;
+      }
+      if (!particle.has_zdim) {
+        weight_z[2] = 1;
+      }
 
-    const int nx = particle.Ubx - particle.Lbx + 1;
-    const int ny = particle.Uby - particle.Lby + 1;
-    const int nz = particle.Ubz - particle.Lbz + 1;
-    for (int cell_z = 0; cell_z < nz; ++cell_z) {
-      for (int cell_y = 0; cell_y < ny; ++cell_y) {
-        for (int cell_x = 0; cell_x < nx; ++cell_x) {
-          const int       grid   = particle.flatindex(cell_z, cell_y, cell_x);
-          const GridIndex anchor = {data.Lbz + cell_z, data.Lby + cell_y, data.Lbx + cell_x};
-          std::array<nix::float64, 5 * 5 * 5 * num_moment_components> local = {};
-          for (int ip = particle.pindex(grid); ip < particle.pindex(grid + 1); ++ip) {
-            std::array<nix::float64, 5> weight_x = {};
-            std::array<nix::float64, 5> weight_y = {};
-            std::array<nix::float64, 5> weight_z = {};
-            for (int offset = -2; offset <= 2; ++offset) {
-              const int slot = offset + 2;
-              if (particle.has_xdim) {
-                const nix::float64 coordinate =
-                    particle.xmin + particle.delx * (cell_x + offset + 0.5);
-                weight_x[slot] = shape2(particle.xu(ip, 0), coordinate, 1.0 / particle.delx);
-              }
-              if (particle.has_ydim) {
-                const nix::float64 coordinate =
-                    particle.ymin + particle.dely * (cell_y + offset + 0.5);
-                weight_y[slot] = shape2(particle.xu(ip, 1), coordinate, 1.0 / particle.dely);
-              }
-              if (particle.has_zdim) {
-                const nix::float64 coordinate =
-                    particle.zmin + particle.delz * (cell_z + offset + 0.5);
-                weight_z[slot] = shape2(particle.xu(ip, 2), coordinate, 1.0 / particle.delz);
-              }
+      const nix::float64                                    vx    = particle.xu(ip, 3);
+      const nix::float64                                    vy    = particle.xu(ip, 4);
+      const nix::float64                                    vz    = particle.xu(ip, 5);
+      const std::array<nix::float64, num_moment_components> value = {
+          1, vx, vy, vz, vx * vx, vy * vy, vz * vz, vx * vy, vx * vz, vy * vz};
+      for (int jz = 0; jz < 5; ++jz) {
+        for (int jy = 0; jy < 5; ++jy) {
+          for (int jx = 0; jx < 5; ++jx) {
+            const nix::float64 weight = particle.m * weight_x[jx] * weight_y[jy] * weight_z[jz];
+            if (weight == 0) {
+              continue;
             }
-            if (!particle.has_xdim) {
-              weight_x[2] = 1;
-            }
-            if (!particle.has_ydim) {
-              weight_y[2] = 1;
-            }
-            if (!particle.has_zdim) {
-              weight_z[2] = 1;
-            }
-
-            const nix::float64                                    vx    = particle.xu(ip, 3);
-            const nix::float64                                    vy    = particle.xu(ip, 4);
-            const nix::float64                                    vz    = particle.xu(ip, 5);
-            const std::array<nix::float64, num_moment_components> value = {
-                1, vx, vy, vz, vx * vx, vy * vy, vz * vz, vx * vy, vx * vz, vy * vz};
-            for (int jz = 0; jz < 5; ++jz) {
-              for (int jy = 0; jy < 5; ++jy) {
-                for (int jx = 0; jx < 5; ++jx) {
-                  const nix::float64 weight =
-                      particle.m * weight_x[jx] * weight_y[jy] * weight_z[jz];
-                  if (weight == 0) {
-                    continue;
-                  }
-                  for (int component = 0; component < num_moment_components; ++component) {
-                    const int index =
-                        (((jz * 5 + jy) * 5 + jx) * num_moment_components) + component;
-                    local[index] += weight * value[component];
-                  }
-                }
-              }
-            }
-          }
-          for (int jz = 0; jz < 5; ++jz) {
-            for (int jy = 0; jy < 5; ++jy) {
-              for (int jx = 0; jx < 5; ++jx) {
-                for (int component = 0; component < num_moment_components; ++component) {
-                  const int index = (((jz * 5 + jy) * 5 + jx) * num_moment_components) + component;
-                  data.moment_kinetic(anchor[0] + jz - 2, anchor[1] + jy - 2, anchor[2] + jx - 2,
-                                      species, component) += local[index];
-                }
-              }
+            for (int component = 0; component < num_moment_components; ++component) {
+              data.moment_kinetic(anchor[0] + jz - 2, anchor[1] + jy - 2, anchor[2] + jx - 2,
+                                  species, component) += weight * value[component];
             }
           }
         }

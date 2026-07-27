@@ -1,5 +1,6 @@
 // -*- C++ -*-
 #include "engine/interpolation.hpp"
+#include "engine/moment.hpp"
 #include "engine/particle.hpp"
 #include "hybrid_chunk.hpp"
 
@@ -9,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 namespace
 {
@@ -170,6 +172,40 @@ TEST_CASE("Buneman-Boris push preserves rollback state and raw ID bits")
   REQUIRE(particle.xu(0, 3) == 0.1);
   REQUIRE(particle_id(particle.xu(0, 6)) == id);
   REQUIRE(particle.xv(0, 0) == Catch::Approx(1.56).margin(1.0e-14));
+}
+
+TEST_CASE("first-corrector deposition preserves a bitwise accepted particle snapshot")
+{
+  auto  chunk    = make_particle_chunk();
+  auto  data     = chunk.get_internal_data();
+  auto& particle = *data.particles[0];
+  particle.q     = 0;
+  particle.m     = 1;
+  particle.Np    = 3;
+  particle.xu.fill(0);
+  particle.xv.fill(-1);
+  for (int ip = 0; ip < particle.Np; ++ip) {
+    particle.xu(ip, 0) = 3.5 - ip;
+    particle.xu(ip, 1) = 1.5;
+    particle.xu(ip, 2) = 1.5;
+    particle.xu(ip, 3) = 0.1 * (ip + 1);
+    const int64_t id   = 20 + ip;
+    std::memcpy(&particle.xu(ip, 6), &id, sizeof(id));
+  }
+  std::vector<nix::float64> accepted(static_cast<size_t>(particle.Np) * nix::Particle::Nc);
+  std::memcpy(accepted.data(), particle.xu.data(), accepted.size() * sizeof(nix::float64));
+  data.field_cell.fill(0);
+  data.background_cell.fill(0);
+
+  hybrid::engine::push_particles(data, data.field_cell, 0.1);
+  hybrid::engine::deposit_moments(data);
+  hybrid::engine::rollback_particles(data);
+
+  REQUIRE(std::memcmp(particle.xu.data(), accepted.data(),
+                      accepted.size() * sizeof(nix::float64)) == 0);
+  for (int ip = 0; ip < particle.Np; ++ip) {
+    REQUIRE(particle_id(particle.xu(ip, 6)) == 20 + ip);
+  }
 }
 
 TEST_CASE("Buneman-Boris magnetic rotation matches the legacy formula")

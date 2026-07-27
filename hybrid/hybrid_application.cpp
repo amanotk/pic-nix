@@ -920,28 +920,17 @@ void HybridApplication::push()
             auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
             auto  data  = chunk.get_internal_data();
             engine::push_particles(data, data.work_field_cell, dt);
-            // Count and sort after push for moment deposition
-            for (auto& particle : data.particles) {
-              particle->count(0, particle->Np - 1, true, data.order);
-              particle->sort();
-            }
           }
 
-          // Accumulate moments from pushed particles
+          // Deposit before sorting so xv remains the accepted particle snapshot.
           update_kinetic_moments();
         }
 
         // Rollback on first corrector
         if (should_rollback && has_particles) {
           for (auto& chunk_ptr : chunkvec) {
-            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-            auto  data  = chunk.get_internal_data();
-            for (auto& particle : data.particles) {
-              particle->swap();
-              // Re-count and sort after rollback to restore original ordering
-              particle->count(0, particle->Np - 1, true, data.order);
-              particle->sort();
-            }
+            auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+            engine::rollback_particles(data);
           }
         }
 
