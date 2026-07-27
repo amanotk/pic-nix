@@ -495,56 +495,65 @@ void HybridChunk::setup(nix::json& config)
   if (has_beam) {
     const int global_nx = gdims[2];
     const int global_ny = gdims[1];
-    const int global_nz = gdims[0];
-    const int Np_global = Npc * global_nx * global_ny * global_nz;
 
-    int nprocess        = 1;
-    int thisrank        = 0;
-    int mpi_initialized = 0;
-    MPI_Initialized(&mpi_initialized);
-    if (mpi_initialized) {
-      MPI_Comm_size(MPI_COMM_WORLD, &nprocess);
-      MPI_Comm_rank(MPI_COMM_WORLD, &thisrank);
-    }
+    const auto local_xrange  = get_xrange();
+    const auto local_yrange  = get_yrange();
+    const auto local_zrange  = get_zrange();
+    const auto global_xrange = get_xrange_global();
+    const auto global_yrange = get_yrange_global();
+    const auto global_zrange = get_zrange_global();
+    const auto local_xmin    = std::get<0>(local_xrange);
+    const auto local_ymin    = std::get<0>(local_yrange);
+    const auto local_zmin    = std::get<0>(local_zrange);
+    const auto global_xmin   = std::get<0>(global_xrange);
+    const auto global_ymin   = std::get<0>(global_yrange);
+    const auto global_zmin   = std::get<0>(global_zrange);
 
-    const auto [xmin, xmax] = get_xrange_global();
-    const auto [ymin, ymax] = get_yrange_global();
-    const auto [zmin, zmax] = get_zrange_global();
+    const int local_nx   = dims[2];
+    const int local_ny   = dims[1];
+    const int local_nz   = dims[0];
+    const int local_np   = Npc * local_nx * local_ny * local_nz;
+    const int global_ix0 = static_cast<int>(std::llround((local_xmin - global_xmin) / delh));
+    const int global_iy0 = static_cast<int>(std::llround((local_ymin - global_ymin) / delh));
+    const int global_iz0 = static_cast<int>(std::llround((local_zmin - global_zmin) / delh));
 
     for (int species = 0; species < num_species; ++species) {
-      const int Np_per_rank = Np_global / nprocess;
-      particles[species]    = std::make_shared<nix::XtensorParticle>(Np_per_rank, *this);
-      auto& p               = *particles[species];
-      p.q                   = qmk_ion * species_mass[species];
-      p.m                   = species_mass[species];
-      p.Np                  = Np_per_rank;
+      particles[species] = std::make_shared<nix::XtensorParticle>(local_np, *this);
+      auto& p            = *particles[species];
+      p.q                = qmk_ion * species_mass[species];
+      p.m                = species_mass[species];
+      p.Np               = local_np;
 
-      const int          ip_start   = thisrank * Np_per_rank;
       const nix::float64 drift      = species_drift[species];
       const nix::float64 thermal_pa = species_th_pa[species];
       const nix::float64 thermal_pe = species_th_pe[species];
 
-      for (int ip = 0; ip < Np_per_rank; ++ip) {
-        const int global_ip = ip + ip_start;
-        const int cell      = global_ip / Npc;
-        const int iz        = cell / (global_ny * global_nx);
-        const int iy        = (cell / global_nx) % global_ny;
-        const int ix        = cell % global_nx;
-        const int local_ip  = global_ip % Npc;
+      for (int ip = 0; ip < local_np; ++ip) {
+        const int local_particle = ip % Npc;
+        const int local_cell     = ip / Npc;
+        const int local_iz       = local_cell / (local_ny * local_nx);
+        const int local_iy       = (local_cell / local_nx) % local_ny;
+        const int local_ix       = local_cell % local_nx;
+        const int global_ix      = global_ix0 + local_ix;
+        const int global_iy      = global_iy0 + local_iy;
+        const int global_iz      = global_iz0 + local_iz;
 
-        p.xu(ip, 0) = xmin + delh * (ix + (local_ip + 0.5) / Npc);
-        p.xu(ip, 1) = ymin + delh * (iy + 0.5);
-        p.xu(ip, 2) = zmin + delh * (iz + 0.5);
+        p.xu(ip, 0) = local_xmin + delh * (local_ix + (local_particle + 0.5) / Npc);
+        p.xu(ip, 1) = local_ymin + delh * (local_iy + 0.5);
+        p.xu(ip, 2) = local_zmin + delh * (local_iz + 0.5);
 
         const std::array<nix::float64, 4> vx_sample = {1.0, -1.0, 0.0, 0.0};
         const std::array<nix::float64, 4> vy_sample = {0.0, 0.0, 1.0, -1.0};
-        p.xu(ip, 3)                                 = vx_sample[local_ip] * thermal_pa + drift;
-        p.xu(ip, 4)                                 = vy_sample[local_ip] * thermal_pe;
-        p.xu(ip, 5)                                 = (local_ip < 2 ? thermal_pe : -thermal_pe);
+        p.xu(ip, 3) = vx_sample[local_particle] * thermal_pa + drift;
+        p.xu(ip, 4) = vy_sample[local_particle] * thermal_pe;
+        p.xu(ip, 5) = (local_particle < 2 ? thermal_pe : -thermal_pe);
 
-        std::int64_t id = static_cast<std::int64_t>(global_ip);
+        const int    cell = (global_iz * global_ny + global_iy) * global_nx + global_ix;
+        std::int64_t id   = static_cast<std::int64_t>(cell * Npc + local_particle);
         std::memcpy(&p.xu(ip, 6), &id, sizeof(std::int64_t));
       }
+      p.count(0, p.Np - 1, true, order);
+      p.sort();
     }
   } else {
     for (auto& particle : particles) {

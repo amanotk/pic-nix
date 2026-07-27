@@ -297,6 +297,23 @@ void HybridApplication::push()
     const engine::FluxSpacing flux_spacing{phase_params.spacing_x, phase_params.spacing_y,
                                            phase_params.spacing_z};
 
+    bool has_initial_particles = false;
+    for (const auto& chunk_ptr : chunkvec) {
+      auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+      for (const auto& particle : data.particles) {
+        if (particle->Np > 0) {
+          has_initial_particles = true;
+          break;
+        }
+      }
+      if (has_initial_particles) {
+        break;
+      }
+    }
+    if (has_initial_particles) {
+      update_kinetic_moments();
+    }
+
     // --- Phase speed evaluation ---
     for (auto& chunk_ptr : chunkvec) {
       auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
@@ -316,8 +333,21 @@ void HybridApplication::push()
             for (int c = 0; c < num_vector_components; ++c) {
               local_bg[c] = data.background_cell(iz, iy, ix, c);
             }
+            std::vector<engine::KineticPhaseMoment> kinetic_moments;
+            kinetic_moments.reserve(static_cast<size_t>(data.num_species));
+            for (int species = 0; species < data.num_species; ++species) {
+              engine::KineticPhaseMoment kinetic = {};
+              for (int c = 0; c < num_moment_components; ++c) {
+                kinetic.moment[c] = data.moment_kinetic(iz, iy, ix, species, c);
+              }
+              kinetic.charge_to_mass = data.particles[species]->q / data.particles[species]->m;
+              kinetic_moments.push_back(kinetic);
+            }
             const auto phase =
-                engine::default_phase_speed(local_fluid, local_field, local_bg, phase_params);
+                kinetic_moments.empty()
+                    ? engine::default_phase_speed(local_fluid, local_field, local_bg, phase_params)
+                    : engine::default_phase_speed(local_fluid, local_field, local_bg,
+                                                  kinetic_moments, phase_params);
             for (int dir = 0; dir < num_phase_directions; ++dir) {
               for (int branch = 0; branch < num_phase_branches; ++branch) {
                 data.phase_cell(iz, iy, ix, dir, branch) = phase[3 * dir + branch];
@@ -844,16 +874,8 @@ void HybridApplication::push()
           }
         }
 
-        // Final particle sort + boundary after second corrector
+        // Final particle migration after second corrector
         if (!should_rollback && has_particles) {
-          for (auto& chunk_ptr : chunkvec) {
-            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-            auto  data  = chunk.get_internal_data();
-            for (auto& particle : data.particles) {
-              // Already counted and sorted after push; just ensure boundary
-              particle->set_boundary_periodic(0, particle->Np - 1);
-            }
-          }
           migrate_particles();
         }
       }

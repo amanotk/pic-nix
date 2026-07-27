@@ -342,15 +342,13 @@ public:
     }
 
     for (int ip = Lbp; ip <= Ubp; ip++) {
-      int ix = has_xdim ? digitize(xu(ip, 0), xoffset, rdx) : 0;
-      int iy = has_ydim ? digitize(xu(ip, 1), yoffset, rdy) : 0;
-      int iz = has_zdim ? digitize(xu(ip, 2), zoffset, rdz) : 0;
-      int ii = flatindex(iz, iy, ix);
-
-      // take care out-of-bounds particles
-      ii = has_xdim && (xu(ip, 0) < xmin || xu(ip, 0) >= xmax) ? out_of_bounds : ii;
-      ii = has_ydim && (xu(ip, 1) < ymin || xu(ip, 1) >= ymax) ? out_of_bounds : ii;
-      ii = has_zdim && (xu(ip, 2) < zmin || xu(ip, 2) >= zmax) ? out_of_bounds : ii;
+      int        ix       = has_xdim ? digitize(xu(ip, 0), xoffset, rdx) : 0;
+      int        iy       = has_ydim ? digitize(xu(ip, 1), yoffset, rdy) : 0;
+      int        iz       = has_zdim ? digitize(xu(ip, 2), zoffset, rdz) : 0;
+      const bool out_of_x = has_xdim && (xu(ip, 0) < xmin || xu(ip, 0) >= xmax);
+      const bool out_of_y = has_ydim && (xu(ip, 1) < ymin || xu(ip, 1) >= ymax);
+      const bool out_of_z = has_zdim && (xu(ip, 2) < zmin || xu(ip, 2) >= zmax);
+      const int  ii = (out_of_x || out_of_y || out_of_z) ? out_of_bounds : flatindex(iz, iy, ix);
 
       increment(ip, ii);
     }
