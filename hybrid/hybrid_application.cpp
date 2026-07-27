@@ -2,6 +2,7 @@
 #include "hybrid_application.hpp"
 
 #include "hybrid_chunk.hpp"
+#include "hybrid_diag.hpp"
 
 #include "engine/field.hpp"
 #include "engine/filter.hpp"
@@ -247,6 +248,19 @@ void HybridApplication::push()
     const nix::float64 light_speed     = first_data.light_speed;
     const nix::float64 adiabatic_index = first_data.adiabatic_index;
     const nix::float64 dt              = cfgparser->get_delt();
+
+    // Initial state diagnostics (step 0)
+    {
+      int rank = 0;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+      for (size_t ic = 0; ic < chunkvec.size(); ++ic) {
+        auto& chunk = static_cast<HybridChunk&>(*chunkvec[ic]);
+        auto  data  = chunk.get_internal_data();
+        if (curstep == 0) {
+          diag::write_diagnostics(data, "diagnostics/initial", rank, static_cast<int>(ic));
+        }
+      }
+    }
 
     // Copy accepted state to working arrays
     for (auto& chunk_ptr : chunkvec) {
@@ -897,6 +911,17 @@ void HybridApplication::push()
             }
           }
         }
+      }
+    }
+
+    // Final state diagnostics after commit
+    {
+      int rank = 0;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+      for (size_t ic = 0; ic < chunkvec.size(); ++ic) {
+        auto& chunk = static_cast<HybridChunk&>(*chunkvec[ic]);
+        auto  data  = chunk.get_internal_data();
+        diag::write_diagnostics(data, "diagnostics/final", rank, static_cast<int>(ic));
       }
     }
   } catch (const std::exception& e) {
