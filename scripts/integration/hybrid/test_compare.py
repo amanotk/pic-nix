@@ -15,6 +15,7 @@ from compare import (
     compare_snapshots,
     compute_diagnostics,
     load_snapshot,
+    validate_ownership_change,
 )
 
 
@@ -184,6 +185,23 @@ class SnapshotTest(unittest.TestCase):
             self.assertAlmostEqual(diagnostic["kinetic"], 10.0)
             np.testing.assert_allclose(diagnostic["mode_density"], [0.0, 0.5, 0.0])
             np.testing.assert_allclose(diagnostic["mode_transverse_b"], [0.0, 1.0, 0.0])
+
+    def test_ownership_change_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            before = _write_snapshot(
+                root / "before", [((0, 0, 0), (1, 1, 2)), ((0, 0, 2), (1, 1, 2))]
+            )
+            after = _write_snapshot(
+                root / "after", [((0, 0, 0), (1, 1, 2)), ((0, 0, 2), (1, 1, 2))]
+            )
+            meta_path = after / "chunk_1" / "meta.json"
+            meta = json.loads(meta_path.read_text())
+            meta["rank"] = 0
+            meta_path.write_text(json.dumps(meta))
+            validate_ownership_change(before, after)
+            with self.assertRaises(DiagnosticError):
+                validate_ownership_change(before, before)
 
     def test_legacy_cli_rejects_missing_input(self):
         script = Path(__file__).with_name("legacy_compare.py")

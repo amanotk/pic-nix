@@ -33,3 +33,21 @@ Verify the checked-in fixture contents against their manifests without a Hybrid3
 ```bash
 python3 scripts/integration/hybrid/reference.py --verify-only
 ```
+
+## Validate The Port  
+
+The CTest suite exercises the Hybrid port against these fixtures and against decomposition/restart/DLB invariants. Configure with tests enabled, then run:  
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Important Hybrid acceptance checks include:  
+
+- `test_hybrid_shared_state_step0_legacy` and `test_hybrid_shared_state_step1_legacy` compare a one-rank/one-chunk port run initialized from the canonical legacy state at frozen strict tolerances.  
+- `test_hybrid_shared_state_ssor_legacy` compares legacy SSOR2 stage offsets, iteration counts, and rounded residual history.  
+- `test_hybrid_beam_*decomposition*` compares deterministic beam output across rank counts and chunk topologies.  
+- `test_hybrid_beam_restart_np*` compares continuous versus resumed output.  
+- `test_hybrid_beam_rebalance_restart_np2_*` proves a forced chunk ownership change, compares fixed versus rebalanced output, and verifies restart after migration.  
+
+The current faithful backend is the legacy SSOR2 Ohm solver. The optional elliptic/PETSc backend is intentionally deferred and must preserve the same discrete Ohm system when implemented.  

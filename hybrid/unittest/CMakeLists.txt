@@ -284,6 +284,9 @@ if(TARGET hybrid_beam)
         ${CMAKE_COMMAND} -E
         copy ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config_rebalance.toml ${rebalance_toml}
     )
+    set_tests_properties(${name}_write_config PROPERTIES
+      DEPENDS ${name}_prepare
+    )
     add_test(
       NAME ${name}_run
       COMMAND

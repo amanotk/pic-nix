@@ -455,6 +455,9 @@ void HybridChunk::reset_load()
       throw std::invalid_argument("cell_load_by_chunk must include every Hybrid chunk");
     }
     load[LoadCell] = cell_load_by_chunk.at(id).get<nix::float64>();
+    if (!std::isfinite(load[LoadCell]) || load[LoadCell] < 0) {
+      throw std::invalid_argument("cell_load_by_chunk entries must be finite and nonnegative");
+    }
   }
   load[LoadParticle] = 0;
   for (const auto& particle : particles) {
