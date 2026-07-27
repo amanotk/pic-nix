@@ -283,22 +283,32 @@ void HybridApplication::push()
     }
 
     // All subsequent stages reuse the same snapshot of accepted phase speed.
+    // Charge-to-mass ratios: legacy beam sets qmi=0 (ion fluid inactive) and
+    // qme = qe/me = -cc * mie / sqrt(4*pi).
+    const nix::float64                 mie = cfgparser->get_parameter().value("mie", 100.0);
+    const nix::float64                 qme = -light_speed * mie / std::sqrt(nix::math::pi4);
     const engine::PhaseSpeedParameters phase_params{
         light_speed,
         adiabatic_index,
-        1.0,
-        -2.0,
+        0.0,
+        qme,
         first_chunk.get_delx(),
         first_chunk.get_dely(),
         first_chunk.get_delz(),
     };
 
+    const nix::float64 electron_entropy =
+        first_data.fluid(first_data.Lbz, first_data.Lby, first_data.Lbx,
+                         fluid_component::electron_pressure) /
+        std::pow(first_data.fluid(first_data.Lbz, first_data.Lby, first_data.Lbx,
+                                  fluid_component::electron_density),
+                 adiabatic_index);
     const engine::FluidParameters fluid_parameters{
         light_speed,
         adiabatic_index,
         phase_params.electron_charge_to_mass,
         phase_params.ion_charge_to_mass,
-        0.7,
+        electron_entropy,
     };
 
     const engine::OhmSolverCoefficients ssor2_coeff = engine::compute_ssor2_coefficients(
@@ -535,14 +545,7 @@ void HybridApplication::push()
                         data.work_field_staggered(iz, iy, ix, field_component::magnetic_z),
                         data.work_field_staggered(iz - 1, iy, ix, field_component::magnetic_z));
 
-                // Cell-centered E from work_field_cell (unchanged during CT, kept from previous
-                // Ohm)
-                data.work_field_cell(iz, iy, ix, field_component::electric_x) =
-                    data.field_cell(iz, iy, ix, field_component::electric_x);
-                data.work_field_cell(iz, iy, ix, field_component::electric_y) =
-                    data.field_cell(iz, iy, ix, field_component::electric_y);
-                data.work_field_cell(iz, iy, ix, field_component::electric_z) =
-                    data.field_cell(iz, iy, ix, field_component::electric_z);
+                // Cell-centered E: keep previous SSOR solution as initial guess (do not overwrite)
               }
             }
           }
