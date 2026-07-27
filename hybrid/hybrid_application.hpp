@@ -48,6 +48,8 @@ protected:
 
   void update_kinetic_moments();
 
+  void require_kinetic_particles() const;
+
   bool is_push_needed() override;
 
   void push() override;

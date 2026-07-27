@@ -260,6 +260,11 @@ public:
   {
     migrate_particles();
   }
+
+  void require_particles() const
+  {
+    require_kinetic_particles();
+  }
 };
 
 void run_application_migration_test()
@@ -296,16 +301,21 @@ void run_application_migration_test()
     }
   }
 
-  auto  data        = chunk->get_internal_data();
-  auto& particle    = *data.particles[0];
-  auto [xmin, xmax] = chunk->get_xrange();
+  TestHybridApplication application;
+  auto&                 installed = application.add_chunk(std::move(chunk));
+  auto                  data      = installed.get_internal_data();
+  auto&                 particle  = *data.particles[0];
+  auto [xmin, xmax]               = installed.get_xrange();
+  REQUIRE_THROWS_AS(application.require_particles(), std::invalid_argument);
+  if (rank == 0) {
+    particle.Np = 1;
+  }
+  REQUIRE_NOTHROW(application.require_particles());
+
   particle.Np       = 1;
   particle.xu(0, 0) = xmax + 0.1;
   particle.xv(0, 0) = xmax - 0.1;
   store_id(particle.xu(0, 6), rank * 100 + 7);
-
-  TestHybridApplication application;
-  auto&                 installed = application.add_chunk(std::move(chunk));
   application.migrate();
   auto restored = installed.get_internal_data();
   REQUIRE(restored.particles[0]->Np == 1);

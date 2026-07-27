@@ -237,6 +237,22 @@ void HybridApplication::update_kinetic_moments()
   }
 }
 
+void HybridApplication::require_kinetic_particles() const
+{
+  int local_count = 0;
+  for (const auto& chunk_ptr : chunkvec) {
+    const auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+    for (const auto& particle : data.particles) {
+      local_count += particle->Np;
+    }
+  }
+  int global_count = 0;
+  MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  if (global_count == 0) {
+    throw std::invalid_argument("Hybrid application push requires kinetic particles");
+  }
+}
+
 bool HybridApplication::is_push_needed()
 {
   return curtime < argparser->get_physical_time_max();
@@ -251,6 +267,7 @@ void HybridApplication::push()
     const nix::float64 light_speed     = first_data.light_speed;
     const nix::float64 adiabatic_index = first_data.adiabatic_index;
     const nix::float64 dt              = cfgparser->get_delt();
+    require_kinetic_particles();
 
     const std::filesystem::path diagnostic_root = "diagnostics";
     const auto                  write_snapshot  = [&](int step, nix::float64 time) {
@@ -364,22 +381,7 @@ void HybridApplication::push()
     const engine::FluxSpacing flux_spacing{phase_params.spacing_x, phase_params.spacing_y,
                                            phase_params.spacing_z};
 
-    bool has_initial_particles = false;
-    for (const auto& chunk_ptr : chunkvec) {
-      auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
-      for (const auto& particle : data.particles) {
-        if (particle->Np > 0) {
-          has_initial_particles = true;
-          break;
-        }
-      }
-      if (has_initial_particles) {
-        break;
-      }
-    }
-    if (has_initial_particles) {
-      update_kinetic_moments();
-    }
+    update_kinetic_moments();
 
     // --- Phase speed evaluation ---
     for (auto& chunk_ptr : chunkvec) {
@@ -900,42 +902,24 @@ void HybridApplication::push()
       if (engine::pcc2_is_particle_stage(stage)) {
         const bool should_rollback = engine::pcc2_should_rollback_particles(stage);
 
-        // Skip particle stages when there are no active particles
-        bool has_particles = false;
-        for (const auto& chunk_ptr : chunkvec) {
-          auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
-          for (const auto& p : data.particles) {
-            if (p->Np > 0) {
-              has_particles = true;
-              break;
-            }
-          }
-          if (has_particles)
-            break;
+        // Push particles using averaged work_field_cell.
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          engine::push_particles(data, data.work_field_cell, dt);
         }
 
-        if (has_particles) {
-          // Push particles using averaged work_field_cell
-          for (auto& chunk_ptr : chunkvec) {
-            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-            auto  data  = chunk.get_internal_data();
-            engine::push_particles(data, data.work_field_cell, dt);
-          }
-
-          // Deposit before sorting so xv remains the accepted particle snapshot.
-          update_kinetic_moments();
-        }
+        // Deposit before sorting so xv remains the accepted particle snapshot.
+        update_kinetic_moments();
 
         // Rollback on first corrector
-        if (should_rollback && has_particles) {
+        if (should_rollback) {
           for (auto& chunk_ptr : chunkvec) {
             auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
             engine::rollback_particles(data);
           }
-        }
-
-        // Final particle migration after second corrector
-        if (!should_rollback && has_particles) {
+        } else {
+          // Final particle migration after second corrector
           migrate_particles();
         }
       }

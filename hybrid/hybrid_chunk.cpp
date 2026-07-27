@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 namespace hybrid
@@ -456,23 +457,83 @@ void HybridChunk::setup(nix::json& config)
   num_species     = config["Ns"].get<int>();
   light_speed     = config["cc"].get<nix::float64>();
   adiabatic_index = config["gamma"].get<nix::float64>();
+  if (num_species <= 0) {
+    throw std::invalid_argument("Hybrid setup requires at least one species");
+  }
+  if (!std::isfinite(delh) || delh <= 0) {
+    throw std::invalid_argument("Hybrid setup requires positive finite grid spacing");
+  }
+  if (!std::isfinite(light_speed) || light_speed <= 0) {
+    throw std::invalid_argument("Hybrid setup requires positive finite light speed");
+  }
+  if (!std::isfinite(adiabatic_index) || adiabatic_index <= 1) {
+    throw std::invalid_argument("Hybrid setup requires a finite adiabatic index above one");
+  }
+
+  const bool   has_beam = config.contains("Npc");
+  int          Npc      = 0;
+  int          Mpc      = 0;
+  nix::float64 mie      = 100.0;
+  nix::float64 tie      = 1.0;
+  nix::float64 betae    = 1.0;
+  nix::float64 nb       = 0.02;
+  nix::float64 vcpa     = 1.0;
+  nix::float64 vcpe     = 1.0;
+  nix::float64 vbd      = 10.0;
+  nix::float64 vbpa     = 1.0;
+  nix::float64 vbpe     = 1.0;
+  if (has_beam) {
+    for (const char* name :
+         {"Mpc", "mie", "tie", "betae", "nb", "vcpa", "vcpe", "vbd", "vbpa", "vbpe"}) {
+      if (!config.contains(name)) {
+        throw std::invalid_argument(std::string("Hybrid beam setup requires parameter ") + name);
+      }
+    }
+    Npc   = config["Npc"].get<int>();
+    Mpc   = config["Mpc"].get<int>();
+    mie   = config["mie"].get<nix::float64>();
+    tie   = config["tie"].get<nix::float64>();
+    betae = config["betae"].get<nix::float64>();
+    nb    = config["nb"].get<nix::float64>();
+    vcpa  = config["vcpa"].get<nix::float64>();
+    vcpe  = config["vcpe"].get<nix::float64>();
+    vbd   = config["vbd"].get<nix::float64>();
+    vbpa  = config["vbpa"].get<nix::float64>();
+    vbpe  = config["vbpe"].get<nix::float64>();
+
+    if (num_species != 2) {
+      throw std::invalid_argument("Hybrid beam setup requires exactly two kinetic species");
+    }
+    if (Npc != 4) {
+      throw std::invalid_argument(
+          "Hybrid beam setup currently supports exactly four particles per cell");
+    }
+    if (Mpc < Npc) {
+      throw std::invalid_argument("Hybrid beam particle capacity must cover particles per cell");
+    }
+    if (!std::isfinite(mie) || mie <= 0 || !std::isfinite(tie) || tie <= 0 ||
+        !std::isfinite(betae) || betae <= 0) {
+      throw std::invalid_argument(
+          "Hybrid beam mass ratio and temperatures must be positive and finite");
+    }
+    if (!std::isfinite(nb) || nb <= 0 || nb >= 1) {
+      throw std::invalid_argument(
+          "Hybrid beam density fraction must be finite and between zero and one");
+    }
+    if (!std::isfinite(vcpa) || vcpa < 0 || !std::isfinite(vcpe) || vcpe < 0 ||
+        !std::isfinite(vbpa) || vbpa < 0 || !std::isfinite(vbpe) || vbpe < 0 ||
+        !std::isfinite(vbd)) {
+      throw std::invalid_argument(
+          "Hybrid beam drift must be finite and thermal speeds must be finite and nonnegative");
+    }
+  }
+
   set_boundary_margin(hybrid::boundary_margin);
   set_coordinate(delh, delh, delh);
 
   allocate();
 
   // --- Derive beam parameters from config ---
-  const bool         has_beam = config.contains("Npc") && config["Npc"].get<int>() > 0;
-  const int          Npc      = has_beam ? config["Npc"].get<int>() : 0;
-  const nix::float64 mie      = has_beam ? config.value("mie", 100.0) : 100.0;
-  const nix::float64 betae    = has_beam ? config.value("betae", 1.0) : 1.0;
-  const nix::float64 nb       = has_beam ? config.value("nb", 0.02) : 0.02;
-  const nix::float64 vcpa     = has_beam ? config.value("vcpa", 1.0) : 1.0;
-  const nix::float64 vcpe     = has_beam ? config.value("vcpe", 1.0) : 1.0;
-  const nix::float64 vbd      = has_beam ? config.value("vbd", 10.0) : 10.0;
-  const nix::float64 vbpa     = has_beam ? config.value("vbpa", 1.0) : 1.0;
-  const nix::float64 vbpe     = has_beam ? config.value("vbpe", 1.0) : 1.0;
-
   const nix::float64 roe = 1.0 / mie;
   const nix::float64 roi = 1.0 - nb;
   const nix::float64 rob = nb;
@@ -592,10 +653,6 @@ void HybridChunk::setup(nix::json& config)
           field_staggered(iz, iy, ix, field_component::magnetic_x) = bx;
           field_staggered(iz, iy, ix, field_component::magnetic_y) = 0;
           field_staggered(iz, iy, ix, field_component::magnetic_z) = 0;
-
-          background_cell(iz, iy, ix, 0) = bx;
-          background_cell(iz, iy, ix, 1) = 0;
-          background_cell(iz, iy, ix, 2) = 0;
         }
       }
     }

@@ -1,10 +1,16 @@
 // -*- C++ -*-
+#include "engine/interpolation.hpp"
 #include "hybrid_chunk.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -48,6 +54,26 @@ hybrid::HybridChunk make_chunk()
   chunk.set_global_context(offset, global);
   chunk.setup(config);
   return chunk;
+}
+
+nix::json make_beam_config()
+{
+  return {{"delh", 0.25},
+          {"Ns", 2},
+          {"cc", 1.0e+4},
+          {"gamma", 1.666666666666667},
+          {"Npc", 4},
+          {"Mpc", 16},
+          {"mie", 100.0},
+          {"tie", 1.0},
+          {"betae", 1.0},
+          {"nb", 0.02},
+          {"vcpa", 0.70710678118654757},
+          {"vcpe", 0.70710678118654757},
+          {"vbd", 10.0},
+          {"vbpa", 0.70710678118654757},
+          {"vbpe", 0.70710678118654757},
+          {"option", {{"cell_load", 1.0}}}};
 }
 } // namespace
 
@@ -286,20 +312,7 @@ TEST_CASE("beam initialization validates particle counts and IDs", "[hybrid][bea
 
   chunk.set_boundary_margin(hybrid::boundary_margin);
 
-  nix::json config = {{"delh", 0.25},
-                      {"Ns", 2},
-                      {"cc", 1.0e+4},
-                      {"gamma", 1.666666666666667},
-                      {"Npc", 4},
-                      {"mie", 100.0},
-                      {"betae", 1.0},
-                      {"nb", 0.02},
-                      {"vcpa", 0.70710678118654757},
-                      {"vcpe", 0.70710678118654757},
-                      {"vbd", 10.0},
-                      {"vbpa", 0.70710678118654757},
-                      {"vbpe", 0.70710678118654757},
-                      {"option", {{"cell_load", 1.0}}}};
+  nix::json config = make_beam_config();
 
   int gdims_arr[3] = {static_cast<int>(dims[0]), static_cast<int>(dims[1]),
                       static_cast<int>(dims[2])};
@@ -322,10 +335,25 @@ TEST_CASE("beam initialization validates particle counts and IDs", "[hybrid][bea
     const auto& p = *data.particles[species];
     REQUIRE(p.Np == expected_np);
     REQUIRE(p.Np > 0);
+    const double density =
+        species == 0 ? 1.0 - config["nb"].get<double>() : config["nb"].get<double>();
+    REQUIRE(p.m == Catch::Approx(density / Npc));
 
     std::vector<std::int64_t> ids(static_cast<size_t>(p.Np));
     for (int ip = 0; ip < p.Np; ++ip) {
       std::memcpy(&ids[static_cast<size_t>(ip)], &p.xu(ip, 6), sizeof(std::int64_t));
+      const int local_particle              = static_cast<int>(ids[static_cast<size_t>(ip)] % Npc);
+      const std::array<double, 4> vx_sample = {1, -1, 0, 0};
+      const std::array<double, 4> vy_sample = {0, 0, 1, -1};
+      const double drift = species == 0 ? -config["vbd"].get<double>() * config["nb"].get<double>()
+                                        : config["vbd"].get<double>();
+      const double parallel =
+          species == 0 ? config["vcpa"].get<double>() : config["vbpa"].get<double>();
+      const double perpendicular =
+          species == 0 ? config["vcpe"].get<double>() : config["vbpe"].get<double>();
+      REQUIRE(p.xu(ip, 3) == Catch::Approx(drift + parallel * vx_sample[local_particle]));
+      REQUIRE(p.xu(ip, 4) == Catch::Approx(perpendicular * vy_sample[local_particle]));
+      REQUIRE(p.xu(ip, 5) == Catch::Approx(local_particle < 2 ? perpendicular : -perpendicular));
     }
     std::sort(ids.begin(), ids.end());
     auto dup = std::adjacent_find(ids.begin(), ids.end());
@@ -354,7 +382,112 @@ TEST_CASE("beam initialization validates particle counts and IDs", "[hybrid][bea
       for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
         REQUIRE(data.fluid(iz, iy, ix, fluid_component::electron_density) > 0);
         REQUIRE(data.field_cell(iz, iy, ix, field_component::magnetic_x) != 0);
+        for (int component = 0; component < num_vector_components; ++component) {
+          REQUIRE(data.background_cell(iz, iy, ix, component) == 0);
+        }
       }
     }
+  }
+
+  REQUIRE(array_is_zero(data.background_cell));
+  REQUIRE(array_is_zero(data.background_x_face));
+  REQUIRE(array_is_zero(data.background_y_face));
+  REQUIRE(array_is_zero(data.background_z_face));
+
+  const auto&            particle = *data.particles[0];
+  const engine::Position position = {particle.xu(0, 0), particle.xu(0, 1), particle.xu(0, 2)};
+  const auto             anchor   = engine::particle_cell(particle, position);
+  const auto interpolated = engine::interpolate_collocated(data.field_cell, data.background_cell,
+                                                           particle, anchor, position);
+  REQUIRE(interpolated[field_component::magnetic_x] ==
+          Catch::Approx(std::sqrt(nix::math::pi4)).margin(1.0e-13));
+}
+
+TEST_CASE("beam initialization rejects unsupported or unsafe parameters", "[hybrid][beam]")
+{
+  const auto setup = [](nix::json config) {
+    const nix::Dims3D   dims{2, 2, 2};
+    const nix::Bool3D   has_dim{true, true, true};
+    const int           offset[3] = {0, 0, 0};
+    const int           global[3] = {2, 2, 2};
+    hybrid::HybridChunk chunk(dims, has_dim, 0);
+    chunk.set_global_context(offset, global);
+    chunk.setup(config);
+  };
+
+  SECTION("species count")
+  {
+    auto config  = make_beam_config();
+    config["Ns"] = 1;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("supported particles per cell")
+  {
+    auto config   = make_beam_config();
+    config["Npc"] = 3;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("particle capacity")
+  {
+    auto config   = make_beam_config();
+    config["Mpc"] = 3;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("grid spacing")
+  {
+    auto config    = make_beam_config();
+    config["delh"] = 0;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("light speed")
+  {
+    auto config  = make_beam_config();
+    config["cc"] = std::numeric_limits<double>::infinity();
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("adiabatic index")
+  {
+    auto config     = make_beam_config();
+    config["gamma"] = 1;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("mass ratio")
+  {
+    auto config   = make_beam_config();
+    config["mie"] = 0;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("temperature")
+  {
+    auto config   = make_beam_config();
+    config["tie"] = 0;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+    config          = make_beam_config();
+    config["betae"] = -1;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("density fraction")
+  {
+    auto config  = make_beam_config();
+    config["nb"] = 0;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+    config       = make_beam_config();
+    config["nb"] = 1;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("particle speeds")
+  {
+    auto config    = make_beam_config();
+    config["vcpa"] = -1;
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+    config        = make_beam_config();
+    config["vbd"] = std::numeric_limits<double>::quiet_NaN();
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
+  }
+  SECTION("required parameter")
+  {
+    auto config = make_beam_config();
+    config.erase("mie");
+    REQUIRE_THROWS_AS(setup(config), std::invalid_argument);
   }
 }
