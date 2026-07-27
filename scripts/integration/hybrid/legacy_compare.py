@@ -1,153 +1,145 @@
 #!/usr/bin/env python3
-"""Compare PIC-NIX Hybrid output with legacy reference NPZ fixtures.
+"""Compare one canonical PIC-NIX Hybrid snapshot with a legacy fixture."""
 
-Reports numerical differences and attributes them to deterministic vs
-MersenneTwister particle initialization where appropriate.
-"""
-
-import json
-import re
+import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 
-
-REFERENCE_DIR = Path(__file__).with_name("reference")
-
-
-def load_our_npy(root: Path):
-    """Load our NPY diagnostics."""
-    chunks = []
-    for subdir in sorted(root.rglob("rank_*_chunk_*")):
-        meta = json.loads((subdir / "meta.json").read_text())
-        chunk = {
-            "meta": meta,
-            "field": np.load(subdir / "field.npy"),
-            "fluid": np.load(subdir / "fluid.npy"),
-            "moment": np.load(subdir / "moment.npy"),
-        }
-        for s in range(meta["num_species"]):
-            pp = subdir / f"particle_{s}.npy"
-            if pp.exists():
-                chunk.setdefault("particles", []).append(np.load(pp))
-        chunks.append(chunk)
-    chunks.sort(key=lambda c: (c["meta"]["Lbz"], c["meta"]["Lby"], c["meta"]["Lbx"]))
-    return chunks
+from compare import DiagnosticError, compute_diagnostics, load_snapshot
 
 
-def assemble_global_array(chunks, key):
-    """Stack chunk arrays along axis 0."""
-    parts = [c[key] for c in chunks]
-    return np.concatenate(parts, axis=0)
+def compare_legacy(
+    snapshot_path: Path,
+    reference_path: Path,
+    config_path: Path,
+    *,
+    index: int | None = None,
+    atol: float = 1.0e-6,
+    rtol: float = 1.0e-6,
+) -> list[str]:
+    """Return every mismatch with the selected legacy fixture state."""
+    if not reference_path.is_file():
+        raise DiagnosticError(f"legacy reference does not exist: {reference_path}")
+    snapshot = load_snapshot(snapshot_path)
+    try:
+        reference = np.load(reference_path, allow_pickle=False)
+    except Exception as error:
+        raise DiagnosticError(f"cannot load {reference_path}: {error}") from error
 
-
-def compare_case(label: str, our_root: Path, legacy_npz: Path, config_path: Path = None):
-    print(f"\n=== {label} ===")
-    if not our_root.exists():
-        print(f"  SKIP: our diagnostics not found at {our_root}")
-        return
-    if not legacy_npz.exists():
-        print(f"  SKIP: legacy reference not found at {legacy_npz}")
-        return
-
-    our_chunks = load_our_npy(our_root)
-    legacy = dict(np.load(legacy_npz))
-
-    # Compare field arrays (step 1 = index 1)
-    for leg_key, our_key, desc in [
-        ("field_eb", "field", "E+B cell field"),
-        ("field_up", "fluid", "fluid state"),
-        ("moment_mom", "moment", "kinetic moments"),
-    ]:
-        if leg_key not in legacy:
-            print(f"  {desc}: legacy key '{leg_key}' missing")
+    step_index = snapshot["meta"]["step"] if index is None else index
+    errors = []
+    array_keys = {
+        "field": "field_eb",
+        "fluid": "field_up",
+        "moment": "moment_mom",
+    }
+    for snapshot_key, reference_key in array_keys.items():
+        if reference_key not in reference:
+            errors.append(f"legacy reference is missing {reference_key}")
             continue
-        leg_arr = legacy[leg_key]
-        our_arr = assemble_global_array(our_chunks, our_key)
-
-        if leg_arr.ndim >= 5:
-            leg_step = leg_arr[1]  # step 1
-        elif leg_arr.ndim >= 4:
-            leg_step = leg_arr[1]
-        else:
+        if step_index < 0 or step_index >= reference[reference_key].shape[0]:
+            errors.append(
+                f"legacy reference has no index {step_index} for {reference_key}"
+            )
             continue
+        actual = snapshot["arrays"][snapshot_key]
+        expected = reference[reference_key][step_index]
+        if actual.shape != expected.shape:
+            errors.append(
+                f"{snapshot_key} shape differs: {actual.shape} vs {expected.shape}"
+            )
+        elif not np.allclose(actual, expected, atol=atol, rtol=rtol):
+            errors.append(
+                f"{snapshot_key} max absolute difference {np.max(np.abs(actual - expected)):.6e}"
+            )
 
-        if leg_step.shape != our_arr.shape:
-            print(f"  {desc}: shape mismatch legacy={leg_step.shape} ours={our_arr.shape}")
+    for species, (actual_ids, actual_state) in enumerate(snapshot["particles"]):
+        id_key = f"particle_{species:02d}_id"
+        state_key = f"particle_{species:02d}_state"
+        if id_key not in reference or state_key not in reference:
+            errors.append(
+                f"legacy reference is missing particles for species {species}"
+            )
             continue
+        if step_index < 0 or step_index >= reference[id_key].shape[0]:
+            errors.append(f"legacy reference has no particle index {step_index}")
+            continue
+        expected_ids = reference[id_key][step_index]
+        expected_state = reference[state_key][step_index]
+        if not np.array_equal(actual_ids, expected_ids):
+            errors.append(f"species {species} particle IDs differ")
+        elif not np.allclose(actual_state, expected_state, atol=atol, rtol=rtol):
+            errors.append(
+                f"species {species} particle state max absolute difference "
+                f"{np.max(np.abs(actual_state - expected_state)):.6e}"
+            )
 
-        abs_diff = np.max(np.abs(leg_step - our_arr))
-        rel_diff = abs_diff / (np.max(np.abs(leg_step)) + 1e-32)
+    diagnostics = compute_diagnostics(snapshot_path, config_path)
+    if "energy" not in reference or step_index >= reference["energy"].shape[0]:
+        errors.append(f"legacy reference has no energy index {step_index}")
+    else:
+        actual_energy = np.asarray(
+            [
+                diagnostics["magnetic"],
+                diagnostics["electron"],
+                diagnostics["ion"],
+                diagnostics["kinetic"],
+            ]
+        )
+        expected_energy = reference["energy"][step_index]
+        if not np.allclose(actual_energy, expected_energy, atol=atol, rtol=rtol):
+            errors.append(
+                f"energy max absolute difference {np.max(np.abs(actual_energy - expected_energy)):.6e}"
+            )
 
-        status = "OK" if abs_diff < 1e-6 else "DIFF"
-        note = ""
-        if desc == "kinetic moments":
-            note = " (expected: deterministic vs random particle init)"
-        elif desc == "fluid state":
-            note = " (may differ due to kinetic moment coupling in Ohm source)"
-
-        print(f"  {desc}: {status} max abs={abs_diff:.6e} rel={rel_diff:.6e}{note}")
-
-    # Energy comparison
-    if "energy" in legacy:
-        leg_energy = legacy["energy"]
-        if leg_energy.ndim >= 2:
-            leg_step = leg_energy[1]
-        else:
-            leg_step = leg_energy
-
-        # Compute our energy
-        field = assemble_global_array(our_chunks, "field")
-        fluid = assemble_global_array(our_chunks, "fluid")
-
-        gamma = 1.666666666666667
-        if config_path and config_path.exists():
-            m = re.search(r"gamma\s*=\s*([0-9.]+)", config_path.read_text())
-            if m:
-                gamma = float(m.group(1))
-
-        magnetic = np.sum(field[..., 3:6]**2) / (8 * np.pi)
-        electron = np.sum(0.5 * fluid[..., 0] * np.sum(fluid[..., 1:4]**2, axis=-1) + fluid[..., 4] / (gamma - 1))
-        ion = np.sum(0.5 * fluid[..., 5] * np.sum(fluid[..., 6:9]**2, axis=-1) + fluid[..., 9] / (gamma - 1))
-
-        kinetic = 0.0
-        for c in our_chunks:
-            for p in c.get("particles", []):
-                if p.shape[0] > 0:
-                    kinetic += 0.5 * np.sum(p[:, 3:6]**2)
-
-        print(f"  energy legacy: mag={leg_step[0]:.4f} el={leg_step[1]:.4f} ion={leg_step[2]:.4f} kin={leg_step[3]:.4f} sum={sum(leg_step):.4f}")
-        print(f"  energy ours:   mag={magnetic:.4f} el={electron:.4f} ion={ion:.4f} kin={kinetic:.4f} sum={magnetic+electron+ion+kinetic:.4f}")
-        print("  energy: kinetic differs (expected: deterministic vs random particle init)")
-
-    # SSOR comparison
-    our_log = our_root.parent.parent / "debug.log" if our_root.name == "final" else our_root.parent / "debug.log"
-    if not our_log.exists():
-        our_log = our_root.parent / "debug.log"
-
-    if "ssor_iteration" in legacy and our_log.exists():
-        leg_iter = legacy["ssor_iteration"]
-
-        log_text = our_log.read_text()
-        our_iters = [int(m.group(1)) for m in re.finditer(r"iter=(\d+)", log_text)]
-
-        print(f"  SSOR: legacy {len(leg_iter)} total iterations, ours {len(our_iters)} total iterations")
-        print("  SSOR: convergence behavior comparison not feasible (different particle init changes source)")
+    for diagnostic_key in ("mode_density", "mode_transverse_b"):
+        if (
+            diagnostic_key not in reference
+            or step_index >= reference[diagnostic_key].shape[0]
+        ):
+            errors.append(
+                f"legacy reference has no {diagnostic_key} index {step_index}"
+            )
+            continue
+        actual = np.asarray(diagnostics[diagnostic_key])
+        expected = np.abs(reference[diagnostic_key][step_index])
+        if actual.shape != expected.shape or not np.allclose(
+            actual, expected, atol=atol, rtol=rtol
+        ):
+            errors.append(f"{diagnostic_key} differs")
+    return errors
 
 
-def main():
-    import argparse
+def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--our-one-step", type=Path, help="Our one-step diagnostics/final dir")
-    parser.add_argument("--our-short-run", type=Path, help="Our short-run diagnostics/final dir")
-    parser.add_argument("--config", type=Path, default=Path("hybrid/example/beam/config.toml"))
+    parser.add_argument("snapshot", type=Path)
+    parser.add_argument("reference", type=Path)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--index", type=int)
+    parser.add_argument("--atol", type=float, default=1.0e-6)
+    parser.add_argument("--rtol", type=float, default=1.0e-6)
     args = parser.parse_args()
-
-    compare_case("One-step beam", args.our_one_step,
-                 REFERENCE_DIR / "beam_one_step.npz", args.config)
-    compare_case("Short-run beam", args.our_short_run,
-                 REFERENCE_DIR / "beam_short_run.npz", args.config)
+    try:
+        errors = compare_legacy(
+            args.snapshot,
+            args.reference,
+            args.config,
+            index=args.index,
+            atol=args.atol,
+            rtol=args.rtol,
+        )
+    except (DiagnosticError, OSError, KeyError, TypeError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("snapshot matches legacy reference")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

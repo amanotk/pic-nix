@@ -1,6 +1,7 @@
 if(NOT DEFINED MPIEXEC)
   find_program(MPIEXEC NAMES mpiexec mpirun REQUIRED)
 endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 include(${PICNIX_DIR}/nix/cmake/Catch2Setup.cmake)
 
@@ -57,6 +58,11 @@ add_test(NAME test_hybrid_pcc2 COMMAND test_hybrid_pcc2)
 add_executable(test_hybrid_ohm_bridge test_hybrid_ohm_bridge.cpp)
 target_link_libraries(test_hybrid_ohm_bridge PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
 add_test(NAME test_hybrid_ohm_bridge COMMAND test_hybrid_ohm_bridge)
+
+add_test(
+  NAME test_hybrid_compare
+  COMMAND ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/test_compare.py
+)
 
 function(add_hybrid_mpi_test name target nproc)
   set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
@@ -259,4 +265,65 @@ if(TARGET hybrid_beam)
   add_hybrid_np4_test(test_hybrid_beam_zero_step_np4 4 0)
   add_hybrid_np4_test(test_hybrid_beam_one_step_np4 4 0.01)
   add_hybrid_np4_test(test_hybrid_beam_short_run_np4 4 0.04)
+
+  set(hybrid_compare ${PICNIX_DIR}/scripts/integration/hybrid/compare.py)
+  add_test(
+    NAME test_hybrid_beam_initial_decomposition
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} compare
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_0
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np4/diagnostics/snapshots/step_0
+      --atol 1e-8 --rtol 1e-8
+  )
+  set_tests_properties(test_hybrid_beam_initial_decomposition PROPERTIES
+    DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np4"
+  )
+
+  add_test(
+    NAME test_hybrid_beam_one_step_decomposition_np2
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} compare
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np2/diagnostics/snapshots/step_1
+      --atol 1e-6 --rtol 1e-6
+  )
+  set_tests_properties(test_hybrid_beam_one_step_decomposition_np2 PROPERTIES
+    DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np2"
+  )
+
+  foreach(nproc IN ITEMS 1 2)
+    set(restart_name test_hybrid_beam_restart_np${nproc})
+    add_test(
+      NAME ${restart_name}_compare
+      COMMAND
+        ${Python3_EXECUTABLE} ${hybrid_compare} compare
+        ${CMAKE_CURRENT_BINARY_DIR}/${restart_name}/resume/diagnostics/snapshots/step_2
+        ${CMAKE_CURRENT_BINARY_DIR}/${restart_name}/direct/diagnostics/snapshots/step_2
+        --atol 1e-6 --rtol 1e-6
+    )
+    set_tests_properties(${restart_name}_compare PROPERTIES
+      DEPENDS "${restart_name}_resume;${restart_name}_direct"
+    )
+  endforeach()
+
+  add_test(
+    NAME test_hybrid_beam_diagnostic_history
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} history
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_short_run_np1/diagnostics 4
+  )
+  set_tests_properties(test_hybrid_beam_diagnostic_history PROPERTIES
+    DEPENDS test_hybrid_beam_short_run_np1
+  )
+
+  add_test(
+    NAME test_hybrid_beam_diagnostics
+    COMMAND
+      ${Python3_EXECUTABLE} ${hybrid_compare} diag
+      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
+      --config ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml
+  )
+  set_tests_properties(test_hybrid_beam_diagnostics PROPERTIES
+    DEPENDS test_hybrid_beam_one_step_np1
+  )
 endif()

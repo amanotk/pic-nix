@@ -16,7 +16,9 @@
 #include "engine/phasespeed.hpp"
 #include "engine/ssor2.hpp"
 
+#include <filesystem>
 #include <sstream>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -250,17 +252,54 @@ void HybridApplication::push()
     const nix::float64 adiabatic_index = first_data.adiabatic_index;
     const nix::float64 dt              = cfgparser->get_delt();
 
-    // Initial state diagnostics (step 0)
-    {
-      int rank = 0;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      for (size_t ic = 0; ic < chunkvec.size(); ++ic) {
-        auto& chunk = static_cast<HybridChunk&>(*chunkvec[ic]);
-        auto  data  = chunk.get_internal_data();
-        if (curstep == 0) {
-          diag::write_diagnostics(data, "diagnostics/initial", rank, static_cast<int>(ic));
+    const std::filesystem::path diagnostic_root = "diagnostics";
+    const auto                  write_snapshot  = [&](int step, nix::float64 time) {
+      const auto step_dir = diagnostic_root / "snapshots" / ("step_" + std::to_string(step));
+      int        directory_ready = 1;
+      if (thisrank == 0) {
+        try {
+          std::filesystem::remove_all(step_dir);
+        } catch (const std::filesystem::filesystem_error&) {
+          directory_ready = 0;
         }
       }
+      MPI_Bcast(&directory_ready, 1, MPI_INT, 0, MPI_COMM_WORLD);
+      if (directory_ready == 0) {
+        throw std::runtime_error("Failed to clear Hybrid diagnostic step directory");
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+
+      for (const auto& chunk_ptr : chunkvec) {
+        auto&                     chunk  = static_cast<HybridChunk&>(*chunk_ptr);
+        auto                      data   = chunk.get_internal_data();
+        const auto                offset = chunk.get_offset();
+        const auto                dims   = chunk.get_dims();
+        std::vector<nix::float64> particle_mass;
+        std::vector<nix::float64> particle_charge;
+        particle_mass.reserve(data.particles.size());
+        particle_charge.reserve(data.particles.size());
+        for (const auto& particle : data.particles) {
+          particle_mass.push_back(particle->m);
+          particle_charge.push_back(particle->q);
+        }
+        const diag::SnapshotMetadata metadata{
+            thisrank,
+            chunk.get_id(),
+            {offset[0], offset[1], offset[2]},
+            {dims[0], dims[1], dims[2]},
+            {ndims[0], ndims[1], ndims[2]},
+            step,
+            time,
+            dt,
+            std::move(particle_mass),
+            std::move(particle_charge),
+        };
+        diag::write_diagnostics(data, diagnostic_root, metadata);
+      }
+    };
+
+    if (curstep == 0) {
+      write_snapshot(curstep, curtime);
     }
 
     // Copy accepted state to working arrays
@@ -932,20 +971,13 @@ void HybridApplication::push()
       }
     }
 
-    // Final state diagnostics after commit
-    {
-      int rank = 0;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      if (rank == 0) {
-        std::system("mkdir -p diagnostics");
-        std::ofstream slog("diagnostics/debug.log");
-        slog << ssor_log.str();
-      }
-      for (size_t ic = 0; ic < chunkvec.size(); ++ic) {
-        auto& chunk = static_cast<HybridChunk&>(*chunkvec[ic]);
-        auto  data  = chunk.get_internal_data();
-        diag::write_diagnostics(data, "diagnostics/final", rank, static_cast<int>(ic));
-      }
+    // push() runs before Application advances its step and time counters.
+    write_snapshot(curstep + 1, curtime + dt);
+    if (thisrank == 0) {
+      const auto ssor_dir = diagnostic_root / "ssor";
+      std::filesystem::create_directories(ssor_dir);
+      auto slog = diag::open_output(ssor_dir / ("step_" + std::to_string(curstep + 1) + ".log"));
+      slog << ssor_log.str();
     }
   } catch (const std::exception& e) {
     std::cerr << "Hybrid push() failed: " << e.what() << std::endl;
