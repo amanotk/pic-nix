@@ -16,7 +16,8 @@ thirdparty/
 # VSCode settings
 .vscode
 # Local notes
-notes
+notes/*
+!notes/hybrid-elliptic-backend.md
 TODO.md
 # Local scratch / planning artifacts
 tmp/
