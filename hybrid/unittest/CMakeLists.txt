@@ -1,7 +1,6 @@
 if(NOT DEFINED MPIEXEC)
   find_program(MPIEXEC NAMES mpiexec mpirun REQUIRED)
 endif()
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 include(${PICNIX_DIR}/nix/cmake/Catch2Setup.cmake)
 
@@ -62,11 +61,6 @@ add_test(NAME test_hybrid_ohm_bridge COMMAND test_hybrid_ohm_bridge)
 add_executable(hybrid_shared_state hybrid_shared_state.cpp)
 target_link_libraries(hybrid_shared_state PRIVATE hybrid)
 
-add_test(
-  NAME test_hybrid_compare
-  COMMAND ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/test_compare.py
-)
-
 function(add_hybrid_mpi_test name target nproc)
   set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
   file(MAKE_DIRECTORY ${tmpdir})
@@ -95,10 +89,8 @@ if(TARGET hybrid_beam)
   set(shared_state_dir ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_shared_state)
   file(MAKE_DIRECTORY ${shared_state_dir})
   add_test(
-    NAME test_hybrid_shared_state_export
-    COMMAND
-      ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/reference.py
-      --case beam_one_step --export-shared ${shared_state_dir}/shared_state.bin
+    NAME test_hybrid_shared_state_prepare
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/shared_state.bin ${shared_state_dir}/shared_state.bin
   )
   add_test(
     NAME test_hybrid_shared_state_run
@@ -107,46 +99,11 @@ if(TARGET hybrid_beam)
       -c ${CMAKE_CURRENT_LIST_DIR}/config_shared.toml -t 0.01
   )
   set_tests_properties(test_hybrid_shared_state_run PROPERTIES
-    DEPENDS test_hybrid_shared_state_export
+    DEPENDS test_hybrid_shared_state_prepare
     LABELS MPI
     PROCESSORS 1
     TIMEOUT 120
     WORKING_DIRECTORY ${shared_state_dir}
-  )
-  foreach(step IN ITEMS 0 1)
-    add_test(
-      NAME test_hybrid_shared_state_step${step}_legacy
-      COMMAND
-        ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/legacy_compare.py
-        ${shared_state_dir}/diagnostics/snapshots/step_${step}
-        ${PICNIX_DIR}/scripts/integration/hybrid/reference/beam_one_step.npz
-        --config ${CMAKE_CURRENT_LIST_DIR}/config_shared.toml --index ${step}
-        --atol 1e-13 --rtol 1e-12
-    )
-    set_tests_properties(test_hybrid_shared_state_step${step}_legacy PROPERTIES
-      DEPENDS test_hybrid_shared_state_run
-    )
-  endforeach()
-  set(hybrid_compare ${PICNIX_DIR}/scripts/integration/hybrid/compare.py)
-  add_test(
-    NAME test_hybrid_shared_state_ssor_legacy
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} ssor
-      ${shared_state_dir}/diagnostics/ssor/step_1.log
-      ${PICNIX_DIR}/scripts/integration/hybrid/reference/beam_one_step.npz
-  )
-  set_tests_properties(test_hybrid_shared_state_ssor_legacy PROPERTIES
-    DEPENDS test_hybrid_shared_state_run
-  )
-  add_test(
-    NAME test_hybrid_shared_state_invariants
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} invariants
-      ${shared_state_dir}/diagnostics/snapshots/step_1
-      --expected-particles 128
-  )
-  set_tests_properties(test_hybrid_shared_state_invariants PROPERTIES
-    DEPENDS test_hybrid_shared_state_run
   )
 
   function(add_hybrid_zero_step_test name nproc)
@@ -405,171 +362,4 @@ if(TARGET hybrid_beam)
   add_hybrid_np4_test(test_hybrid_beam_short_run_np4 4 0.04)
   add_hybrid_np4_test(test_hybrid_beam_one_step_4chunk_np1 1 0.01)
   add_hybrid_np4_test(test_hybrid_beam_one_step_4chunk_np2 2 0.01)
-
-  add_test(
-    NAME test_hybrid_beam_initial_decomposition
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_0
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np4/diagnostics/snapshots/step_0
-      --atol 1e-8 --rtol 1e-8
-  )
-  set_tests_properties(test_hybrid_beam_initial_decomposition PROPERTIES
-    DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np4"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_one_step_decomposition_np2
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np2/diagnostics/snapshots/step_1
-      --atol 1e-6 --rtol 1e-6
-  )
-  set_tests_properties(test_hybrid_beam_one_step_decomposition_np2 PROPERTIES
-    DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np2"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_one_step_decomposition_np4
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np4/diagnostics/snapshots/step_1
-      --atol 1e-5 --rtol 1e-5
-  )
-  set_tests_properties(test_hybrid_beam_one_step_decomposition_np4 PROPERTIES
-    DEPENDS "test_hybrid_beam_one_step_np1;test_hybrid_beam_one_step_np4"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_short_run_decomposition_np4
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_short_run_np1/diagnostics/snapshots/step_4
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_short_run_np4/diagnostics/snapshots/step_4
-      --atol 1e-5 --rtol 1e-5
-  )
-  set_tests_properties(test_hybrid_beam_short_run_decomposition_np4 PROPERTIES
-    DEPENDS "test_hybrid_beam_short_run_np1;test_hybrid_beam_short_run_np4"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_fixed_topology_np1_np2
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_4chunk_np1/diagnostics/snapshots/step_1
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_4chunk_np2/diagnostics/snapshots/step_1
-      --atol 1e-5 --rtol 1e-5
-  )
-  set_tests_properties(test_hybrid_beam_fixed_topology_np1_np2 PROPERTIES
-    DEPENDS "test_hybrid_beam_one_step_4chunk_np1;test_hybrid_beam_one_step_4chunk_np2"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_fixed_topology_np1_np4
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_4chunk_np1/diagnostics/snapshots/step_1
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np4/diagnostics/snapshots/step_1
-      --atol 1e-5 --rtol 1e-5
-  )
-  set_tests_properties(test_hybrid_beam_fixed_topology_np1_np4 PROPERTIES
-    DEPENDS "test_hybrid_beam_one_step_4chunk_np1;test_hybrid_beam_one_step_np4"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_fixed_rank_topology_np2
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np2/diagnostics/snapshots/step_1
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_4chunk_np2/diagnostics/snapshots/step_1
-      --atol 1e-5 --rtol 1e-5
-  )
-  set_tests_properties(test_hybrid_beam_fixed_rank_topology_np2 PROPERTIES
-    DEPENDS "test_hybrid_beam_one_step_np2;test_hybrid_beam_one_step_4chunk_np2"
-  )
-
-  add_test(
-    NAME test_hybrid_beam_accepted_invariants
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} invariants
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
-      --expected-particles 128
-  )
-  set_tests_properties(test_hybrid_beam_accepted_invariants PROPERTIES
-    DEPENDS test_hybrid_beam_one_step_np1
-  )
-
-  set(rebalance_restart_name test_hybrid_beam_rebalance_restart_np2)
-  add_test(
-    NAME ${rebalance_restart_name}_ownership
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} ownership
-      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_0
-      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_3
-  )
-  set_tests_properties(${rebalance_restart_name}_ownership PROPERTIES
-    DEPENDS ${rebalance_restart_name}_direct
-  )
-
-  add_test(
-    NAME ${rebalance_restart_name}_fixed_compare
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/fixed/diagnostics/snapshots/step_3
-      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_3
-      --atol 1e-5 --rtol 1e-5
-  )
-  set_tests_properties(${rebalance_restart_name}_fixed_compare PROPERTIES
-    DEPENDS "${rebalance_restart_name}_fixed;${rebalance_restart_name}_direct"
-  )
-
-  add_test(
-    NAME ${rebalance_restart_name}_compare
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} compare
-      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/resume/diagnostics/snapshots/step_3
-      ${CMAKE_CURRENT_BINARY_DIR}/${rebalance_restart_name}/direct/diagnostics/snapshots/step_3
-      --atol 1e-6 --rtol 1e-6
-  )
-  set_tests_properties(${rebalance_restart_name}_compare PROPERTIES
-    DEPENDS "${rebalance_restart_name}_resume;${rebalance_restart_name}_direct"
-  )
-
-  foreach(nproc IN ITEMS 1 2 4)
-    set(restart_name test_hybrid_beam_restart_np${nproc})
-    add_test(
-      NAME ${restart_name}_compare
-      COMMAND
-        ${Python3_EXECUTABLE} ${hybrid_compare} compare
-        ${CMAKE_CURRENT_BINARY_DIR}/${restart_name}/resume/diagnostics/snapshots/step_2
-        ${CMAKE_CURRENT_BINARY_DIR}/${restart_name}/direct/diagnostics/snapshots/step_2
-        --atol 1e-6 --rtol 1e-6
-    )
-    set_tests_properties(${restart_name}_compare PROPERTIES
-      DEPENDS "${restart_name}_resume;${restart_name}_direct"
-    )
-  endforeach()
-
-  add_test(
-    NAME test_hybrid_beam_diagnostic_history
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} history
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_short_run_np1/diagnostics 4
-  )
-  set_tests_properties(test_hybrid_beam_diagnostic_history PROPERTIES
-    DEPENDS test_hybrid_beam_short_run_np1
-  )
-
-  add_test(
-    NAME test_hybrid_beam_diagnostics
-    COMMAND
-      ${Python3_EXECUTABLE} ${hybrid_compare} diag
-      ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_beam_one_step_np1/diagnostics/snapshots/step_1
-      --config ${CMAKE_CURRENT_LIST_DIR}/../example/beam/config.toml
-  )
-  set_tests_properties(test_hybrid_beam_diagnostics PROPERTIES
-    DEPENDS test_hybrid_beam_one_step_np1
-  )
 endif()

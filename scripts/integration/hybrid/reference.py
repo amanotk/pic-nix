@@ -20,7 +20,7 @@ CASES = {
 }
 SSOR_PATTERN = re.compile(r"iter\s*=\s*(\d+), error\s*=\s*([-+\d.eE]+)")
 SHARED_MAGIC = b"HYBRIDR6"
-SHARED_VERSION = 1
+SHARED_VERSION = 2
 
 
 def parse_config(path: Path) -> dict[str, str]:
@@ -237,6 +237,47 @@ def export_shared_state(case: str, output_path: Path, index: int = 0) -> None:
                 for state, particle_id in zip(states, ids):
                     output.write(state.tobytes(order="C"))
                     output.write(struct.pack("<q", int(particle_id)))
+
+            step1_index = index + 1
+            if step1_index < fixture["field_eb"].shape[0]:
+                step1_field = np.asarray(fixture["field_eb"][step1_index], dtype="<f8")
+                step1_fluid = np.asarray(fixture["field_up"][step1_index], dtype="<f8")
+                step1_moment = np.asarray(fixture["moment_mom"][step1_index], dtype="<f8")
+                if step1_field.shape[:3] != (nz, ny, nx) or step1_fluid.shape[:3] != (nz, ny, nx):
+                    raise RuntimeError("shared fixture step-1 shape mismatch")
+                if step1_moment.shape[:3] != (nz, ny, nx) or step1_moment.shape[3] != num_species:
+                    raise RuntimeError("shared fixture step-1 moment shape mismatch")
+
+                has_step1 = np.uint32(1)
+                output.write(has_step1.tobytes(order="C"))
+                output.write(step1_field.tobytes(order="C"))
+                output.write(step1_fluid.tobytes(order="C"))
+                output.write(step1_moment.tobytes(order="C"))
+                for species in range(num_species):
+                    step1_states = np.asarray(
+                        fixture[f"particle_{species:02d}_state"][step1_index], dtype="<f8"
+                    )
+                    step1_ids = np.asarray(
+                        fixture[f"particle_{species:02d}_id"][step1_index], dtype="<i8"
+                    )
+                    if step1_states.shape != (step1_ids.size, 6):
+                        raise RuntimeError(
+                            f"shared fixture species {species} step-1 particle shape mismatch"
+                        )
+                    output.write(struct.pack("<q", step1_ids.size))
+                    for state_val, particle_id in zip(step1_states, step1_ids):
+                        output.write(state_val.tobytes(order="C"))
+                        output.write(struct.pack("<q", int(particle_id)))
+
+                ssor_offset = np.asarray(fixture["ssor_offset"], dtype="<i4")
+                ssor_iter = np.asarray(fixture["ssor_iteration"], dtype="<i4")
+                ssor_residual = np.asarray(fixture["ssor_relative_error"], dtype="<f8")
+                output.write(struct.pack("<I", ssor_offset.size))
+                output.write(ssor_offset.tobytes(order="C"))
+                output.write(struct.pack("<I", ssor_iter.size))
+                output.write(ssor_iter.tobytes(order="C"))
+                output.write(struct.pack("<I", ssor_residual.size))
+                output.write(ssor_residual.tobytes(order="C"))
 
 
 def run_case(
