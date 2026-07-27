@@ -39,6 +39,28 @@ TEST_CASE("default phase speed matches legacy two-fluid formula")
   }
 }
 
+TEST_CASE("default phase speed includes kinetic moment contributions")
+{
+  const auto                        params     = parameters();
+  const hybrid::engine::FluidState  fluid      = {1.2, 0.3,  -0.2, 0.4,  0.9485643171120767,
+                                                  0.8, -0.1, 0.5,  -0.3, 0.6};
+  const hybrid::engine::FieldState  field      = {0.2, -0.3, 0.1, 1.1, -0.7, 0.4};
+  const hybrid::engine::VectorState background = {0.2, -0.1, 0.3};
+  const std::vector<hybrid::engine::KineticPhaseMoment> kinetic = {
+      {{{0.15, 0.02, -0.03, 0.04, 0.12, 0.10, 0.08, 0, 0, 0}}, -0.5},
+      {{{0.25, -0.04, 0.05, -0.02, 0.2, 0.16, 0.18, 0, 0, 0}}, 0.75}};
+
+  const auto phase = hybrid::engine::default_phase_speed(fluid, field, background, kinetic, params);
+  const hybrid::engine::PhaseState expected = {
+      1.4256419559206712, 1.235904045252528,  1.126933945584754,
+      1.583886411603795,  1.3287369099426654, 1.1287369099426654,
+      1.5326549065840962, 1.4007981328668573, 1.1336884983153623};
+  for (int component = 0; component < hybrid::num_phase_directions * hybrid::num_phase_branches;
+       ++component) {
+    REQUIRE(phase[component] == Catch::Approx(expected[component]).epsilon(tolerance));
+  }
+}
+
 TEST_CASE("phase cell-to-face interpolation uses directional maxima")
 {
   const hybrid::engine::PhaseState left  = {1.0, 2.0, 3.0, 4.0, 1.5, 6.0, 7.0, 8.0, 9.0};

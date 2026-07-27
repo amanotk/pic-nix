@@ -25,6 +25,12 @@ struct FluidParameters {
   nix::float64 electron_entropy;
 };
 
+struct FluxSpacing {
+  nix::float64 x;
+  nix::float64 y;
+  nix::float64 z;
+};
+
 inline ConservedState conservative(const FluidState& fluid, const FieldState& field,
                                    const FluidParameters& parameters)
 {
@@ -103,6 +109,23 @@ inline ConservedState fluid_rhs(nix::float64 time_step, const FieldState& field,
           charge * field[1] + (jz * bx - jx * bz) * reciprocal_light_speed,
           charge * field[2] + (jx * by - jy * bx) * reciprocal_light_speed,
           jx * field[0] + jy * field[1] + jz * field[2]};
+}
+
+inline ConservedState
+advance_conserved_fluid(const ConservedState& baseline, const ConservedState& flux_x_minus,
+                        const ConservedState& flux_x_plus, const ConservedState& flux_y_minus,
+                        const ConservedState& flux_y_plus, const ConservedState& flux_z_minus,
+                        const ConservedState& flux_z_plus, const ConservedState& rhs,
+                        const FluxSpacing& spacing)
+{
+  ConservedState result = {};
+  for (int component = 0; component < num_conserved_components; ++component) {
+    result[component] =
+        baseline[component] + (flux_x_minus[component] - flux_x_plus[component]) / spacing.x +
+        (flux_y_minus[component] - flux_y_plus[component]) / spacing.y +
+        (flux_z_minus[component] - flux_z_plus[component]) / spacing.z + rhs[component];
+  }
+  return result;
 }
 
 inline ConservedState physical_flux(int direction, const FluidState& fluid, const FieldState& field,

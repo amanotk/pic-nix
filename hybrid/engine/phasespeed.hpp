@@ -8,10 +8,17 @@
 #include <array>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 namespace hybrid::engine
 {
-using PhaseState = std::array<nix::float64, num_phase_directions * num_phase_branches>;
+using PhaseState  = std::array<nix::float64, num_phase_directions * num_phase_branches>;
+using MomentState = std::array<nix::float64, num_moment_components>;
+
+struct KineticPhaseMoment {
+  MomentState  moment;
+  nix::float64 charge_to_mass;
+};
 
 struct PhaseSpeedParameters {
   nix::float64 light_speed;
@@ -149,6 +156,78 @@ default_phase_speed(const FluidState& fluid, const FieldState& field,
       result[index]                = symmetric;
       result[index + 1]            = symmetric;
     }
+  }
+  return result;
+}
+
+inline PhaseState
+default_phase_speed(const FluidState& fluid, const FieldState& field,
+                    const std::array<nix::float64, num_vector_components>& background,
+                    const std::vector<KineticPhaseMoment>&                 kinetic_moments,
+                    const PhaseSpeedParameters&                            parameters)
+{
+  const auto         kn  = nyquist_wavenumber_squared(parameters);
+  const nix::float64 cc  = parameters.light_speed * parameters.light_speed;
+  nix::float64       wpi = fluid[fluid_component::ion_density] * parameters.ion_charge_to_mass *
+                     parameters.ion_charge_to_mass * nix::math::pi4;
+  nix::float64 wpe = fluid[fluid_component::electron_density] * parameters.electron_charge_to_mass *
+                     parameters.electron_charge_to_mass * nix::math::pi4;
+  nix::float64 ro = fluid[fluid_component::electron_density] + fluid[fluid_component::ion_density];
+  nix::float64 pr =
+      fluid[fluid_component::electron_pressure] + fluid[fluid_component::ion_pressure];
+  std::array<nix::float64, num_vector_components> electron_velocity = {
+      fluid[fluid_component::electron_velocity_x] * wpe,
+      fluid[fluid_component::electron_velocity_y] * wpe,
+      fluid[fluid_component::electron_velocity_z] * wpe};
+  std::array<nix::float64, num_vector_components> ion_velocity = {
+      fluid[fluid_component::ion_velocity_x] * wpi, fluid[fluid_component::ion_velocity_y] * wpi,
+      fluid[fluid_component::ion_velocity_z] * wpi};
+  for (const auto& species : kinetic_moments) {
+    const nix::float64 charge_to_mass_squared =
+        nix::math::pi4 * species.charge_to_mass * species.charge_to_mass;
+    const nix::float64 plasma_frequency =
+        species.moment[moment_component::density] * charge_to_mass_squared;
+    ro += species.moment[moment_component::density];
+    pr +=
+        (species.moment[moment_component::stress_xx] + species.moment[moment_component::stress_yy] +
+         species.moment[moment_component::stress_zz]) /
+        3.0;
+    auto&         velocity_sum = species.charge_to_mass < 0 ? electron_velocity : ion_velocity;
+    nix::float64& frequency    = species.charge_to_mass < 0 ? wpe : wpi;
+    frequency += plasma_frequency;
+    velocity_sum[0] += species.moment[moment_component::momentum_x] * charge_to_mass_squared;
+    velocity_sum[1] += species.moment[moment_component::momentum_y] * charge_to_mass_squared;
+    velocity_sum[2] += species.moment[moment_component::momentum_z] * charge_to_mass_squared;
+  }
+  for (int component = 0; component < num_vector_components; ++component) {
+    electron_velocity[component] /= wpe;
+    ion_velocity[component] /= wpi;
+  }
+
+  const nix::float64                                    rki      = cc / wpi;
+  const nix::float64                                    mei      = wpi / wpe;
+  const std::array<nix::float64, num_vector_components> magnetic = {
+      field[field_component::magnetic_x] + background[0],
+      field[field_component::magnetic_y] + background[1],
+      field[field_component::magnetic_z] + background[2]};
+  const nix::float64 b2 =
+      magnetic[0] * magnetic[0] + magnetic[1] * magnetic[1] + magnetic[2] * magnetic[2] + 1.0e-30;
+  const nix::float64 va2  = b2 * (1.0 / nix::math::pi4) / ro;
+  const nix::float64 vs2  = parameters.adiabatic_index * pr / ro;
+  const nix::float64 beta = vs2 / va2;
+
+  PhaseState result = {};
+  for (int direction = 0; direction < num_phase_directions; ++direction) {
+    const int          index = 3 * direction;
+    const nix::float64 root =
+        solve_phase_cubic(kn[direction] * rki, magnetic[direction] * magnetic[direction] / b2, beta,
+                          mei, 0, parameters);
+    result[index + 2]        = std::sqrt(root * va2);
+    const nix::float64 phase = result[index + 2];
+    result[index] =
+        std::max({electron_velocity[direction] + phase, ion_velocity[direction] + phase, 0.0});
+    result[index + 1] =
+        -std::min({electron_velocity[direction] - phase, ion_velocity[direction] - phase, 0.0});
   }
   return result;
 }
