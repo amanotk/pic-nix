@@ -59,6 +59,9 @@ add_executable(test_hybrid_ohm_bridge test_hybrid_ohm_bridge.cpp)
 target_link_libraries(test_hybrid_ohm_bridge PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
 add_test(NAME test_hybrid_ohm_bridge COMMAND test_hybrid_ohm_bridge)
 
+add_executable(hybrid_shared_state hybrid_shared_state.cpp)
+target_link_libraries(hybrid_shared_state PRIVATE hybrid)
+
 add_test(
   NAME test_hybrid_compare
   COMMAND ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/test_compare.py
@@ -89,6 +92,42 @@ foreach(target IN ITEMS test_hybrid_boundary test_hybrid_particle_transfer test_
 endforeach()
 
 if(TARGET hybrid_beam)
+  set(shared_state_dir ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_shared_state)
+  file(MAKE_DIRECTORY ${shared_state_dir})
+  add_test(
+    NAME test_hybrid_shared_state_export
+    COMMAND
+      ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/reference.py
+      --case beam_one_step --export-shared ${shared_state_dir}/shared_state.bin
+  )
+  add_test(
+    NAME test_hybrid_shared_state_run
+    COMMAND
+      ${MPIEXEC} -n 1 $<TARGET_FILE:hybrid_shared_state>
+      -c ${CMAKE_CURRENT_LIST_DIR}/config_shared.toml -t 0.01
+  )
+  set_tests_properties(test_hybrid_shared_state_run PROPERTIES
+    DEPENDS test_hybrid_shared_state_export
+    LABELS MPI
+    PROCESSORS 1
+    TIMEOUT 120
+    WORKING_DIRECTORY ${shared_state_dir}
+  )
+  foreach(step IN ITEMS 0 1)
+    add_test(
+      NAME test_hybrid_shared_state_step${step}_legacy
+      COMMAND
+        ${Python3_EXECUTABLE} ${PICNIX_DIR}/scripts/integration/hybrid/legacy_compare.py
+        ${shared_state_dir}/diagnostics/snapshots/step_${step}
+        ${PICNIX_DIR}/scripts/integration/hybrid/reference/beam_one_step.npz
+        --config ${CMAKE_CURRENT_LIST_DIR}/config_shared.toml --index ${step}
+        --atol 1e-13 --rtol 1e-12
+    )
+    set_tests_properties(test_hybrid_shared_state_step${step}_legacy PROPERTIES
+      DEPENDS test_hybrid_shared_state_run
+    )
+  endforeach()
+
   function(add_hybrid_zero_step_test name nproc)
     set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
     add_test(NAME ${name}_prepare COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir})

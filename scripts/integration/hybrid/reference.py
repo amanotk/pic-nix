@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import shutil
+import struct
 import subprocess
 from pathlib import Path
 
@@ -18,6 +19,8 @@ CASES = {
     "beam_short_run": REFERENCE_DIR / "beam_short_run.cfg",
 }
 SSOR_PATTERN = re.compile(r"iter\s*=\s*(\d+), error\s*=\s*([-+\d.eE]+)")
+SHARED_MAGIC = b"HYBRIDR6"
+SHARED_VERSION = 1
 
 
 def parse_config(path: Path) -> dict[str, str]:
@@ -183,6 +186,59 @@ def verify_fixture(case: str) -> None:
                 )
 
 
+def export_shared_state(case: str, output_path: Path, index: int = 0) -> None:
+    """Export one canonical fixture state for the test-only Hybrid loader."""
+    verify_fixture(case)
+    fixture_path = REFERENCE_DIR / f"{case}.npz"
+    with np.load(fixture_path, allow_pickle=False) as fixture:
+        field = np.asarray(fixture["field_eb"][index], dtype="<f8")
+        fluid = np.asarray(fixture["field_up"][index], dtype="<f8")
+        moment = np.asarray(fixture["moment_mom"][index], dtype="<f8")
+        if field.shape[-1] != 6 or fluid.shape[-1] != 10:
+            raise RuntimeError("shared fixture has incompatible field or fluid shape")
+        if moment.shape[:3] != field.shape[:3] or moment.shape[-1] != 10:
+            raise RuntimeError("shared fixture has incompatible moment shape")
+        nz, ny, nx = field.shape[:3]
+        num_species = moment.shape[3]
+        time = float(fixture["field_time"][index])
+        time_step = float(fixture["field_delt"][index])
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("wb") as output:
+            output.write(
+                struct.pack(
+                    "<8sII4i2d",
+                    SHARED_MAGIC,
+                    SHARED_VERSION,
+                    index,
+                    nz,
+                    ny,
+                    nx,
+                    num_species,
+                    time,
+                    time_step,
+                )
+            )
+            output.write(field.tobytes(order="C"))
+            output.write(fluid.tobytes(order="C"))
+            output.write(moment.tobytes(order="C"))
+            for species in range(num_species):
+                states = np.asarray(
+                    fixture[f"particle_{species:02d}_state"][index], dtype="<f8"
+                )
+                ids = np.asarray(
+                    fixture[f"particle_{species:02d}_id"][index], dtype="<i8"
+                )
+                if states.shape != (ids.size, 6):
+                    raise RuntimeError(
+                        f"shared fixture species {species} particle shape mismatch"
+                    )
+                output.write(struct.pack("<q", ids.size))
+                for state, particle_id in zip(states, ids):
+                    output.write(state.tobytes(order="C"))
+                    output.write(struct.pack("<q", int(particle_id)))
+
+
 def run_case(
     executable: Path, output_root: Path, case: str, repeats: int
 ) -> dict[str, object]:
@@ -250,6 +306,8 @@ def main() -> int:
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--case", choices=sorted(CASES), action="append")
     parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--export-shared", type=Path)
+    parser.add_argument("--index", type=int, default=0)
     args = parser.parse_args()
 
     cases = args.case or list(CASES)
@@ -257,6 +315,13 @@ def main() -> int:
         for case in cases:
             verify_fixture(case)
         print(json.dumps({"verified": cases}, indent=2))
+        return 0
+
+    if args.export_shared is not None:
+        if len(cases) != 1:
+            parser.error("--export-shared requires exactly one --case")
+        export_shared_state(cases[0], args.export_shared, args.index)
+        print(json.dumps({"exported": str(args.export_shared), "index": args.index}))
         return 0
 
     if args.executable is None or args.output is None:

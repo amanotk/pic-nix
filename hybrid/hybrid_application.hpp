@@ -4,6 +4,7 @@
 
 #include "hybrid.hpp"
 
+#include "engine/pcc2.hpp"
 #include "nix/application.hpp"
 #include "nix/chunk.hpp"
 #include "nix/diag.hpp"
@@ -51,6 +52,8 @@ protected:
   void require_kinetic_particles() const;
 
   bool is_push_needed() override;
+
+  virtual void pcc2_stage_completed(engine::Pcc2Stage stage);
 
   void push() override;
 };

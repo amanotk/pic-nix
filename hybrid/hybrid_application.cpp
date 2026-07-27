@@ -259,6 +259,10 @@ bool HybridApplication::is_push_needed()
   return curtime < argparser->get_physical_time_max();
 }
 
+void HybridApplication::pcc2_stage_completed(engine::Pcc2Stage)
+{
+}
+
 void HybridApplication::push()
 {
   try {
@@ -288,7 +292,10 @@ void HybridApplication::push()
       MPI_Barrier(MPI_COMM_WORLD);
 
       for (const auto& chunk_ptr : chunkvec) {
-        auto&                     chunk  = static_cast<HybridChunk&>(*chunk_ptr);
+        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+        if (!chunk.exchanges_idle()) {
+          throw std::runtime_error("Accepted Hybrid snapshot has an active exchange");
+        }
         auto                      data   = chunk.get_internal_data();
         const auto                offset = chunk.get_offset();
         const auto                dims   = chunk.get_dims();
@@ -484,8 +491,10 @@ void HybridApplication::push()
     // --- PCC2 stages ---
     for (engine::Pcc2Stage stage                 = engine::Pcc2Stage::PredictorField;
          stage != engine::Pcc2Stage::Idle; stage = engine::pcc2_next_stage(stage)) {
-      if (stage == engine::Pcc2Stage::Commit)
+      if (stage == engine::Pcc2Stage::Commit) {
+        pcc2_stage_completed(stage);
         break;
+      }
 
       if (engine::pcc2_is_field_stage(stage)) {
         // Reconstruct cell states to faces and compute independent directional HLL fluxes.
@@ -855,6 +864,23 @@ void HybridApplication::push()
             }
           }
         }
+
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_pack(data.work_fluid, BoundaryCopy10);
+          chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+          chunk.boundary_begin(data.work_fluid, BoundaryCopy10);
+          chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
+        }
+        for (auto& chunk_ptr : chunkvec) {
+          auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+          auto  data  = chunk.get_internal_data();
+          chunk.boundary_end(data.work_fluid, BoundaryCopy10);
+          chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+          chunk.boundary_unpack(data.work_fluid, BoundaryCopy10);
+          chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+        }
       }
 
       if (engine::pcc2_is_particle_stage(stage)) {
@@ -881,6 +907,7 @@ void HybridApplication::push()
           migrate_particles();
         }
       }
+      pcc2_stage_completed(stage);
     }
 
     // --- Commit ---
