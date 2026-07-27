@@ -54,6 +54,10 @@ add_executable(test_hybrid_pcc2 test_hybrid_pcc2.cpp)
 target_link_libraries(test_hybrid_pcc2 PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
 add_test(NAME test_hybrid_pcc2 COMMAND test_hybrid_pcc2)
 
+add_executable(test_hybrid_ohm_bridge test_hybrid_ohm_bridge.cpp)
+target_link_libraries(test_hybrid_ohm_bridge PRIVATE Catch2::Catch2 hybrid_obj_serial hybrid)
+add_test(NAME test_hybrid_ohm_bridge COMMAND test_hybrid_ohm_bridge)
+
 function(add_hybrid_mpi_test name target nproc)
   set(tmpdir ${CMAKE_CURRENT_BINARY_DIR}/${name})
   file(MAKE_DIRECTORY ${tmpdir})
