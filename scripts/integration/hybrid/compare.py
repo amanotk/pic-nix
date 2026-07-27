@@ -297,21 +297,128 @@ def compute_diagnostics(root: Path, config_path: Path | None = None) -> dict:
 
 
 def validate_history(root: Path, final_step: int) -> None:
-    """Validate that a run retained every snapshot and per-step SSOR log."""
+    """Validate that a run retained semantic snapshots and per-step SSOR logs."""
     if final_step < 0:
         raise DiagnosticError("final step must be nonnegative")
     for step in range(final_step + 1):
-        snapshot = load_snapshot(root / "snapshots" / f"step_{step}")
+        snapshot_path = root / "snapshots" / f"step_{step}"
+        snapshot = load_snapshot(snapshot_path)
         if snapshot["meta"]["step"] != step:
             raise DiagnosticError(
                 f"snapshot step_{step} contains step {snapshot['meta']['step']}"
             )
+        diagnostics = compute_diagnostics(snapshot_path)
+        energy = np.asarray(
+            [
+                diagnostics["magnetic"],
+                diagnostics["electron"],
+                diagnostics["ion"],
+                diagnostics["kinetic"],
+                diagnostics["total"],
+            ]
+        )
+        if not np.isfinite(energy).all():
+            raise DiagnosticError(f"snapshot step_{step} has non-finite energy")
+        for key in ("mode_density", "mode_transverse_b"):
+            mode = np.asarray(diagnostics[key])
+            if mode.size < 2 or not np.isfinite(mode).all():
+                raise DiagnosticError(f"snapshot step_{step} has invalid {key}")
+        if step == final_step and diagnostics["mode_density"][1] <= 0:
+            raise DiagnosticError(f"snapshot step_{step} lost the first density mode")
     for step in range(1, final_step + 1):
         log_path = root / "ssor" / f"step_{step}.log"
-        if not log_path.is_file():
-            raise DiagnosticError(f"missing SSOR log: {log_path}")
-        if not log_path.read_text().strip():
-            raise DiagnosticError(f"empty SSOR log: {log_path}")
+        _, _, offsets, converged = _parse_ssor_log(log_path)
+        if offsets.size != 4:
+            raise DiagnosticError(f"{log_path}: expected three Ohm stages")
+        if not all(converged):
+            raise DiagnosticError(f"{log_path}: not all Ohm stages converged")
+
+
+def validate_invariants(root: Path, expected_particles: int | None = None) -> None:
+    """Validate accepted-state invariants visible in one diagnostic snapshot."""
+    snapshot = load_snapshot(root)
+    for key, array in snapshot["arrays"].items():
+        if not np.isfinite(array).all():
+            raise DiagnosticError(f"{key} contains NaN or infinity")
+    for species, (ids, state) in enumerate(snapshot["particles"]):
+        if expected_particles is not None and ids.size != expected_particles:
+            raise DiagnosticError(
+                f"species {species} has {ids.size} particles, expected {expected_particles}"
+            )
+        if ids.size and not np.all(ids[:-1] <= ids[1:]):
+            raise DiagnosticError(
+                f"species {species} particle IDs are not canonicalized"
+            )
+        if not np.isfinite(state).all():
+            raise DiagnosticError(
+                f"species {species} particle state contains NaN or infinity"
+            )
+
+
+def _parse_ssor_log(
+    log_path: Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[bool]]:
+    if not log_path.is_file():
+        raise DiagnosticError(f"missing SSOR log: {log_path}")
+    iterations = []
+    residuals = []
+    offsets = [0]
+    converged = []
+    stage_pattern = re.compile(
+        r"^# Ohm stage (\d+): iterations=(\d+) converged=(true|false)$"
+    )
+    iter_pattern = re.compile(r"^iter=(\d+), error=([^\s]+)$")
+    stage_start = 0
+    for line in log_path.read_text().splitlines():
+        if match := iter_pattern.match(line):
+            iterations.append(int(match.group(1)))
+            residuals.append(float(match.group(2)))
+            continue
+        if match := stage_pattern.match(line):
+            expected_stage_iterations = int(match.group(2))
+            actual_stage_iterations = len(iterations) - stage_start
+            if actual_stage_iterations != expected_stage_iterations:
+                raise DiagnosticError(
+                    f"{log_path}: Ohm stage {match.group(1)} reports "
+                    f"{expected_stage_iterations} iterations but has {actual_stage_iterations}"
+                )
+            offsets.append(len(iterations))
+            converged.append(match.group(3) == "true")
+            stage_start = len(iterations)
+            continue
+        if line.strip():
+            raise DiagnosticError(f"{log_path}: unrecognized SSOR log line: {line}")
+    return (
+        np.asarray(iterations, dtype=np.int32),
+        np.asarray(residuals, dtype=np.float64),
+        np.asarray(offsets, dtype=np.int32),
+        converged,
+    )
+
+
+def compare_ssor_history(log_path: Path, reference_path: Path) -> None:
+    """Compare one port SSOR log with the legacy rounded residual history."""
+    try:
+        reference = np.load(reference_path, allow_pickle=False)
+    except Exception as error:
+        raise DiagnosticError(f"cannot load {reference_path}: {error}") from error
+    required = ("ssor_iteration", "ssor_relative_error", "ssor_offset")
+    for key in required:
+        if key not in reference:
+            raise DiagnosticError(f"legacy reference is missing {key}")
+    iterations, residuals, offsets, converged = _parse_ssor_log(log_path)
+    if not converged or not all(converged):
+        raise DiagnosticError(f"{log_path}: not all Ohm stages converged")
+    if not np.array_equal(offsets, reference["ssor_offset"]):
+        raise DiagnosticError(f"{log_path}: SSOR offsets differ")
+    if not np.array_equal(iterations, reference["ssor_iteration"]):
+        raise DiagnosticError(f"{log_path}: SSOR iteration sequence differs")
+    actual = np.asarray([f"{value:12.3e}" for value in residuals])
+    expected = np.asarray(
+        [f"{value:12.3e}" for value in reference["ssor_relative_error"]]
+    )
+    if not np.array_equal(actual, expected):
+        raise DiagnosticError(f"{log_path}: SSOR rounded residual history differs")
 
 
 def main() -> int:
@@ -336,6 +443,18 @@ def main() -> int:
     )
     history_parser.add_argument("diagnostics", type=Path)
     history_parser.add_argument("final_step", type=int)
+
+    invariants_parser = subparsers.add_parser(
+        "invariants", help="validate accepted snapshot invariants"
+    )
+    invariants_parser.add_argument("snapshot", type=Path)
+    invariants_parser.add_argument("--expected-particles", type=int)
+
+    ssor_parser = subparsers.add_parser(
+        "ssor", help="compare SSOR history with a legacy fixture"
+    )
+    ssor_parser.add_argument("log", type=Path)
+    ssor_parser.add_argument("reference", type=Path)
     args = parser.parse_args()
 
     try:
@@ -353,6 +472,16 @@ def main() -> int:
         if args.command == "history":
             validate_history(args.diagnostics, args.final_step)
             print("diagnostic history is complete")
+            return 0
+
+        if args.command == "invariants":
+            validate_invariants(args.snapshot, args.expected_particles)
+            print("accepted-state invariants hold")
+            return 0
+
+        if args.command == "ssor":
+            compare_ssor_history(args.log, args.reference)
+            print("SSOR history matches legacy reference")
             return 0
 
         print(json.dumps(compute_diagnostics(args.snapshot, args.config), indent=2))
