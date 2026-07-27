@@ -82,3 +82,24 @@ TEST_CASE("PCC2 stage flow preserves uniform conservative update trajectory")
   REQUIRE(particle_stages == 2);
   REQUIRE(hybrid::engine::pcc2_should_rollback_particles(P::FirstCorrectorParticle));
 }
+
+TEST_CASE("PCC2 fluid update uses accepted conservation and working-field forcing")
+{
+  const hybrid::engine::FluidState   fluid = {1.0, 0.1, 0.2, 0.3, 0.8, 0.5, 0.4, 0.3, 0.2, 0.6};
+  const hybrid::engine::FieldState   accepted_field = {0.1, 0.2, 0.3, 1.0, 0.0, 0.0};
+  const hybrid::engine::FieldState   working_field  = {2.0, -1.0, 0.5, 0.0, 3.0, -2.0};
+  const hybrid::engine::CurrentState current        = {0.4, -0.3, 0.2, -0.1};
+  const hybrid::engine::VectorState  background     = {0.2, 0.1, -0.1};
+  const auto                         params         = fluid_params();
+  const auto baseline = hybrid::engine::conservative(fluid, accepted_field, params);
+  const auto forcing  = hybrid::engine::fluid_rhs(0.05, working_field, current, background, params);
+
+  REQUIRE(baseline[4] == Catch::Approx(0.1425 + 2.1 + 0.5 / nix::math::pi4));
+  REQUIRE(forcing[1] == Catch::Approx(-0.039725));
+  REQUIRE(forcing[2] == Catch::Approx(0.021625));
+  REQUIRE(forcing[3] == Catch::Approx(-0.007575));
+  REQUIRE(forcing[4] == Catch::Approx(0.0425));
+  const auto accepted_forcing =
+      hybrid::engine::fluid_rhs(0.05, accepted_field, current, background, params);
+  REQUIRE(forcing != accepted_forcing);
+}

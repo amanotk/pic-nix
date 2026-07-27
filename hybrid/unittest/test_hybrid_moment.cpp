@@ -179,3 +179,27 @@ TEST_CASE("binomial filter collapses inactive dimensions")
   REQUIRE(data.moment_kinetic(data.Lbz, data.Lby, ix, 0, 0) == 0.5);
   REQUIRE(data.moment_kinetic(data.Lbz, data.Lby, ix + 1, 0, 0) == 0.25);
 }
+
+TEST_CASE("electric filter has the legacy two-pass response and preserves magnetic field")
+{
+  auto chunk = make_moment_chunk();
+  auto data  = chunk.get_internal_data();
+  data.work_field_cell.fill(0);
+  const int iz                                                          = data.Lbz + 2;
+  const int iy                                                          = data.Lby + 2;
+  const int ix                                                          = data.Lbx + 2;
+  data.work_field_cell(iz, iy, ix, hybrid::field_component::electric_x) = 1;
+  xt::view(data.work_field_cell, xt::all(), xt::all(), xt::all(),
+           hybrid::field_component::magnetic_x)
+      .fill(7);
+
+  hybrid::engine::filter_electric_once(data);
+  REQUIRE(data.work_field_cell(iz, iy, ix, hybrid::field_component::electric_x) == 0.125);
+  REQUIRE(data.work_field_cell(iz, iy, ix + 1, hybrid::field_component::electric_x) == 0.0625);
+  hybrid::engine::filter_electric_once(data);
+  REQUIRE(data.work_field_cell(iz, iy, ix, hybrid::field_component::electric_x) ==
+          Catch::Approx(0.375 * 0.375 * 0.375).margin(1.0e-15));
+  REQUIRE(xt::all(xt::equal(xt::view(data.work_field_cell, xt::all(), xt::all(), xt::all(),
+                                     hybrid::field_component::magnetic_x),
+                            7)));
+}

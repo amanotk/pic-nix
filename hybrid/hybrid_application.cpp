@@ -597,15 +597,17 @@ void HybridApplication::push()
           for (int iz = data.Lbz; iz <= data.Ubz; ++iz) {
             for (int iy = data.Lby; iy <= data.Uby; ++iy) {
               for (int ix = data.Lbx; ix <= data.Ubx; ++ix) {
-                engine::FluidState   local_fluid = {};
-                engine::FieldState   local_field = {};
-                engine::VectorState  bg          = {};
-                engine::CurrentState cur         = {};
+                engine::FluidState   local_fluid    = {};
+                engine::FieldState   accepted_field = {};
+                engine::FieldState   working_field  = {};
+                engine::VectorState  bg             = {};
+                engine::CurrentState cur            = {};
                 for (int c = 0; c < num_fluid_components; ++c) {
                   local_fluid[c] = data.fluid(iz, iy, ix, c);
                 }
                 for (int c = 0; c < num_field_components; ++c) {
-                  local_field[c] = data.field_cell(iz, iy, ix, c);
+                  accepted_field[c] = data.field_cell(iz, iy, ix, c);
+                  working_field[c]  = data.work_field_cell(iz, iy, ix, c);
                 }
                 for (int c = 0; c < num_vector_components; ++c) {
                   bg[c] = data.background_cell(iz, iy, ix, c);
@@ -614,8 +616,8 @@ void HybridApplication::push()
                   cur[c] = data.current_kinetic(iz, iy, ix, c);
                 }
 
-                const auto uc = engine::conservative(local_fluid, local_field, fluid_parameters);
-                const auto rh = engine::fluid_rhs(dt, local_field, cur, bg, fluid_parameters);
+                const auto uc = engine::conservative(local_fluid, accepted_field, fluid_parameters);
+                const auto rh = engine::fluid_rhs(dt, working_field, cur, bg, fluid_parameters);
 
                 engine::ConservedState fx_minus = {}, fx_plus = {}, fy_minus = {}, fy_plus = {},
                                        fz_minus = {}, fz_plus = {};
@@ -849,6 +851,25 @@ void HybridApplication::push()
           auto  data  = chunk.get_internal_data();
           chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
           chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+        }
+
+        for (int pass = 0; pass < 2; ++pass) {
+          for (auto& chunk_ptr : chunkvec) {
+            auto data = static_cast<HybridChunk&>(*chunk_ptr).get_internal_data();
+            engine::filter_electric_once(data);
+          }
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_pack(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_begin(data.work_field_cell, BoundaryCopy6);
+          }
+          for (auto& chunk_ptr : chunkvec) {
+            auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
+            auto  data  = chunk.get_internal_data();
+            chunk.boundary_end(data.work_field_cell, BoundaryCopy6);
+            chunk.boundary_unpack(data.work_field_cell, BoundaryCopy6);
+          }
         }
 
         ssor_log << "# Ohm stage " << ohm_stage_index << ": iterations=" << ssor_total_iterations
