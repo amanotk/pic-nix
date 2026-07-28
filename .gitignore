@@ -18,6 +18,7 @@ thirdparty/
 # Local notes
 notes/*
 !notes/hybrid-elliptic-backend.md
+!notes/hybrid-reorganization-plan.md
 TODO.md
 # Local scratch / planning artifacts
 tmp/
