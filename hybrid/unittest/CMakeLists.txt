@@ -89,17 +89,12 @@ if(TARGET hybrid_beam)
   set(shared_state_dir ${CMAKE_CURRENT_BINARY_DIR}/test_hybrid_shared_state)
   file(MAKE_DIRECTORY ${shared_state_dir})
   add_test(
-    NAME test_hybrid_shared_state_prepare
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/shared_state.bin ${shared_state_dir}/shared_state.bin
-  )
-  add_test(
     NAME test_hybrid_shared_state_run
     COMMAND
       ${MPIEXEC} -n 1 $<TARGET_FILE:hybrid_shared_state>
       -c ${CMAKE_CURRENT_LIST_DIR}/config_shared.toml -t 0.01
   )
   set_tests_properties(test_hybrid_shared_state_run PROPERTIES
-    DEPENDS test_hybrid_shared_state_prepare
     LABELS MPI
     PROCESSORS 1
     TIMEOUT 120

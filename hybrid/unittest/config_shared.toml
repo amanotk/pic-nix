@@ -16,6 +16,7 @@
     interval = 100
 
   [application.option]
+    random_seed = 42
 
 [parameter]
   Nx = 8
@@ -41,4 +42,3 @@
   vbd = 10.0
   vbpa = 0.70710678118654757
   vbpe = 0.70710678118654757
-  shared_state = 'shared_state.bin'

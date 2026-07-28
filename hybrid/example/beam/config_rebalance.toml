@@ -16,6 +16,7 @@
     interval = 1
 
   [application.option]
+    random_seed = 42
 
 [parameter]
   Nx = 8

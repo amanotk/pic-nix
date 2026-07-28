@@ -16,6 +16,7 @@
     interval = 100
 
   [application.option]
+    random_seed = 42
     cell_load_by_chunk = [100.0, 1.0, 1.0, 1.0]
 
 [parameter]
