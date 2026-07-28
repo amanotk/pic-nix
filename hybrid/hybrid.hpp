@@ -4,6 +4,13 @@
 
 namespace hybrid
 {
+// forward declarations
+class HybridApplicationInterface;
+class HybridApplication;
+class HybridChunk;
+class HybridDiag;
+class HybridPacker;
+
 inline constexpr int boundary_margin = 2;
 inline constexpr int particle_order  = 2;
 

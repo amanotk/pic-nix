@@ -4,6 +4,10 @@
 #include "hybrid_chunk.hpp"
 #include "hybrid_diag.hpp"
 
+#include "diag/field.hpp"
+#include "diag/history.hpp"
+#include "diag/hybrid_diag.hpp"
+
 #include "engine/field.hpp"
 #include "engine/filter.hpp"
 #include "engine/fluid.hpp"
@@ -30,6 +34,16 @@ nix::Application::PtrChunk HybridApplicationInterface::create_chunk(nix::Dims3D 
                                                                     nix::Bool3D has_dim, int id)
 {
   return std::make_unique<HybridChunk>(dims, has_dim, id);
+}
+
+int HybridApplicationInterface::get_num_species()
+{
+  return static_cast<HybridApplication*>(app_pointer)->get_num_species();
+}
+
+int HybridApplication::get_num_species() const
+{
+  return num_species_;
 }
 
 HybridApplication::HybridApplication(int argc, char** argv, PtrInterface interface)
@@ -85,6 +99,15 @@ void HybridApplication::set_chunk_communicators()
   }
 }
 
+void HybridApplication::initialize_diagnostic()
+{
+  base_type::initialize_diagnostic();
+
+  auto interface = std::static_pointer_cast<HybridApplicationInterface>(get_interface());
+  diagvec.push_back(std::make_unique<HistoryDiag>(interface));
+  diagvec.push_back(std::make_unique<FieldDiag>(interface));
+}
+
 void HybridApplication::restore_accepted_halos()
 {
   auto exchange_rank4 = [&](auto get_array, BoundaryMode mode) {
@@ -129,6 +152,7 @@ void HybridApplication::restore_accepted_halos()
 void HybridApplication::setup_chunks()
 {
   base_type::setup_chunks();
+  num_species_ = cfgparser->get_parameter().value("Ns", 0);
   set_chunk_communicators();
   restore_accepted_halos();
 }
@@ -358,59 +382,6 @@ void HybridApplication::push()
     const nix::float64 adiabatic_index = first_data.adiabatic_index;
     const nix::float64 dt              = cfgparser->get_delt();
     require_kinetic_particles();
-
-    const std::filesystem::path diagnostic_root = "diagnostics";
-    const auto                  write_snapshot  = [&](int step, nix::float64 time) {
-      const auto step_dir = diagnostic_root / "snapshots" / ("step_" + std::to_string(step));
-      int        directory_ready = 1;
-      if (thisrank == 0) {
-        try {
-          std::filesystem::remove_all(step_dir);
-        } catch (const std::filesystem::filesystem_error&) {
-          directory_ready = 0;
-        }
-      }
-      MPI_Bcast(&directory_ready, 1, MPI_INT, 0, MPI_COMM_WORLD);
-      if (directory_ready == 0) {
-        throw std::runtime_error("Failed to clear Hybrid diagnostic step directory");
-      }
-      MPI_Barrier(MPI_COMM_WORLD);
-
-      for (const auto& chunk_ptr : chunkvec) {
-        auto& chunk = static_cast<HybridChunk&>(*chunk_ptr);
-        if (!chunk.exchanges_idle()) {
-          throw std::runtime_error("Accepted Hybrid snapshot has an active exchange");
-        }
-        auto                      data   = chunk.get_internal_data();
-        const auto                offset = chunk.get_offset();
-        const auto                dims   = chunk.get_dims();
-        std::vector<nix::float64> particle_mass;
-        std::vector<nix::float64> particle_charge;
-        particle_mass.reserve(data.particles.size());
-        particle_charge.reserve(data.particles.size());
-        for (const auto& particle : data.particles) {
-          particle_mass.push_back(particle->m);
-          particle_charge.push_back(particle->q);
-        }
-        const diag::SnapshotMetadata metadata{
-            thisrank,
-            chunk.get_id(),
-            {offset[0], offset[1], offset[2]},
-            {dims[0], dims[1], dims[2]},
-            {ndims[0], ndims[1], ndims[2]},
-            step,
-            time,
-            dt,
-            std::move(particle_mass),
-            std::move(particle_charge),
-        };
-        diag::write_diagnostics(data, diagnostic_root, metadata);
-      }
-    };
-
-    if (curstep == 0) {
-      write_snapshot(curstep, curtime);
-    }
 
     // Copy accepted state to working arrays
     for (auto& chunk_ptr : chunkvec) {
@@ -1014,10 +985,9 @@ void HybridApplication::push()
       }
     }
 
-    // push() runs before Application advances its step and time counters.
-    write_snapshot(curstep + 1, curtime + dt);
     if (thisrank == 0) {
-      const auto ssor_dir = diagnostic_root / "ssor";
+      const std::filesystem::path diagnostic_root = "diagnostics";
+      const auto                  ssor_dir        = diagnostic_root / "ssor";
       std::filesystem::create_directories(ssor_dir);
       auto slog = diag::open_output(ssor_dir / ("step_" + std::to_string(curstep + 1) + ".log"));
       slog << ssor_log.str();

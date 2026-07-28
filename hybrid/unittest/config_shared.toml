@@ -1,9 +1,13 @@
 [[diagnostic]]
-  name = 'none'
+  name = 'history'
+  interval = 1
+
+[[diagnostic]]
+  name = 'field'
   interval = 1
 
 [application]
-  basedir = ''
+  basedir = 'data'
 
   [application.log]
     interval = 1

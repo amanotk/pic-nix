@@ -17,6 +17,8 @@ class HybridApplicationInterface : public nix::Application::Interface
 {
 public:
   PtrChunk create_chunk(nix::Dims3D dims, nix::Bool3D has_dim, int id) override;
+
+  virtual int get_num_species();
 };
 
 class HybridApplication : public nix::Application
@@ -29,11 +31,16 @@ public:
 
   ~HybridApplication() override = default;
 
+  int get_num_species() const;
+
 protected:
   MpiCommVec mpicommvec;
   bool       communicators_initialized = false;
+  int        num_species_              = 0;
 
   void initialize(int argc, char** argv) override;
+
+  void initialize_diagnostic() override;
 
   void finalize() override;
 
