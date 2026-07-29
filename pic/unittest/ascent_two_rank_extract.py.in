@@ -18,14 +18,14 @@ comm.Allreduce(MPI.IN_PLACE, domain_count, op=MPI.SUM)
 if domain_count[0] != 2:
     raise RuntimeError(f"unexpected global domain count: {domain_count[0]}")
 
-phi = chunks[0].centered_field("phi").array
-if phi.shape != (1, 1, 2):
-    raise RuntimeError(f"unexpected phi shape: {phi.shape}")
+rho = chunks[0].centered_field("rho").array
+if rho.shape != (1, 1, 2):
+    raise RuntimeError(f"unexpected rho shape: {rho.shape}")
 
-total = np.array([phi.sum()], dtype=np.float64)
+total = np.array([rho.sum()], dtype=np.float64)
 comm.Allreduce(MPI.IN_PLACE, total, op=MPI.SUM)
 if not np.isclose(total[0], 6.0):
-    raise RuntimeError(f"unexpected global phi sum: {total[0]}")
+    raise RuntimeError(f"unexpected global rho sum: {total[0]}")
 
 if comm.Get_rank() == 0:
     pathlib.Path("ascent_two_rank_result.txt").write_text(f"{total[0]:.1f}\n")

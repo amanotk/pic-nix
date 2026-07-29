@@ -52,7 +52,6 @@ struct DomainView {
   RawArrayView              uf;
   RawArrayView              uj;
   RawArrayView              um;
-  RawArrayView              phi;
   std::vector<ParticleView> particles;
 
 private:
@@ -123,9 +122,6 @@ public:
     um = make_raw_view(data.um);
     um.components.assign(um_components.begin(), um_components.end());
     um.location = "cell";
-
-    phi          = make_raw_view(data.phi);
-    phi.location = "cell";
 
     particles.reserve(data.up.size());
     for (const auto& particle : data.up) {

@@ -79,7 +79,7 @@ TEST_CASE("Ascent renders a centered PIC-NIX scalar field")
   runtime.publish_execute(publication.node, PICNIX_ASCENT_RENDER_ACTIONS_FILE);
   runtime.shutdown();
 
-  const auto image = std::filesystem::path("ascent_picnix_phi.png");
+  const auto image = std::filesystem::path("ascent_picnix_rho.png");
   REQUIRE(std::filesystem::exists(image));
   REQUIRE(std::filesystem::file_size(image) > 0);
 }

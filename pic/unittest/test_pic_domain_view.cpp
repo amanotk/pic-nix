@@ -58,7 +58,6 @@ TEST_CASE("DomainView captures chunk metadata and raw descriptors")
   REQUIRE(view.uf.components[0] == "Ex");
   REQUIRE(view.uj.components[3] == "Jz");
   REQUIRE(view.um.components[13] == "zx");
-  REQUIRE(view.phi.location == "cell");
 
   REQUIRE(view.particles.size() == 1);
   REQUIRE(view.particles[0].np_active == 2);

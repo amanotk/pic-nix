@@ -53,12 +53,12 @@ Ascent actions can run Python extracts or visualization scenes:
         file: "ascent_extract.py"
 - action: "add_scenes"
   scenes:
-    phi:
+    rho:
       plots:
         value:
           type: "pseudocolor"
-          field: "phi"
-      image_name: "picnix_phi"
+          field: "rho"
+      image_name: "picnix_rho"
 ```
 
 The runtime opens lazily on the first scheduled invocation, publishes and

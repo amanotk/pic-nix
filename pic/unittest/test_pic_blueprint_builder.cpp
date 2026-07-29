@@ -72,7 +72,6 @@ TEST_CASE("BlueprintBuilder publishes a verifiable domain")
   REQUIRE(domain["fields/J/values/x"].as_float64_ptr()[0] == Catch::Approx(11.0));
   REQUIRE(domain["fields/J/values/z"].as_float64_ptr()[0] == Catch::Approx(13.0));
   REQUIRE(domain["fields/rho/values"].as_float64_ptr()[0] == Catch::Approx(10.0));
-  REQUIRE(domain["fields/phi/values"].as_float64_ptr()[0] == Catch::Approx(20.0));
 }
 
 TEST_CASE("BlueprintBuilder refreshes external pointers and preserves domain IDs")

@@ -29,8 +29,7 @@ std::unique_ptr<PicChunk> make_chunk(int rank)
 
   auto data = chunk->get_internal_data();
   data.uf.fill(0.0);
-  data.uj.fill(0.0);
-  data.phi.fill(static_cast<float64>(rank + 1));
+  data.uj.fill(static_cast<float64>(rank + 1));
   return chunk;
 }
 } // namespace

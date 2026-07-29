@@ -185,7 +185,6 @@ BlueprintPublication BlueprintBuilder::build(const std::vector<PicChunk*>& chunk
       add_raw_array(domain, "uf", view.uf);
       add_raw_array(domain, "uj", view.uj);
       add_raw_array(domain, "um", view.um);
-      add_raw_array(domain, "phi", view.phi);
       if (options.particles) {
         add_raw_particles(domain, view);
       }
@@ -234,18 +233,6 @@ BlueprintPublication BlueprintBuilder::build(const std::vector<PicChunk*>& chunk
       add_vector_component(domain, "J", "z", publication.buffers[publication.buffers.size() - 1]);
       add_field(domain, "rho", "cell_mesh", "element",
                 publication.buffers[publication.buffers.size() - 4]);
-
-      auto phi_values = std::vector<float64>();
-      phi_values.reserve(count);
-      for (int iz = data.Lbz; iz <= data.Ubz; iz++) {
-        for (int iy = data.Lby; iy <= data.Uby; iy++) {
-          for (int ix = data.Lbx; ix <= data.Ubx; ix++) {
-            phi_values.push_back(data.phi(iz, iy, ix));
-          }
-        }
-      }
-      publication.buffers.push_back(std::move(phi_values));
-      add_field(domain, "phi", "cell_mesh", "element", publication.buffers.back());
     }
   }
 
