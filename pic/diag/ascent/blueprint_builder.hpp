@@ -1,6 +1,6 @@
 // -*- C++ -*-
-#ifndef _PIC_INSITU_BLUEPRINT_BUILDER_HPP_
-#define _PIC_INSITU_BLUEPRINT_BUILDER_HPP_
+#ifndef _PIC_ASCENT_BLUEPRINT_BUILDER_HPP_
+#define _PIC_ASCENT_BLUEPRINT_BUILDER_HPP_
 
 #include "domain_view.hpp"
 
@@ -8,7 +8,7 @@
 
 #include <vector>
 
-namespace picnix::insitu
+namespace pic_ascent
 {
 struct BlueprintOptions {
   bool raw       = true;
@@ -27,6 +27,6 @@ public:
   static BlueprintPublication build(const std::vector<PicChunk*>& chunks, int cycle, float64 time,
                                     const BlueprintOptions& options = {});
 };
-} // namespace picnix::insitu
+} // namespace pic_ascent
 
 #endif

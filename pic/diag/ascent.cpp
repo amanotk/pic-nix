@@ -1,9 +1,9 @@
 // -*- C++ -*-
 #include "ascent.hpp"
-#include "../pic_application.hpp"
-#include "../pic_chunk.hpp"
+#include "pic/pic_application.hpp"
+#include "pic/pic_chunk.hpp"
 
-#include "../insitu/blueprint_builder.hpp"
+#include "pic/diag/ascent/blueprint_builder.hpp"
 
 #include <filesystem>
 #include <mpi.h>
@@ -29,7 +29,7 @@ void AscentDiag::operator()(nix::json& config)
   }
   const auto actions = config["actions"].get<std::string>();
 
-  picnix::insitu::BlueprintOptions options;
+  pic_ascent::BlueprintOptions options;
   if (config.contains("publish")) {
     if (!config["publish"].is_object()) {
       ERROR << "Ascent diagnostic `publish` must be an object";
@@ -73,7 +73,7 @@ void AscentDiag::operator()(nix::json& config)
 
   try {
     auto publication =
-        picnix::insitu::BlueprintBuilder::build(chunks, data.curstep, data.curtime, options);
+        pic_ascent::BlueprintBuilder::build(chunks, data.curstep, data.curtime, options);
     runtime.publish_execute(publication.node, actions_path);
   } catch (const std::exception& error) {
     ERROR << fmt::format("Ascent diagnostic failed on rank {} for `{}`: {}", info->world_rank,

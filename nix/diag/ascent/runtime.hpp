@@ -1,6 +1,6 @@
 // -*- C++ -*-
-#ifndef _PIC_INSITU_ASCENT_RUNTIME_HPP_
-#define _PIC_INSITU_ASCENT_RUNTIME_HPP_
+#ifndef _NIX_ASCENT_RUNTIME_HPP_
+#define _NIX_ASCENT_RUNTIME_HPP_
 
 #include <ascent/ascent.hpp>
 
@@ -8,7 +8,7 @@
 
 #include <filesystem>
 
-namespace picnix::insitu
+namespace nix
 {
 class AscentRuntime
 {
@@ -24,6 +24,6 @@ private:
   MPI_Comm       comm    = MPI_COMM_NULL;
   bool           is_open = false;
 };
-} // namespace picnix::insitu
+} // namespace nix
 
 #endif

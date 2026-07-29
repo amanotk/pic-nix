@@ -92,7 +92,6 @@ foreach(target IN ITEMS ${SERIAL_EXECS})
 endforeach()
 
 if(PICNIX_ENABLE_ASCENT)
-  target_link_libraries(test_pic_blueprint_builder PRIVATE ascent::ascent_mpi)
   set_tests_properties(test_pic_blueprint_builder PROPERTIES LABELS ASCENT)
 
   add_executable(test_pic_ascent_runtime test_pic_ascent_runtime.cpp)
@@ -105,7 +104,6 @@ if(PICNIX_ENABLE_ASCENT)
     pic_obj_parallel
     pic
     nix
-    ascent::ascent_mpi
   )
 
   add_mpi_test(
@@ -140,7 +138,6 @@ if(PICNIX_ENABLE_ASCENT)
     pic_obj_parallel
     pic
     nix
-    ascent::ascent_mpi
   )
 
   add_mpi_test(
@@ -175,7 +172,6 @@ if(PICNIX_ENABLE_ASCENT)
     pic_obj_parallel
     pic
     nix
-    ascent::ascent_mpi
   )
 
   add_mpi_test_with_cleanup(

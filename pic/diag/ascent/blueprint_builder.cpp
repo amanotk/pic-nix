@@ -10,7 +10,7 @@
 #include <numeric>
 #include <string>
 
-namespace picnix::insitu
+namespace pic_ascent
 {
 namespace
 {
@@ -251,4 +251,4 @@ BlueprintPublication BlueprintBuilder::build(const std::vector<PicChunk*>& chunk
 
   return publication;
 }
-} // namespace picnix::insitu
+} // namespace pic_ascent

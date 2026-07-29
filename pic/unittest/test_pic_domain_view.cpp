@@ -1,6 +1,7 @@
 // -*- C++ -*-
 
-#include "../insitu/domain_view.hpp"
+#include "pic/diag/ascent/domain_view.hpp"
+#include "pic/diag/ascent/field_schema.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -34,7 +35,7 @@ std::unique_ptr<PicChunk> make_chunk(nix::Dims3D dims, nix::Bool3D has_dim, int 
 TEST_CASE("DomainView captures chunk metadata and raw descriptors")
 {
   auto chunk = make_chunk({2, 3, 4}, {true, true, true}, 17);
-  auto view  = picnix::insitu::DomainView(*chunk, 9, 1.25);
+  auto view  = pic_ascent::DomainView(*chunk, 9, 1.25);
 
   REQUIRE(view.domain_id == 17);
   REQUIRE(view.dimension == 3);
@@ -72,7 +73,7 @@ TEST_CASE("DomainView reports reduced-dimensional chunk shapes")
   SECTION("1D")
   {
     auto chunk = make_chunk({1, 1, 4}, {false, false, true}, 1);
-    auto view  = picnix::insitu::DomainView(*chunk, 0, 0.0);
+    auto view  = pic_ascent::DomainView(*chunk, 0, 0.0);
     REQUIRE(view.dimension == 1);
     REQUIRE(view.local_cell_shape_zyx == std::array<int, 3>{1, 1, 4});
   }
@@ -80,8 +81,18 @@ TEST_CASE("DomainView reports reduced-dimensional chunk shapes")
   SECTION("2D")
   {
     auto chunk = make_chunk({1, 3, 4}, {false, true, true}, 2);
-    auto view  = picnix::insitu::DomainView(*chunk, 0, 0.0);
+    auto view  = pic_ascent::DomainView(*chunk, 0, 0.0);
     REQUIRE(view.dimension == 2);
     REQUIRE(view.local_cell_shape_zyx == std::array<int, 3>{1, 3, 4});
   }
+}
+
+TEST_CASE("Field schema identifies staggered PIC components")
+{
+  REQUIRE(pic_ascent::raw_schema_version == 1);
+  REQUIRE(pic_ascent::uf_components[0].name == "Ex");
+  REQUIRE(pic_ascent::uf_components[0].association == "x-face");
+  REQUIRE(pic_ascent::uf_components[0].normalized_xyz == std::array<double, 3>{0.0, 0.5, 0.5});
+  REQUIRE(pic_ascent::uj_components[0].association == "cell");
+  REQUIRE(pic_ascent::um_components[13] == "zx");
 }

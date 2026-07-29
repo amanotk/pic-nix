@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.23)
 
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "")
 set(CMAKE_POLICY_DEFAULT_CMP0127 NEW)
 
 set(CMAKE_CXX_STANDARD 17)

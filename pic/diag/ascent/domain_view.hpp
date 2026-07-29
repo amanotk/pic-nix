@@ -1,9 +1,9 @@
 // -*- C++ -*-
-#ifndef _PIC_INSITU_DOMAIN_VIEW_HPP_
-#define _PIC_INSITU_DOMAIN_VIEW_HPP_
+#ifndef _PIC_ASCENT_DOMAIN_VIEW_HPP_
+#define _PIC_ASCENT_DOMAIN_VIEW_HPP_
 
-#include "../pic_chunk.hpp"
-#include "nix/xtensor/field_layout.hpp"
+#include "field_schema.hpp"
+#include "pic/pic_chunk.hpp"
 
 #include <array>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <string_view>
 #include <vector>
 
-namespace picnix::insitu
+namespace pic_ascent
 {
 struct RawArrayView {
   float64*                       data = nullptr;
@@ -149,6 +149,6 @@ public:
     }
   }
 };
-} // namespace picnix::insitu
+} // namespace pic_ascent
 
 #endif

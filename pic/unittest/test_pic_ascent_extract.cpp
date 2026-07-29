@@ -1,7 +1,7 @@
 // -*- C++ -*-
 
-#include "../insitu/ascent_runtime.hpp"
-#include "../insitu/blueprint_builder.hpp"
+#include "nix/diag/ascent/runtime.hpp"
+#include "pic/diag/ascent/blueprint_builder.hpp"
 
 #include "../pic_chunk.hpp"
 
@@ -47,14 +47,14 @@ TEST_CASE("Ascent Python extract consumes PIC-NIX domains across two ranks")
     return;
   }
 
-  auto                             chunk  = make_chunk(rank);
-  const std::vector<PicChunk*>     chunks = {chunk.get()};
-  picnix::insitu::BlueprintOptions options;
+  auto                         chunk  = make_chunk(rank);
+  const std::vector<PicChunk*> chunks = {chunk.get()};
+  pic_ascent::BlueprintOptions options;
   options.raw       = false;
   options.particles = false;
-  auto publication  = picnix::insitu::BlueprintBuilder::build(chunks, 0, 0.0, options);
+  auto publication  = pic_ascent::BlueprintBuilder::build(chunks, 0, 0.0, options);
 
-  picnix::insitu::AscentRuntime runtime;
+  nix::AscentRuntime runtime;
   runtime.publish_execute(publication.node, PICNIX_ASCENT_EXTRACT_ACTIONS_FILE);
   runtime.shutdown();
 

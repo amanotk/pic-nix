@@ -235,7 +235,7 @@ FetchContent mode and the install script.
 
 ## v0.5.0 C++ Migration Notes
 
-- CMake 3.20 or newer is required.
+- CMake 3.23 or newer is required.
 - Include `nix/xtensor/xtensor_halo3d.hpp`,
   `nix/xtensor/xtensor_packer3d.hpp`, and
   `nix/xtensor/xtensor_particle.hpp` instead of their former paths directly

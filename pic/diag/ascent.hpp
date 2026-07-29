@@ -2,10 +2,10 @@
 #ifndef _PIC_DIAG_ASCENT_HPP_
 #define _PIC_DIAG_ASCENT_HPP_
 
-#include "../insitu/ascent_runtime.hpp"
-#include "../pic_application.hpp"
-#include "../pic_chunk.hpp"
-#include "../pic_diag.hpp"
+#include "nix/diag/ascent/runtime.hpp"
+#include "pic/pic_application.hpp"
+#include "pic/pic_chunk.hpp"
+#include "pic/pic_diag.hpp"
 
 ///
 /// @brief Optional Ascent in-situ diagnostic.
@@ -21,8 +21,8 @@ public:
   void shutdown() override;
 
 private:
-  bool                          shutdown_called = false;
-  picnix::insitu::AscentRuntime runtime;
+  bool               shutdown_called = false;
+  nix::AscentRuntime runtime;
 };
 
 #endif

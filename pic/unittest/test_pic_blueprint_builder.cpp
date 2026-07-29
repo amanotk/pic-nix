@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-#include "../insitu/blueprint_builder.hpp"
+#include "pic/diag/ascent/blueprint_builder.hpp"
 
 #include <conduit_blueprint.hpp>
 
@@ -53,16 +53,16 @@ TEST_CASE("BlueprintBuilder publishes a verifiable domain")
   auto                         chunk  = make_chunk();
   const std::vector<PicChunk*> chunks = {chunk.get()};
 
-  picnix::insitu::BlueprintOptions options;
+  pic_ascent::BlueprintOptions options;
   options.particles         = true;
-  auto          publication = picnix::insitu::BlueprintBuilder::build(chunks, 12, 3.5, options);
+  auto          publication = pic_ascent::BlueprintBuilder::build(chunks, 12, 3.5, options);
   auto&         domain      = publication.node["domain_7"];
   conduit::Node info;
 
   REQUIRE(conduit::blueprint::mesh::verify(domain, info));
   REQUIRE(domain["state/cycle"].to_int() == 12);
   REQUIRE(domain["state/time"].to_double() == Catch::Approx(3.5));
-  REQUIRE(domain["picnix/schema_version"].to_int() == picnix::insitu::raw_schema_version);
+  REQUIRE(domain["picnix/schema_version"].to_int() == pic_ascent::raw_schema_version);
   REQUIRE(domain["picnix/raw/uf/values"].as_float64_ptr() == chunk->get_internal_data().uf.data());
   REQUIRE(domain["picnix/raw/uf/components"].child(0).as_string() == "Ex");
   REQUIRE(domain["picnix/particles/species_000/np_active"].to_int() == 1);
@@ -80,10 +80,10 @@ TEST_CASE("BlueprintBuilder refreshes external pointers and preserves domain IDs
   auto                         chunk        = make_chunk();
   const std::vector<PicChunk*> first_chunks = {chunk.get()};
 
-  picnix::insitu::BlueprintOptions options;
+  pic_ascent::BlueprintOptions options;
   options.centered        = false;
   options.particles       = true;
-  auto       first        = picnix::insitu::BlueprintBuilder::build(first_chunks, 0, 0.0, options);
+  auto       first        = pic_ascent::BlueprintBuilder::build(first_chunks, 0, 0.0, options);
   const auto first_uf_ptr = first.node["domain_7/picnix/raw/uf/values"].as_float64_ptr();
   const auto first_particle_ptr =
       first.node["domain_7/picnix/particles/species_000/values"].as_float64_ptr();
@@ -93,7 +93,7 @@ TEST_CASE("BlueprintBuilder refreshes external pointers and preserves domain IDs
   data.up[0]->set_Np_active(4);
   data.uf.resize({data.uf.shape(0) + 1, data.uf.shape(1), data.uf.shape(2), data.uf.shape(3)});
   const std::vector<PicChunk*> refreshed_chunks = {chunk.get()};
-  auto second = picnix::insitu::BlueprintBuilder::build(refreshed_chunks, 1, 0.0, options);
+  auto second = pic_ascent::BlueprintBuilder::build(refreshed_chunks, 1, 0.0, options);
 
   REQUIRE(second.node["domain_7/picnix/raw/uf/values"].as_float64_ptr() == data.uf.data());
   REQUIRE(second.node["domain_7/picnix/raw/uf/values"].as_float64_ptr() != first_uf_ptr);
@@ -105,7 +105,7 @@ TEST_CASE("BlueprintBuilder refreshes external pointers and preserves domain IDs
 
   auto                         other            = make_chunk(9, 2);
   const std::vector<PicChunk*> reordered_chunks = {other.get(), chunk.get()};
-  auto reordered = picnix::insitu::BlueprintBuilder::build(reordered_chunks, 2, 0.0, options);
+  auto reordered = pic_ascent::BlueprintBuilder::build(reordered_chunks, 2, 0.0, options);
   REQUIRE(reordered.node.has_path("domain_7"));
   REQUIRE(reordered.node.has_path("domain_9"));
 }
@@ -116,18 +116,18 @@ TEST_CASE("BlueprintBuilder handles empty and null particle species")
   auto data  = chunk->get_internal_data();
   data.up.clear();
 
-  picnix::insitu::BlueprintOptions options;
+  pic_ascent::BlueprintOptions options;
   options.raw                         = true;
   options.centered                    = false;
   options.particles                   = true;
   const std::vector<PicChunk*> chunks = {chunk.get()};
-  auto publication = picnix::insitu::BlueprintBuilder::build(chunks, 0, 0.0, options);
+  auto publication = pic_ascent::BlueprintBuilder::build(chunks, 0, 0.0, options);
   REQUIRE(publication.node.has_path("domain_7"));
   REQUIRE_FALSE(publication.node["domain_7"].has_path("picnix/particles"));
 
   data.up.resize(1);
   data.up[0].reset();
-  publication = picnix::insitu::BlueprintBuilder::build(chunks, 1, 0.0, options);
+  publication = pic_ascent::BlueprintBuilder::build(chunks, 1, 0.0, options);
   REQUIRE(publication.node.has_path("domain_7/picnix/particles/species_000"));
   REQUIRE(publication.node["domain_7/picnix/particles/species_000/np_active"].to_int() == 0);
 }

@@ -1,11 +1,11 @@
 // -*- C++ -*-
-#ifndef _NIX_XTENSOR_FIELD_LAYOUT_HPP_
-#define _NIX_XTENSOR_FIELD_LAYOUT_HPP_
+#ifndef _PIC_ASCENT_FIELD_SCHEMA_HPP_
+#define _PIC_ASCENT_FIELD_SCHEMA_HPP_
 
 #include <array>
 #include <string_view>
 
-namespace picnix::insitu
+namespace pic_ascent
 {
 inline constexpr int raw_schema_version = 1;
 
@@ -47,6 +47,6 @@ inline constexpr std::array<std::string_view, 14> um_components = {{
     "yz",
     "zx",
 }};
-} // namespace picnix::insitu
+} // namespace pic_ascent
 
 #endif

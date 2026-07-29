@@ -3,8 +3,6 @@
 #include "xtensor/xtensor_packer3d.hpp"
 #include "xtensor/xtensor_particle.hpp"
 
-#include "xtensor/field_layout.hpp"
-
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -315,16 +313,6 @@ TEST_CASE("XtensorPacker3D compact colocation handles current in 1D 2D and 3D")
     REQUIRE(y(0, 0, 0, 2) == 146.0);
     REQUIRE(y(0, 0, 0, 3) == 201.0);
   }
-}
-
-TEST_CASE("PIC-NIX field layout metadata identifies staggered components")
-{
-  REQUIRE(picnix::insitu::raw_schema_version == 1);
-  REQUIRE(picnix::insitu::uf_components[0].name == "Ex");
-  REQUIRE(picnix::insitu::uf_components[0].association == "x-face");
-  REQUIRE(picnix::insitu::uf_components[0].normalized_xyz == std::array<double, 3>{0.0, 0.5, 0.5});
-  REQUIRE(picnix::insitu::uj_components[0].association == "cell");
-  REQUIRE(picnix::insitu::um_components[13] == "zx");
 }
 
 TEST_CASE("XtensorPacker3D pack_moment decimates by averaging blocks")

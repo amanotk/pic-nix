@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-#include "../insitu/ascent_runtime.hpp"
+#include "nix/diag/ascent/runtime.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,7 +17,7 @@ TEST_CASE("AscentRuntime opens, executes, and closes")
   data["topologies/mesh/type"]     = "uniform";
   data["topologies/mesh/coordset"] = "coords";
 
-  picnix::insitu::AscentRuntime runtime;
+  nix::AscentRuntime runtime;
   runtime.publish_execute(data, PICNIX_ASCENT_ACTIONS_FILE);
   runtime.shutdown();
   runtime.shutdown();
@@ -27,8 +27,8 @@ TEST_CASE("AscentRuntime opens, executes, and closes")
 
 TEST_CASE("AscentRuntime releases its communicator when actions loading fails")
 {
-  conduit::Node                 data;
-  picnix::insitu::AscentRuntime runtime;
+  conduit::Node      data;
+  nix::AscentRuntime runtime;
 
   REQUIRE_THROWS_AS(runtime.publish_execute(data, "missing-ascent-actions.yaml"),
                     std::runtime_error);

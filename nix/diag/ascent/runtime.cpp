@@ -1,11 +1,11 @@
 // -*- C++ -*-
-#include "ascent_runtime.hpp"
+#include "runtime.hpp"
 
 #include <ascent/ascent_actions_utils.hpp>
 
 #include <stdexcept>
 
-namespace picnix::insitu
+namespace nix
 {
 void AscentRuntime::open(const std::filesystem::path& actions_path)
 {
@@ -61,4 +61,4 @@ void AscentRuntime::shutdown()
   is_open = false;
   actions.reset();
 }
-} // namespace picnix::insitu
+} // namespace nix

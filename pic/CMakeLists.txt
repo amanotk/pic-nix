@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.23)
 
 # project (standalone build)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -43,10 +43,6 @@ if(PICNIX_ENABLE_PETSC)
 endif()
 
 if(PICNIX_ENABLE_ASCENT)
-  if(CMAKE_VERSION VERSION_LESS 3.23)
-    message(FATAL_ERROR "PICNIX_ENABLE_ASCENT requires CMake 3.23 or newer")
-  endif()
-
   enable_language(C)
   find_package(MPI REQUIRED COMPONENTS C CXX)
   find_package(Ascent CONFIG REQUIRED)
@@ -66,10 +62,11 @@ if(PICNIX_ENABLE_ASCENT)
     message(STATUS "Ascent render tests will be disabled: VTK-h support is unavailable")
   endif()
 
+  add_subdirectory(${PICNIX_DIR}/nix/diag/ascent ${CMAKE_CURRENT_BINARY_DIR}/nix_ascent)
+
   list(APPEND PIC_SOURCES
     diag/ascent.cpp
-    insitu/ascent_runtime.cpp
-    insitu/blueprint_builder.cpp
+    diag/ascent/blueprint_builder.cpp
   )
 endif()
 
@@ -83,7 +80,7 @@ target_link_libraries(pic PRIVATE std::mdspan)
 target_compile_definitions(pic PUBLIC PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
 if(PICNIX_ENABLE_ASCENT)
-  target_link_libraries(pic PUBLIC ascent::ascent_mpi)
+  target_link_libraries(pic PUBLIC nix::ascent)
   target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=1)
 else()
   target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=0)
