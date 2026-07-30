@@ -74,6 +74,12 @@ public:
   {
     std::filesystem::remove(config_filename);
   }
+
+  void set_test_configuration(json configuration)
+  {
+    cfgparser = create_cfgparser();
+    cfgparser->overwrite(configuration);
+  }
 };
 
 class ShutdownDiag : public Diag
@@ -129,6 +135,23 @@ TEST_CASE("test_main")
 
   std::filesystem::remove("profile.msgpack");
   std::filesystem::remove("log.msgpack");
+}
+
+TEST_CASE("parsed configuration is forwarded by value")
+{
+  auto interface = std::make_shared<TestApplication::Interface>();
+
+  TestApplication app(0, nullptr, interface);
+  json            configuration = json::parse(config_content);
+  app.set_test_configuration(configuration);
+
+  json app_copy                     = app.get_configuration();
+  json interface_copy               = interface->get_configuration();
+  app_copy["parameter"]["Nx"]       = 32;
+  interface_copy["parameter"]["Nx"] = 64;
+
+  REQUIRE(app.get_configuration() == configuration);
+  REQUIRE(interface->get_configuration() == configuration);
 }
 
 TEST_CASE("diagnostics shut down before MPI finalization")

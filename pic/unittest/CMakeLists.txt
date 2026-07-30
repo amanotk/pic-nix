@@ -140,13 +140,14 @@ if(PICNIX_ENABLE_ASCENT)
     nix
   )
 
-  add_mpi_test(
+  add_mpi_test_with_cleanup(
     test_pic_ascent_extract_np2
     test_pic_ascent_extract
     2
     ${CMAKE_CURRENT_BINARY_DIR}/tmp_ascent_extract_np2
   )
   set_tests_properties(test_pic_ascent_extract_np2_prepare test_pic_ascent_extract_np2
+    test_pic_ascent_extract_np2_cleanup
     PROPERTIES LABELS "MPI;ASCENT"
   )
   set_tests_properties(test_pic_ascent_extract_np2 PROPERTIES

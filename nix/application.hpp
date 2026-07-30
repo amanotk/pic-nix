@@ -53,6 +53,12 @@ public:
     return app_pointer->get_internal_data();
   }
 
+  // return parsed configuration
+  virtual json get_configuration() const
+  {
+    return app_pointer->get_configuration();
+  }
+
   // convert to json
   virtual json to_json()
   {
@@ -163,6 +169,12 @@ public:
   DataContainer get_internal_data()
   {
     return {ndims, cdims, thisrank, nprocess, nthread, curstep, curtime, chunkmap, chunkvec};
+  }
+
+  /// @brief return parsed configuration
+  virtual json get_configuration() const
+  {
+    return cfgparser->get_root();
   }
 
   ///

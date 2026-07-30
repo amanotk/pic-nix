@@ -252,6 +252,23 @@ TEST_CASE("XtensorPacker3D compact colocation excludes ghost cells")
           Catch::Approx(0.25 * (x(3, 4, 5, 5) + x(3, 5, 6, 5) + x(3, 4, 6, 5) + x(3, 5, 5, 5))));
 }
 
+TEST_CASE("XtensorPacker3D compact colocation accepts explicit active axes")
+{
+  xt::xtensor<float64, 4> x({3, 3, 3, 6});
+  x.fill(0.0);
+  x(1, 1, 1, 0) = 2.0;
+  x(1, 1, 2, 0) = 4.0;
+  x(1, 1, 1, 4) = 6.0;
+  x(1, 1, 2, 4) = 10.0;
+
+  MockData data{1, 1, 1, 1, 1, 1};
+  auto     y = XtensorPacker3D::colocate_field(x, data, false, false, true);
+
+  REQUIRE(y.shape() == std::array<std::size_t, 4>{1, 1, 1, 6});
+  REQUIRE(y(0, 0, 0, 0) == Catch::Approx(3.0));
+  REQUIRE(y(0, 0, 0, 4) == Catch::Approx(8.0));
+}
+
 TEST_CASE("XtensorPacker3D compact colocation handles current in 1D 2D and 3D")
 {
   XtensorPacker3D packer;

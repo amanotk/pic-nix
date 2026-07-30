@@ -39,7 +39,7 @@ protected:
   }
 
 public:
-  json get_root()
+  json get_root() const
   {
     return root;
   }

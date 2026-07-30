@@ -6,8 +6,8 @@ from mpi4py import MPI
 from picnix.insitu import Dataset
 
 
-comm = MPI.Comm.f2py(ascent_mpi_comm_id())
-dataset = Dataset.from_conduit(ascent_data())
+comm = MPI.Comm.f2py(ascent_mpi_comm_id())  # noqa: F821
+dataset = Dataset.from_conduit(ascent_data())  # noqa: F821
 chunks = list(dataset.local_chunks())
 
 if len(chunks) != 1:
@@ -18,14 +18,63 @@ comm.Allreduce(MPI.IN_PLACE, domain_count, op=MPI.SUM)
 if domain_count[0] != 2:
     raise RuntimeError(f"unexpected global domain count: {domain_count[0]}")
 
-rho = chunks[0].centered_field("rho").array
-if rho.shape != (1, 1, 2):
-    raise RuntimeError(f"unexpected rho shape: {rho.shape}")
+chunk = chunks[0]
+electric = chunk.E.array
+moment = chunk.um00.array
+if electric.shape != (1, 1, 2, 3):
+    raise RuntimeError(f"unexpected E shape: {electric.shape}")
+if moment.shape != (1, 1, 2, 14):
+    raise RuntimeError(f"unexpected um00 shape: {moment.shape}")
 
-total = np.array([rho.sum()], dtype=np.float64)
-comm.Allreduce(MPI.IN_PLACE, total, op=MPI.SUM)
-if not np.isclose(total[0], 6.0):
-    raise RuntimeError(f"unexpected global rho sum: {total[0]}")
+totals = np.array([electric[..., 0].sum(), moment[..., 0].sum()])
+local_totals = totals.copy()
+comm.Allreduce(MPI.IN_PLACE, totals, op=MPI.SUM)
+if not np.allclose(totals, [6.0, 6.0]):
+    raise RuntimeError(
+        f"unexpected global centered sums: {totals}; "
+        f"local sums: {comm.allgather(local_totals.tolist())}"
+    )
+
+if chunk.uf.shape != (1, 1, 4, 6) or chunk.uj.shape != (1, 1, 4, 4):
+    raise RuntimeError(f"unexpected raw shapes: {chunk.uf.shape}, {chunk.uj.shape}")
+if chunk.uf_owned.shape != (1, 1, 2, 6):
+    raise RuntimeError(f"unexpected owned uf shape: {chunk.uf_owned.shape}")
+if chunk.uj_owned.shape != (1, 1, 2, 4):
+    raise RuntimeError(f"unexpected owned uj shape: {chunk.uj_owned.shape}")
+raw_ey = chunk.uf.component("Ey")
+if not np.allclose(raw_ey, comm.Get_rank() + 2.0):
+    leaf = chunk.uf.node["values"]["Ey"]
+    raise RuntimeError(
+        f"raw uf component stride was not preserved: values={raw_ey}, "
+        f"value_strides={raw_ey.strides}, leaf={leaf}, "
+        f"leaf_type={type(leaf)}, leaf_strides={getattr(leaf, 'strides', None)}"
+    )
+raw_jz = chunk.uj.component("Jz")
+if not np.allclose(raw_jz, comm.Get_rank() + 13.0):
+    leaf = chunk.uj.node["values"]["Jz"]
+    raise RuntimeError(
+        f"raw uj component stride was not preserved: values={raw_jz}, "
+        f"leaf_type={type(leaf)}, strides={getattr(leaf, 'strides', None)}"
+    )
+
+if chunk.neighbor_domain_ids.shape != (27,) or chunk.neighbor_ranks.shape != (27,):
+    raise RuntimeError("unexpected neighbor shape")
+if chunk.neighbor_domain_ids[13] != chunk.domain_id:
+    raise RuntimeError("center neighbor domain does not match")
+if chunk.neighbor_ranks[13] != comm.Get_rank():
+    raise RuntimeError("center neighbor rank does not match")
+
+particles = chunk.particle00.array
+if particles.shape != (1, 7) or particles.dtype != np.float64:
+    raise RuntimeError(
+        f"unexpected particle array: {particles.shape}, {particles.dtype}"
+    )
+if dataset.schema_version != 1 or dataset.boundary_margin != 1:
+    raise RuntimeError("unexpected shared PIC metadata")
+if dataset.config["parameter"]["case"] != "two-rank-protocol":
+    raise RuntimeError(f"unexpected PIC configuration: {dataset.config}")
 
 if comm.Get_rank() == 0:
-    pathlib.Path("ascent_two_rank_result.txt").write_text(f"{total[0]:.1f}\n")
+    pathlib.Path("ascent_two_rank_result.txt").write_text(
+        f"{totals[0]:.1f} {totals[1]:.1f}\n"
+    )

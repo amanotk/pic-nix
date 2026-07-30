@@ -1,8 +1,17 @@
+- action: "add_pipelines"
+  pipelines:
+    vector_fields:
+      magnitude:
+        type: "vector_magnitude"
+        params:
+          field: "E"
+          output_name: "E_magnitude"
 - action: "add_scenes"
   scenes:
-    picnix_rho:
+    picnix_E:
       plots:
-        rho_plot:
+        E_plot:
           type: "pseudocolor"
-          field: "rho"
-      image_name: "ascent_picnix_rho"
+          field: "E_magnitude"
+          pipeline: "vector_fields"
+      image_name: "ascent_picnix_E"

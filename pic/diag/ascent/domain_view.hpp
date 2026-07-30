@@ -2,36 +2,24 @@
 #ifndef _PIC_ASCENT_DOMAIN_VIEW_HPP_
 #define _PIC_ASCENT_DOMAIN_VIEW_HPP_
 
-#include "field_schema.hpp"
 #include "pic/pic_chunk.hpp"
 
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <string_view>
 #include <vector>
 
 namespace pic_ascent
 {
 struct RawArrayView {
-  float64*                       data = nullptr;
-  std::vector<std::size_t>       shape;
-  std::vector<std::size_t>       strides_bytes;
-  std::vector<std::string_view>  components;
-  std::vector<ComponentLocation> locations;
-  std::string_view               location;
+  float64*                   data = nullptr;
+  std::array<std::size_t, 3> shape_zyx{};
+  std::size_t                component_count = 0;
 };
 
 struct ParticleView {
-  float64*                      data = nullptr;
-  std::vector<std::size_t>      shape;
-  std::vector<std::size_t>      strides_bytes;
-  std::size_t                   np_active    = 0;
-  std::size_t                   np_allocated = 0;
-  float64                       charge       = 0.0;
-  float64                       mass         = 0.0;
-  std::vector<std::string_view> components;
-  std::string_view              id_encoding;
+  float64*    data      = nullptr;
+  std::size_t np_active = 0;
 };
 
 struct DomainView {
@@ -42,31 +30,44 @@ struct DomainView {
   float64                   time      = 0.0;
   std::array<int, 3>        global_cell_shape_zyx{};
   std::array<int, 3>        local_cell_shape_zyx{};
-  std::array<int, 3>        allocated_shape_zyx{};
   std::array<int, 3>        global_offset_zyx{};
   std::array<int, 3>        active_lower_zyx{};
   std::array<int, 3>        active_upper_zyx{};
-  int                       ghost_width = 0;
+  std::array<bool, 3>       active_axes_zyx{};
+  int                       boundary_margin = 0;
   std::array<float64, 3>    spacing_xyz{};
   std::array<float64, 3>    physical_origin_xyz{};
   RawArrayView              uf;
   RawArrayView              uj;
-  RawArrayView              um;
+  std::array<int, 27>       neighbor_domain_ids{};
+  std::array<int, 27>       neighbor_ranks{};
   std::vector<ParticleView> particles;
 
 private:
   template <typename Array>
-  static RawArrayView make_raw_view(Array& array)
+  static RawArrayView make_raw_view(Array& array, const std::array<bool, 3>& active_axes,
+                                    int boundary_margin)
   {
-    RawArrayView result;
-    result.data = array.data();
-    for (auto extent : array.shape()) {
-      result.shape.push_back(extent);
-    }
-    for (auto stride : array.strides()) {
-      result.strides_bytes.push_back(stride * sizeof(float64));
-    }
-    return result;
+    const std::array<std::size_t, 3> source_shape = {
+        array.shape(0),
+        array.shape(1),
+        array.shape(2),
+    };
+    const std::array<std::size_t, 3> first = {
+        active_axes[0] ? 0 : static_cast<std::size_t>(boundary_margin),
+        active_axes[1] ? 0 : static_cast<std::size_t>(boundary_margin),
+        active_axes[2] ? 0 : static_cast<std::size_t>(boundary_margin),
+    };
+    const std::size_t component_count = array.shape(3);
+    const std::size_t offset =
+        ((first[0] * source_shape[1] + first[1]) * source_shape[2] + first[2]) * component_count;
+
+    return {
+        array.data() + offset,
+        {active_axes[0] ? source_shape[0] : 1, active_axes[1] ? source_shape[1] : 1,
+         active_axes[2] ? source_shape[2] : 1},
+        component_count,
+    };
   }
 
   static int global_extent(float64 lower, float64 upper, float64 spacing)
@@ -88,8 +89,9 @@ public:
     auto yrange = chunk.get_yrange_global();
     auto zrange = chunk.get_zrange_global();
 
-    dimension = static_cast<int>(chunk.has_xdim()) + static_cast<int>(chunk.has_ydim()) +
-                static_cast<int>(chunk.has_zdim());
+    active_axes_zyx = {chunk.has_zdim(), chunk.has_ydim(), chunk.has_xdim()};
+    dimension       = static_cast<int>(active_axes_zyx[0]) + static_cast<int>(active_axes_zyx[1]) +
+                static_cast<int>(active_axes_zyx[2]);
     global_cell_shape_zyx = {global_extent(zrange.first, zrange.second, data.delz),
                              global_extent(yrange.first, yrange.second, data.dely),
                              global_extent(xrange.first, xrange.second, data.delx)};
@@ -97,51 +99,32 @@ public:
     global_offset_zyx     = {offset[0], offset[1], offset[2]};
     active_lower_zyx      = {data.Lbz, data.Lby, data.Lbx};
     active_upper_zyx      = {data.Ubz, data.Uby, data.Ubx};
-    allocated_shape_zyx   = {static_cast<int>(data.uf.shape(0)), static_cast<int>(data.uf.shape(1)),
-                             static_cast<int>(data.uf.shape(2))};
-    ghost_width           = data.boundary_margin;
+    boundary_margin       = data.boundary_margin;
     spacing_xyz           = {data.delx, data.dely, data.delz};
     physical_origin_xyz   = {data.xlim[0], data.ylim[0], data.zlim[0]};
 
-    uf = make_raw_view(data.uf);
-    uf.components.reserve(uf_components.size());
-    uf.locations.reserve(uf_components.size());
-    for (const auto& component : uf_components) {
-      uf.components.push_back(component.name);
-      uf.locations.push_back(component);
-    }
+    uf = make_raw_view(data.uf, active_axes_zyx, boundary_margin);
+    uj = make_raw_view(data.uj, active_axes_zyx, boundary_margin);
 
-    uj = make_raw_view(data.uj);
-    uj.components.reserve(uj_components.size());
-    uj.locations.reserve(uj_components.size());
-    for (const auto& component : uj_components) {
-      uj.components.push_back(component.name);
-      uj.locations.push_back(component);
+    std::size_t index = 0;
+    for (int dz = -1; dz <= 1; dz++) {
+      for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+          neighbor_domain_ids[index] = chunk.get_nb_id(dz, dy, dx);
+          neighbor_ranks[index]      = chunk.get_nb_rank(dz, dy, dx);
+          index++;
+        }
+      }
     }
-
-    um = make_raw_view(data.um);
-    um.components.assign(um_components.begin(), um_components.end());
-    um.location = "cell";
 
     particles.reserve(data.up.size());
     for (const auto& particle : data.up) {
       ParticleView view;
-      view.components  = {"x", "y", "z", "ux", "uy", "uz", "id_bits"};
-      view.id_encoding = "int64_bits_in_float64_slot";
       if (particle != nullptr) {
-        view.data         = particle->xu.data();
-        view.np_active    = static_cast<std::size_t>(particle->get_Np_active());
-        view.np_allocated = static_cast<std::size_t>(particle->get_Np_total());
-        view.charge       = particle->q;
-        view.mass         = particle->m;
-        for (auto extent : particle->xu.shape()) {
-          view.shape.push_back(extent);
-        }
-        for (auto stride : particle->xu.strides()) {
-          view.strides_bytes.push_back(stride * sizeof(float64));
-        }
+        view.data      = particle->xu.data();
+        view.np_active = static_cast<std::size_t>(particle->get_Np_active());
       }
-      particles.push_back(std::move(view));
+      particles.push_back(view);
     }
   }
 };

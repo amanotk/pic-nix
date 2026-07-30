@@ -46,6 +46,10 @@ void AscentDiag::operator()(nix::json& config)
     options.centered  = publish.value("centered", options.centered);
     options.particles = publish.value("particles", options.particles);
   }
+  if (!options.centered && !options.raw) {
+    ERROR << "Ascent diagnostic requires `centered` or `raw` publication";
+    return;
+  }
 
   std::vector<PicChunk*> chunks;
   chunks.reserve(data.chunkvec.size());
@@ -67,13 +71,13 @@ void AscentDiag::operator()(nix::json& config)
     return;
   }
 
-  if (options.raw) {
+  if (options.centered) {
     interface->calculate_moment();
   }
 
   try {
-    auto publication =
-        pic_ascent::BlueprintBuilder::build(chunks, data.curstep, data.curtime, options);
+    auto publication = pic_ascent::BlueprintBuilder::build(chunks, data.curstep, data.curtime,
+                                                           interface->get_configuration(), options);
     runtime.publish_execute(publication.node, actions_path);
   } catch (const std::exception& error) {
     ERROR << fmt::format("Ascent diagnostic failed on rank {} for `{}`: {}", info->world_rank,

@@ -155,16 +155,12 @@ public:
 
   /// calculate colocated electromagnetic field components
   template <typename Array, typename Data>
-  static inline auto colocate_field(Array& x, Data data)
+  static inline auto colocate_field(Array& x, Data data, bool has_z, bool has_y, bool has_x)
   {
     const size_t size_z = data.Ubz - data.Lbz + 1;
     const size_t size_y = data.Uby - data.Lby + 1;
     const size_t size_x = data.Ubx - data.Lbx + 1;
     auto         y      = xt::eval(xt::zeros<float64>({size_z, size_y, size_x, size_t(6)}));
-
-    const bool has_z = size_z > 1;
-    const bool has_y = size_y > 1;
-    const bool has_x = size_x > 1;
 
     for (size_t oz = 0; oz < size_z; oz++) {
       for (size_t oy = 0; oy < size_y; oy++) {
@@ -190,6 +186,15 @@ public:
     }
 
     return y;
+  }
+
+  template <typename Array, typename Data>
+  static inline auto colocate_field(Array& x, Data data)
+  {
+    const bool has_z = data.Ubz - data.Lbz + 1 > 1;
+    const bool has_y = data.Uby - data.Lby + 1 > 1;
+    const bool has_x = data.Ubx - data.Lbx + 1 > 1;
+    return colocate_field(x, data, has_z, has_y, has_x);
   }
 
   /// calculate compact cell-centered current components

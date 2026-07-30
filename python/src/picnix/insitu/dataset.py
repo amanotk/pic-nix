@@ -1,12 +1,26 @@
 import json
+import re
 from collections.abc import Mapping
 
 import numpy as np
 
 SCHEMA_VERSION = 1
 
+_CENTERED_COMPONENTS = {
+    "E": ("x", "y", "z"),
+    "B": ("x", "y", "z"),
+}
+_RAW_COMPONENTS = {
+    "uf": ("Ex", "Ey", "Ez", "Bx", "By", "Bz"),
+    "uj": ("rho", "Jx", "Jy", "Jz"),
+}
+_PARTICLE_COMPONENTS = ("x", "y", "z", "ux", "uy", "uz", "id")
+_SHARED_METADATA = ("schema_version", "boundary_margin", "config")
+
 
 def _get(node, key, default=None):
+    if node is None:
+        return default
     if isinstance(node, Mapping):
         return node.get(key, default)
     if hasattr(node, "has_path") and not node.has_path(key):
@@ -26,6 +40,8 @@ def _children(node):
 
 
 def _items(node):
+    if node is None:
+        return ()
     if isinstance(node, Mapping):
         return node.items()
     if hasattr(node, "child_names"):
@@ -45,157 +61,337 @@ def _array(node):
     return np.asarray(_value(node))
 
 
-class Field:
-    def __init__(self, node, shape=None):
-        self.node = node
-        self.shape = tuple(shape) if shape is not None else None
+def _object(node):
+    if isinstance(node, Mapping):
+        return {name: _object(value) for name, value in node.items()}
+    if isinstance(node, (list, tuple)):
+        return [_object(value) for value in node]
+    dtype_method = getattr(node, "dtype", None)
+    if callable(dtype_method):
+        dtype = dtype_method()
+        if dtype.is_object():
+            return {name: _object(value) for name, value in _items(node)}
+        if dtype.is_list():
+            return [_object(node[index]) for index in range(node.number_of_children())]
+    value = _value(node)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
 
-    def _array(self, node):
+
+class Field:
+    def __init__(self, node, shape, components):
+        if node is None:
+            raise KeyError("field is not published")
+        self.node = node
+        self.spatial_shape = tuple(shape)
+        self.components = tuple(components)
+
+    def _component_array(self, node):
         values = _array(node)
-        if self.shape is not None and values.size == np.prod(self.shape):
-            return values.reshape(self.shape)
-        return values
+        expected = int(np.prod(self.spatial_shape))
+        if values.size != expected:
+            raise ValueError(
+                f"field component has {values.size} values, expected {expected}"
+            )
+        if values.shape == self.spatial_shape:
+            return values
+        if values.ndim != 1:
+            raise ValueError("field components must be flat or have the topology shape")
+        element_stride = values.strides[0]
+        nz, ny, nx = self.spatial_shape
+        return np.lib.stride_tricks.as_strided(
+            values,
+            shape=self.spatial_shape,
+            strides=(ny * nx * element_stride, nx * element_stride, element_stride),
+            writeable=values.flags.writeable,
+        )
 
     def component(self, name):
+        if name not in self.components:
+            raise KeyError(name)
         values = _get(self.node, "values")
-        children = dict(_items(values))
-        if children:
-            if name not in children:
-                raise KeyError(name)
-            return self._array(children[name])
-        return self._array(values)
+        component = _get(values, name)
+        if component is None:
+            raise ValueError(f"field is missing canonical component {name!r}")
+        return self._component_array(component)
 
     @property
     def array(self):
-        values = _get(self.node, "values")
-        children = list(_items(values))
-        if children:
-            return np.stack([self._array(value) for _, value in children], axis=-1)
-        return self._array(values)
+        return np.stack([self.component(name) for name in self.components], axis=-1)
+
+    @property
+    def shape(self):
+        return (*self.spatial_shape, len(self.components))
+
+    def __array__(self, dtype=None, copy=None):
+        array = self.array
+        if dtype is not None:
+            array = array.astype(dtype, copy=False)
+        if copy:
+            array = array.copy()
+        return array
+
+    def __getitem__(self, key):
+        return self.array[key]
 
 
 class RawField(Field):
-    def __init__(self, node):
-        super().__init__(node)
-        self.components = list(_value(_get(node, "components", [])))
-        self.locations = list(_value(_get(node, "component_locations", [])))
+    def __init__(self, node, shape, components, boundary_margin):
+        super().__init__(node, shape, components)
+        self.boundary_margin = boundary_margin
 
-    def component(self, name):
-        try:
-            index = self.components.index(name)
-        except ValueError as error:
-            raise KeyError(name) from error
+    @property
+    def owned(self):
+        margin = self.boundary_margin
+        if margin == 0:
+            return self.array
+        slices = []
+        for size in self.spatial_shape:
+            if size == 1:
+                slices.append(slice(None))
+            elif size <= 2 * margin:
+                raise ValueError("boundary margin leaves no owned raw cells")
+            else:
+                slices.append(slice(margin, -margin))
+        return self.array[tuple(slices)]
 
-        return self.array()[..., index]
-
-    def array(self):
-        values = _array(_get(self.node, "values"))
-        shape = tuple(_value(_get(self.node, "shape", values.shape)))
-        strides = tuple(_value(_get(self.node, "strides_bytes", values.strides)))
-        if values.shape == shape and values.strides == strides:
-            return values
-        return np.ndarray(shape, dtype=np.float64, buffer=values, strides=strides)
-
-    def interior(self, mesh):
-        lower = (
-            mesh.active_lower
-            if hasattr(mesh, "active_lower")
-            else _value(_get(mesh, "active_lower", []))
-        )
-        upper = (
-            mesh.active_upper
-            if hasattr(mesh, "active_upper")
-            else _value(_get(mesh, "active_upper", []))
-        )
-        slices = tuple(slice(lo, hi + 1) for lo, hi in zip(lower, upper))
-        return self.array()[slices]
+    def interior(self, mesh=None):
+        return self.owned
 
 
 class ParticleField:
-    def __init__(self, node):
+    components = _PARTICLE_COMPONENTS
+
+    def __init__(self, node=None):
         self.node = node
-        self.components = list(_value(_get(node, "components", [])))
-
-    def _array(self):
-        values = _get(self.node, "values")
-        shape_value = _get(self.node, "shape")
-        strides_value = _get(self.node, "strides_bytes")
-        if values is None:
-            return np.empty((0, 7), dtype=np.float64)
-
-        values = _array(values)
-        shape = tuple(_value(shape_value)) if shape_value is not None else values.shape
-        strides = (
-            tuple(_value(strides_value))
-            if strides_value is not None
-            else values.strides
-        )
-        if not shape:
-            shape = (0, 7)
-        if values.shape == shape and values.strides == strides:
-            return values
-        return np.ndarray(shape, dtype=np.float64, buffer=values, strides=strides)
-
-    @property
-    def allocated(self):
-        return self._array()
 
     @property
     def active(self):
-        count = int(_value(_get(self.node, "np_active", 0)))
-        return self.allocated[:count]
+        if self.node is None:
+            return np.empty((0, 7), dtype=np.float64)
+        values = _array(self.node)
+        if values.size % 7:
+            raise ValueError("particle array length is not divisible by 7")
+        values = values.reshape((-1, 7))
+        if values.dtype != np.float64:
+            raise ValueError("particle arrays must use float64 storage")
+        return values
+
+    @property
+    def allocated(self):
+        return self.active
+
+    @property
+    def array(self):
+        return self.active
+
+    @property
+    def shape(self):
+        return self.active.shape
 
     @property
     def ids(self):
-        return np.frombuffer(self.active[:, 6].tobytes(), dtype=np.int64)
+        return self.active[:, 6]
 
-    def kinetic_energy(self):
-        mass = float(_value(_get(self.node, "mass", 0.0)))
+    def kinetic_energy(self, mass):
         velocity = self.active[:, 3:6]
         return 0.5 * mass * np.sum(velocity * velocity, axis=1)
 
+    def __array__(self, dtype=None, copy=None):
+        array = self.active
+        if dtype is not None:
+            array = array.astype(dtype, copy=False)
+        if copy:
+            array = array.copy()
+        return array
+
+    def __getitem__(self, key):
+        return self.active[key]
+
 
 class Domain:
-    def __init__(self, node):
+    def __init__(self, node, dataset):
         self.node = node
-        self.mesh = _get(_get(node, "picnix"), "mesh", {})
+        self.dataset = dataset
 
     @property
     def domain_id(self):
-        return int(_value(_get(_get(self.node, "state"), "domain_id", 0)))
+        value = _get(_get(self.node, "state"), "domain_id")
+        if value is None:
+            raise ValueError("domain is missing state/domain_id")
+        return int(_value(value))
 
-    @property
-    def active_lower(self):
-        return tuple(_value(_get(self.mesh, "active_lower", [])))
-
-    @property
-    def active_upper(self):
-        return tuple(_value(_get(self.mesh, "active_upper", [])))
+    def _topology_shape(self, topology_name):
+        topology = _get(_get(self.node, "topologies"), topology_name)
+        if topology is None:
+            raise KeyError(topology_name)
+        coordset_name = _value(_get(topology, "coordset"))
+        coordset = _get(_get(self.node, "coordsets"), coordset_name)
+        dims = _get(coordset, "dims")
+        extents = []
+        for axis in ("i", "j", "k"):
+            value = _get(dims, axis)
+            if value is None:
+                break
+            extent = int(_value(value)) - 1
+            if extent < 1:
+                raise ValueError(f"invalid {topology_name} coordset dimension {axis}")
+            extents.append(extent)
+        if not extents:
+            raise ValueError(f"cannot derive shape for topology {topology_name!r}")
+        return (1,) * (3 - len(extents)) + tuple(reversed(extents))
 
     def raw_field(self, name):
-        return RawField(_get(_get(_get(self.node, "picnix"), "raw"), name))
+        try:
+            components = _RAW_COMPONENTS[name]
+        except KeyError as error:
+            raise KeyError(name) from error
+        node = _get(_get(self.node, "fields"), name)
+        return RawField(
+            node,
+            self._topology_shape("raw_storage_mesh"),
+            components,
+            self.dataset.boundary_margin,
+        )
 
     def centered_field(self, name):
-        shape = _value(_get(self.mesh, "local_cell_shape", []))
-        return Field(_get(_get(self.node, "fields"), name), shape)
+        if name.startswith("um") and re.fullmatch(r"um\d{2,}", name):
+            components = tuple(f"m{index:02d}" for index in range(14))
+        else:
+            try:
+                components = _CENTERED_COMPONENTS[name]
+            except KeyError as error:
+                raise KeyError(name) from error
+        node = _get(_get(self.node, "fields"), name)
+        return Field(node, self._topology_shape("cell_mesh"), components)
 
     def particles(self, species=0):
-        name = f"species_{species:03d}" if isinstance(species, int) else species
-        return ParticleField(_get(_get(_get(self.node, "picnix"), "particles"), name))
+        name = f"particle{species:02d}" if isinstance(species, int) else species
+        particle = _get(_get(_get(self.node, "pic"), "particles"), name)
+        return ParticleField(_get(particle, "xu"))
+
+    @property
+    def E(self):
+        return self.centered_field("E")
+
+    @property
+    def B(self):
+        return self.centered_field("B")
+
+    @property
+    def uf(self):
+        return self.raw_field("uf")
+
+    @property
+    def uj(self):
+        return self.raw_field("uj")
+
+    @property
+    def uf_owned(self):
+        return self.uf.owned
+
+    @property
+    def uj_owned(self):
+        return self.uj.owned
+
+    @property
+    def neighbor_domain_ids(self):
+        return self._neighbors("domain_ids")
+
+    @property
+    def neighbor_ranks(self):
+        return self._neighbors("neighbor_ranks")
+
+    def _neighbors(self, name):
+        neighbors = _get(_get(self.node, "pic"), "neighbors")
+        value = _get(neighbors, name)
+        if value is None:
+            raise KeyError(f"pic/neighbors/{name}")
+        array = _array(value)
+        if array.size != 27 or not np.issubdtype(array.dtype, np.integer):
+            raise ValueError(f"neighbor {name} must contain 27 integers")
+        return array.reshape(27)
+
+    def __getattr__(self, name):
+        if re.fullmatch(r"um\d{2,}", name):
+            return self.centered_field(name)
+        if re.fullmatch(r"particle\d{2,}", name):
+            return self.particles(name)
+        raise AttributeError(name)
 
 
 class Dataset:
     def __init__(self, node):
         self.node = node
-        self._validate_schema()
+        self._domains = list(_children(node))
+        self._metadata_node = self._validate_metadata()
+        self._boundary_margin = self._parse_boundary_margin()
+        self._config = self._parse_config()
 
-    def _validate_schema(self):
-        for _, domain in _children(self.node):
-            schema = _get(_get(domain, "picnix"), "schema_version")
-            if schema is not None and int(_value(schema)) != SCHEMA_VERSION:
+    def _validate_metadata(self):
+        if not self._domains:
+            raise ValueError("dataset has no local domains")
+
+        owners = {name: [] for name in _SHARED_METADATA}
+        for domain_name, domain in self._domains:
+            pic = _get(domain, "pic")
+            for name in _SHARED_METADATA:
+                if _get(pic, name) is not None:
+                    owners[name].append(domain_name)
+
+            neighbors = _get(pic, "neighbors")
+            has_ids = _get(neighbors, "domain_ids") is not None
+            has_ranks = _get(neighbors, "neighbor_ranks") is not None
+            if has_ids != has_ranks:
                 raise ValueError(
-                    f"unsupported PIC-NIX schema version: {_value(schema)}"
+                    f"domain {domain_name!r} must publish both neighbor arrays"
                 )
+
+        if any(len(names) != 1 for names in owners.values()):
+            raise ValueError("shared PIC metadata must have exactly one local owner")
+        owner_names = {names[0] for names in owners.values()}
+        if len(owner_names) != 1:
+            raise ValueError(
+                "shared PIC metadata must be colocated on one local domain"
+            )
+
+        owner_name = owner_names.pop()
+        owner = dict(self._domains)[owner_name]
+        schema = int(_value(_get(_get(owner, "pic"), "schema_version")))
+        if schema != SCHEMA_VERSION:
+            raise ValueError(f"unsupported PIC-NIX schema version: {schema}")
+        return _get(owner, "pic")
+
+    @property
+    def schema_version(self):
+        return int(_value(_get(self._metadata_node, "schema_version")))
+
+    @property
+    def boundary_margin(self):
+        return self._boundary_margin
+
+    def _parse_boundary_margin(self):
+        margin = int(_value(_get(self._metadata_node, "boundary_margin")))
+        if margin < 0:
+            raise ValueError("boundary margin must be non-negative")
+        return margin
+
+    @property
+    def config(self):
+        return self._config
+
+    def _parse_config(self):
+        config = _object(_get(self._metadata_node, "config"))
+        if isinstance(config, bytes):
+            config = config.decode()
+        if isinstance(config, str):
+            config = json.loads(config)
+        if not isinstance(config, dict):
+            raise ValueError("pic/config must be a JSON object or object tree")
+        return config
 
     @classmethod
     def from_conduit(cls, node):
@@ -207,7 +403,7 @@ class Dataset:
         return cls(node)
 
     def local_chunks(self):
-        return (Domain(node) for _, node in _children(self.node))
+        return (Domain(node, self) for _, node in self._domains)
 
     def domain(self, domain_id):
         for chunk in self.local_chunks():
@@ -218,4 +414,4 @@ class Dataset:
     def to_json(self):
         if hasattr(self.node, "to_json"):
             return self.node.to_json()
-        return json.dumps(self.node)
+        return json.dumps(_object(self.node))

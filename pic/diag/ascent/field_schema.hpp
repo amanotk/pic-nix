@@ -7,46 +7,23 @@
 
 namespace pic_ascent
 {
-inline constexpr int raw_schema_version = 1;
+inline constexpr int schema_version = 1;
 
-struct ComponentLocation {
-  std::string_view      name;
-  std::string_view      association;
-  std::array<double, 3> normalized_xyz;
+inline constexpr std::array<std::string_view, 6> uf_components = {
+    "Ex", "Ey", "Ez", "Bx", "By", "Bz",
 };
 
-inline constexpr std::array<ComponentLocation, 6> uf_components = {{
-    {"Ex", "x-face", {0.0, 0.5, 0.5}},
-    {"Ey", "y-face", {0.5, 0.0, 0.5}},
-    {"Ez", "z-face", {0.5, 0.5, 0.0}},
-    {"Bx", "x-edge", {0.5, 0.0, 0.0}},
-    {"By", "y-edge", {0.0, 0.5, 0.0}},
-    {"Bz", "z-edge", {0.0, 0.0, 0.5}},
-}};
+inline constexpr std::array<std::string_view, 4> uj_components = {
+    "rho",
+    "Jx",
+    "Jy",
+    "Jz",
+};
 
-inline constexpr std::array<ComponentLocation, 4> uj_components = {{
-    {"rho", "cell", {0.5, 0.5, 0.5}},
-    {"Jx", "x-face", {0.0, 0.5, 0.5}},
-    {"Jy", "y-face", {0.5, 0.0, 0.5}},
-    {"Jz", "z-face", {0.5, 0.5, 0.0}},
-}};
-
-inline constexpr std::array<std::string_view, 14> um_components = {{
-    "t",
-    "x",
-    "y",
-    "z",
-    "tt",
-    "xx",
-    "yy",
-    "zz",
-    "tx",
-    "ty",
-    "tz",
-    "xy",
-    "yz",
-    "zx",
-}};
+inline constexpr std::array<std::string_view, 14> moment_components = {
+    "m00", "m01", "m02", "m03", "m04", "m05", "m06",
+    "m07", "m08", "m09", "m10", "m11", "m12", "m13",
+};
 } // namespace pic_ascent
 
 #endif
