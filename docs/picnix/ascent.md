@@ -35,6 +35,9 @@ Run the Python helper tests from the repository root with:
 python -m pytest python/tests/test_ascent.py
 ```
 
+Runnable rendering and Python-extract examples are available under
+[`pic/example/diagnostics/ascent/`](../../pic/example/diagnostics/ascent/README.md).  
+
 ## Configuration
 
 Add one Ascent diagnostic to the simulation configuration:  

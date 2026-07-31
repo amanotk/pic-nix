@@ -1,0 +1,6 @@
+- action: "add_extracts"
+  extracts:
+    inspect_pic_domain:
+      type: "python"
+      params:
+        file: "pic/example/diagnostics/ascent/inspect.py"
