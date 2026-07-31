@@ -415,11 +415,6 @@ class Dataset:
     def from_conduit(cls, node):
         return cls(node)
 
-    @classmethod
-    def from_ascent(cls, node_or_callable):
-        node = node_or_callable() if callable(node_or_callable) else node_or_callable
-        return cls(node)
-
     def local_chunks(self):
         return (Domain(node, self) for _, node in self._domains)
 

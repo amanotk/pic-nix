@@ -32,7 +32,7 @@ ctest --test-dir build-ascent -L ASCENT --output-on-failure
 Run the Python helper tests from the repository root with:  
 
 ```sh
-python -m pytest python/tests/test_insitu.py
+python -m pytest python/tests/test_ascent.py
 ```
 
 ## Configuration
@@ -224,7 +224,7 @@ scripts. Construct the PIC-NIX wrapper explicitly:
 ```python
 from mpi4py import MPI
 
-from picnix.insitu import Dataset
+from picnix.ascent import Dataset
 
 comm = MPI.Comm.f2py(ascent_mpi_comm_id())
 dataset = Dataset.from_conduit(ascent_data())
@@ -235,13 +235,12 @@ for chunk in dataset.local_chunks():
     moments = chunk.um00.array
 ```
 
-`Dataset.from_ascent(node_or_callable)` is an equivalent explicit constructor;
-it calls its argument when the argument is callable. The helper does not import
-Ascent globals implicitly. `dataset.domain(domain_id)` finds a local domain by
-its `state/domain_id`. Shared values are available as `dataset.schema_version`,
-`dataset.boundary_margin`, and `dataset.config`. Dataset construction verifies
-that all three values have one and the same local owner and rejects unsupported
-schema versions.  
+`Dataset.from_conduit(node)` is the standard constructor. The helper does
+not import Ascent globals implicitly. `dataset.domain(domain_id)` finds a
+local domain by its `state/domain_id`. Shared values are available as
+`dataset.schema_version`, `dataset.boundary_margin`, and `dataset.config`.
+Dataset construction verifies that all three values have one and the same
+local owner and rejects unsupported schema versions.  
 
 Centered accessors are `chunk.E`, `chunk.B`, `chunk.umNN`, and
 `chunk.centered_field(name)`. Raw accessors are `chunk.uf`, `chunk.uj`,

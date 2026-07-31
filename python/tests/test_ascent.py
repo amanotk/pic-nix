@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pytest
 
-from picnix.insitu import Dataset
+from picnix.ascent import Dataset
 
 
 def make_domain(domain_id, dimension, *, metadata=None, raw=False, particles=False):
@@ -267,11 +267,10 @@ def test_particle_storage_must_be_float64():
         _ = particle.active
 
 
-def test_from_conduit_from_ascent_and_to_json():
+def test_from_conduit_and_to_json():
     data = {"domain": make_domain(6, 1, metadata=metadata())}
 
     assert Dataset.from_conduit(data).domain(6).domain_id == 6
-    assert Dataset.from_ascent(lambda: data).domain(6).domain_id == 6
     assert json.loads(Dataset(data).to_json())["domain"]["state"]["domain_id"] == 6
 
 

@@ -3,7 +3,7 @@ import pathlib
 import numpy as np
 from mpi4py import MPI
 
-from picnix.insitu import Dataset
+from picnix.ascent import Dataset
 
 
 comm = MPI.Comm.f2py(ascent_mpi_comm_id())  # noqa: F821
