@@ -155,7 +155,7 @@ Ascent $ASCENT_VERSION and its dependencies installed to $PREFIX.
 
 Ascent CMake package:
 
-  $PREFIX/ascent-checkout
+  $PREFIX/ascent-checkout/lib/cmake/ascent
 
 Python environment:
 

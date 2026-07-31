@@ -401,6 +401,18 @@ def test_from_conduit_and_to_json():
 def test_top_level_wildcard_exports_legacy_names():
     namespace = {}
     exec("from picnix import *", namespace)
-    assert "Run" in namespace
-    assert "Tracer" in namespace
-    assert "get_wk_spectrum" in namespace
+    expected = {
+        "DEFAULT_LOG_PREFIX",
+        "DEFAULT_LOAD_PREFIX",
+        "DEFAULT_FIELD_PREFIX",
+        "DEFAULT_PARTICLE_PREFIX",
+        "DEFAULT_TRACER_PREFIX",
+    }
+    for module_name in ("utils", "field", "ohm", "particle", "run"):
+        module = __import__(f"picnix.{module_name}", fromlist=[module_name])
+        expected.update(
+            getattr(module, "__all__", None)
+            or (name for name in vars(module) if not name.startswith("_"))
+        )
+
+    assert expected <= namespace.keys()

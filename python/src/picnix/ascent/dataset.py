@@ -263,10 +263,6 @@ class ParticleField:
     def ids(self):
         return self.active[:, 6]
 
-    def kinetic_energy(self, mass):
-        velocity = self.active[:, 3:6]
-        return 0.5 * mass * np.sum(velocity * velocity, axis=1)
-
     def __array__(self, dtype=None, copy=None):
         array = self.active
         if dtype is not None:
