@@ -44,14 +44,12 @@ Add one Ascent diagnostic to the simulation configuration:
 name = "ascent"
 interval = 100
 actions = "ascent_actions.yaml"
-
-[diagnostic.publish]
-centered = true
-raw = false
-particles = false
+publish_centered = true
+publish_raw = false
+publish_particles = false
 ```
 
-The publish table and its individual keys are optional. The defaults are:  
+The publish keys are optional boolean flags. The defaults are:  
 
 | Option | Default | Published data |
 | --- | --- | --- |

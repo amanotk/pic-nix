@@ -30,22 +30,15 @@ void AscentDiag::operator()(nix::json& config)
   const auto actions = config["actions"].get<std::string>();
 
   pic_ascent::BlueprintOptions options;
-  if (config.contains("publish")) {
-    if (!config["publish"].is_object()) {
-      ERROR << "Ascent diagnostic `publish` must be an object";
+  for (const auto key : {"publish_centered", "publish_raw", "publish_particles"}) {
+    if (config.contains(key) && !config[key].is_boolean()) {
+      ERROR << fmt::format("Ascent diagnostic `{}` must be a boolean", key);
       return;
     }
-    const auto& publish = config["publish"];
-    for (const auto& key : {"raw", "centered", "particles"}) {
-      if (publish.contains(key) && !publish[key].is_boolean()) {
-        ERROR << fmt::format("Ascent diagnostic publish option `{}` must be boolean", key);
-        return;
-      }
-    }
-    options.raw       = publish.value("raw", options.raw);
-    options.centered  = publish.value("centered", options.centered);
-    options.particles = publish.value("particles", options.particles);
   }
+  options.centered  = config.value("publish_centered", options.centered);
+  options.raw       = config.value("publish_raw", options.raw);
+  options.particles = config.value("publish_particles", options.particles);
   if (!options.centered && !options.raw) {
     ERROR << "Ascent diagnostic requires `centered` or `raw` publication";
     return;

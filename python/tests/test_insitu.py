@@ -254,8 +254,8 @@ def test_particles_are_active_float64_arrays_with_two_digit_names():
     assert domain.particle00.components == ("x", "y", "z", "ux", "uy", "uz", "id")
     assert domain.particle00.ids.dtype == np.float64
     assert domain.particle00.ids.tolist() == [101.0, 102.0, 103.0]
-    assert domain.particles(12).shape == (1, 7)
-    assert domain.particles(1).shape == (0, 7)
+    assert domain.particles.particle12.shape == (1, 7)
+    assert domain.particle01.shape == (0, 7)
 
 
 def test_particle_storage_must_be_float64():

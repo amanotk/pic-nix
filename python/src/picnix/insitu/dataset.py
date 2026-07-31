@@ -193,6 +193,10 @@ class ParticleField:
         return self.active.shape
 
     @property
+    def xu(self):
+        return self.active
+
+    @property
     def ids(self):
         return self.active[:, 6]
 
@@ -210,6 +214,16 @@ class ParticleField:
 
     def __getitem__(self, key):
         return self.active[key]
+
+
+class _Particles:
+    def __init__(self, domain):
+        self._domain = domain
+
+    def __getattr__(self, name):
+        if re.fullmatch(r"particle\d{2,}", name):
+            return self._domain._particle(name)
+        raise AttributeError(name)
 
 
 class Domain:
@@ -268,7 +282,11 @@ class Domain:
         node = _get(_get(self.node, "fields"), name)
         return Field(node, self._topology_shape("cell_mesh"), components)
 
-    def particles(self, species=0):
+    @property
+    def particles(self):
+        return _Particles(self)
+
+    def _particle(self, species=0):
         name = f"particle{species:02d}" if isinstance(species, int) else species
         particle = _get(_get(_get(self.node, "pic"), "particles"), name)
         return ParticleField(_get(particle, "xu"))
@@ -319,7 +337,7 @@ class Domain:
         if re.fullmatch(r"um\d{2,}", name):
             return self.centered_field(name)
         if re.fullmatch(r"particle\d{2,}", name):
-            return self.particles(name)
+            return self._particle(name)
         raise AttributeError(name)
 
 
