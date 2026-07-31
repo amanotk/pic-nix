@@ -39,6 +39,11 @@ std::unique_ptr<PicChunk> make_render_chunk()
       data.uf(data.Lbz, iy, ix, 1) = 1.0;
     }
   }
+  for (int iy = data.Lby; iy <= data.Uby; iy++) {
+    for (int ix = data.Lbx; ix <= data.Ubx; ix++) {
+      data.um(data.Lbz, iy, ix, 0, 0) = static_cast<float64>(ix + 2 * iy);
+    }
+  }
   return chunk;
 }
 } // namespace
@@ -52,8 +57,8 @@ TEST_CASE("Ascent renders a centered PIC-NIX scalar field")
   auto                         chunk  = make_render_chunk();
   const std::vector<PicChunk*> chunks = {chunk.get()};
   pic_ascent::BlueprintOptions options;
-  options.raw       = false;
-  options.particles = false;
+  options.raw_fields    = false;
+  options.raw_particles = false;
   auto  publication = pic_ascent::BlueprintBuilder::build(chunks, 0, 0.0, json::object(), options);
   auto& domain      = publication.node["domain_0"];
   conduit::Node info;
@@ -81,4 +86,7 @@ TEST_CASE("Ascent renders a centered PIC-NIX scalar field")
   const auto image = std::filesystem::path("ascent_picnix_E.png");
   REQUIRE(std::filesystem::exists(image));
   REQUIRE(std::filesystem::file_size(image) > 0);
+  const auto moment_image = std::filesystem::path("ascent_picnix_M0.png");
+  REQUIRE(std::filesystem::exists(moment_image));
+  REQUIRE(std::filesystem::file_size(moment_image) > 0);
 }

@@ -105,13 +105,10 @@ TEST_CASE("DomainView selects singleton center planes for inactive dimensions")
   }
 }
 
-TEST_CASE("Field schema defines canonical protocol components")
+TEST_CASE("Field schema defines deposited moment component order")
 {
-  REQUIRE(pic_ascent::schema_version == 1);
-  REQUIRE(pic_ascent::uf_components[0] == "Ex");
-  REQUIRE(pic_ascent::uf_components[5] == "Bz");
-  REQUIRE(pic_ascent::uj_components[0] == "rho");
-  REQUIRE(pic_ascent::uj_components[3] == "Jz");
-  REQUIRE(pic_ascent::moment_components[0] == "m00");
-  REQUIRE(pic_ascent::moment_components[13] == "m13");
+  REQUIRE(pic_ascent::moment_components[0] == "M0");
+  REQUIRE(pic_ascent::moment_components[3] == "Mz");
+  REQUIRE(pic_ascent::moment_components[4] == "Ttt");
+  REQUIRE(pic_ascent::moment_components[13] == "Tzx");
 }

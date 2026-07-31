@@ -8,6 +8,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <mpi.h>
 
@@ -85,12 +87,15 @@ const json configuration = {
 };
 } // namespace
 
-TEST_CASE("BlueprintBuilder defaults to the centered protocol dataset")
+TEST_CASE("BlueprintBuilder defaults to fields and mass current without energy momentum")
 {
   pic_ascent::BlueprintOptions defaults;
-  REQUIRE(defaults.centered);
-  REQUIRE_FALSE(defaults.raw);
-  REQUIRE_FALSE(defaults.particles);
+  REQUIRE(defaults.electric_field);
+  REQUIRE(defaults.magnetic_field);
+  REQUIRE(defaults.mass_current);
+  REQUIRE_FALSE(defaults.energy_momentum);
+  REQUIRE_FALSE(defaults.raw_fields);
+  REQUIRE_FALSE(defaults.raw_particles);
 
   auto                         chunk  = make_chunk();
   const std::vector<PicChunk*> chunks = {chunk.get()};
@@ -108,10 +113,11 @@ TEST_CASE("BlueprintBuilder defaults to the centered protocol dataset")
 
   REQUIRE(domain["fields/E/values/x"].as_float64_ptr()[0] == Catch::Approx(1.0));
   REQUIRE(domain["fields/B/values/z"].as_float64_ptr()[0] == Catch::Approx(6.0));
-  REQUIRE(domain["fields/um00/values/m00"].as_float64_ptr()[0] == Catch::Approx(111.0));
-  REQUIRE(domain["fields/um01/values/m13"].as_float64_ptr()[0] == Catch::Approx(1130111.0));
+  REQUIRE(domain["fields/um00_M0/values"].as_float64_ptr()[0] == Catch::Approx(111.0));
+  REQUIRE(domain["fields/um01_Mz/values"].as_float64_ptr()[0] == Catch::Approx(1030111.0));
+  REQUIRE_FALSE(domain.has_path("fields/um00_Ttt"));
+  REQUIRE_FALSE(domain.has_path("fields/um00"));
 
-  REQUIRE(domain["pic/schema_version"].to_int() == pic_ascent::schema_version);
   REQUIRE(domain["pic/boundary_margin"].to_int() == 1);
   REQUIRE(json::parse(domain["pic/config"].as_string()) == configuration);
 
@@ -119,11 +125,55 @@ TEST_CASE("BlueprintBuilder defaults to the centered protocol dataset")
   REQUIRE_FALSE(domain.has_path("fields/rho"));
   REQUIRE_FALSE(domain.has_path("fields/uf"));
   REQUIRE_FALSE(domain.has_path("coordsets/raw_storage_coords"));
+  REQUIRE_FALSE(domain.has_path("pic/raw"));
   REQUIRE_FALSE(domain.has_path("pic/neighbors"));
   REQUIRE_FALSE(domain.has_path("pic/particles"));
   REQUIRE_FALSE(domain.has_path("ascent_ghosts"));
   REQUIRE_FALSE(domain.has_path("adjsets"));
   REQUIRE_FALSE(domain.has_path("nestsets"));
+}
+
+TEST_CASE("BlueprintBuilder independently selects centered field groups")
+{
+  auto                         chunk = make_chunk();
+  pic_ascent::BlueprintOptions options;
+  options.electric_field  = false;
+  options.magnetic_field  = false;
+  options.mass_current    = false;
+  options.energy_momentum = true;
+
+  auto publication =
+      pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options);
+  auto&         domain = publication.node["domain_7"];
+  conduit::Node info;
+  REQUIRE(conduit::blueprint::mesh::verify(domain, info));
+  REQUIRE_FALSE(domain.has_path("fields/E"));
+  REQUIRE_FALSE(domain.has_path("fields/B"));
+  REQUIRE_FALSE(domain.has_path("fields/um00_M0"));
+  REQUIRE(domain["fields/um00_Ttt/values"].as_float64_ptr()[0] == Catch::Approx(40111.0));
+  REQUIRE(domain["fields/um01_Tzx/values"].as_float64_ptr()[0] == Catch::Approx(1130111.0));
+}
+
+TEST_CASE("BlueprintBuilder independently selects electric and magnetic fields")
+{
+  auto chunk = make_chunk();
+
+  const auto build_selected = [&](bool electric, bool magnetic) {
+    pic_ascent::BlueprintOptions options;
+    options.electric_field  = electric;
+    options.magnetic_field  = magnetic;
+    options.mass_current    = false;
+    options.energy_momentum = false;
+    return pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options);
+  };
+
+  auto electric = build_selected(true, false);
+  REQUIRE(electric.node["domain_7"].has_path("fields/E"));
+  REQUIRE_FALSE(electric.node["domain_7"].has_path("fields/B"));
+
+  auto magnetic = build_selected(false, true);
+  REQUIRE_FALSE(magnetic.node["domain_7"].has_path("fields/E"));
+  REQUIRE(magnetic.node["domain_7"].has_path("fields/B"));
 }
 
 TEST_CASE("BlueprintBuilder preserves the actual centered topology dimension")
@@ -154,30 +204,36 @@ TEST_CASE("BlueprintBuilder preserves the actual centered topology dimension")
   }
 }
 
-TEST_CASE("BlueprintBuilder verifies raw meshes in every supported dimension")
+TEST_CASE("BlueprintBuilder normalizes custom raw array shapes in every supported dimension")
 {
-  const auto verify_raw = [](nix::Dims3D dims, nix::Bool3D has_dim) {
+  const auto check_raw = [](nix::Dims3D dims, nix::Bool3D has_dim,
+                            const std::array<conduit::int64, 3>& expected) {
     auto                         chunk = make_chunk(dims, has_dim);
     pic_ascent::BlueprintOptions options;
-    options.centered = false;
-    options.raw      = true;
+    options.raw_fields = true;
     auto publication =
         pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options);
+    auto&         domain = publication.node["domain_7"];
+    auto*         shape  = domain["pic/raw/shape"].as_int64_ptr();
     conduit::Node info;
-    REQUIRE(conduit::blueprint::mesh::verify(publication.node["domain_7"], info));
+    REQUIRE(conduit::blueprint::mesh::verify(domain, info));
+    REQUIRE(std::equal(expected.begin(), expected.end(), shape));
+    REQUIRE_FALSE(domain.has_path("coordsets/raw_storage_coords"));
+    REQUIRE_FALSE(domain.has_path("topologies/raw_storage_mesh"));
+    REQUIRE_FALSE(domain.has_path("fields/uf"));
   };
 
   SECTION("1D")
   {
-    verify_raw({1, 1, 3}, {false, false, true});
+    check_raw({1, 1, 3}, {false, false, true}, {1, 1, 5});
   }
   SECTION("2D")
   {
-    verify_raw({1, 2, 3}, {false, true, true});
+    check_raw({1, 2, 3}, {false, true, true}, {1, 4, 5});
   }
   SECTION("3D")
   {
-    verify_raw({2, 2, 3}, {true, true, true});
+    check_raw({2, 2, 3}, {true, true, true}, {4, 4, 5});
   }
 }
 
@@ -187,19 +243,20 @@ TEST_CASE("BlueprintBuilder publishes zero-copy raw fields, neighbors, and activ
   auto data  = chunk->get_internal_data();
 
   pic_ascent::BlueprintOptions options;
-  options.centered  = false;
-  options.raw       = true;
-  options.particles = true;
+  options.raw_fields    = true;
+  options.raw_particles = true;
   auto publication =
       pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options);
-  auto&         domain = publication.node["domain_7"];
-  conduit::Node info;
-
-  REQUIRE(conduit::blueprint::mesh::verify(domain, info));
-  REQUIRE(domain["coordsets/raw_storage_coords/dims/i"].to_int() == 6);
-  REQUIRE_FALSE(domain["coordsets/raw_storage_coords"].has_path("dims/j"));
-  REQUIRE(domain["fields/uf/values/Ex"].as_float64_ptr() == &data.uf(1, 1, 0, 0));
-  REQUIRE(domain["fields/uj/values/Jz"].as_float64_ptr()[0] == Catch::Approx(data.uj(1, 1, 0, 3)));
+  auto& domain = publication.node["domain_7"];
+  REQUIRE(domain["pic/raw/shape"].dtype().number_of_elements() == 3);
+  REQUIRE(domain["pic/raw/shape"].as_int64_ptr()[0] == 1);
+  REQUIRE(domain["pic/raw/shape"].as_int64_ptr()[1] == 1);
+  REQUIRE(domain["pic/raw/shape"].as_int64_ptr()[2] == 5);
+  REQUIRE(domain["pic/raw/uf"].dtype().number_of_elements() == 30);
+  REQUIRE(domain["pic/raw/uj"].dtype().number_of_elements() == 20);
+  REQUIRE(domain["pic/raw/uf"].as_float64_ptr() == &data.uf(1, 1, 0, 0));
+  REQUIRE(domain["pic/raw/uj"].as_float64_ptr() == &data.uj(1, 1, 0, 0));
+  REQUIRE(domain["pic/raw/uj"].as_float64_ptr()[3] == Catch::Approx(data.uj(1, 1, 0, 3)));
   REQUIRE(domain["pic/neighbors/domain_ids"].dtype().number_of_elements() == 27);
   REQUIRE(domain["pic/neighbors/domain_ids"].as_int32_ptr()[0] == -1);
   REQUIRE(domain["pic/neighbors/domain_ids"].as_int32_ptr()[13] == 7);
@@ -210,10 +267,11 @@ TEST_CASE("BlueprintBuilder publishes zero-copy raw fields, neighbors, and activ
   REQUIRE(particles.dtype().number_of_elements() == 14);
   REQUIRE(particles.as_float64_ptr() == data.up[0]->xu.data());
   REQUIRE_FALSE(domain.has_path("pic/particles/particle01"));
-  REQUIRE_FALSE(domain.has_path("fields/um"));
+  REQUIRE(domain.has_path("fields/um00_M0"));
+  REQUIRE_FALSE(domain.has_path("fields/um00_Ttt"));
 
   data.uf(1, 1, 0, 0) = 42.5;
-  REQUIRE(domain["fields/uf/values/Ex"].as_float64_ptr()[0] == Catch::Approx(42.5));
+  REQUIRE(domain["pic/raw/uf"].as_float64_ptr()[0] == Catch::Approx(42.5));
 }
 
 TEST_CASE("BlueprintBuilder assigns shared metadata to the first local domain")
@@ -223,10 +281,8 @@ TEST_CASE("BlueprintBuilder assigns shared metadata to the first local domain")
   auto publication =
       pic_ascent::BlueprintBuilder::build({first.get(), second.get()}, 0, 0.0, configuration);
 
-  REQUIRE(publication.node["domain_17"].has_path("pic/schema_version"));
   REQUIRE(publication.node["domain_17"].has_path("pic/boundary_margin"));
   REQUIRE(publication.node["domain_17"].has_path("pic/config"));
-  REQUIRE_FALSE(publication.node["domain_4"].has_path("pic/schema_version"));
   REQUIRE_FALSE(publication.node["domain_4"].has_path("pic/boundary_margin"));
   REQUIRE_FALSE(publication.node["domain_4"].has_path("pic/config"));
 
@@ -243,16 +299,31 @@ TEST_CASE("BlueprintBuilder publishes particles independently of raw fields")
 {
   auto                         chunk = make_chunk();
   pic_ascent::BlueprintOptions options;
-  options.raw       = false;
-  options.particles = true;
+  options.raw_fields    = false;
+  options.raw_particles = true;
   auto publication =
       pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options);
   auto& domain = publication.node["domain_7"];
   REQUIRE(domain.has_path("pic/particles/particle00/xu"));
   REQUIRE_FALSE(domain.has_path("fields/uf"));
+}
 
-  options.centered = false;
-  REQUIRE_THROWS_AS(
-      pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options),
-      std::invalid_argument);
+TEST_CASE("BlueprintBuilder always publishes a mesh for custom-only data")
+{
+  auto                         chunk = make_chunk();
+  pic_ascent::BlueprintOptions options;
+  options.electric_field  = false;
+  options.magnetic_field  = false;
+  options.mass_current    = false;
+  options.energy_momentum = false;
+  options.raw_fields      = true;
+
+  auto publication =
+      pic_ascent::BlueprintBuilder::build({chunk.get()}, 0, 0.0, configuration, options);
+  auto&         domain = publication.node["domain_7"];
+  conduit::Node info;
+  REQUIRE(conduit::blueprint::mesh::verify(domain, info));
+  REQUIRE(domain.has_path("topologies/cell_mesh"));
+  REQUIRE(domain.has_path("pic/raw/uf"));
+  REQUIRE_FALSE(domain.has_path("fields"));
 }

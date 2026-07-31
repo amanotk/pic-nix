@@ -88,11 +88,11 @@ TEST_CASE("Ascent Python extract consumes PIC-NIX domains across two ranks")
   auto                         chunk  = make_chunk(rank);
   const std::vector<PicChunk*> chunks = {chunk.get()};
   pic_ascent::BlueprintOptions options;
-  options.raw             = true;
-  options.particles       = true;
+  options.raw_fields      = true;
+  options.raw_particles   = true;
   const json  config      = {{"parameter", {{"case", "two-rank-protocol"}}}};
   auto        publication = pic_ascent::BlueprintBuilder::build(chunks, 0, 0.0, config, options);
-  const auto* m00 = publication.node["domain_" + std::to_string(rank) + "/fields/um00/values/m00"]
+  const auto* m00 = publication.node["domain_" + std::to_string(rank) + "/fields/um00_M0/values"]
                         .as_float64_ptr();
   REQUIRE(m00[0] == Catch::Approx(rank + 1.0));
   REQUIRE(m00[1] == Catch::Approx(rank + 1.0));

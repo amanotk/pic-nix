@@ -4,18 +4,30 @@ from collections.abc import Mapping
 
 import numpy as np
 
-SCHEMA_VERSION = 1
-
 _CENTERED_COMPONENTS = {
     "E": ("x", "y", "z"),
     "B": ("x", "y", "z"),
 }
+_MASS_CURRENT_COMPONENTS = ("M0", "Mx", "My", "Mz")
+_ENERGY_MOMENTUM_COMPONENTS = (
+    "Ttt",
+    "Txx",
+    "Tyy",
+    "Tzz",
+    "Ttx",
+    "Tty",
+    "Ttz",
+    "Txy",
+    "Tyz",
+    "Tzx",
+)
+_MOMENT_COMPONENTS = _MASS_CURRENT_COMPONENTS + _ENERGY_MOMENTUM_COMPONENTS
 _RAW_COMPONENTS = {
     "uf": ("Ex", "Ey", "Ez", "Bx", "By", "Bz"),
     "uj": ("rho", "Jx", "Jy", "Jz"),
 }
 _PARTICLE_COMPONENTS = ("x", "y", "z", "ux", "uy", "uz", "id")
-_SHARED_METADATA = ("schema_version", "boundary_margin", "config")
+_SHARED_METADATA = ("boundary_margin", "config")
 
 
 def _get(node, key, default=None):
@@ -144,6 +156,25 @@ class RawField(Field):
         self.boundary_margin = boundary_margin
 
     @property
+    def array(self):
+        values = _array(self.node)
+        if values.dtype != np.float64:
+            raise ValueError("raw field arrays must use float64 storage")
+        expected = int(np.prod(self.spatial_shape)) * len(self.components)
+        if values.size != expected:
+            raise ValueError(f"raw field has {values.size} values, expected {expected}")
+        if values.ndim != 1:
+            raise ValueError("raw field arrays must be flat")
+        return values.reshape((*self.spatial_shape, len(self.components)))
+
+    def component(self, name):
+        try:
+            index = self.components.index(name)
+        except ValueError as error:
+            raise KeyError(name) from error
+        return self.array[..., index]
+
+    @property
     def owned(self):
         margin = self.boundary_margin
         if margin == 0:
@@ -160,6 +191,38 @@ class RawField(Field):
 
     def interior(self, mesh=None):
         return self.owned
+
+
+class MomentField(Field):
+    def __init__(self, fields, name, shape):
+        components = tuple(
+            component
+            for component in _MOMENT_COMPONENTS
+            if _get(fields, f"{name}_{component}") is not None
+        )
+        if not components:
+            raise KeyError("moment is not published")
+        super().__init__(fields, shape, components)
+        self.name = name
+
+    def component(self, name):
+        if name not in self.components:
+            raise KeyError(name)
+        field = _get(self.node, f"{self.name}_{name}")
+        values = _get(field, "values")
+        if values is None:
+            raise ValueError(f"moment is missing canonical component {name!r}")
+        return self._component_array(values)
+
+    def __getattr__(self, name):
+        if name in _MOMENT_COMPONENTS:
+            try:
+                return self.component(name)
+            except KeyError as error:
+                raise AttributeError(
+                    f"moment component {name!r} is not published"
+                ) from error
+        raise AttributeError(name)
 
 
 class ParticleField:
@@ -263,24 +326,40 @@ class Domain:
             components = _RAW_COMPONENTS[name]
         except KeyError as error:
             raise KeyError(name) from error
-        node = _get(_get(self.node, "fields"), name)
+        raw = _get(_get(self.node, "pic"), "raw")
+        node = _get(raw, name)
+        if node is None:
+            raise KeyError("field is not published")
+        shape = _array(_get(raw, "shape"))
+        if (
+            shape.ndim != 1
+            or shape.size != 3
+            or not np.issubdtype(shape.dtype, np.integer)
+        ):
+            raise ValueError("pic/raw/shape must contain three integers")
+        shape = tuple(int(value) for value in shape)
+        if any(value < 1 for value in shape):
+            raise ValueError("pic/raw/shape extents must be positive")
         return RawField(
             node,
-            self._topology_shape("raw_storage_mesh"),
+            shape,
             components,
             self.dataset.boundary_margin,
         )
 
     def centered_field(self, name):
-        if name.startswith("um") and re.fullmatch(r"um\d{2,}", name):
-            components = tuple(f"m{index:02d}" for index in range(14))
-        else:
-            try:
-                components = _CENTERED_COMPONENTS[name]
-            except KeyError as error:
-                raise KeyError(name) from error
+        try:
+            components = _CENTERED_COMPONENTS[name]
+        except KeyError as error:
+            raise KeyError(name) from error
         node = _get(_get(self.node, "fields"), name)
         return Field(node, self._topology_shape("cell_mesh"), components)
+
+    def moment_field(self, name):
+        if not re.fullmatch(r"um\d{2,}", name):
+            raise KeyError(name)
+        fields = _get(self.node, "fields")
+        return MomentField(fields, name, self._topology_shape("cell_mesh"))
 
     @property
     def particles(self):
@@ -335,7 +414,7 @@ class Domain:
 
     def __getattr__(self, name):
         if re.fullmatch(r"um\d{2,}", name):
-            return self.centered_field(name)
+            return self.moment_field(name)
         if re.fullmatch(r"particle\d{2,}", name):
             return self._particle(name)
         raise AttributeError(name)
@@ -378,14 +457,7 @@ class Dataset:
 
         owner_name = owner_names.pop()
         owner = dict(self._domains)[owner_name]
-        schema = int(_value(_get(_get(owner, "pic"), "schema_version")))
-        if schema != SCHEMA_VERSION:
-            raise ValueError(f"unsupported PIC-NIX schema version: {schema}")
         return _get(owner, "pic")
-
-    @property
-    def schema_version(self):
-        return int(_value(_get(self._metadata_node, "schema_version")))
 
     @property
     def boundary_margin(self):

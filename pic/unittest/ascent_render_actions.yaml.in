@@ -15,3 +15,9 @@
           field: "E_magnitude"
           pipeline: "vector_fields"
       image_name: "ascent_picnix_E"
+    picnix_M0:
+      plots:
+        M0_plot:
+          type: "pseudocolor"
+          field: "um00_M0"
+      image_name: "ascent_picnix_M0"

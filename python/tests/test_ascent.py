@@ -6,7 +6,16 @@ import pytest
 from picnix.ascent import Dataset
 
 
-def make_domain(domain_id, dimension, *, metadata=None, raw=False, particles=False):
+def make_domain(
+    domain_id,
+    dimension,
+    *,
+    metadata=None,
+    raw=False,
+    particles=False,
+    mass_current=True,
+    energy_momentum=False,
+):
     cell_xyz = (4, 3, 2)[:dimension]
     cell_shape = (1,) * (3 - dimension) + tuple(reversed(cell_xyz))
     cell_count = int(np.prod(cell_shape))
@@ -23,6 +32,36 @@ def make_domain(domain_id, dimension, *, metadata=None, raw=False, particles=Fal
             },
         }
 
+    def scalar_field(offset):
+        return {
+            "association": "element",
+            "topology": "cell_mesh",
+            "values": np.arange(cell_count, dtype=np.float64) + offset,
+        }
+
+    mass_current_components = ("M0", "Mx", "My", "Mz")
+    energy_momentum_components = (
+        "Ttt",
+        "Txx",
+        "Tyy",
+        "Tzz",
+        "Ttx",
+        "Tty",
+        "Ttz",
+        "Txy",
+        "Tyz",
+        "Tzx",
+    )
+    moment_components = []
+    if mass_current:
+        moment_components.extend(enumerate(mass_current_components))
+    if energy_momentum:
+        moment_components.extend(enumerate(energy_momentum_components, start=4))
+    moment_fields = {
+        f"um03_{name}": scalar_field(20 + index * 100)
+        for index, name in reversed(moment_components)
+    }
+
     domain = {
         "state": {"domain_id": domain_id, "cycle": 5, "time": 1.5},
         "coordsets": {"cell_coords": {"type": "uniform", "dims": dims}},
@@ -30,7 +69,7 @@ def make_domain(domain_id, dimension, *, metadata=None, raw=False, particles=Fal
         "fields": {
             "E": field(("x", "y", "z"), 0),
             "B": field(("x", "y", "z"), 10),
-            "um03": field(tuple(f"m{i:02d}" for i in range(14)), 20),
+            **moment_fields,
         },
         "pic": {},
     }
@@ -41,29 +80,19 @@ def make_domain(domain_id, dimension, *, metadata=None, raw=False, particles=Fal
         raw_xyz = tuple(size + 2 for size in cell_xyz)
         raw_shape = (1,) * (3 - dimension) + tuple(reversed(raw_xyz))
         raw_count = int(np.prod(raw_shape))
-        raw_dims = dict(
-            zip("ijk"[:dimension], (size + 1 for size in raw_xyz), strict=True)
-        )
-        domain["coordsets"]["raw_storage_coords"] = {
-            "type": "uniform",
-            "dims": raw_dims,
-        }
-        domain["topologies"]["raw_storage_mesh"] = {
-            "type": "uniform",
-            "coordset": "raw_storage_coords",
-        }
+        domain["pic"]["raw"] = {"shape": np.asarray(raw_shape, dtype=np.int64)}
         for name, components in (
             ("uf", ("Ex", "Ey", "Ez", "Bx", "By", "Bz")),
             ("uj", ("rho", "Jx", "Jy", "Jz")),
         ):
-            domain["fields"][name] = {
-                "association": "element",
-                "topology": "raw_storage_mesh",
-                "values": {
-                    component: np.arange(raw_count, dtype=np.float64) + index * 1000
-                    for index, component in reversed(list(enumerate(components)))
-                },
-            }
+            values = np.stack(
+                [
+                    np.arange(raw_count, dtype=np.float64) + index * 1000
+                    for index, _ in enumerate(components)
+                ],
+                axis=-1,
+            )
+            domain["pic"]["raw"][name] = values.reshape(-1)
         domain["pic"]["neighbors"] = {
             "domain_ids": np.arange(27, dtype=np.int64),
             "neighbor_ranks": np.arange(27, dtype=np.int32) + 100,
@@ -82,7 +111,6 @@ def make_domain(domain_id, dimension, *, metadata=None, raw=False, particles=Fal
 
 def metadata(config=None):
     return {
-        "schema_version": 1,
         "boundary_margin": 1,
         "config": json.dumps({"simulation": {"dimension": 3}})
         if config is None
@@ -100,7 +128,7 @@ def test_topology_shapes_are_normalized_to_three_dimensions(dimension, expected)
 
     assert domain.E.shape == (*expected, 3)
     assert domain.B.shape == (*expected, 3)
-    assert domain.um03.shape == (*expected, 14)
+    assert domain.um03.shape == (*expected, 4)
     assert domain.E.component("x").shape == expected
 
 
@@ -117,9 +145,70 @@ def test_canonical_component_order_and_domain_mapping():
     assert dataset.domain(2).domain_id == 2
     assert chunks[0].E.components == ("x", "y", "z")
     assert chunks[0].E[0, 0, 0].tolist() == [0.0, 100.0, 200.0]
-    assert chunks[0].um03[0, 0, 0].tolist() == [20.0 + 100 * i for i in range(14)]
+    assert chunks[0].um03.components == ("M0", "Mx", "My", "Mz")
+    assert chunks[0].um03[0, 0, 0].tolist() == [20.0 + 100 * i for i in range(4)]
+    assert chunks[0].um03.Mx[0, 0, 0] == 120.0
+    with pytest.raises(KeyError):
+        chunks[0].um03.component("Ttx")
+    with pytest.raises(AttributeError):
+        _ = chunks[0].um03.Ttx
     with pytest.raises(KeyError):
         dataset.domain(100)
+
+
+def test_energy_momentum_extends_grouped_moment_in_deposited_order():
+    domain = Dataset(
+        {"domain": make_domain(3, 2, metadata=metadata(), energy_momentum=True)}
+    ).domain(3)
+
+    assert domain.um03.components == (
+        "M0",
+        "Mx",
+        "My",
+        "Mz",
+        "Ttt",
+        "Txx",
+        "Tyy",
+        "Tzz",
+        "Ttx",
+        "Tty",
+        "Ttz",
+        "Txy",
+        "Tyz",
+        "Tzx",
+    )
+    assert domain.um03.shape == (1, 3, 4, 14)
+    assert domain.um03.Tzx[0, 0, 0] == 1320.0
+    assert domain.moment_field("um03").component("Ttx")[0, 0, 0] == 820.0
+
+
+def test_energy_momentum_can_be_published_without_mass_current():
+    domain = Dataset(
+        {
+            "domain": make_domain(
+                3,
+                1,
+                metadata=metadata(),
+                mass_current=False,
+                energy_momentum=True,
+            )
+        }
+    ).domain(3)
+
+    assert domain.um03.components == (
+        "Ttt",
+        "Txx",
+        "Tyy",
+        "Tzz",
+        "Ttx",
+        "Tty",
+        "Ttz",
+        "Txy",
+        "Tyz",
+        "Tzx",
+    )
+    assert domain.um03.shape == (1, 1, 4, 10)
+    assert domain.um03.Ttt[0, 0, 0] == 420.0
 
 
 def test_metadata_owner_accepts_json_and_object_config():
@@ -134,7 +223,6 @@ def test_metadata_owner_accepts_json_and_object_config():
         }
     )
 
-    assert json_dataset.schema_version == 1
     assert json_dataset.boundary_margin == 1
     assert json_dataset.config["simulation"]["dimension"] == 3
     assert object_dataset.config == {
@@ -167,10 +255,6 @@ def test_conduit_config_preserves_lists_of_objects():
                 {"config": data["a"]["pic"].pop("config")}
             ),
             "colocated",
-        ),
-        (
-            lambda data: data["a"]["pic"].update(schema_version=2),
-            "unsupported PIC-NIX schema version",
         ),
     ],
 )
@@ -212,6 +296,46 @@ def test_raw_fields_preserve_order_and_crop_owned_cells(
     assert domain.uf_owned.shape == owned_shape
     assert domain.uj_owned.shape == (*owned_shape[:-1], 4)
     assert domain.raw_field("uf").interior().shape == owned_shape
+
+
+def test_raw_fields_and_components_share_flat_source_storage():
+    source_domain = make_domain(3, 2, metadata=metadata(), raw=True)
+    source = source_domain["pic"]["raw"]["uf"]
+    field = Dataset({"domain": source_domain}).domain(3).uf
+
+    assert np.shares_memory(field.array, source)
+    assert np.shares_memory(field.component("By"), source)
+    source[4] = 42.0
+    assert field.component("By")[0, 0, 0] == 42.0
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda raw: raw.update(shape=np.array([1, 2], dtype=np.int64)),
+            "three integers",
+        ),
+        (
+            lambda raw: raw.update(shape=np.array([[1, 1, 6]], dtype=np.int64)),
+            "three integers",
+        ),
+        (
+            lambda raw: raw.update(shape=np.array([1, 0, 2], dtype=np.int64)),
+            "positive",
+        ),
+        (lambda raw: raw.update(uf=raw["uf"][:-1]), "expected"),
+        (lambda raw: raw.update(uf=raw["uf"].astype(np.float32)), "float64"),
+        (lambda raw: raw.update(uf=raw["uf"].reshape(1, -1)), "flat"),
+    ],
+)
+def test_invalid_raw_storage_is_rejected(mutate, message):
+    source_domain = make_domain(3, 1, metadata=metadata(), raw=True)
+    mutate(source_domain["pic"]["raw"])
+    domain = Dataset({"domain": source_domain}).domain(3)
+
+    with pytest.raises(ValueError, match=message):
+        _ = domain.uf.array
 
 
 def test_strided_component_shape_restoration_preserves_source_view():

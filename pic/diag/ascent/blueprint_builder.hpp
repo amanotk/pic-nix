@@ -12,9 +12,12 @@
 namespace pic_ascent
 {
 struct BlueprintOptions {
-  bool raw       = false;
-  bool centered  = true;
-  bool particles = false;
+  bool electric_field  = true;
+  bool magnetic_field  = true;
+  bool mass_current    = true;
+  bool energy_momentum = false;
+  bool raw_fields      = false;
+  bool raw_particles   = false;
 };
 
 struct BlueprintPublication {

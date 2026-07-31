@@ -557,7 +557,13 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
     config             = replace_all(config, "@CZ@", std::to_string(cfg.cz));
     config             = replace_all(config, "@ASCENT_DIAGNOSTIC@",
                          with_ascent ? "\n[[diagnostic]]\n  name = 'ascent'\n  begin = 0\n  "
-                                                   "interval = 1\n  actions = 'ascent_empty_actions.yaml'\n"
+                                                   "interval = 1\n  actions = 'ascent_empty_actions.yaml'\n  "
+                                                   "publish_electric_field = true\n  "
+                                                   "publish_magnetic_field = true\n  "
+                                                   "publish_mass_current = true\n  "
+                                                   "publish_energy_momentum = true\n  "
+                                                   "publish_raw_fields = true\n  "
+                                                   "publish_raw_particles = true\n"
                                                  : "");
 
     std::ofstream ofs(config_path);

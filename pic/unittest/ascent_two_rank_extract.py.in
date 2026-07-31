@@ -20,11 +20,16 @@ if domain_count[0] != 2:
 
 chunk = chunks[0]
 electric = chunk.E.array
-moment = chunk.um00.array
+moment_field = chunk.um00
+moment = moment_field.array
 if electric.shape != (1, 1, 2, 3):
     raise RuntimeError(f"unexpected E shape: {electric.shape}")
-if moment.shape != (1, 1, 2, 14):
+if moment.shape != (1, 1, 2, 4):
     raise RuntimeError(f"unexpected um00 shape: {moment.shape}")
+if moment_field.components != ("M0", "Mx", "My", "Mz"):
+    raise RuntimeError(f"unexpected moment components: {moment_field.components}")
+if not np.shares_memory(moment_field.M0, moment_field.component("M0")):
+    raise RuntimeError("moment attribute and component access disagree")
 
 totals = np.array([electric[..., 0].sum(), moment[..., 0].sum()])
 local_totals = totals.copy()
@@ -43,18 +48,15 @@ if chunk.uj_owned.shape != (1, 1, 2, 4):
     raise RuntimeError(f"unexpected owned uj shape: {chunk.uj_owned.shape}")
 raw_ey = chunk.uf.component("Ey")
 if not np.allclose(raw_ey, comm.Get_rank() + 2.0):
-    leaf = chunk.uf.node["values"]["Ey"]
     raise RuntimeError(
         f"raw uf component stride was not preserved: values={raw_ey}, "
-        f"value_strides={raw_ey.strides}, leaf={leaf}, "
-        f"leaf_type={type(leaf)}, leaf_strides={getattr(leaf, 'strides', None)}"
+        f"value_strides={raw_ey.strides}, leaf={chunk.uf.node}"
     )
 raw_jz = chunk.uj.component("Jz")
 if not np.allclose(raw_jz, comm.Get_rank() + 13.0):
-    leaf = chunk.uj.node["values"]["Jz"]
     raise RuntimeError(
         f"raw uj component stride was not preserved: values={raw_jz}, "
-        f"leaf_type={type(leaf)}, strides={getattr(leaf, 'strides', None)}"
+        f"leaf={chunk.uj.node}"
     )
 
 if chunk.neighbor_domain_ids.shape != (27,) or chunk.neighbor_ranks.shape != (27,):
@@ -69,7 +71,7 @@ if particles.shape != (1, 7) or particles.dtype != np.float64:
     raise RuntimeError(
         f"unexpected particle array: {particles.shape}, {particles.dtype}"
     )
-if dataset.schema_version != 1 or dataset.boundary_margin != 1:
+if dataset.boundary_margin != 1:
     raise RuntimeError("unexpected shared PIC metadata")
 if dataset.config["parameter"]["case"] != "two-rank-protocol":
     raise RuntimeError(f"unexpected PIC configuration: {dataset.config}")

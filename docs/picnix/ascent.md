@@ -44,24 +44,31 @@ Add one Ascent diagnostic to the simulation configuration:
 name = "ascent"
 interval = 100
 actions = "ascent_actions.yaml"
-publish_centered = true
-publish_raw = false
-publish_particles = false
+publish_electric_field = true
+publish_magnetic_field = true
+publish_mass_current = true
+publish_energy_momentum = false
+publish_raw_fields = false
+publish_raw_particles = false
 ```
 
 The publish keys are optional boolean flags. The defaults are:  
 
 | Option | Default | Published data |
 | --- | --- | --- |
-| `centered` | `true` | Owned-cell mesh, collocated `E` and `B`, and one 14-component moment field per species |
-| `raw` | `false` | Storage-index mesh, zero-copy `uf` and `uj` components, and domain neighbors |
-| `particles` | `false` | Zero-copy active `xu` rows for each nonempty species |
+| `publish_electric_field` | `true` | Collocated three-component `E` field |
+| `publish_magnetic_field` | `true` | Collocated three-component `B` field |
+| `publish_mass_current` | `true` | Four scalar mass-current moments per species |
+| `publish_energy_momentum` | `false` | Ten scalar energy-momentum components per species |
+| `publish_raw_fields` | `false` | Zero-copy interleaved `uf` and `uj` arrays, their shape, and domain neighbors |
+| `publish_raw_particles` | `false` | Zero-copy active `xu` rows for each nonempty species |
 
-Particle publication is independent of raw publication, so particles may be
-published while `raw=false` as long as the centered mesh remains enabled. At
-least one of `centered` or `raw` must be true so every domain is a valid
-Blueprint mesh. Moment calculation is performed only when centered publication
-is enabled.  
+The owned-cell `cell_mesh` is always published because Ascent requires every
+domain to contain a valid Blueprint mesh. All six data switches are independent,
+so a publication may contain only the mesh and selected custom raw data. Moment
+calculation runs only when mass-current or energy-momentum publication is
+enabled. The current deposition implementation calculates all 14 moments
+together even when only one group is published.  
 
 `interval` must be a positive integer when present. `actions` is required and
 must name a nonempty, readable file. A relative actions path is resolved against
@@ -89,21 +96,21 @@ The following tree shows every optional group and its exact path:
 ```text
 domain_<domain-id>/
 |-- state/{domain_id,cycle,time}
-|-- coordsets/cell_coords                         # centered=true
-|-- topologies/cell_mesh                          # centered=true
-|-- fields/E/values/{x,y,z}                       # centered=true
-|-- fields/B/values/{x,y,z}                       # centered=true
-|-- fields/um00/values/{m00,...,m13}              # centered=true
-|-- fields/um01/values/{m00,...,m13}              # centered=true
-|-- coordsets/raw_storage_coords                  # raw=true
-|-- topologies/raw_storage_mesh                   # raw=true
-|-- fields/uf/values/{Ex,Ey,Ez,Bx,By,Bz}          # raw=true
-|-- fields/uj/values/{rho,Jx,Jy,Jz}               # raw=true
-|-- pic/neighbors/domain_ids                      # raw=true
-|-- pic/neighbors/neighbor_ranks                  # raw=true
-|-- pic/particles/particle00/xu                   # particles=true, if active
-|-- pic/particles/particle01/xu                   # particles=true, if active
-|-- pic/schema_version                            # metadata owner only
+|-- coordsets/cell_coords
+|-- topologies/cell_mesh
+|-- fields/E/values/{x,y,z}                       # electric field enabled
+|-- fields/B/values/{x,y,z}                       # magnetic field enabled
+|-- fields/um00_{M0,Mx,My,Mz}/values              # mass current enabled
+|-- fields/um00_{Ttt,...,Tzx}/values              # energy momentum enabled
+|-- fields/um01_{M0,Mx,My,Mz}/values              # mass current enabled
+|-- fields/um01_{Ttt,...,Tzx}/values              # energy momentum enabled
+|-- pic/raw/shape                                 # raw fields enabled
+|-- pic/raw/uf                                    # raw fields enabled
+|-- pic/raw/uj                                    # raw fields enabled
+|-- pic/neighbors/domain_ids                      # raw fields enabled
+|-- pic/neighbors/neighbor_ranks                  # raw fields enabled
+|-- pic/particles/particle00/xu                   # raw particles enabled, if active
+|-- pic/particles/particle01/xu                   # raw particles enabled, if active
 |-- pic/boundary_margin                           # metadata owner only
 `-- pic/config                                    # metadata owner only
 ```
@@ -122,28 +129,63 @@ cell counts plus one vertex on each active axis.
 
 All centered fields have `association: element` and `topology: cell_mesh`. `E`
 and `B` are collocated at cell centers from the staggered `uf` storage and have
-canonical component order `(x, y, z)`. Each `umNN` field copies the owned part
-of that species' moment array and has canonical component order
-`(m00, m01, ..., m13)`. No ghost cells are included.  
+canonical component order `(x, y, z)`. Each particle moment is an independent
+scalar field prefixed by its species name. No ghost cells are included.  
+
+The default mass-current fields are:  
+
+```text
+umNN_M0
+umNN_Mx
+umNN_My
+umNN_Mz
+```
+
+`M0` is the deposited mass density. `Mx`, `My`, and `Mz` are its spatial mass
+fluxes. For particle mass $`m_s`$, interpolation weight $`W_p`$, and velocity
+$`v_i`$, their definitions are:  
+
+```math
+M_0 = \sum_p m_s W_p, \qquad M_i = \sum_p m_s v_i W_p.
+```
+
+Optional energy-momentum publication adds:  
+
+```text
+umNN_Ttt  umNN_Txx  umNN_Tyy  umNN_Tzz
+umNN_Ttx  umNN_Tty  umNN_Ttz
+umNN_Txy  umNN_Tyz  umNN_Tzx
+```
+
+The `xy`, `yz`, `zx` sequence preserves the cyclic ordering used by the moment
+deposition. The spatial block is the complete momentum flux, including bulk
+transport and random or thermal pressure; it is not a bulk-subtracted stress
+tensor. These names follow the PIC-NIX normalization:  
+
+```math
+T_{tt} = \sum_p m_s \gamma_p c W_p, \qquad
+T_{ti} = \sum_p m_s u_i W_p, \qquad
+T_{ij} = \sum_p m_s \frac{u_i u_j}{\gamma_p} W_p.
+```
 
 The centered component buffers are compact, publication-owned copies. The
 moment arrays must therefore be current before publication; the diagnostic
-calls the PIC moment calculation when `centered=true`.  
+calls the PIC moment calculation when `publish_mass_current=true` or
+`publish_energy_momentum=true`.  
 
 ## Raw storage
 
-Raw publication adds `raw_storage_coords` and `raw_storage_mesh`. This uniform
-mesh has origin zero and unit spacing: it describes storage indices, not the
-physical locations of staggered quantities. `uf` and `uj` are element-associated
-fields on this mesh. Their component leaves are external, strided views into the
-original interleaved `float64` arrays, so no component reorder or field copy is
-performed.  
+Raw-field publication adds `pic/raw/shape`, `pic/raw/uf`, and `pic/raw/uj`.
+`shape` is a three-integer `(z, y, x)` spatial shape. `uf` and `uj` are flat
+external views of the original interleaved `float64` allocations, so no
+component reorder or field copy is performed. They are custom Conduit data, not
+Blueprint fields, and must be read from the direct input returned by
+`ascent_data()`.  
 
 On active axes, the raw shape includes the complete allocated storage extent,
 including boundary cells. On an inactive axis, publication selects the single
 plane at `boundary_margin` and reports an extent of one. Consequently, all
-dimensions expose a normalized `(z, y, x)` spatial shape even though the
-Blueprint topology omits inactive axes:  
+dimensions expose a normalized `(z, y, x)` spatial shape:  
 
 ```text
 1D spatial shape: (1, 1, nx_raw)
@@ -153,10 +195,11 @@ Blueprint topology omits inactive axes:
 
 The component axis is appended in Python, giving `uf` shape
 `(nz_raw, ny_raw, nx_raw, 6)` and `uj` shape
-`(nz_raw, ny_raw, nx_raw, 4)`. The raw mesh is not a collocated physical vector
-mesh: the electromagnetic and current-storage components retain their native
-PIC staggering. Do not apply generic mesh differentiation, recentering, or
-vector filters to these raw fields. Use the centered fields for ordinary Ascent
+`(nz_raw, ny_raw, nx_raw, 4)`. `uf` uses component order
+`(Ex, Ey, Ez, Bx, By, Bz)` and `uj` uses `(rho, Jx, Jy, Jz)`. The flat leaves
+therefore contain `product(shape) * 6` and `product(shape) * 4` values,
+respectively. These components retain their native PIC staggering. They are
+unavailable to generic Ascent mesh filters; use centered fields for
 visualization and interpret raw storage with PIC-aware analysis.  
 
 The Python owned view removes `boundary_margin` cells from both ends of every
@@ -164,7 +207,7 @@ non-singleton raw axis. Singleton inactive axes are unchanged.
 
 ## Neighbors
 
-With `raw=true`, every domain publishes the paired integer arrays
+With `publish_raw_fields=true`, every domain publishes the paired integer arrays
 `pic/neighbors/domain_ids` and `pic/neighbors/neighbor_ranks`. Both have shape
 `(27,)` and use the native PIC-NIX ordering:  
 
@@ -180,8 +223,9 @@ publication is disabled.
 
 ## Active particles
 
-For each species with at least one active particle, `particles=true` publishes
-the first `Np_active` rows of the original `xu` allocation at
+For each species with at least one active particle,
+`publish_raw_particles=true` publishes the first `Np_active` rows of the original
+`xu` allocation at
 `pic/particles/particleNN/xu`. Empty or unallocated species are omitted. The
 unused allocated tail is never published.  
 
@@ -204,17 +248,15 @@ exactly one local owner: the first `PicChunk` in the local publication order.
 This is not necessarily the domain with the lowest ID. Only that domain has:  
 
 ```text
-pic/schema_version
 pic/boundary_margin
 pic/config
 ```
 
-`pic/schema_version` is currently integer `1`. `pic/boundary_margin` is the
-common non-negative boundary margin; publication rejects local chunks with
-different margins. `pic/config` is the complete parsed simulation configuration,
-currently serialized by C++ as a JSON string. The Python reader also accepts an
-equivalent Conduit object tree and exposes either representation as a `dict`.
-Other local domains do not duplicate these values.  
+`pic/boundary_margin` is the common non-negative boundary margin; publication
+rejects local chunks with different margins. `pic/config` is the complete parsed
+simulation configuration, currently serialized by C++ as a JSON string. The
+Python reader also accepts an equivalent Conduit object tree and exposes either
+representation as a `dict`. Other local domains do not duplicate these values.  
 
 ## Python extracts
 
@@ -232,29 +274,31 @@ dataset = Dataset.from_conduit(ascent_data())
 for chunk in dataset.local_chunks():
     electric = chunk.E.array
     ex = chunk.E.component("x")
-    moments = chunk.um00.array
+    mass_density = chunk.um00.M0
+    mass_flux_x = chunk.um00.component("Mx")
 ```
 
 `Dataset.from_conduit(node)` is the standard constructor. The helper does
 not import Ascent globals implicitly. `dataset.domain(domain_id)` finds a
 local domain by its `state/domain_id`. Shared values are available as
-`dataset.schema_version`, `dataset.boundary_margin`, and `dataset.config`.
-Dataset construction verifies that all three values have one and the same
-local owner and rejects unsupported schema versions.  
+`dataset.boundary_margin` and `dataset.config`. Dataset construction verifies
+that both values have one and the same local owner.  
 
-Centered accessors are `chunk.E`, `chunk.B`, `chunk.umNN`, and
-`chunk.centered_field(name)`. Raw accessors are `chunk.uf`, `chunk.uj`,
+Centered field accessors are `chunk.E`, `chunk.B`, and
+`chunk.centered_field(name)`. Published moments are grouped dynamically under
+`chunk.umNN` and `chunk.moment_field(name)`. Raw accessors are `chunk.uf`, `chunk.uj`,
 `chunk.raw_field(name)`, `chunk.uf_owned`, and `chunk.uj_owned`; a raw field also
 provides `.owned` and `.interior()`. Neighbor arrays are
 `chunk.neighbor_domain_ids` and `chunk.neighbor_ranks`. Particle accessors are
-`chunk.particleNN` and `chunk.particles(species)`. Requesting an unpublished
+`chunk.particleNN` and `chunk.particles.particleNN`. Requesting an unpublished
 particle species returns an empty `(0, 7)` `float64` array.  
 
 Python always restores three spatial axes in `(z, y, x)` order:  
 
 ```text
 E.array, B.array:                 (nz, ny, nx, 3)
-umNN.array:                       (nz, ny, nx, 14)
+umNN.array, mass current only:    (nz, ny, nx, 4)
+umNN.array, both moment groups:   (nz, ny, nx, 14)
 uf.array:                         (nz_raw, ny_raw, nx_raw, 6)
 uj.array:                         (nz_raw, ny_raw, nx_raw, 4)
 particleNN.array:                 (Np_active, 7)
@@ -262,11 +306,14 @@ neighbor_domain_ids, ranks:       (27,)
 ```
 
 Inactive spatial axes have extent one. Canonical component order is independent
-of Conduit child insertion order. `Field.component(name)` restores a normalized
-NumPy view of one component and preserves an external source view where Conduit
-permits it. `.array` stacks the canonical components along a new final axis and
-therefore materializes a NumPy array. Particle `.array` reshapes the directly
-published storage.  
+of Conduit child insertion order. Moment order is `(M0, Mx, My, Mz)` followed,
+when enabled, by `(Ttt, Txx, Tyy, Tzz, Ttx, Tty, Ttz, Txy, Tyz, Tzx)`.
+`Field.component(name)` restores a normalized NumPy view of one component and
+preserves an external source view where Conduit permits it. Moment components
+also support attribute access such as `chunk.um00.Ttx`. Grouped centered
+`.array` access stacks canonical components and therefore materializes a NumPy
+array. Raw-field and particle `.array` reshape directly published storage
+without copying.  
 
 Install `picnix`, NumPy, and, for MPI extracts, `mpi4py` in Ascent's Python
 `PYTHONPATH`; the Conduit Python module must also be importable.  
@@ -288,7 +335,7 @@ actions; then resume updates and release temporary storage.
 
 This interface does not publish `ascent_ghosts`, Blueprint `adjsets` or
 `nestsets`, particle coordsets or point topologies, raw moment arrays, or
-additional per-domain copies of shared configuration. It does not turn the raw
-storage mesh into a physically collocated mesh, preserve custom particle data
-through arbitrary mesh-only pipelines, or provide performance and memory
-benchmarks as an automated test gate.  
+additional per-domain copies of shared configuration. It does not expose raw
+storage to Blueprint mesh filters, preserve custom raw data through arbitrary
+mesh-only pipelines, or provide performance and memory benchmarks as an
+automated test gate.  

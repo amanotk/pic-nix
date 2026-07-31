@@ -30,19 +30,20 @@ void AscentDiag::operator()(nix::json& config)
   const auto actions = config["actions"].get<std::string>();
 
   pic_ascent::BlueprintOptions options;
-  for (const auto key : {"publish_centered", "publish_raw", "publish_particles"}) {
+  for (const auto key :
+       {"publish_electric_field", "publish_magnetic_field", "publish_mass_current",
+        "publish_energy_momentum", "publish_raw_fields", "publish_raw_particles"}) {
     if (config.contains(key) && !config[key].is_boolean()) {
       ERROR << fmt::format("Ascent diagnostic `{}` must be a boolean", key);
       return;
     }
   }
-  options.centered  = config.value("publish_centered", options.centered);
-  options.raw       = config.value("publish_raw", options.raw);
-  options.particles = config.value("publish_particles", options.particles);
-  if (!options.centered && !options.raw) {
-    ERROR << "Ascent diagnostic requires `centered` or `raw` publication";
-    return;
-  }
+  options.electric_field  = config.value("publish_electric_field", options.electric_field);
+  options.magnetic_field  = config.value("publish_magnetic_field", options.magnetic_field);
+  options.mass_current    = config.value("publish_mass_current", options.mass_current);
+  options.energy_momentum = config.value("publish_energy_momentum", options.energy_momentum);
+  options.raw_fields      = config.value("publish_raw_fields", options.raw_fields);
+  options.raw_particles   = config.value("publish_raw_particles", options.raw_particles);
 
   std::vector<PicChunk*> chunks;
   chunks.reserve(data.chunkvec.size());
@@ -64,7 +65,7 @@ void AscentDiag::operator()(nix::json& config)
     return;
   }
 
-  if (options.centered) {
+  if (options.mass_current || options.energy_momentum) {
     interface->calculate_moment();
   }
 
