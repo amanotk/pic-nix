@@ -11,6 +11,32 @@ TEST_CASE("Basic")
   CfgParser parser;
 }
 
+TEST_CASE("get_root returns an isolated copy from a const parser")
+{
+  CfgParser parser;
+  json      configuration = {
+           {"application", {{"option", json::object()}}},
+           {"diagnostic", json::array()},
+           {"parameter",
+            {{"Nx", 16},
+             {"Ny", 16},
+             {"Nz", 16},
+             {"Cx", 4},
+             {"Cy", 4},
+             {"Cz", 4},
+             {"delt", 1.0},
+             {"delh", 1.0}}},
+  };
+  parser.overwrite(configuration);
+
+  const CfgParser& const_parser = parser;
+  json             root_copy    = const_parser.get_root();
+  root_copy["parameter"]["Nx"]  = 32;
+
+  REQUIRE(const_parser.get_root() == configuration);
+  REQUIRE(const_parser.get_root()["parameter"]["Nx"] == 16);
+}
+
 TEST_CASE("check_mandatory_sections")
 {
   CfgParser parser;
@@ -158,7 +184,7 @@ TEST_CASE("check_dimensions")
 
 TEST_CASE("parse_file")
 {
-  CfgParser parser;
+  CfgParser   parser;
   std::string filename;
   std::string content;
 
@@ -224,4 +250,3 @@ TEST_CASE("parse_file")
   // cleanup
   std::filesystem::remove(filename);
 }
-

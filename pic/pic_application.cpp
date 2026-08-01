@@ -11,6 +11,10 @@
 #include "diag/tracer.hpp"
 #include "diag/tracer_pickup.hpp"
 
+#if PICNIX_ENABLE_ASCENT
+#include "diag/ascent.hpp"
+#endif
+
 #include "nix/diag/load.hpp"
 #include "nix/diag/resource.hpp"
 
@@ -89,9 +93,23 @@ void PicApplication::initialize(int argc, char** argv)
 
 void PicApplication::initialize_diagnostic()
 {
-  if (cfgparser->get_diagnostic().is_array() == false) {
+  const auto diagnostics = cfgparser->get_diagnostic();
+  if (diagnostics.is_array() == false) {
     ERROR << fmt::format("Invalid diagnostic");
   }
+
+#if PICNIX_ENABLE_ASCENT
+  int ascent_count = 0;
+  for (const auto& diagnostic : diagnostics) {
+    if (diagnostic.value("name", std::string{}) == "ascent") {
+      ascent_count++;
+    }
+  }
+  if (ascent_count > 1) {
+    ERROR << "Only one Ascent diagnostic entry is supported";
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+#endif
 
   base_type::initialize_diagnostic();
 
@@ -103,6 +121,9 @@ void PicApplication::initialize_diagnostic()
   diagvec.push_back(std::make_unique<ParticleDiag>(interface));
   diagvec.push_back(std::make_unique<TracerPickupDiag>(interface));
   diagvec.push_back(std::make_unique<TracerDiag>(interface));
+#if PICNIX_ENABLE_ASCENT
+  diagvec.push_back(std::make_unique<AscentDiag>(interface));
+#endif
 }
 
 void PicApplication::set_chunk_communicator()

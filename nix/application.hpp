@@ -53,6 +53,12 @@ public:
     return app_pointer->get_internal_data();
   }
 
+  // return parsed configuration
+  virtual json get_configuration() const
+  {
+    return app_pointer->get_configuration();
+  }
+
   // convert to json
   virtual json to_json()
   {
@@ -125,7 +131,7 @@ protected:
   int     curstep;  ///< current iteration step
   float64 curtime;  ///< current time
 
-  bool is_mpi_init_called_by_me;   ///< true if Application initialized MPI
+  bool is_mpi_init_called_by_me; ///< true if Application initialized MPI
 
 public:
   /// @brief default constructor
@@ -139,8 +145,7 @@ public:
   /// @param argv array of arguments
   ///
   Application(int argc, char** argv, PtrInterface interface)
-      : is_mpi_init_called_by_me(false), interface(interface),
-        chunkvec()
+      : is_mpi_init_called_by_me(false), interface(interface), chunkvec()
   {
     cl_argc = argc;
     cl_argv = argv;
@@ -164,6 +169,12 @@ public:
   DataContainer get_internal_data()
   {
     return {ndims, cdims, thisrank, nprocess, nthread, curstep, curtime, chunkmap, chunkvec};
+  }
+
+  /// @brief return parsed configuration
+  virtual json get_configuration() const
+  {
+    return cfgparser->get_root();
   }
 
   ///
@@ -274,6 +285,11 @@ protected:
   /// @brief finalize MPI
   ///
   void finalize_mpi();
+
+  ///
+  /// @brief shut down and destroy diagnostics before MPI cleanup
+  ///
+  void finalize_diagnostic();
 
   ///
   /// @brief assert

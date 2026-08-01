@@ -20,7 +20,7 @@ A separate repository for `nix` can be found [here](https://github.com/amanotk/n
 ## Requirements
 
 - C++ compiler supporting C++17 or later
-- CMake version 3.20 or later
+- CMake version 3.23 or later
 - MPI library (OpenMPI, MPICH, etc.)
 
 In addition, C++ libraries listed in `nix/DEPENDENCIES.md` will be automatically downloaded and built by CMake. However, pre-installing them with `scripts/install_dependencies.sh` is recommended for repeated builds (see below).

@@ -229,6 +229,109 @@ TEST_CASE("XtensorPacker3D pack_field colocates 3D field components")
   }
 }
 
+TEST_CASE("XtensorPacker3D compact colocation excludes ghost cells")
+{
+  XtensorPacker3D         packer;
+  xt::xtensor<float64, 4> x({5, 6, 7, 6});
+  for (size_t iz = 0; iz < x.shape(0); ++iz) {
+    for (size_t iy = 0; iy < x.shape(1); ++iy) {
+      for (size_t ix = 0; ix < x.shape(2); ++ix) {
+        for (size_t c = 0; c < x.shape(3); ++c) {
+          x(iz, iy, ix, c) = static_cast<float64>(iz * 1000 + iy * 100 + ix * 10 + c);
+        }
+      }
+    }
+  }
+
+  MockData data{1, 5, 1, 4, 1, 3};
+  auto     y = packer.colocate_field(x, data);
+
+  REQUIRE(y.shape() == std::array<std::size_t, 4>{3, 4, 5, 6});
+  REQUIRE(y(0, 0, 0, 0) == Catch::Approx(0.5 * (x(1, 1, 1, 0) + x(1, 1, 2, 0))));
+  REQUIRE(y(2, 3, 4, 5) ==
+          Catch::Approx(0.25 * (x(3, 4, 5, 5) + x(3, 5, 6, 5) + x(3, 4, 6, 5) + x(3, 5, 5, 5))));
+}
+
+TEST_CASE("XtensorPacker3D compact colocation accepts explicit active axes")
+{
+  xt::xtensor<float64, 4> x({3, 3, 3, 6});
+  x.fill(0.0);
+  x(1, 1, 1, 0) = 2.0;
+  x(1, 1, 2, 0) = 4.0;
+  x(1, 1, 1, 4) = 6.0;
+  x(1, 1, 2, 4) = 10.0;
+
+  MockData data{1, 1, 1, 1, 1, 1};
+  auto     y = XtensorPacker3D::colocate_field(x, data, false, false, true);
+
+  REQUIRE(y.shape() == std::array<std::size_t, 4>{1, 1, 1, 6});
+  REQUIRE(y(0, 0, 0, 0) == Catch::Approx(3.0));
+  REQUIRE(y(0, 0, 0, 4) == Catch::Approx(8.0));
+}
+
+TEST_CASE("XtensorPacker3D compact colocation handles current in 1D 2D and 3D")
+{
+  XtensorPacker3D packer;
+
+  SECTION("1D")
+  {
+    xt::xtensor<float64, 4> x({3, 3, 6, 4});
+    for (size_t ix = 0; ix < x.shape(2); ++ix) {
+      x(1, 1, ix, 0) = 10.0 + ix;
+      x(1, 1, ix, 1) = 20.0 + ix;
+      x(1, 1, ix, 2) = 30.0 + ix;
+      x(1, 1, ix, 3) = 40.0 + ix;
+    }
+
+    auto y = packer.colocate_current(x, MockData{1, 4, 1, 1, 1, 1});
+    REQUIRE(y.shape() == std::array<std::size_t, 4>{1, 1, 4, 4});
+    REQUIRE(y(0, 0, 0, 0) == 11.0);
+    REQUIRE(y(0, 0, 0, 1) == 21.5);
+    REQUIRE(y(0, 0, 0, 2) == 31.0);
+    REQUIRE(y(0, 0, 0, 3) == 41.0);
+  }
+
+  SECTION("2D")
+  {
+    xt::xtensor<float64, 4> x({3, 5, 5, 4});
+    for (size_t iy = 0; iy < x.shape(1); ++iy) {
+      for (size_t ix = 0; ix < x.shape(2); ++ix) {
+        x(1, iy, ix, 0) = 10.0 + iy * 10.0 + ix;
+        x(1, iy, ix, 1) = 20.0 + iy * 10.0 + ix;
+        x(1, iy, ix, 2) = 30.0 + iy * 10.0 + ix;
+        x(1, iy, ix, 3) = 40.0 + iy * 10.0 + ix;
+      }
+    }
+
+    auto y = packer.colocate_current(x, MockData{1, 3, 1, 3, 1, 1});
+    REQUIRE(y.shape() == std::array<std::size_t, 4>{1, 3, 3, 4});
+    REQUIRE(y(0, 0, 0, 1) == 31.5);
+    REQUIRE(y(0, 0, 0, 2) == 46.0);
+    REQUIRE(y(0, 0, 0, 3) == 51.0);
+  }
+
+  SECTION("3D")
+  {
+    xt::xtensor<float64, 4> x({5, 5, 5, 4});
+    for (size_t iz = 0; iz < x.shape(0); ++iz) {
+      for (size_t iy = 0; iy < x.shape(1); ++iy) {
+        for (size_t ix = 0; ix < x.shape(2); ++ix) {
+          x(iz, iy, ix, 0) = 10.0 + iz * 100.0 + iy * 10.0 + ix;
+          x(iz, iy, ix, 1) = 20.0 + iz * 100.0 + iy * 10.0 + ix;
+          x(iz, iy, ix, 2) = 30.0 + iz * 100.0 + iy * 10.0 + ix;
+          x(iz, iy, ix, 3) = 40.0 + iz * 100.0 + iy * 10.0 + ix;
+        }
+      }
+    }
+
+    auto y = packer.colocate_current(x, MockData{1, 3, 1, 3, 1, 3});
+    REQUIRE(y.shape() == std::array<std::size_t, 4>{3, 3, 3, 4});
+    REQUIRE(y(0, 0, 0, 1) == 131.5);
+    REQUIRE(y(0, 0, 0, 2) == 146.0);
+    REQUIRE(y(0, 0, 0, 3) == 201.0);
+  }
+}
+
 TEST_CASE("XtensorPacker3D pack_moment decimates by averaging blocks")
 {
   XtensorPacker3D         packer;

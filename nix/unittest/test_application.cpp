@@ -19,6 +19,7 @@ const std::string config_filename = "config.json";
 const std::string config_content  = R"(
 {
   "application": {
+    "basedir": ".",
     "log": {
       "prefix": "log",
       "path": ".",
@@ -73,6 +74,50 @@ public:
   {
     std::filesystem::remove(config_filename);
   }
+
+  void set_test_configuration(json configuration)
+  {
+    cfgparser = create_cfgparser();
+    cfgparser->overwrite(configuration);
+  }
+};
+
+class ShutdownDiag : public Diag
+{
+public:
+  static inline bool shutdown_before_mpi  = false;
+  static inline bool destroyed_before_mpi = false;
+
+  ShutdownDiag() : Diag("foo")
+  {
+  }
+
+  ~ShutdownDiag() override
+  {
+    int finalized = 0;
+    MPI_Finalized(&finalized);
+    destroyed_before_mpi = finalized == 0;
+  }
+
+  void shutdown() override
+  {
+    int finalized = 0;
+    MPI_Finalized(&finalized);
+    shutdown_before_mpi = finalized == 0;
+  }
+};
+
+class ShutdownTestApplication : public TestApplication
+{
+public:
+  using TestApplication::TestApplication;
+
+protected:
+  void initialize_diagnostic() override
+  {
+    Application::initialize_diagnostic();
+    diagvec.push_back(std::make_unique<ShutdownDiag>());
+  }
 };
 
 TEST_CASE("test_main")
@@ -87,6 +132,47 @@ TEST_CASE("test_main")
   TestApplication app(argc, cargv, interface);
 
   REQUIRE(app.main() == 0);
+
+  std::filesystem::remove("profile.msgpack");
+  std::filesystem::remove("log.msgpack");
+}
+
+TEST_CASE("parsed configuration is forwarded by value")
+{
+  auto interface = std::make_shared<TestApplication::Interface>();
+
+  TestApplication app(0, nullptr, interface);
+  json            configuration = json::parse(config_content);
+  app.set_test_configuration(configuration);
+
+  json app_copy                     = app.get_configuration();
+  json interface_copy               = interface->get_configuration();
+  app_copy["parameter"]["Nx"]       = 32;
+  interface_copy["parameter"]["Nx"] = 64;
+
+  REQUIRE(app.get_configuration() == configuration);
+  REQUIRE(interface->get_configuration() == configuration);
+}
+
+TEST_CASE("diagnostics shut down before MPI finalization")
+{
+  ShutdownDiag::shutdown_before_mpi  = false;
+  ShutdownDiag::destroyed_before_mpi = false;
+
+  std::vector<std::string> args = {"./test_application", "-c", config_filename, "--emax", "1"};
+  std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+
+  int    argc      = static_cast<int>(argv.size());
+  char** cargv     = const_cast<char**>(argv.data());
+  auto   interface = std::make_shared<ShutdownTestApplication::Interface>();
+
+  {
+    ShutdownTestApplication app(argc, cargv, interface);
+    REQUIRE(app.main() == 0);
+  }
+
+  REQUIRE(ShutdownDiag::shutdown_before_mpi);
+  REQUIRE(ShutdownDiag::destroyed_before_mpi);
 
   std::filesystem::remove("profile.msgpack");
   std::filesystem::remove("log.msgpack");

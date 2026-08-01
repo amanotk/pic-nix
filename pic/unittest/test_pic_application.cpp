@@ -444,7 +444,8 @@ std::string replace_all(std::string text, const std::string& needle, const std::
   return text;
 }
 
-std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
+std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
+                                            bool with_ascent = false)
 {
   const char*           tmpdir_env = std::getenv("PICNIX_TMPDIR");
   std::filesystem::path base       = tmpdir_env != nullptr ? tmpdir_env : ".";
@@ -497,6 +498,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   name = 'history'
   begin = 1
   interval = 1000000
+@ASCENT_DIAGNOSTIC@
 )TOML";
 #else
   const char* config_template = R"TOML(
@@ -541,6 +543,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
   name = 'history'
   begin = 1
   interval = 1000000
+@ASCENT_DIAGNOSTIC@
 )TOML";
 #endif
 
@@ -552,9 +555,23 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank)
     config             = replace_all(config, "@CX@", std::to_string(cfg.cx));
     config             = replace_all(config, "@CY@", std::to_string(cfg.cy));
     config             = replace_all(config, "@CZ@", std::to_string(cfg.cz));
+    config             = replace_all(config, "@ASCENT_DIAGNOSTIC@",
+                         with_ascent ? "\n[[diagnostic]]\n  name = 'ascent'\n  begin = 0\n  "
+                                                   "interval = 1\n  actions = 'ascent_empty_actions.yaml'\n  "
+                                                   "publish_electric_field = true\n  "
+                                                   "publish_magnetic_field = true\n  "
+                                                   "publish_mass_current = true\n  "
+                                                   "publish_energy_momentum = true\n  "
+                                                   "publish_raw_fields = true\n  "
+                                                   "publish_raw_particles = true\n"
+                                                 : "");
 
     std::ofstream ofs(config_path);
     ofs << config;
+    if (with_ascent) {
+      std::ofstream actions(config_path.parent_path() / "ascent_empty_actions.yaml");
+      actions << "[]\n";
+    }
   }
 
   return config_path;
@@ -578,6 +595,7 @@ void cleanup_config_and_tmpdir(const std::filesystem::path& config_path, int ran
   MPI_Barrier(MPI_COMM_WORLD);
   if (rank == 0) {
     std::filesystem::remove(config_path);
+    std::filesystem::remove(config_path.parent_path() / "ascent_empty_actions.yaml");
   }
   MPI_Barrier(MPI_COMM_WORLD);
   cleanup_tmpdir(rank);
@@ -648,6 +666,29 @@ TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
 
   cleanup_config_and_tmpdir(config_path, rank);
 }
+
+#if PICNIX_ENABLE_ASCENT
+TEST_CASE("PicApplication runs Ascent diagnostic through finalization", "[ASCENT][np=1]")
+{
+  if (!require_mpi_size(1)) {
+    return;
+  }
+
+  const GridConfig grid_config = {8, 8, 8, 1, 1, 1};
+  const int        rank        = get_mpi_rank();
+  const auto       config_path = write_config_for_grid(grid_config, rank, true);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  CliArgs         cli       = make_cli_args(config_path);
+  auto            interface = std::make_shared<TestInterface>();
+  TestApplication app(cli.argc(), cli.cargv(), interface);
+
+  REQUIRE(app.main() == 0);
+
+  cleanup_config_and_tmpdir(config_path, rank);
+}
+#endif
 
 TEST_CASE("pic_application_writes_complete_checkpoint_status", "[np=1][np=8]")
 {
