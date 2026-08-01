@@ -6,17 +6,33 @@ MPI-enabled Ascent installation.
 
 ## Build and test
 
-Configure with CMake 3.23 or newer, an MPI compiler wrapper, and the CMake
-package directory from the Ascent installation:  
+Configure with CMake 3.23 or newer, an MPI compiler wrapper, and the Ascent
+superbuild installation prefix:  
 
 ```sh
 cmake -S . -B build-ascent \
   -DBUILD_TESTING=ON \
   -DPICNIX_ENABLE_ASCENT=ON \
-  -DAscent_DIR=/path/to/ascent/lib/cmake/ascent \
+  -DPICNIX_ASCENT_ROOT=/path/to/ascent-prefix \
   -DCMAKE_CXX_COMPILER=mpicxx
 cmake --build build-ascent --parallel
 ```
+
+When Ascent is installed by `scripts/install_ascent.sh`, use the prefix passed
+to the script. PIC-NIX automatically looks for Ascent in the upstream superbuild
+layout at `<prefix>/ascent-checkout`. Passing the superbuild prefix through
+`CMAKE_PREFIX_PATH` also works:  
+
+```sh
+cmake -S . -B build-ascent \
+  -DBUILD_TESTING=ON \
+  -DPICNIX_ENABLE_ASCENT=ON \
+  -DCMAKE_PREFIX_PATH=/path/to/ascent-prefix \
+  -DCMAKE_CXX_COMPILER=mpicxx
+```
+
+Advanced users may still pass `-DAscent_DIR=/path/to/lib/cmake/ascent`
+directly.  
 
 The Ascent package must provide `ascent::ascent_mpi`. Python extract tests are
 enabled when Ascent and Conduit have Python support; rendering tests are enabled
@@ -35,8 +51,67 @@ Run the Python helper tests from the repository root with:
 python -m pytest python/tests/test_ascent.py
 ```
 
+Use Ascent's Python environment when testing Python extracts from an Ascent
+superbuild installation:  
+
+```sh
+/path/to/ascent-prefix/python-venv/bin/python -m pytest python/tests/test_ascent.py
+```
+
 Runnable rendering and Python-extract examples are available under
 [`pic/example/diagnostics/ascent/`](../../pic/example/diagnostics/ascent/README.md).  
+
+## Runtime environment
+
+PIC-NIX executables linked to Ascent may contain embedded runtime search paths,
+but batch environments can change library and Python lookup behavior. For job
+scripts, set the Ascent superbuild prefix and prepend the relevant runtime
+paths explicitly:  
+
+```sh
+export ASCENT_ROOT=/path/to/ascent-prefix
+export LD_LIBRARY_PATH="$ASCENT_ROOT/ascent-checkout/lib:$ASCENT_ROOT/conduit-v0.9.5/lib:${LD_LIBRARY_PATH:-}"
+export PYTHONHOME=/path/to/python-prefix:/path/to/python-exec-prefix
+export PYTHONPATH="/path/to/pic-nix/python/src:$ASCENT_ROOT/python-venv/lib/pythonX.Y/site-packages:${PYTHONPATH:-}"
+```
+
+Depending on how Ascent was built, `LD_LIBRARY_PATH` may also need the MPI,
+VTK-m, RAJA, Umpire, Camp, MFEM, Silo, HDF5, or other dependency library
+directories. Site modules often provide these paths; otherwise use the same
+dependency prefixes recorded by the Ascent installation.  
+
+Python extracts run inside Ascent's Python support. Their Python environment
+must be able to import `picnix`, `conduit`, and `mpi4py` when MPI-aware extracts
+are used. Installing `picnix` and `mpi4py` into Ascent's `python-venv` is usually
+cleaner than maintaining a long `PYTHONPATH`. Embedded Python may also need
+`PYTHONHOME` so every MPI rank can find the standard library and
+platform-dependent `lib-dynload` directory. For Python virtual environments,
+derive these paths from the Python used to build Ascent:  
+
+```sh
+$ASCENT_ROOT/python-venv/bin/python - <<'PY'
+import sys
+print(sys.base_prefix)
+print(sys.base_exec_prefix)
+PY
+```
+
+Use the two printed paths as `PYTHONHOME=<base_prefix>:<base_exec_prefix>`. In
+many MPI environments, exporting these variables before launch is enough. If the
+launcher or scheduler does not propagate the shell environment, pass them
+explicitly; for example, OpenMPI accepts:  
+
+```sh
+mpiexec -x PYTHONHOME -x PYTHONPATH -x LD_LIBRARY_PATH -n 16 ./main.out -c config.toml
+```
+
+Python-enabled Ascent builds are native-build oriented because the selected
+Python executable is used during the Ascent/Conduit build. Cross-build systems
+where login and compute nodes use different architectures, such as an x86_64
+login node targeting aarch64 compute nodes, may not be able to build usable
+Python extension modules with a normal host Python. In that case, build the
+C++/MPI Ascent path first and enable Python extracts only with a site-provided
+target Python/sysroot/toolchain recipe.  
 
 ## Configuration
 
