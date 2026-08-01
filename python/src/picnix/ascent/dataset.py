@@ -261,7 +261,7 @@ class ParticleField:
 
     @property
     def ids(self):
-        return self.active[:, 6]
+        return self.active[:, 6].view(np.int64)
 
     def __array__(self, dtype=None, copy=None):
         array = self.active

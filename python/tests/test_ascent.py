@@ -101,7 +101,7 @@ def make_domain(
 
     if particles:
         xu = np.arange(21, dtype=np.float64).reshape(3, 7)
-        xu[:, 6] = [101.0, 102.0, 103.0]
+        xu[:, 6] = np.asarray([101, 102, 103], dtype=np.int64).view(np.float64)
         domain["pic"]["particles"] = {
             "particle00": {"xu": xu},
             "particle12": {"xu": np.arange(7, dtype=np.float64)},
@@ -376,8 +376,8 @@ def test_particles_are_active_float64_arrays_with_two_digit_names():
 
     assert domain.particle00.shape == (3, 7)
     assert domain.particle00.components == ("x", "y", "z", "ux", "uy", "uz", "id")
-    assert domain.particle00.ids.dtype == np.float64
-    assert domain.particle00.ids.tolist() == [101.0, 102.0, 103.0]
+    assert domain.particle00.ids.dtype == np.int64
+    assert domain.particle00.ids.tolist() == [101, 102, 103]
     assert domain.particles.particle12.shape == (1, 7)
     assert domain.particle01.shape == (0, 7)
 

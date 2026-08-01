@@ -313,11 +313,12 @@ Each array has shape `(Np_active, 7)`, `float64` storage, and component order:
 (x, y, z, ux, uy, uz, id)
 ```
 
-The ID column remains the original `float64` value; the publisher and Python
-helper do not reinterpret or convert it. Particle arrays are custom `pic` data,
-not Blueprint point meshes or fields. Python extracts that need them must read
-the direct published input returned by `ascent_data()`, not a downstream
-mesh-only pipeline result.  
+The ID column stores the original PIC-NIX bit-copied integer ID in `float64`
+storage. `particleNN.array` and `particleNN.xu` expose that native storage, while
+`particleNN.ids` reinterprets the ID column as `int64`. Particle arrays are
+custom `pic` data, not Blueprint point meshes or fields. Python extracts that
+need them must read the direct published input returned by `ascent_data()`, not a
+downstream mesh-only pipeline result.  
 
 ## Shared metadata
 
