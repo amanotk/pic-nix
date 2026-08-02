@@ -29,7 +29,7 @@ public:
     REQUIRE(periodicity[2] == px);
   }
 
-  void test_sfc_first_axis(std::optional<sfc::SfcAxis> expected)
+  void test_sfc_first_axis(sfc::SfcAxis expected)
   {
     REQUIRE(sfc_first_axis == expected);
   }
@@ -98,7 +98,7 @@ TEST_CASE("Initialization")
   {
     ChunkMapTest chunkmap(Cz, Cy, Cx);
     REQUIRE(chunkmap.validate());
-    chunkmap.test_sfc_first_axis(std::nullopt);
+    chunkmap.test_sfc_first_axis(sfc::SfcAxis::None);
   }
 
   SECTION("axis first")
@@ -298,6 +298,6 @@ TEST_CASE("Save to and load from file")
     restored.from_json(obj);
 
     REQUIRE(restored.validate());
-    restored.test_sfc_first_axis(std::nullopt);
+    restored.test_sfc_first_axis(sfc::SfcAxis::None);
   }
 }

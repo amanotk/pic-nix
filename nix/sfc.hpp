@@ -14,20 +14,19 @@
 ///
 
 #include <cstddef>
-#include <optional>
 #include <string>
 #include <vector>
 
 namespace sfc
 {
-enum class SfcAxis { X, Y, Z };
+enum class SfcAxis { None, X, Y, Z };
 
 ///
 /// @brief parse an SFC axis name
 /// @param name axis name (`x`, `y`, or `z`)
-/// @return parsed axis, or empty for an invalid name
+/// @return parsed axis, or None for an invalid name
 ///
-std::optional<SfcAxis> parse_axis(const std::string& name);
+SfcAxis parse_axis(const std::string& name);
 
 ///
 /// @brief return the configuration name for an SFC axis

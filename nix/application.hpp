@@ -244,7 +244,7 @@ public:
 
     if (option.contains("sfc_first_axis")) {
       auto axis = sfc::parse_axis(option["sfc_first_axis"].get<std::string>());
-      return std::make_unique<ChunkMap>(Cz, Cy, Cx, axis.value());
+      return std::make_unique<ChunkMap>(Cz, Cy, Cx, axis);
     }
 
     return std::make_unique<ChunkMap>(Cz, Cy, Cx);

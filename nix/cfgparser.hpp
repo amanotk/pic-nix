@@ -206,7 +206,7 @@ public:
     }
 
     std::string axis = option["sfc_first_axis"].get<std::string>();
-    if (sfc::parse_axis(axis).has_value() == false) {
+    if (sfc::parse_axis(axis) == sfc::SfcAxis::None) {
       std::cerr << fmt::format("Unknown `sfc_first_axis`: {}\n", axis);
       return false;
     }

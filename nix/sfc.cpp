@@ -39,7 +39,7 @@ inline void forward_id_3d(std::vector<int>& index, int Ny, int Nx, int& id, int 
   id++;
 }
 
-std::optional<SfcAxis> parse_axis(const std::string& name)
+SfcAxis parse_axis(const std::string& name)
 {
   if (name == "x") {
     return SfcAxis::X;
@@ -50,12 +50,14 @@ std::optional<SfcAxis> parse_axis(const std::string& name)
   if (name == "z") {
     return SfcAxis::Z;
   }
-  return std::nullopt;
+  return SfcAxis::None;
 }
 
 const char* axis_name(SfcAxis axis)
 {
   switch (axis) {
+  case SfcAxis::None:
+    return "";
   case SfcAxis::X:
     return "x";
   case SfcAxis::Y:
@@ -224,6 +226,9 @@ void get_map3d_axis_first(size_t Nz, size_t Ny, size_t Nx, SfcAxis axis, std::ve
   size_t line_size;
 
   switch (axis) {
+  case SfcAxis::None:
+    get_map3d(Nz, Ny, Nx, index, coord);
+    return;
   case SfcAxis::X:
     plane_ny  = Nz;
     plane_nx  = Ny;
@@ -257,6 +262,8 @@ void get_map3d_axis_first(size_t Nz, size_t Ny, size_t Nx, SfcAxis axis, std::ve
       int    iz;
 
       switch (axis) {
+      case SfcAxis::None:
+        return;
       case SfcAxis::X:
         ix = static_cast<int>(line_coord);
         iy = plane_x;

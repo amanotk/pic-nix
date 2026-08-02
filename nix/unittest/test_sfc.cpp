@@ -13,6 +13,9 @@ void check_axis_first(size_t Nz, size_t Ny, size_t Nx, sfc::SfcAxis axis)
   int    axis_column;
 
   switch (axis) {
+  case sfc::SfcAxis::None:
+    FAIL("axis-first test requires an axis");
+    return;
   case sfc::SfcAxis::X:
     line_size   = Nx;
     axis_column = 0;
@@ -162,7 +165,8 @@ TEST_CASE("SFC3D axis first")
     REQUIRE(sfc::parse_axis("x") == sfc::SfcAxis::X);
     REQUIRE(sfc::parse_axis("y") == sfc::SfcAxis::Y);
     REQUIRE(sfc::parse_axis("z") == sfc::SfcAxis::Z);
-    REQUIRE_FALSE(sfc::parse_axis("invalid").has_value());
+    REQUIRE(sfc::parse_axis("invalid") == sfc::SfcAxis::None);
+    REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::None)).empty());
     REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::X)) == "x");
     REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::Y)) == "y");
     REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::Z)) == "z");
