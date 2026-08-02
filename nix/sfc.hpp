@@ -14,10 +14,28 @@
 ///
 
 #include <cstddef>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace sfc
 {
+enum class SfcAxis { X, Y, Z };
+
+///
+/// @brief parse an SFC axis name
+/// @param name axis name (`x`, `y`, or `z`)
+/// @return parsed axis, or empty for an invalid name
+///
+std::optional<SfcAxis> parse_axis(const std::string& name);
+
+///
+/// @brief return the configuration name for an SFC axis
+/// @param axis SFC axis
+/// @return axis name
+///
+const char* axis_name(SfcAxis axis);
+
 ///
 /// @brief construct 2D SFC map
 /// @param Ny number of cells in y
@@ -37,6 +55,18 @@ void get_map2d(size_t Ny, size_t Nx, int ncol, std::vector<int>& index, std::vec
 /// @param coord coordinates of cells (flat (Nz*Ny*Nx)*3, row-major)
 ///
 void get_map3d(size_t Nz, size_t Ny, size_t Nx, std::vector<int>& index, std::vector<int>& coord);
+
+///
+/// @brief construct a connected 3D map from alternating lines along one axis
+/// @param Nz number of cells in z
+/// @param Ny number of cells in y
+/// @param Nx number of cells in x
+/// @param axis axis traversed first within each line
+/// @param index indices or IDs of cells (flat Nz*Ny*Nx, row-major z-y-x)
+/// @param coord coordinates of cells (flat (Nz*Ny*Nx)*3, row-major)
+///
+void get_map3d_axis_first(size_t Nz, size_t Ny, size_t Nx, SfcAxis axis, std::vector<int>& index,
+                          std::vector<int>& coord);
 
 ///
 /// @brief check that index is a valid permutation of [0..N-1]

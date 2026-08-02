@@ -82,6 +82,15 @@ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.toml
 In this example, you use 8 MPI processes, each launching 2 threads.  
 The simulation parameters will be read from the configuration file `config.toml`.
 
+For slab-like load distributions, an optional connected SFC can traverse one axis first. Set the axis under `[application.option]`:
+
+```toml
+[application.option]
+  sfc_first_axis = 'x'
+```
+
+Valid values are `x`, `y`, and `z`. If `sfc_first_axis` is omitted, PIC-NIX uses the default three-dimensional Gilbert curve.
+
 Available command-line options will be shown with the `--help` option:
 
 ```

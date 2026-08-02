@@ -3,6 +3,7 @@
 #define _CHUNKMAP_HPP_
 
 #include "nix.hpp"
+#include "sfc.hpp"
 
 NIX_NAMESPACE_BEGIN
 
@@ -18,16 +19,22 @@ NIX_NAMESPACE_BEGIN
 class ChunkMap
 {
 protected:
-  int              size;           ///< number of total chunks
-  int              dims[3];        ///< chunk dimension
-  int              periodicity[3]; ///< periodicity in each direction
-  std::vector<int> boundary;       ///< rank boundary
-  std::vector<int> coord;          ///< chunk ID to coordinate map (size * 3)
-  std::vector<int> chunkid;        ///< coordinate to chunk ID map (dims[0] * dims[1] * dims[2])
+  int                         size;           ///< number of total chunks
+  int                         dims[3];        ///< chunk dimension
+  int                         periodicity[3]; ///< periodicity in each direction
+  std::vector<int>            boundary;       ///< rank boundary
+  std::vector<int>            coord;          ///< chunk ID to coordinate map (size * 3)
+  std::vector<int>            chunkid; ///< coordinate to chunk ID map (dims[0] * dims[1] * dims[2])
+  std::optional<sfc::SfcAxis> sfc_first_axis; ///< axis-first SFC, or empty for Gilbert
+
+  ChunkMap(int Cz, int Cy, int Cx, std::optional<sfc::SfcAxis> sfc_first_axis);
 
 public:
   /// @brief constructor
   ChunkMap(int Cz, int Cy, int Cx);
+
+  /// @brief constructor using connected alternating lines along an axis
+  ChunkMap(int Cz, int Cy, int Cx, sfc::SfcAxis sfc_first_axis);
 
   /// @brief constructor
   ChunkMap(const int dims[3]);
