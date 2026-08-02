@@ -5,6 +5,52 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+namespace
+{
+void check_axis_first(size_t Nz, size_t Ny, size_t Nx, sfc::SfcAxis axis)
+{
+  size_t line_size;
+  int    axis_column;
+
+  switch (axis) {
+  case sfc::SfcAxis::None:
+    FAIL("axis-first test requires an axis");
+    return;
+  case sfc::SfcAxis::X:
+    line_size   = Nx;
+    axis_column = 0;
+    break;
+  case sfc::SfcAxis::Y:
+    line_size   = Ny;
+    axis_column = 1;
+    break;
+  case sfc::SfcAxis::Z:
+    line_size   = Nz;
+    axis_column = 2;
+    break;
+  }
+
+  size_t           size = Nz * Ny * Nx;
+  std::vector<int> index(size, 0);
+  std::vector<int> coord(size * 3, 0);
+  sfc::get_map3d_axis_first(Nz, Ny, Nx, axis, index, coord);
+
+  REQUIRE(sfc::check_index(index));
+  REQUIRE(sfc::check_locality3d(coord, size));
+
+  for (size_t line = 0; line < size / line_size; line++) {
+    int expected = line % 2 == 0 ? 0 : static_cast<int>(line_size - 1);
+    int delta    = line % 2 == 0 ? 1 : -1;
+
+    for (size_t offset = 0; offset < line_size; offset++) {
+      size_t id = line * line_size + offset;
+      REQUIRE(coord[id * 3 + axis_column] == expected);
+      expected += delta;
+    }
+  }
+}
+} // namespace
+
 //
 // 2D
 //
@@ -109,5 +155,48 @@ TEST_CASE("SFC3D")
     sfc::get_map3d(Nz, Ny, Nx, index, coord);
     REQUIRE(sfc::check_locality3d(coord, Nz * Ny * Nx, distmax2));
     REQUIRE(sfc::check_index(index));
+  }
+}
+
+TEST_CASE("SFC3D axis first")
+{
+  SECTION("axis names")
+  {
+    REQUIRE(sfc::parse_axis("x") == sfc::SfcAxis::X);
+    REQUIRE(sfc::parse_axis("y") == sfc::SfcAxis::Y);
+    REQUIRE(sfc::parse_axis("z") == sfc::SfcAxis::Z);
+    REQUIRE(sfc::parse_axis("invalid") == sfc::SfcAxis::None);
+    REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::None)).empty());
+    REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::X)) == "x");
+    REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::Y)) == "y");
+    REQUIRE(std::string(sfc::axis_name(sfc::SfcAxis::Z)) == "z");
+  }
+
+  SECTION("three dimensional")
+  {
+    check_axis_first(4, 6, 8, sfc::SfcAxis::X);
+    check_axis_first(4, 6, 8, sfc::SfcAxis::Y);
+    check_axis_first(4, 6, 8, sfc::SfcAxis::Z);
+  }
+
+  SECTION("odd dimensions remain connected")
+  {
+    check_axis_first(3, 5, 7, sfc::SfcAxis::X);
+    check_axis_first(3, 5, 7, sfc::SfcAxis::Y);
+    check_axis_first(3, 5, 7, sfc::SfcAxis::Z);
+  }
+
+  SECTION("production shock dimensions")
+  {
+    check_axis_first(12, 48, 480, sfc::SfcAxis::X);
+  }
+
+  SECTION("degenerate dimensions")
+  {
+    check_axis_first(1, 5, 7, sfc::SfcAxis::X);
+    check_axis_first(5, 1, 7, sfc::SfcAxis::Y);
+    check_axis_first(5, 7, 1, sfc::SfcAxis::Z);
+    check_axis_first(1, 1, 7, sfc::SfcAxis::X);
+    check_axis_first(1, 1, 1, sfc::SfcAxis::Z);
   }
 }

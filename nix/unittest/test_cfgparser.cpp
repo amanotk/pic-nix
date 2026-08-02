@@ -15,9 +15,9 @@ TEST_CASE("get_root returns an isolated copy from a const parser")
 {
   CfgParser parser;
   json      configuration = {
-           {"application", {{"option", json::object()}}},
-           {"diagnostic", json::array()},
-           {"parameter",
+      {"application", {{"option", json::object()}}},
+      {"diagnostic", json::array()},
+      {"parameter",
             {{"Nx", 16},
              {"Ny", 16},
              {"Nz", 16},
@@ -179,6 +179,63 @@ TEST_CASE("check_dimensions")
     REQUIRE(parser.check_dimensions(parameter[0]) == false);
     REQUIRE(parser.check_dimensions(parameter[1]) == false);
     REQUIRE(parser.check_dimensions(parameter[2]) == false);
+  }
+}
+
+TEST_CASE("check_application_options")
+{
+  CfgParser parser;
+
+  SECTION("Gilbert is the default")
+  {
+    json option = json::object();
+    REQUIRE(parser.check_application_options(option));
+  }
+
+  SECTION("valid first axes")
+  {
+    for (const char* axis : {"x", "y", "z"}) {
+      json option = {{"sfc_first_axis", axis}};
+      REQUIRE(parser.check_application_options(option));
+    }
+  }
+
+  SECTION("invalid first axis")
+  {
+    json option = {{"sfc_first_axis", "time"}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("first axis must be a string")
+  {
+    json option = {{"sfc_first_axis", 0}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("option section must be a table")
+  {
+    json scalar = 0;
+    json array  = json::array();
+    REQUIRE_FALSE(parser.check_application_options(scalar));
+    REQUIRE_FALSE(parser.check_application_options(array));
+  }
+
+  SECTION("full configuration rejects an invalid axis")
+  {
+    json configuration = {
+        {"application", {{"option", {{"sfc_first_axis", "time"}}}}},
+        {"diagnostic", json::array()},
+        {"parameter",
+         {{"Nx", 16},
+          {"Ny", 16},
+          {"Nz", 16},
+          {"Cx", 4},
+          {"Cy", 4},
+          {"Cz", 4},
+          {"delt", 1.0},
+          {"delh", 1.0}}},
+    };
+    REQUIRE_FALSE(parser.validate(configuration));
   }
 }
 

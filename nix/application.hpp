@@ -236,10 +236,17 @@ public:
   virtual std::unique_ptr<ChunkMap> create_chunkmap()
   {
     auto parameter = cfgparser->get_parameter();
+    auto option    = cfgparser->get_application()["option"];
 
     int Cx = parameter.value("Cx", 1);
     int Cy = parameter.value("Cy", 1);
     int Cz = parameter.value("Cz", 1);
+
+    if (option.contains("sfc_first_axis")) {
+      auto axis = sfc::parse_axis(option["sfc_first_axis"].get<std::string>());
+      return std::make_unique<ChunkMap>(Cz, Cy, Cx, axis);
+    }
+
     return std::make_unique<ChunkMap>(Cz, Cy, Cx);
   }
 

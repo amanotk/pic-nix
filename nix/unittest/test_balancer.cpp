@@ -1,10 +1,44 @@
 // -*- C++ -*-
 
 #include "balancer.hpp"
+#include "chunkmap.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 using namespace nix;
+
+namespace
+{
+float64 shock_imbalance(ChunkMap& chunkmap, int Cz, int Cy, int Cx, int dense_width, int nprocess,
+                        int nassign)
+{
+  int      nchunk = Cz * Cy * Cx;
+  Balancer balancer(nchunk);
+
+  for (int id = 0; id < nchunk; id++) {
+    auto [cz, cy, cx] = chunkmap.get_coordinate(id);
+    balancer.load(id) = cx < dense_width ? 4.0 : 1.0;
+  }
+
+  std::vector<int> boundary(nprocess + 1);
+  for (int rank = 0; rank <= nprocess; rank++) {
+    boundary[rank] = rank * nchunk / nprocess;
+  }
+
+  for (int i = 0; i < nassign; i++) {
+    boundary = balancer.assign(boundary);
+  }
+
+  std::vector<float64> load(nchunk);
+  for (int id = 0; id < nchunk; id++) {
+    load[id] = balancer.load(id);
+  }
+  auto rankload = balancer.get_rankload(boundary, load);
+  auto meanload = std::accumulate(rankload.begin(), rankload.end(), 0.0) / nprocess;
+
+  return *std::max_element(rankload.begin(), rankload.end()) / meanload;
+}
+} // namespace
 
 TEST_CASE("access to chunkload")
 {
@@ -104,3 +138,23 @@ TEST_CASE("assign")
   }
 }
 
+TEST_CASE("axis-first ordering accelerates slab balancing")
+{
+  const int Cz          = 4;
+  const int Cy          = 12;
+  const int Cx          = 48;
+  const int dense_width = 5;
+  const int nprocess    = 96;
+  const int nassign     = 4;
+
+  ChunkMap gilbert(Cz, Cy, Cx);
+  ChunkMap axis_first(Cz, Cy, Cx, sfc::SfcAxis::X);
+
+  float64 gilbert_imbalance = shock_imbalance(gilbert, Cz, Cy, Cx, dense_width, nprocess, nassign);
+  float64 axis_first_imbalance =
+      shock_imbalance(axis_first, Cz, Cy, Cx, dense_width, nprocess, nassign);
+
+  CAPTURE(gilbert_imbalance, axis_first_imbalance);
+  REQUIRE(axis_first_imbalance < 1.2);
+  REQUIRE(axis_first_imbalance < gilbert_imbalance);
+}

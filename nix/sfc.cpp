@@ -14,6 +14,7 @@ namespace sfc
 // internal helpers
 //
 void get_map1d(size_t Nx, int ncol, std::vector<int>& index, std::vector<int>& coord);
+void get_connected_map2d(size_t Ny, size_t Nx, std::vector<int>& index, std::vector<int>& coord);
 
 void gilbert2d(std::vector<int>& index, int Nx, int& id, int x, int y, int ax, int ay, int bx,
                int by);
@@ -36,6 +37,35 @@ inline void forward_id_3d(std::vector<int>& index, int Ny, int Nx, int& id, int 
 {
   index[z * Ny * Nx + y * Nx + x] = id;
   id++;
+}
+
+SfcAxis parse_axis(const std::string& name)
+{
+  if (name == "x") {
+    return SfcAxis::X;
+  }
+  if (name == "y") {
+    return SfcAxis::Y;
+  }
+  if (name == "z") {
+    return SfcAxis::Z;
+  }
+  return SfcAxis::None;
+}
+
+const char* axis_name(SfcAxis axis)
+{
+  switch (axis) {
+  case SfcAxis::None:
+    return "";
+  case SfcAxis::X:
+    return "x";
+  case SfcAxis::Y:
+    return "y";
+  case SfcAxis::Z:
+    return "z";
+  }
+  return "";
 }
 
 //
@@ -87,6 +117,26 @@ void get_map2d(size_t Ny, size_t Nx, int ncol, std::vector<int>& index, std::vec
       int id               = index[iy * Nx + ix];
       coord[id * ncol + 0] = static_cast<int>(ix);
       coord[id * ncol + 1] = static_cast<int>(iy);
+    }
+  }
+}
+
+void get_connected_map2d(size_t Ny, size_t Nx, std::vector<int>& index, std::vector<int>& coord)
+{
+  get_map2d(Ny, Nx, 2, index, coord);
+  if (check_locality2d(coord, Ny * Nx)) {
+    return;
+  }
+
+  int id = 0;
+  for (size_t iy = 0; iy < Ny; iy++) {
+    for (size_t offset = 0; offset < Nx; offset++) {
+      size_t ix = iy % 2 == 0 ? offset : Nx - offset - 1;
+
+      index[iy * Nx + ix] = id;
+      coord[id * 2 + 0]   = static_cast<int>(ix);
+      coord[id * 2 + 1]   = static_cast<int>(iy);
+      id++;
     }
   }
 }
@@ -164,6 +214,78 @@ void get_map3d(size_t Nz, size_t Ny, size_t Nx, std::vector<int>& index, std::ve
         coord[id * 3 + 1] = static_cast<int>(iy);
         coord[id * 3 + 2] = static_cast<int>(iz);
       }
+    }
+  }
+}
+
+void get_map3d_axis_first(size_t Nz, size_t Ny, size_t Nx, SfcAxis axis, std::vector<int>& index,
+                          std::vector<int>& coord)
+{
+  size_t plane_ny;
+  size_t plane_nx;
+  size_t line_size;
+
+  switch (axis) {
+  case SfcAxis::None:
+    get_map3d(Nz, Ny, Nx, index, coord);
+    return;
+  case SfcAxis::X:
+    plane_ny  = Nz;
+    plane_nx  = Ny;
+    line_size = Nx;
+    break;
+  case SfcAxis::Y:
+    plane_ny  = Nz;
+    plane_nx  = Nx;
+    line_size = Ny;
+    break;
+  case SfcAxis::Z:
+    plane_ny  = Ny;
+    plane_nx  = Nx;
+    line_size = Nz;
+    break;
+  }
+
+  const size_t     plane_size = plane_ny * plane_nx;
+  std::vector<int> plane_index(plane_size, 0);
+  std::vector<int> plane_coord(plane_size * 2, 0);
+  get_connected_map2d(plane_ny, plane_nx, plane_index, plane_coord);
+
+  for (size_t plane_id = 0; plane_id < plane_size; plane_id++) {
+    int plane_x = plane_coord[plane_id * 2 + 0];
+    int plane_y = plane_coord[plane_id * 2 + 1];
+
+    for (size_t offset = 0; offset < line_size; offset++) {
+      size_t line_coord = plane_id % 2 == 0 ? offset : line_size - offset - 1;
+      int    ix;
+      int    iy;
+      int    iz;
+
+      switch (axis) {
+      case SfcAxis::None:
+        return;
+      case SfcAxis::X:
+        ix = static_cast<int>(line_coord);
+        iy = plane_x;
+        iz = plane_y;
+        break;
+      case SfcAxis::Y:
+        ix = plane_x;
+        iy = static_cast<int>(line_coord);
+        iz = plane_y;
+        break;
+      case SfcAxis::Z:
+        ix = plane_x;
+        iy = plane_y;
+        iz = static_cast<int>(line_coord);
+        break;
+      }
+
+      int id                             = static_cast<int>(plane_id * line_size + offset);
+      index[iz * Ny * Nx + iy * Nx + ix] = id;
+      coord[id * 3 + 0]                  = ix;
+      coord[id * 3 + 1]                  = iy;
+      coord[id * 3 + 2]                  = iz;
     }
   }
 }

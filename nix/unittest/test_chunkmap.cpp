@@ -13,6 +13,7 @@ public:
   using ChunkMap::ChunkMap;
   using ChunkMap::dims;
   using ChunkMap::periodicity;
+  using ChunkMap::sfc_first_axis;
 
   void test_dimension(int nz, int ny, int nx)
   {
@@ -26,6 +27,11 @@ public:
     REQUIRE(periodicity[0] == pz);
     REQUIRE(periodicity[1] == py);
     REQUIRE(periodicity[2] == px);
+  }
+
+  void test_sfc_first_axis(sfc::SfcAxis expected)
+  {
+    REQUIRE(sfc_first_axis == expected);
   }
 
   void test_get_neighbor_coord(int coord, int delta, int dir)
@@ -92,6 +98,14 @@ TEST_CASE("Initialization")
   {
     ChunkMapTest chunkmap(Cz, Cy, Cx);
     REQUIRE(chunkmap.validate());
+    chunkmap.test_sfc_first_axis(sfc::SfcAxis::None);
+  }
+
+  SECTION("axis first")
+  {
+    ChunkMapTest chunkmap(Cz, Cy, Cx, sfc::SfcAxis::X);
+    REQUIRE(chunkmap.validate());
+    chunkmap.test_sfc_first_axis(sfc::SfcAxis::X);
   }
 }
 
@@ -250,5 +264,40 @@ TEST_CASE("Save to and load from file")
     // cleanup
     std::remove(filename.c_str());
   }
-}
 
+  SECTION("axis first")
+  {
+    ChunkMapTest chunkmap(Cz, Cy, Cx, sfc::SfcAxis::Y);
+    auto         obj = chunkmap.to_json();
+
+    REQUIRE(obj["sfc_first_axis"] == "y");
+
+    ChunkMapTest restored(Cz, Cy, Cx);
+    restored.from_json(obj);
+
+    REQUIRE(restored.validate());
+    restored.test_sfc_first_axis(sfc::SfcAxis::Y);
+
+    for (int iz = 0; iz < Cz; iz++) {
+      for (int iy = 0; iy < Cy; iy++) {
+        for (int ix = 0; ix < Cx; ix++) {
+          int id = restored.get_chunkid(iz, iy, ix);
+          REQUIRE(restored.get_coordinate(id) == std::make_tuple(iz, iy, ix));
+        }
+      }
+    }
+  }
+
+  SECTION("old checkpoint defaults to Gilbert")
+  {
+    ChunkMapTest chunkmap(Cz, Cy, Cx);
+    auto         obj = chunkmap.to_json();
+    obj.erase("sfc_first_axis");
+
+    ChunkMapTest restored(Cz, Cy, Cx, sfc::SfcAxis::Z);
+    restored.from_json(obj);
+
+    REQUIRE(restored.validate());
+    restored.test_sfc_first_axis(sfc::SfcAxis::None);
+  }
+}

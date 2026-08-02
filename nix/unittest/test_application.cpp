@@ -80,6 +80,28 @@ public:
     cfgparser = create_cfgparser();
     cfgparser->overwrite(configuration);
   }
+
+  std::unique_ptr<ChunkMap> create_test_chunkmap()
+  {
+    return create_chunkmap();
+  }
+
+  void prepare_test_state(json configuration)
+  {
+    set_test_configuration(configuration);
+    chunkmap = create_chunkmap();
+
+    thisrank = 0;
+    nprocess = 1;
+    nthread  = 1;
+    curstep  = 0;
+    curtime  = 0;
+    wclock   = 0;
+    for (int i = 0; i < 4; i++) {
+      ndims[i] = 1;
+      cdims[i] = 1;
+    }
+  }
 };
 
 class ShutdownDiag : public Diag
@@ -152,6 +174,77 @@ TEST_CASE("parsed configuration is forwarded by value")
 
   REQUIRE(app.get_configuration() == configuration);
   REQUIRE(interface->get_configuration() == configuration);
+}
+
+TEST_CASE("SFC first-axis configuration creates the requested chunk map")
+{
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(0, nullptr, interface);
+  json            configuration = json::parse(config_content);
+
+  SECTION("Gilbert by default")
+  {
+    app.set_test_configuration(configuration);
+    auto chunkmap = app.create_test_chunkmap();
+    REQUIRE(chunkmap->to_json()["sfc_first_axis"].is_null());
+  }
+
+  SECTION("axis first")
+  {
+    configuration["application"]["option"]["sfc_first_axis"] = "z";
+    app.set_test_configuration(configuration);
+    auto chunkmap = app.create_test_chunkmap();
+    REQUIRE(chunkmap->to_json()["sfc_first_axis"] == "z");
+  }
+}
+
+TEST_CASE("restart rejects an SFC mismatch")
+{
+  json gilbert_configuration                                    = json::parse(config_content);
+  json axis_configuration                                       = gilbert_configuration;
+  axis_configuration["application"]["option"]["sfc_first_axis"] = "x";
+
+  auto            gilbert_interface = std::make_shared<TestApplication::Interface>();
+  TestApplication gilbert(0, nullptr, gilbert_interface);
+  gilbert.prepare_test_state(gilbert_configuration);
+  json state = gilbert.to_json();
+
+  SECTION("matching old Gilbert checkpoint")
+  {
+    state["chunkmap"].erase("sfc_first_axis");
+    REQUIRE(gilbert.from_json(state));
+  }
+
+  SECTION("different SFC")
+  {
+    auto            axis_interface = std::make_shared<TestApplication::Interface>();
+    TestApplication axis(0, nullptr, axis_interface);
+    axis.prepare_test_state(axis_configuration);
+    REQUIRE_FALSE(axis.from_json(state));
+  }
+
+  SECTION("matching axis-first SFC")
+  {
+    auto            axis_interface = std::make_shared<TestApplication::Interface>();
+    TestApplication axis(0, nullptr, axis_interface);
+    axis.prepare_test_state(axis_configuration);
+    json axis_state = axis.to_json();
+    REQUIRE(axis.from_json(axis_state));
+  }
+
+  SECTION("different first axes")
+  {
+    auto            x_interface = std::make_shared<TestApplication::Interface>();
+    TestApplication x_axis(0, nullptr, x_interface);
+    x_axis.prepare_test_state(axis_configuration);
+    json axis_state = x_axis.to_json();
+
+    auto            y_interface = std::make_shared<TestApplication::Interface>();
+    TestApplication y_axis(0, nullptr, y_interface);
+    axis_configuration["application"]["option"]["sfc_first_axis"] = "y";
+    y_axis.prepare_test_state(axis_configuration);
+    REQUIRE_FALSE(y_axis.from_json(axis_state));
+  }
 }
 
 TEST_CASE("diagnostics shut down before MPI finalization")

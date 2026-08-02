@@ -70,7 +70,12 @@ std::vector<int> coord_from_json(const json& obj, int size)
 }
 } // namespace
 
-ChunkMap::ChunkMap(int Cz, int Cy, int Cx) : periodicity{1, 1, 1}
+ChunkMap::ChunkMap(int Cz, int Cy, int Cx) : ChunkMap(Cz, Cy, Cx, sfc::SfcAxis::None)
+{
+}
+
+ChunkMap::ChunkMap(int Cz, int Cy, int Cx, sfc::SfcAxis sfc_first_axis)
+    : periodicity{1, 1, 1}, sfc_first_axis(sfc_first_axis)
 {
   size    = Cz * Cy * Cx;
   dims[0] = Cz;
@@ -80,7 +85,11 @@ ChunkMap::ChunkMap(int Cz, int Cy, int Cx) : periodicity{1, 1, 1}
   coord.assign(size * 3, 0);
   chunkid.assign(size, 0);
 
-  sfc::get_map3d(Cz, Cy, Cx, chunkid, coord);
+  if (sfc_first_axis != sfc::SfcAxis::None) {
+    sfc::get_map3d_axis_first(Cz, Cy, Cx, sfc_first_axis, chunkid, coord);
+  } else {
+    sfc::get_map3d(Cz, Cy, Cx, chunkid, coord);
+  }
 }
 
 ChunkMap::ChunkMap(const int dims[3]) : ChunkMap(dims[0], dims[1], dims[2])
@@ -108,6 +117,8 @@ json ChunkMap::to_json()
   obj["chunkid"]     = chunkid_to_json(chunkid, dims);
   obj["coord"]       = coord_to_json(coord, size);
   obj["boundary"]    = boundary;
+  obj["sfc_first_axis"] =
+      sfc_first_axis != sfc::SfcAxis::None ? json(sfc::axis_name(sfc_first_axis)) : json(nullptr);
 
   return obj;
 }
@@ -125,6 +136,16 @@ void ChunkMap::from_json(json& obj)
   periodicity[0] = obj["periodicity"][0].get<int>();
   periodicity[1] = obj["periodicity"][1].get<int>();
   periodicity[2] = obj["periodicity"][2].get<int>();
+
+  if (obj.contains("sfc_first_axis") && obj["sfc_first_axis"].is_null() == false) {
+    auto axis = sfc::parse_axis(obj["sfc_first_axis"].get<std::string>());
+    if (axis == sfc::SfcAxis::None) {
+      throw std::invalid_argument("Invalid sfc_first_axis in ChunkMap state");
+    }
+    sfc_first_axis = axis;
+  } else {
+    sfc_first_axis = sfc::SfcAxis::None;
+  }
 
   chunkid = chunkid_from_json(obj["chunkid"], dims);
   coord   = coord_from_json(obj["coord"], size);

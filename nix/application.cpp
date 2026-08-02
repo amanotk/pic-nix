@@ -36,6 +36,10 @@ bool Application::from_json(json& state)
   consistency &= current_state["nprocess"] == state["nprocess"];
   consistency &= current_state["configuration"]["parameter"] == state["configuration"]["parameter"];
 
+  json current_sfc = current_state["chunkmap"].value("sfc_first_axis", json(nullptr));
+  json saved_sfc   = state["chunkmap"].value("sfc_first_axis", json(nullptr));
+  consistency &= current_sfc == saved_sfc;
+
   if (consistency == false) {
     ERROR << fmt::format("Trying to load inconsistent state");
   } else {
@@ -138,7 +142,7 @@ void Application::finalize()
 
   float64 shutdown_end = nix::wall_clock();
   log                  = {
-                       {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
+      {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
   logger->append(curstep, "shutdown_end", log);
   logger->flush();
 

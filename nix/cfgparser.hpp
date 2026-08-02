@@ -4,6 +4,7 @@
 
 #include "debug.hpp"
 #include "nix.hpp"
+#include "sfc.hpp"
 
 NIX_NAMESPACE_BEGIN
 
@@ -155,9 +156,10 @@ public:
 
     status = status & check_mandatory_sections(object);
 
-    // make sure that the option section exists in the application section
-    if (root["application"]["option"].is_null() == true) {
-      root["application"]["option"] = {};
+    // check the optional application options without changing the configuration
+    if (object["application"].contains("option") &&
+        object["application"]["option"].is_null() == false) {
+      status = status & check_application_options(object["application"]["option"]);
     }
 
     // check the parameter section
@@ -185,6 +187,31 @@ public:
     }
 
     return status;
+  }
+
+  virtual bool check_application_options(json& option)
+  {
+    if (option.is_object() == false) {
+      std::cerr << "`application.option` must be a table\n";
+      return false;
+    }
+
+    if (option.contains("sfc_first_axis") == false) {
+      return true;
+    }
+
+    if (option["sfc_first_axis"].is_string() == false) {
+      std::cerr << "`sfc_first_axis` must be one of: x, y, z\n";
+      return false;
+    }
+
+    std::string axis = option["sfc_first_axis"].get<std::string>();
+    if (sfc::parse_axis(axis) == sfc::SfcAxis::None) {
+      std::cerr << fmt::format("Unknown `sfc_first_axis`: {}\n", axis);
+      return false;
+    }
+
+    return true;
   }
 
   virtual bool check_mandatory_parameters(json& parameter)
