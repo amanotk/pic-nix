@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import csv
 import re
 from copy import deepcopy
@@ -44,6 +41,41 @@ def sample_records():
             "timestamp": {"unixtime": 102.0},
         },
     ]
+
+
+def sample_performance_records():
+    records = sample_records()
+    for record in records:
+        step = record["step"]
+
+        def stats(value, max_rank=1):
+            return {
+                "size": 4,
+                "min": value,
+                "max": value + 0.3,
+                "mean": value + 0.1,
+                "median": value + 0.1,
+                "p95": value + 0.2,
+                "min_rank": 0,
+                "max_rank": max_rank,
+            }
+
+        record["performance"] = {
+            "schema_version": 1,
+            "push": {
+                "local": stats(0.5 + step),
+                "barrier": stats(0.05 + step, max_rank=2),
+            },
+            "phase": {
+                phase: {
+                    "wall": stats(0.1 + step),
+                    "omp_efficiency": stats(0.7 + 0.01 * step),
+                    "max_chunk": stats(10 + step),
+                }
+                for phase in log_analyzer.PERFORMANCE_PHASES
+            },
+        }
+    return records
 
 
 def test_extract_timing_rows_and_summaries(tmp_path):
@@ -138,6 +170,67 @@ def test_write_csv(tmp_path):
     assert float(csv_rows[1]["total_elapsed"]) == pytest.approx(1.90)
 
 
+def test_extract_and_report_performance_records(tmp_path):
+    rows = log_analyzer.extract_timing_rows(sample_performance_records())
+
+    assert rows[1]["performance"]["schema_version"] == 1
+    assert rows[1]["performance"]["push"]["local"]["mean"] == pytest.approx(1.6)
+
+    summary = log_analyzer.summarize_performance(rows)
+    assert summary["push.local"]["records"] == 3
+    assert summary["push.local"]["mean"] == pytest.approx(1.6)
+    assert summary["push.local"]["max"] == pytest.approx(2.8)
+    assert summary["phase.advance.omp_efficiency"]["size"] == pytest.approx(4)
+
+    report = log_analyzer.format_report(rows, "log.msgpack", top=0)
+    assert "Performance Summary" in report
+    assert "push.local" in report
+    assert "phase.particle_exchange.wall" in report
+    assert "phase.field_exchange.max_chunk" in report
+
+    output = tmp_path / "performance.csv"
+    log_analyzer.write_csv(rows, output)
+    with output.open(newline="") as fp:
+        csv_rows = list(csv.DictReader(fp))
+
+    assert csv_rows[1]["performance.schema_version"] == "1"
+    assert float(csv_rows[1]["performance.push.local.p95"]) == pytest.approx(1.7)
+    assert csv_rows[1]["performance.push.local.min_rank"] == "0"
+    assert float(
+        csv_rows[1]["performance.phase.advance.omp_efficiency.mean"]
+    ) == pytest.approx(0.81)
+
+
+def test_old_records_keep_original_rows_csv_and_report(tmp_path):
+    rows = log_analyzer.extract_timing_rows(sample_records())
+    output = tmp_path / "timing.csv"
+
+    log_analyzer.write_csv(rows, output)
+    with output.open(newline="") as fp:
+        reader = csv.DictReader(fp)
+        list(reader)
+
+    assert all("performance" not in row for row in rows)
+    assert all(not field.startswith("performance.") for field in reader.fieldnames)
+    assert "Performance Summary" not in log_analyzer.format_report(
+        rows, "log.msgpack", top=0
+    )
+
+
+def test_unknown_and_incomplete_performance_records_are_ignored():
+    unknown = sample_records()[0]
+    unknown["performance"] = {"schema_version": 2, "push": {}}
+    incomplete = sample_performance_records()[1]
+    del incomplete["performance"]["push"]["local"]["mean"]
+
+    rows = log_analyzer.extract_timing_rows([unknown, incomplete])
+    summary = log_analyzer.summarize_performance(rows)
+
+    assert "performance" not in rows[0]
+    assert "push.local" not in summary
+    assert summary["push.barrier"]["records"] == 1
+
+
 def test_plot_rows(tmp_path):
     rows = log_analyzer.extract_timing_rows(sample_records())
     output = tmp_path / "timing.png"
@@ -146,6 +239,20 @@ def test_plot_rows(tmp_path):
 
     assert output.is_file()
     assert output.stat().st_size > 0
+
+
+def test_plot_rows_with_performance(tmp_path):
+    rows = log_analyzer.extract_timing_rows(sample_performance_records())
+    output = tmp_path / "performance.png"
+    binned_output = tmp_path / "performance-binned.png"
+
+    log_analyzer.plot_rows(rows, output, rolling=2)
+    log_analyzer.plot_rows(rows, binned_output, max_points=2)
+
+    assert output.is_file()
+    assert output.stat().st_size > 0
+    assert binned_output.is_file()
+    assert binned_output.stat().st_size > 0
 
 
 def test_binned_total_timing_and_plot(tmp_path):

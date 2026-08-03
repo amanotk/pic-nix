@@ -187,6 +187,24 @@ if(PICNIX_ENABLE_ASCENT)
   endif()
 endif()
 
+# sampled performance profiler tests (Catch2, MPI)
+add_executable(test_pic_performance test_pic_performance.cpp)
+target_include_directories(test_pic_performance PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(test_pic_performance PRIVATE
+  Catch2::Catch2
+  pic_obj_parallel
+  pic
+  nix
+)
+
+set(PIC_PERFORMANCE_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_performance_np8)
+add_mpi_test(
+  test_pic_performance_np8
+  test_pic_performance
+  8
+  ${PIC_PERFORMANCE_TMPDIR_NP8}
+)
+
 # PicApplicationInterface smoke / application tests (Catch2, MPI)
 add_executable(test_pic_application test_pic_application.cpp)
 target_include_directories(test_pic_application PRIVATE ${INCLUDE_DIRS})

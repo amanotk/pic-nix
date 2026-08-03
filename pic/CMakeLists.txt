@@ -35,6 +35,7 @@ endif()
 set(PIC_SOURCES
   pic_chunk.cpp
   pic_application.cpp
+  pic_performance.cpp
   pic_poisson.cpp
   pic_poisson_basic.cpp
   pic_poisson_factory.cpp

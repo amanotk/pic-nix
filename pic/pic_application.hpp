@@ -6,6 +6,7 @@
 
 #include "nix/array_types.hpp"
 #include "pic.hpp"
+#include "pic_performance.hpp"
 
 #include "elliptic/elliptic.hpp"
 
@@ -55,6 +56,7 @@ protected:
   MpiCommVec           mpicommvec;     ///< MPI Communicators
   PtrPoissonSolver     solver;         ///< Poisson solver
   std::vector<float64> qm_per_species; ///< per-species q/m extracted at setup_chunks
+  PicPerformance       performance;    ///< sampled push performance profiler
 
   virtual PtrPoissonInterface create_poisson_interface();
 
