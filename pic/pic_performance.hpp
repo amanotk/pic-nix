@@ -19,7 +19,19 @@ public:
     Count,
   };
 
-  static constexpr int NumPhases = static_cast<int>(Phase::Count);
+  enum class Operation {
+    CurrentBegin,
+    ParticleBegin,
+    CurrentWaitall,
+    FieldBegin,
+    ParticleProbe,
+    ParticleWaitall,
+    FieldWaitall,
+    Count,
+  };
+
+  static constexpr int NumPhases     = static_cast<int>(Phase::Count);
+  static constexpr int NumOperations = static_cast<int>(Operation::Count);
 
   bool configure(const nix::json& application);
 
@@ -36,14 +48,18 @@ public:
 
   void record_phase_wall(Phase phase, nix::float64 elapsed);
 
+  void record_operation(Operation operation, nix::float64 elapsed);
+
   nix::json finish_step(nix::float64 local_push, nix::float64 barrier_wait,
                         MPI_Comm comm = MPI_COMM_WORLD);
 
 private:
   struct ThreadTiming {
-    std::array<nix::float64, NumPhases> busy{};
-    std::array<nix::float64, NumPhases> max_chunk{};
-    std::array<nix::float64, NumPhases> wall{};
+    std::array<nix::float64, NumPhases>     busy{};
+    std::array<nix::float64, NumPhases>     max_chunk{};
+    std::array<nix::float64, NumPhases>     wall{};
+    std::array<nix::float64, NumOperations> operation_total{};
+    std::array<nix::float64, NumOperations> operation_max_call{};
   };
 
   bool                      enabled          = false;
@@ -56,6 +72,11 @@ private:
   static int phase_index(Phase phase)
   {
     return static_cast<int>(phase);
+  }
+
+  static int operation_index(Operation operation)
+  {
+    return static_cast<int>(operation);
   }
 
   static nix::json summarize(const std::vector<nix::float64>& values);

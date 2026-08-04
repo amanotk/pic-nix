@@ -21,6 +21,16 @@ PERFORMANCE_PHASES = (
     "field_exchange",
 )
 PERFORMANCE_PHASE_METRICS = ("wall", "omp_efficiency", "max_chunk")
+PERFORMANCE_OPERATIONS = (
+    "current_begin",
+    "particle_begin",
+    "current_waitall",
+    "field_begin",
+    "particle_probe",
+    "particle_waitall",
+    "field_waitall",
+)
+PERFORMANCE_OPERATION_METRICS = ("total", "thread_max", "max_call")
 PERFORMANCE_STATS = (
     "size",
     "min",
@@ -34,7 +44,7 @@ PERFORMANCE_STATS = (
 DEFAULT_MAX_PLOT_POINTS = 5000
 DEFAULT_PLOT_BINS = 100
 READ_CHUNK_BYTES = 1024 * 1024
-PERFORMANCE_SCHEMA_VERSION = 1
+PERFORMANCE_SCHEMA_VERSIONS = (1, 2)
 
 
 def iter_msgpack_records(filename, progress=False):
@@ -119,7 +129,7 @@ def extract_timing_rows(records):
         performance = record.get("performance")
         if (
             isinstance(performance, dict)
-            and performance.get("schema_version") == PERFORMANCE_SCHEMA_VERSION
+            and performance.get("schema_version") in PERFORMANCE_SCHEMA_VERSIONS
         ):
             row["performance"] = performance
 
@@ -235,6 +245,17 @@ def iter_performance_stats(performance):
                 stats = metrics.get(metric)
                 if isinstance(stats, dict):
                     yield f"phase.{phase}.{metric}", stats
+
+    operations = performance.get("operation")
+    if isinstance(operations, dict):
+        for operation in PERFORMANCE_OPERATIONS:
+            metrics = operations.get(operation)
+            if not isinstance(metrics, dict):
+                continue
+            for metric in PERFORMANCE_OPERATION_METRICS:
+                stats = metrics.get(metric)
+                if isinstance(stats, dict):
+                    yield f"operation.{operation}.{metric}", stats
 
 
 def summarize_performance(rows):
@@ -353,6 +374,11 @@ def write_csv(rows, filename):
                 f"phase.{phase}.{metric}"
                 for phase in PERFORMANCE_PHASES
                 for metric in PERFORMANCE_PHASE_METRICS
+            ),
+            *(
+                f"operation.{operation}.{metric}"
+                for operation in PERFORMANCE_OPERATIONS
+                for metric in PERFORMANCE_OPERATION_METRICS
             ),
         ):
             fields.extend(f"performance.{name}.{stat}" for stat in PERFORMANCE_STATS)
@@ -518,14 +544,33 @@ def plot_performance_axes(axes, x, rows):
             label=phase,
         )
 
+    if len(axes) > 4:
+        for operation in PERFORMANCE_OPERATIONS:
+            axes[4].plot(
+                x,
+                get_performance_axis(rows, "operation", operation, "max_call", "p95"),
+                label=operation,
+            )
+
     axes[0].set_ylabel("push [s]")
     axes[1].set_ylabel("phase wall [s]")
     axes[2].set_ylabel("OMP efficiency")
     axes[3].set_ylabel("max chunk [s]")
+    if len(axes) > 4:
+        axes[4].set_ylabel("MPI call p95 [s]")
 
 
 def performance_plot_rows(rows):
     return [row for row in rows if isinstance(row.get("performance"), dict)]
+
+
+def has_performance_operations(rows):
+    return any(
+        isinstance(row["performance"].get("operation"), dict)
+        and bool(row["performance"]["operation"])
+        for row in rows
+        if isinstance(row.get("performance"), dict)
+    )
 
 
 def plot_binned_rows(rows, filename):
@@ -535,7 +580,8 @@ def plot_binned_rows(rows, filename):
     xmin, xmax = get_step_range(rows)
 
     performance_rows = performance_plot_rows(rows)
-    axis_count = 7 if performance_rows else 3
+    has_operations = has_performance_operations(performance_rows)
+    axis_count = 8 if has_operations else 7 if performance_rows else 3
     fig, axes = plt.subplots(axis_count, 1, figsize=(10, axis_count * 3), sharex=True)
 
     axes[0].fill_between(
@@ -628,6 +674,21 @@ def plot_binned_rows(rows, filename):
                     row["performance"]["phase"][phase][metric] = {
                         "mean": float(np.nanmedian(values))
                     }
+            if has_operations:
+                row["performance"]["operation"] = {}
+                for operation in PERFORMANCE_OPERATIONS:
+                    row["performance"]["operation"][operation] = {"max_call": {}}
+                    values = get_performance_axis(
+                        performance_rows,
+                        "operation",
+                        operation,
+                        "max_call",
+                        "p95",
+                    )[group]
+                    values = values[np.isfinite(values)]
+                    row["performance"]["operation"][operation]["max_call"]["p95"] = (
+                        float(np.median(values)) if values.size else np.nan
+                    )
             binned_rows.append(row)
         plot_performance_axes(axes[3:], get_step_axis(binned_rows), binned_rows)
 
@@ -659,7 +720,13 @@ def plot_rows(rows, filename, rolling=50, max_points=DEFAULT_MAX_PLOT_POINTS):
     rebalance = get_phase_axis(rows, "rebalance")
 
     performance_rows = performance_plot_rows(rows)
-    axis_count = 7 if performance_rows else 3
+    axis_count = (
+        8
+        if has_performance_operations(performance_rows)
+        else 7
+        if performance_rows
+        else 3
+    )
     fig, axes = plt.subplots(axis_count, 1, figsize=(10, axis_count * 3), sharex=True)
 
     axes[0].plot(x, total, label="total", color="black", linewidth=1.0)

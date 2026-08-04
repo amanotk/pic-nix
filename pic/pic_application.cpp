@@ -341,11 +341,21 @@ void PicApplication::push_openmp()
 
       // begin boundary exchange for current
       chunk->set_boundary_pack(BoundaryCur);
+      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_begin(BoundaryCur);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::CurrentBegin,
+                                     nix::wall_clock() - operation_begin);
+      }
 
       // begin boundary exchange for particle
       chunk->set_boundary_pack(BoundaryParticle);
+      operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_begin(BoundaryParticle);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::ParticleBegin,
+                                     nix::wall_clock() - operation_begin);
+      }
 
       // push B for a half step
       chunk->push_bfd(0.5 * delt);
@@ -366,7 +376,12 @@ void PicApplication::push_openmp()
       auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
       float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
 
+      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_end(BoundaryCur);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::CurrentWaitall,
+                                     nix::wall_clock() - operation_begin);
+      }
       chunk->set_boundary_unpack(BoundaryCur);
 
       // push E
@@ -374,7 +389,12 @@ void PicApplication::push_openmp()
 
       // begin boundary exchange for field
       chunk->set_boundary_pack(BoundaryEmf);
+      operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_begin(BoundaryEmf);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::FieldBegin,
+                                     nix::wall_clock() - operation_begin);
+      }
 
       if (sample_performance) {
         performance.record_chunk(PicPerformance::Phase::CurrentField,
@@ -393,7 +413,12 @@ void PicApplication::push_openmp()
       auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
       float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
 
+      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_probe(BoundaryParticle, true);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::ParticleProbe,
+                                     nix::wall_clock() - operation_begin);
+      }
 
       if (sample_performance) {
         performance.record_chunk(PicPerformance::Phase::ParticleProbe,
@@ -412,7 +437,12 @@ void PicApplication::push_openmp()
       auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
       float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
 
+      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_end(BoundaryParticle);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::ParticleWaitall,
+                                     nix::wall_clock() - operation_begin);
+      }
       chunk->set_boundary_unpack(BoundaryParticle);
 
       if (sample_performance) {
@@ -432,7 +462,12 @@ void PicApplication::push_openmp()
       auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
       float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
 
+      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
       chunk->set_boundary_end(BoundaryEmf);
+      if (sample_performance) {
+        performance.record_operation(PicPerformance::Operation::FieldWaitall,
+                                     nix::wall_clock() - operation_begin);
+      }
       chunk->set_boundary_unpack(BoundaryEmf);
 
       if (sample_performance) {

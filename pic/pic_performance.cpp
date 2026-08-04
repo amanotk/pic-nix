@@ -11,9 +11,18 @@ namespace
 constexpr std::array<const char*, PicPerformance::NumPhases> phase_names = {
     "advance", "current_field", "particle_probe", "particle_exchange", "field_exchange"};
 
-constexpr int push_metric_count  = 2;
-constexpr int phase_metric_count = 3;
-constexpr int metric_count = push_metric_count + PicPerformance::NumPhases * phase_metric_count;
+constexpr std::array<const char*, PicPerformance::NumOperations> operation_names = {
+    "current_begin",  "particle_begin",   "current_waitall", "field_begin",
+    "particle_probe", "particle_waitall", "field_waitall",
+};
+
+constexpr int push_metric_count      = 2;
+constexpr int phase_metric_count     = 3;
+constexpr int operation_metric_count = 3;
+constexpr int operation_metric_offset =
+    push_metric_count + PicPerformance::NumPhases * phase_metric_count;
+constexpr int metric_count =
+    operation_metric_offset + PicPerformance::NumOperations * operation_metric_count;
 } // namespace
 
 bool PicPerformance::configure(const nix::json& application)
@@ -95,6 +104,23 @@ void PicPerformance::record_phase_wall(Phase phase, nix::float64 elapsed)
   thread_timing[thread].wall[phase_index(phase)] = elapsed;
 }
 
+void PicPerformance::record_operation(Operation operation, nix::float64 elapsed)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = 0;
+#ifdef _OPENMP
+  thread = omp_get_thread_num();
+#endif
+
+  int index = operation_index(operation);
+  thread_timing[thread].operation_total[index] += elapsed;
+  thread_timing[thread].operation_max_call[index] =
+      std::max(thread_timing[thread].operation_max_call[index], elapsed);
+}
+
 nix::json PicPerformance::summarize(const std::vector<nix::float64>& values)
 {
   std::vector<nix::float64> sorted = values;
@@ -152,6 +178,24 @@ nix::json PicPerformance::finish_step(nix::float64 local_push, nix::float64 barr
     local[base + 2] = max_chunk;
   }
 
+  for (int operation = 0; operation < NumOperations; operation++) {
+    nix::float64 total      = 0.0;
+    nix::float64 thread_max = 0.0;
+    nix::float64 max_call   = 0.0;
+
+    for (int thread = 0; thread < parallel_threads; thread++) {
+      const auto& timing = thread_timing[thread];
+      total += timing.operation_total[operation];
+      thread_max = std::max(thread_max, timing.operation_total[operation]);
+      max_call   = std::max(max_call, timing.operation_max_call[operation]);
+    }
+
+    int base        = operation_metric_offset + operation * operation_metric_count;
+    local[base + 0] = total;
+    local[base + 1] = thread_max;
+    local[base + 2] = max_call;
+  }
+
   int rank = 0;
   int size = 0;
   MPI_Comm_rank(comm, &rank);
@@ -179,13 +223,14 @@ nix::json PicPerformance::finish_step(nix::float64 local_push, nix::float64 barr
   };
 
   nix::json result = {
-      {"schema_version", 1},
+      {"schema_version", 2},
       {"push",
        {
            {"local", summarize(metric_values(0))},
            {"barrier", summarize(metric_values(1))},
        }},
       {"phase", nix::json::object()},
+      {"operation", nix::json::object()},
   };
 
   for (int phase = 0; phase < NumPhases; phase++) {
@@ -194,6 +239,15 @@ nix::json PicPerformance::finish_step(nix::float64 local_push, nix::float64 barr
         {"wall", summarize(metric_values(base + 0))},
         {"omp_efficiency", summarize(metric_values(base + 1))},
         {"max_chunk", summarize(metric_values(base + 2))},
+    };
+  }
+
+  for (int operation = 0; operation < NumOperations; operation++) {
+    int base = operation_metric_offset + operation * operation_metric_count;
+    result["operation"][operation_names[operation]] = {
+        {"total", summarize(metric_values(base + 0))},
+        {"thread_max", summarize(metric_values(base + 1))},
+        {"max_call", summarize(metric_values(base + 2))},
     };
   }
 
