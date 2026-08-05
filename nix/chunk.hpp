@@ -365,6 +365,7 @@ public:
   }
 
   /// @brief probe incoming messages and call recv if ready
+  /// @note caller must obey the MPI thread-support contract
   virtual bool set_boundary_probe(int mode, bool wait)
   {
     return false; // override me
@@ -383,12 +384,14 @@ public:
   }
 
   /// @brief begin boundary exchange
+  /// @note caller must obey the MPI thread-support contract
   virtual void set_boundary_begin(int mode)
   {
     // override me
   }
 
   /// @brief end boundary exchange
+  /// @note caller must obey the MPI thread-support contract
   virtual void set_boundary_end(int mode)
   {
     // override me
@@ -491,7 +494,6 @@ public:
       }
     }
 
-    OMP_MAYBE_CRITICAL
     for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
       for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
         for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
@@ -540,17 +542,14 @@ public:
   void end_bc_exchange(MpiBufferPtr mpibuf, Halo& halo)
   {
     // wait for MPI send/recv calls to complete
-    OMP_MAYBE_CRITICAL
-    {
-      if (mpibuf->sendwait == true) {
-        MPI_Waitall(27, mpibuf->sendreq.data(), MPI_STATUSES_IGNORE);
-        mpibuf->sendwait = false;
-      }
+    if (mpibuf->sendwait == true) {
+      MPI_Waitall(27, mpibuf->sendreq.data(), MPI_STATUSES_IGNORE);
+      mpibuf->sendwait = false;
+    }
 
-      if (mpibuf->recvwait == true) {
-        MPI_Waitall(27, mpibuf->recvreq.data(), MPI_STATUSES_IGNORE);
-        mpibuf->recvwait = false;
-      }
+    if (mpibuf->recvwait == true) {
+      MPI_Waitall(27, mpibuf->recvreq.data(), MPI_STATUSES_IGNORE);
+      mpibuf->recvwait = false;
     }
   }
 };

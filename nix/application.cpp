@@ -102,6 +102,7 @@ void Application::initialize(int argc, char** argv)
   cfgparser->parse_file(argparser->get_config());
 
   initialize_mpi(&argc, &argv);
+  initialize_mpi_thread_mode();
 
   statehandler = create_statehandler();
   balancer     = create_balancer();
@@ -164,25 +165,17 @@ void Application::initialize_mpi(int* argc, char*** argv)
   nthread = nix::get_max_threads();
 
   {
-    int thread_required = NIX_MPI_THREAD_LEVEL;
-    int thread_provided = -1;
-    int mpi_initialized = 0;
+    int thread_requested = get_mpi_thread_requested();
+    mpi_thread_provided  = -1;
+    int mpi_initialized  = 0;
 
     MPI_Initialized(&mpi_initialized);
 
     if (mpi_initialized == 0) {
-      MPI_Init_thread(argc, argv, thread_required, &thread_provided);
+      MPI_Init_thread(argc, argv, thread_requested, &mpi_thread_provided);
       is_mpi_init_called_by_me = true;
     } else {
-      MPI_Query_thread(&thread_provided);
-    }
-
-    if (thread_provided < thread_required) {
-      ERROR << fmt::format("Your MPI does not support required thread level!");
-      if (is_mpi_init_called_by_me) {
-        MPI_Finalize();
-      }
-      exit(-1);
+      MPI_Query_thread(&mpi_thread_provided);
     }
   }
 
@@ -216,6 +209,40 @@ void Application::initialize_mpi(int* argc, char*** argv)
       ERROR << fmt::format("Ignore invalid configuration for mpistream\n");
     }
   }
+}
+
+int Application::get_mpi_thread_requested() const
+{
+  auto        option     = cfgparser->get_application()["option"];
+  std::string configured = option.is_object() ? option.value("mpi_thread_mode", "auto") : "auto";
+
+  switch (parse_mpi_thread_mode(configured)) {
+  case MpiThreadMode::Multiple:
+    return MPI_THREAD_MULTIPLE;
+  case MpiThreadMode::Funneled:
+    return MPI_THREAD_FUNNELED;
+  default:
+    return NIX_MPI_THREAD_LEVEL;
+  }
+}
+
+void Application::initialize_mpi_thread_mode()
+{
+  auto        option     = cfgparser->get_application()["option"];
+  std::string configured = option.is_object() ? option.value("mpi_thread_mode", "auto") : "auto";
+
+  mpi_thread_mode = parse_mpi_thread_mode(configured);
+  if (mpi_thread_mode == MpiThreadMode::Auto) {
+    mpi_thread_mode = mpi_thread_provided >= MPI_THREAD_MULTIPLE ? MpiThreadMode::Multiple
+                                                                 : MpiThreadMode::Funneled;
+  }
+
+  assert_mpi(mpi_thread_mode != MpiThreadMode::Multiple ||
+                 mpi_thread_provided >= MPI_THREAD_MULTIPLE,
+             "`mpi_thread_mode = multiple` requires MPI_THREAD_MULTIPLE");
+  assert_mpi(mpi_thread_mode != MpiThreadMode::Funneled ||
+                 mpi_thread_provided >= MPI_THREAD_FUNNELED,
+             "`mpi_thread_mode = funneled` requires MPI_THREAD_FUNNELED or higher");
 }
 
 void Application::finalize_mpi()

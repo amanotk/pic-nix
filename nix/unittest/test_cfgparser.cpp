@@ -206,6 +206,26 @@ TEST_CASE("check_application_options")
     REQUIRE_FALSE(parser.check_application_options(option));
   }
 
+  SECTION("valid MPI thread modes")
+  {
+    for (const char* mode : {"auto", "multiple", "funneled"}) {
+      json option = {{"mpi_thread_mode", mode}};
+      REQUIRE(parser.check_application_options(option));
+    }
+  }
+
+  SECTION("invalid MPI thread mode")
+  {
+    json option = {{"mpi_thread_mode", "serialized"}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("MPI thread mode must be a string")
+  {
+    json option = {{"mpi_thread_mode", 0}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
   SECTION("first axis must be a string")
   {
     json option = {{"sfc_first_axis", 0}};

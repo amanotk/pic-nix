@@ -88,6 +88,10 @@ protected:
 
   virtual void push_openmp();
 
+  virtual void push_openmp_multiple();
+
+  virtual void push_openmp_funneled();
+
   virtual void calculate_moment_openmp();
 
   virtual void update_poisson_efield();

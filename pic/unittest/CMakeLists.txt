@@ -222,6 +222,9 @@ add_mpi_test(
   8
   ${PIC_IFACE_TMPDIR_NP8}
 )
+set_tests_properties(test_pic_application_np8 PROPERTIES ENVIRONMENT
+  "OMP_NUM_THREADS=2;OMP_DYNAMIC=FALSE"
+)
 
 if(PICNIX_ENABLE_ASCENT)
   set(PIC_IFACE_ASCENT_TMPDIR_NP1 ${CMAKE_CURRENT_BINARY_DIR}/tmp_iface_ascent_np1)

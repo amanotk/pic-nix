@@ -120,16 +120,18 @@ protected:
   ChunkVec        chunkvec;     ///< local chunks
   DiagVec         diagvec;      ///< diagnostic objects
 
-  int     thisrank; ///< my rank
-  int     nprocess; ///< number of mpi processes
-  int     nthread;  ///< number of threads
-  int     cl_argc;  ///< command-line argc
-  char**  cl_argv;  ///< command-line argv
-  float64 wclock;   ///< wall clock time at initialization
-  int     ndims[4]; ///< global grid dimensions
-  int     cdims[4]; ///< chunk dimensions
-  int     curstep;  ///< current iteration step
-  float64 curtime;  ///< current time
+  int           thisrank;            ///< my rank
+  int           nprocess;            ///< number of mpi processes
+  int           nthread;             ///< number of threads
+  int           mpi_thread_provided; ///< MPI thread support level provided at runtime
+  MpiThreadMode mpi_thread_mode;     ///< effective MPI/OpenMP execution mode
+  int           cl_argc;             ///< command-line argc
+  char**        cl_argv;             ///< command-line argv
+  float64       wclock;              ///< wall clock time at initialization
+  int           ndims[4];            ///< global grid dimensions
+  int           cdims[4];            ///< chunk dimensions
+  int           curstep;             ///< current iteration step
+  float64       curtime;             ///< current time
 
   bool is_mpi_init_called_by_me; ///< true if Application initialized MPI
 
@@ -175,6 +177,16 @@ public:
   virtual json get_configuration() const
   {
     return cfgparser->get_root();
+  }
+
+  MpiThreadMode get_mpi_thread_mode() const
+  {
+    return mpi_thread_mode;
+  }
+
+  int get_mpi_thread_provided() const
+  {
+    return mpi_thread_provided;
   }
 
   ///
@@ -287,6 +299,10 @@ protected:
   /// @param argv array of arguments
   ///
   void initialize_mpi(int* argc, char*** argv);
+
+  int get_mpi_thread_requested() const;
+
+  void initialize_mpi_thread_mode();
 
   ///
   /// @brief finalize MPI

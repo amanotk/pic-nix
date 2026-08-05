@@ -445,7 +445,8 @@ std::string replace_all(std::string text, const std::string& needle, const std::
 }
 
 std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
-                                            bool with_ascent = false)
+                                            bool               with_ascent     = false,
+                                            const std::string& mpi_thread_mode = "auto")
 {
   const char*           tmpdir_env = std::getenv("PICNIX_TMPDIR");
   std::filesystem::path base       = tmpdir_env != nullptr ? tmpdir_env : ".";
@@ -459,6 +460,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
  [application]
    [application.option]
       seed_type = 'fixed'
+      mpi_thread_mode = '@MPI_THREAD_MODE@'
    [application.poisson_petsc]
     ksp_type = 'cg'
     pc_type = 'gamg'
@@ -504,7 +506,8 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
   const char* config_template = R"TOML(
  [application]
    [application.option]
-     seed_type = 'fixed'
+      seed_type = 'fixed'
+      mpi_thread_mode = '@MPI_THREAD_MODE@'
    [application.poisson_basic]
      max_iter = 2000
      tol = 1.0e-12
@@ -555,6 +558,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
     config             = replace_all(config, "@CX@", std::to_string(cfg.cx));
     config             = replace_all(config, "@CY@", std::to_string(cfg.cy));
     config             = replace_all(config, "@CZ@", std::to_string(cfg.cz));
+    config             = replace_all(config, "@MPI_THREAD_MODE@", mpi_thread_mode);
     config             = replace_all(config, "@ASCENT_DIAGNOSTIC@",
                          with_ascent ? "\n[[diagnostic]]\n  name = 'ascent'\n  begin = 0\n  "
                                                    "interval = 1\n  actions = 'ascent_empty_actions.yaml'\n  "
@@ -764,34 +768,45 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
   cleanup_config_and_tmpdir(config_path, rank);
 }
 
-TEST_CASE("PicApplication preserves Gauss's law", "[np=8]")
+TEST_CASE("PicApplication preserves Gauss's law in each MPI thread mode", "[np=8]")
 {
   if (!require_mpi_size(8)) {
     return;
   }
 
-  const float64         tol         = 1.0e-12;
-  const int             rank        = get_mpi_rank();
-  const GridConfig      grid_config = GridConfig{32, 32, 32, 4, 4, 4};
-  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
+  const float64    tol         = 1.0e-12;
+  const int        rank        = get_mpi_rank();
+  const GridConfig grid_config = GridConfig{32, 32, 32, 4, 4, 4};
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  int                      thread_provided = MPI_THREAD_SINGLE;
+  std::vector<std::string> modes           = {"funneled"};
+  MPI_Query_thread(&thread_provided);
+  if (thread_provided >= MPI_THREAD_MULTIPLE) {
+    modes.push_back("multiple");
+  }
 
-  CliArgs         cli       = make_cli_args(config_path);
-  auto            interface = std::make_shared<TestInterface>();
-  TestApplication app(cli.argc(), cli.cargv(), interface);
+  for (const auto& mode : modes) {
+    DYNAMIC_SECTION(mode)
+    {
+      std::filesystem::path config_path = write_config_for_grid(grid_config, rank, false, mode);
 
-  app.initialize_for_test(cli.argc(), cli.cargv());
+      MPI_Barrier(MPI_COMM_WORLD);
 
-  // check Gauss's law before particle push
-  app.update_poisson_efield_from_particle();
-  app.require_divergence_error_below(tol);
+      CliArgs         cli       = make_cli_args(config_path);
+      auto            interface = std::make_shared<TestInterface>();
+      TestApplication app(cli.argc(), cli.cargv(), interface);
 
-  // check Gauss's law after particle push
-  app.push();
-  app.require_divergence_error_below(tol);
+      app.initialize_for_test(cli.argc(), cli.cargv());
 
-  app.finalize_for_test();
+      app.update_poisson_efield_from_particle();
+      app.require_divergence_error_below(tol);
 
-  cleanup_config_and_tmpdir(config_path, rank);
+      app.push();
+      app.require_divergence_error_below(tol);
+
+      app.finalize_for_test();
+
+      cleanup_config_and_tmpdir(config_path, rank);
+    }
+  }
 }

@@ -41,10 +41,8 @@
 #endif
 
 #ifdef HAS_MPI_THREAD_MULTIPLE
-#define OMP_MAYBE_CRITICAL
 constexpr int NIX_MPI_THREAD_LEVEL = MPI_THREAD_MULTIPLE;
 #else
-#define OMP_MAYBE_CRITICAL _Pragma("omp critical")
 constexpr int NIX_MPI_THREAD_LEVEL = MPI_THREAD_SERIALIZED;
 #endif
 
@@ -60,6 +58,35 @@ NIX_NAMESPACE_BEGIN
 
 // json
 using json = nlohmann::ordered_json;
+
+enum class MpiThreadMode {
+  Auto,
+  Multiple,
+  Funneled,
+};
+
+inline MpiThreadMode parse_mpi_thread_mode(const std::string& mode)
+{
+  if (mode == "multiple") {
+    return MpiThreadMode::Multiple;
+  }
+  if (mode == "funneled") {
+    return MpiThreadMode::Funneled;
+  }
+  return MpiThreadMode::Auto;
+}
+
+inline const char* mpi_thread_mode_name(MpiThreadMode mode)
+{
+  switch (mode) {
+  case MpiThreadMode::Multiple:
+    return "multiple";
+  case MpiThreadMode::Funneled:
+    return "funneled";
+  default:
+    return "auto";
+  }
+}
 
 //
 // typedefs namespace

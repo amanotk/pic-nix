@@ -86,6 +86,20 @@ public:
     return create_chunkmap();
   }
 
+  MpiThreadMode select_test_mpi_thread_mode(json configuration, int provided)
+  {
+    set_test_configuration(configuration);
+    mpi_thread_provided = provided;
+    initialize_mpi_thread_mode();
+    return mpi_thread_mode;
+  }
+
+  int get_test_mpi_thread_requested(json configuration)
+  {
+    set_test_configuration(configuration);
+    return get_mpi_thread_requested();
+  }
+
   void prepare_test_state(json configuration)
   {
     set_test_configuration(configuration);
@@ -195,6 +209,63 @@ TEST_CASE("SFC first-axis configuration creates the requested chunk map")
     app.set_test_configuration(configuration);
     auto chunkmap = app.create_test_chunkmap();
     REQUIRE(chunkmap->to_json()["sfc_first_axis"] == "z");
+  }
+}
+
+TEST_CASE("MPI thread mode selects a compatible execution strategy")
+{
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(0, nullptr, interface);
+  json            configuration = json::parse(config_content);
+
+  SECTION("auto selects funneled for serialized MPI")
+  {
+    REQUIRE(app.select_test_mpi_thread_mode(configuration, MPI_THREAD_SERIALIZED) ==
+            MpiThreadMode::Funneled);
+  }
+
+  SECTION("auto selects multiple when available")
+  {
+    REQUIRE(app.select_test_mpi_thread_mode(configuration, MPI_THREAD_MULTIPLE) ==
+            MpiThreadMode::Multiple);
+  }
+
+  SECTION("funneled can be forced with multiple support")
+  {
+    configuration["application"]["option"]["mpi_thread_mode"] = "funneled";
+    REQUIRE(app.select_test_mpi_thread_mode(configuration, MPI_THREAD_MULTIPLE) ==
+            MpiThreadMode::Funneled);
+  }
+
+  SECTION("multiple can be selected when available")
+  {
+    configuration["application"]["option"]["mpi_thread_mode"] = "multiple";
+    REQUIRE(app.select_test_mpi_thread_mode(configuration, MPI_THREAD_MULTIPLE) ==
+            MpiThreadMode::Multiple);
+  }
+}
+
+TEST_CASE("MPI thread mode requests the configured support level")
+{
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(0, nullptr, interface);
+  json            configuration = json::parse(config_content);
+
+  SECTION("auto preserves the build default")
+  {
+    REQUIRE(app.get_test_mpi_thread_requested(configuration) == NIX_MPI_THREAD_LEVEL);
+  }
+
+  SECTION("funneled requests only funneled support")
+  {
+    configuration["application"]["option"]["mpi_thread_mode"] = "funneled";
+    REQUIRE(app.get_test_mpi_thread_requested(configuration) == MPI_THREAD_FUNNELED);
+  }
+
+  SECTION("multiple requests multiple support")
+  {
+    configuration["application"]["option"]["mpi_thread_mode"] = "multiple";
+    REQUIRE(app.get_test_mpi_thread_requested(configuration) == MPI_THREAD_MULTIPLE);
   }
 }
 

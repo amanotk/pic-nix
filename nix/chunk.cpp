@@ -291,7 +291,6 @@ int Chunk::set_boundary_query(int mode, int sendrecv)
 
   MpiBufferPtr mpibuf = mpibufvec[mode];
 
-  OMP_MAYBE_CRITICAL
   if (sendrecv == 0) {
 
     MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);
@@ -318,7 +317,6 @@ int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
   mpibuf->bufsize.fill(0);
   mpibuf->bufaddr.fill(0);
 
-  OMP_MAYBE_CRITICAL
   for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
     for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
       for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
@@ -367,7 +365,6 @@ int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
     }
     mpibuf->recvbuf.resize(bufsize);
 
-    OMP_MAYBE_CRITICAL
     for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
       for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
         for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
