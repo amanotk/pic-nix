@@ -61,6 +61,8 @@ TEST_CASE("PicPerformance aggregates rank and OpenMP summaries")
     if (thread == 0) {
       performance.record_chunk(PicPerformance::Phase::Advance, rank + 1.0);
       performance.record_operation(PicPerformance::Operation::CurrentWaitall, rank + 1.0);
+      performance.record_operation_summary(PicPerformance::Operation::CurrentPoll, rank + 2.0,
+                                           rank + 0.75);
       performance.record_operation(PicPerformance::Operation::FieldWaitall, rank + 0.25);
     }
     performance.record_operation(PicPerformance::Operation::CurrentWaitall, rank + 0.5);
@@ -78,7 +80,7 @@ TEST_CASE("PicPerformance aggregates rank and OpenMP summaries")
   auto phase     = result["phase"]["advance"];
   auto operation = result["operation"]["current_waitall"];
 
-  REQUIRE(result["schema_version"] == 2);
+  REQUIRE(result["schema_version"] == 3);
   REQUIRE(push["size"] == size);
   REQUIRE(push["min"] == 1.0);
   REQUIRE(push["max"] == static_cast<nix::float64>(size));
@@ -96,5 +98,8 @@ TEST_CASE("PicPerformance aggregates rank and OpenMP summaries")
   REQUIRE(operation["total"]["min"] == Catch::Approx(1.0 + 0.5 * actual_threads));
   REQUIRE(operation["thread_max"]["max"] == Catch::Approx(2.0 * size - 0.5));
   REQUIRE(operation["max_call"]["max"] == static_cast<nix::float64>(size));
+  REQUIRE(result["operation"]["current_poll"]["total"]["max"] ==
+          static_cast<nix::float64>(size + 1));
+  REQUIRE(result["operation"]["current_poll"]["max_call"]["max"] == Catch::Approx(size - 0.25));
   REQUIRE(result["operation"]["field_waitall"]["max_call"]["max"] == Catch::Approx(size - 0.75));
 }

@@ -61,7 +61,7 @@ def sample_performance_records():
             }
 
         record["performance"] = {
-            "schema_version": 2,
+            "schema_version": 3,
             "push": {
                 "local": stats(0.5 + step),
                 "barrier": stats(0.05 + step, max_rank=2),
@@ -181,7 +181,7 @@ def test_write_csv(tmp_path):
 def test_extract_and_report_performance_records(tmp_path):
     rows = log_analyzer.extract_timing_rows(sample_performance_records())
 
-    assert rows[1]["performance"]["schema_version"] == 2
+    assert rows[1]["performance"]["schema_version"] == 3
     assert rows[1]["performance"]["push"]["local"]["mean"] == pytest.approx(1.6)
 
     summary = log_analyzer.summarize_performance(rows)
@@ -190,6 +190,7 @@ def test_extract_and_report_performance_records(tmp_path):
     assert summary["push.local"]["max"] == pytest.approx(2.8)
     assert summary["phase.advance.omp_efficiency"]["size"] == pytest.approx(4)
     assert summary["operation.current_waitall.max_call"]["mean"] == pytest.approx(1.35)
+    assert summary["operation.current_poll.max_call"]["mean"] == pytest.approx(1.35)
 
     report = log_analyzer.format_report(rows, "log.msgpack", top=0)
     assert "Performance Summary" in report
@@ -203,7 +204,7 @@ def test_extract_and_report_performance_records(tmp_path):
     with output.open(newline="") as fp:
         csv_rows = list(csv.DictReader(fp))
 
-    assert csv_rows[1]["performance.schema_version"] == "2"
+    assert csv_rows[1]["performance.schema_version"] == "3"
     assert float(csv_rows[1]["performance.push.local.p95"]) == pytest.approx(1.7)
     assert csv_rows[1]["performance.push.local.min_rank"] == "0"
     assert float(
@@ -211,6 +212,9 @@ def test_extract_and_report_performance_records(tmp_path):
     ) == pytest.approx(0.81)
     assert float(
         csv_rows[1]["performance.operation.particle_waitall.max_call.p95"]
+    ) == pytest.approx(1.45)
+    assert float(
+        csv_rows[1]["performance.operation.current_poll.max_call.p95"]
     ) == pytest.approx(1.45)
 
 
@@ -232,7 +236,7 @@ def test_old_records_keep_original_rows_csv_and_report(tmp_path):
 
 def test_unknown_and_incomplete_performance_records_are_ignored():
     unknown = sample_records()[0]
-    unknown["performance"] = {"schema_version": 3, "push": {}}
+    unknown["performance"] = {"schema_version": 99, "push": {}}
     incomplete = sample_performance_records()[1]
     del incomplete["performance"]["push"]["local"]["mean"]
 
@@ -242,6 +246,20 @@ def test_unknown_and_incomplete_performance_records_are_ignored():
     assert "performance" not in rows[0]
     assert "push.local" not in summary
     assert summary["push.barrier"]["records"] == 1
+
+
+def test_schema_version_two_performance_records_remain_supported():
+    legacy = sample_performance_records()[:2]
+    for record in legacy:
+        record["performance"]["schema_version"] = 2
+        for operation in ("current_poll", "particle_poll", "field_poll"):
+            del record["performance"]["operation"][operation]
+
+    rows = log_analyzer.extract_timing_rows(legacy)
+    summary = log_analyzer.summarize_performance(rows)
+
+    assert summary["operation.current_waitall.max_call"]["records"] == 2
+    assert "operation.current_poll.max_call" not in summary
 
 
 def test_schema_version_one_performance_records_remain_supported(tmp_path):

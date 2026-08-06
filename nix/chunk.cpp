@@ -292,9 +292,11 @@ int Chunk::set_boundary_query(int mode, int sendrecv)
   MpiBufferPtr mpibuf = mpibufvec[mode];
 
   if (sendrecv == 0) {
-
-    MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);
-    MPI_Testall(27, mpibuf->recvreq.data(), &flag, MPI_STATUSES_IGNORE);
+    int send_complete = 0;
+    int recv_complete = 0;
+    MPI_Testall(27, mpibuf->sendreq.data(), &send_complete, MPI_STATUSES_IGNORE);
+    MPI_Testall(27, mpibuf->recvreq.data(), &recv_complete, MPI_STATUSES_IGNORE);
+    flag = send_complete && recv_complete;
   } else if (sendrecv == +1) {
 
     MPI_Testall(27, mpibuf->sendreq.data(), &flag, MPI_STATUSES_IGNORE);

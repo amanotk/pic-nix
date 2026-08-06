@@ -297,6 +297,8 @@ void exchange_boundary(PicChunk& chunk, int mode)
   if (mode == BoundaryParticle) {
     chunk.set_boundary_probe(mode, true);
   }
+  while (chunk.set_boundary_query(mode) == 0) {
+  }
   chunk.set_boundary_end(mode);
   chunk.set_boundary_unpack(mode);
 }

@@ -84,6 +84,16 @@ public:
     PicApplication::push();
   }
 
+  void complete_boundaries_for_test(std::vector<PtrChunk> chunks)
+  {
+    chunkvec.resize(0);
+    for (auto& chunk : chunks) {
+      chunkvec.push_back(std::move(chunk));
+    }
+    PicApplication::complete_boundaries_funneled(BoundaryCur,
+                                                 PicPerformance::Operation::CurrentPoll);
+  }
+
   void require_poisson_error_below(int mz, int my, int mx, float64 tol)
   {
     const float64 rms_err = compute_poisson_error(mz, my, mx);
@@ -425,6 +435,34 @@ public:
   }
 };
 
+class PollingChunk : public PicChunk
+{
+public:
+  PollingChunk(int id, int incomplete_queries, std::vector<int>& completion_order)
+      : PicChunk({1, 1, 1}, {false, false, true}, id), incomplete_queries(incomplete_queries),
+        completion_order(completion_order)
+  {
+  }
+
+  int set_boundary_query(int, int sendrecv) override
+  {
+    if (sendrecv == -1 && incomplete_queries > 0) {
+      incomplete_queries--;
+      return 0;
+    }
+    return 1;
+  }
+
+  void set_boundary_end(int) override
+  {
+    completion_order.push_back(get_id());
+  }
+
+private:
+  int               incomplete_queries;
+  std::vector<int>& completion_order;
+};
+
 class TestInterface : public PicApplicationInterface
 {
 public:
@@ -669,6 +707,20 @@ TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
   REQUIRE(app.main() == 0);
 
   cleanup_config_and_tmpdir(config_path, rank);
+}
+
+TEST_CASE("FUNNELED completion polls past an incomplete chunk")
+{
+  std::vector<int>                        completion_order;
+  std::vector<nix::Application::PtrChunk> chunks;
+  chunks.push_back(std::make_unique<PollingChunk>(0, 2, completion_order));
+  chunks.push_back(std::make_unique<PollingChunk>(1, 0, completion_order));
+
+  auto            interface = std::make_shared<TestInterface>();
+  TestApplication app(0, nullptr, interface);
+  app.complete_boundaries_for_test(std::move(chunks));
+
+  REQUIRE(completion_order == std::vector<int>{1, 0});
 }
 
 #if PICNIX_ENABLE_ASCENT

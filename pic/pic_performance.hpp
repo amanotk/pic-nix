@@ -27,6 +27,9 @@ public:
     ParticleProbe,
     ParticleWaitall,
     FieldWaitall,
+    CurrentPoll,
+    ParticlePoll,
+    FieldPoll,
     Count,
   };
 
@@ -49,6 +52,8 @@ public:
   void record_phase_wall(Phase phase, nix::float64 elapsed);
 
   void record_operation(Operation operation, nix::float64 elapsed);
+
+  void record_operation_summary(Operation operation, nix::float64 total, nix::float64 max_call);
 
   nix::json finish_step(nix::float64 local_push, nix::float64 barrier_wait,
                         MPI_Comm comm = MPI_COMM_WORLD);

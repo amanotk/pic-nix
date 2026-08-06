@@ -92,6 +92,8 @@ protected:
 
   virtual void push_openmp_funneled();
 
+  void complete_boundaries_funneled(int mode, PicPerformance::Operation operation);
+
   virtual void calculate_moment_openmp();
 
   virtual void update_poisson_efield();

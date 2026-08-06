@@ -29,6 +29,9 @@ PERFORMANCE_OPERATIONS = (
     "particle_probe",
     "particle_waitall",
     "field_waitall",
+    "current_poll",
+    "particle_poll",
+    "field_poll",
 )
 PERFORMANCE_OPERATION_METRICS = ("total", "thread_max", "max_call")
 PERFORMANCE_STATS = (
@@ -44,7 +47,7 @@ PERFORMANCE_STATS = (
 DEFAULT_MAX_PLOT_POINTS = 5000
 DEFAULT_PLOT_BINS = 100
 READ_CHUNK_BYTES = 1024 * 1024
-PERFORMANCE_SCHEMA_VERSIONS = (1, 2)
+PERFORMANCE_SCHEMA_VERSIONS = (1, 2, 3)
 
 
 def iter_msgpack_records(filename, progress=False):

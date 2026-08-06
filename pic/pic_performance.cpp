@@ -12,8 +12,8 @@ constexpr std::array<const char*, PicPerformance::NumPhases> phase_names = {
     "advance", "current_field", "particle_probe", "particle_exchange", "field_exchange"};
 
 constexpr std::array<const char*, PicPerformance::NumOperations> operation_names = {
-    "current_begin",  "particle_begin",   "current_waitall", "field_begin",
-    "particle_probe", "particle_waitall", "field_waitall",
+    "current_begin",    "particle_begin", "current_waitall", "field_begin",   "particle_probe",
+    "particle_waitall", "field_waitall",  "current_poll",    "particle_poll", "field_poll",
 };
 
 constexpr int push_metric_count      = 2;
@@ -106,6 +106,12 @@ void PicPerformance::record_phase_wall(Phase phase, nix::float64 elapsed)
 
 void PicPerformance::record_operation(Operation operation, nix::float64 elapsed)
 {
+  record_operation_summary(operation, elapsed, elapsed);
+}
+
+void PicPerformance::record_operation_summary(Operation operation, nix::float64 total,
+                                              nix::float64 max_call)
+{
   if (sampling == false) {
     return;
   }
@@ -116,9 +122,9 @@ void PicPerformance::record_operation(Operation operation, nix::float64 elapsed)
 #endif
 
   int index = operation_index(operation);
-  thread_timing[thread].operation_total[index] += elapsed;
+  thread_timing[thread].operation_total[index] += total;
   thread_timing[thread].operation_max_call[index] =
-      std::max(thread_timing[thread].operation_max_call[index], elapsed);
+      std::max(thread_timing[thread].operation_max_call[index], max_call);
 }
 
 nix::json PicPerformance::summarize(const std::vector<nix::float64>& values)
@@ -223,7 +229,7 @@ nix::json PicPerformance::finish_step(nix::float64 local_push, nix::float64 barr
   };
 
   nix::json result = {
-      {"schema_version", 2},
+      {"schema_version", 3},
       {"push",
        {
            {"local", summarize(metric_values(0))},

@@ -523,6 +523,54 @@ void PicApplication::push_openmp_multiple()
   }
 }
 
+void PicApplication::complete_boundaries_funneled(int mode, PicPerformance::Operation operation)
+{
+  const bool        sample_performance = performance.is_sampling();
+  std::vector<char> complete(chunkvec.size(), false);
+  size_t            incomplete      = complete.size();
+  float64           operation_total = 0.0;
+  float64           operation_max   = 0.0;
+
+  const auto record_call = [&](float64 begin) {
+    if (sample_performance) {
+      float64 elapsed = nix::wall_clock() - begin;
+      operation_total += elapsed;
+      operation_max = std::max(operation_max, elapsed);
+    }
+  };
+
+  while (incomplete > 0) {
+    // Thread 0 must keep entering MPI because no other thread can drive progress
+    // under MPI_THREAD_FUNNELED.
+    for (size_t i = 0; i < complete.size(); i++) {
+      if (complete[i]) {
+        continue;
+      }
+
+      auto*   chunk         = static_cast<PicChunk*>(chunkvec[i].get());
+      float64 call_begin    = sample_performance ? nix::wall_clock() : 0.0;
+      bool    send_complete = chunk->set_boundary_query(mode, +1);
+      record_call(call_begin);
+
+      call_begin         = sample_performance ? nix::wall_clock() : 0.0;
+      bool recv_complete = chunk->set_boundary_query(mode, -1);
+      record_call(call_begin);
+
+      if (send_complete && recv_complete) {
+        call_begin = sample_performance ? nix::wall_clock() : 0.0;
+        chunk->set_boundary_end(mode);
+        record_call(call_begin);
+        complete[i] = true;
+        incomplete--;
+      }
+    }
+  }
+
+  if (sample_performance) {
+    performance.record_operation_summary(operation, operation_total, operation_max);
+  }
+}
+
 void PicApplication::push_openmp_funneled()
 {
   const bool        sample_performance = performance.is_sampling();
@@ -594,15 +642,7 @@ void PicApplication::push_openmp_funneled()
 
 #pragma omp master
     {
-      for (auto& chunk_ptr : chunkvec) {
-        auto*   chunk           = static_cast<PicChunk*>(chunk_ptr.get());
-        float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
-        chunk->set_boundary_end(BoundaryCur);
-        if (sample_performance) {
-          performance.record_operation(PicPerformance::Operation::CurrentWaitall,
-                                       nix::wall_clock() - operation_begin);
-        }
-      }
+      complete_boundaries_funneled(BoundaryCur, PicPerformance::Operation::CurrentPoll);
     }
 #pragma omp barrier
 
@@ -672,15 +712,7 @@ void PicApplication::push_openmp_funneled()
 
 #pragma omp master
     {
-      for (auto& chunk_ptr : chunkvec) {
-        auto*   chunk           = static_cast<PicChunk*>(chunk_ptr.get());
-        float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
-        chunk->set_boundary_end(BoundaryParticle);
-        if (sample_performance) {
-          performance.record_operation(PicPerformance::Operation::ParticleWaitall,
-                                       nix::wall_clock() - operation_begin);
-        }
-      }
+      complete_boundaries_funneled(BoundaryParticle, PicPerformance::Operation::ParticlePoll);
     }
 #pragma omp barrier
 
@@ -703,15 +735,7 @@ void PicApplication::push_openmp_funneled()
 
 #pragma omp master
     {
-      for (auto& chunk_ptr : chunkvec) {
-        auto*   chunk           = static_cast<PicChunk*>(chunk_ptr.get());
-        float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
-        chunk->set_boundary_end(BoundaryEmf);
-        if (sample_performance) {
-          performance.record_operation(PicPerformance::Operation::FieldWaitall,
-                                       nix::wall_clock() - operation_begin);
-        }
-      }
+      complete_boundaries_funneled(BoundaryEmf, PicPerformance::Operation::FieldPoll);
     }
 #pragma omp barrier
 

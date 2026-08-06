@@ -1,120 +1,86 @@
-# MPI Thread-Mode Performance Validation
+# MPI Communication Performance Validation
 
-This document provides the context and procedure for validating PIC-NIX MPI and
-OpenMP performance on systems other than Fugaku.  It is intended to be usable by
-both human researchers and an LLM working from a fresh checkout without access
-to the investigation history.  
+This document defines a portable procedure for validating changes to PIC-NIX
+MPI and OpenMP communication. It is intended for developers and operators
+running on different machines, MPI implementations, and interconnects. The
+procedure separates correctness, portability, and performance so that a faster
+result is not accepted when it changes simulation behavior.
 
-## Scope
+## Validation Goals
 
-The implementation under test is commit `00fcea6` on
-`feature/pic-performance-profiler` (draft PR
-[#50](https://github.com/amanotk/pic-nix/pull/50)).  It provides explicit
-`funneled`, `multiple`, and `auto` MPI thread modes and schema-v2 sampled PIC
-performance records.  
+A communication change should answer the following questions:
 
-The main questions are:  
+1. Does it preserve numerical results, boundary exchange, checkpointing, and
+   restart behavior?
+2. Does it work with the MPI thread levels provided by the target system?
+3. Does it improve typical performance or reduce communication tails without an
+   unacceptable throughput or OpenMP-efficiency regression?
+4. Does it behave consistently as the number of nodes, chunks, and particles
+   increases?
+5. Are results reproducible across repeated runs and distinguishable from
+   system noise?
 
-1. Does FUNNELED execution remove long-tail MPI stalls and final-barrier waits?
-2. What throughput or OpenMP-efficiency cost does bulk-synchronous FUNNELED
-   execution introduce?
-3. Does the system provide a correct and efficient `MPI_THREAD_MULTIPLE`
-   implementation?
-4. Are observed effects specific to Fugaku MPI, or reproducible with other MPI
-   libraries and interconnects?
-5. Do both modes preserve numerical and checkpoint behavior?
+## Implementations To Compare
 
-## Investigation Context
+Use immutable source revisions and record the full commit SHA for every
+executable. For a completion-polling change, compare at least these two
+implementations:
 
-A 1,536-node Fugaku PIC shock run developed severe rank-local timing variability
-near step 41000 even with regular field and particle output disabled.  In the
-controlled schema-v2 run, rank-local push timing had approximately the following
-distribution:  
+| Implementation | Description | Expected profiler schema |
+| --- | --- | ---: |
+| Ordered FUNNELED reference | Completes each local chunk with blocking waits in container order. | 2 |
+| Fair FUNNELED candidate | Polls all incomplete local chunks so a delayed chunk does not prevent progress on later chunks. | 3 |
 
-| Metric | Approximate time |
-| --- | ---: |
-| Median push | 0.45 s |
-| p95 push | 3.28 s |
-| Maximum push | 5.02 s |
-| Median final-barrier wait | 4.57 s |
-| `current_waitall` after slowdown | 3.34 s |
-| `field_begin` after slowdown | 1.65 s |
+The completion strategy is selected by the source revision, not by a runtime
+option. Build the reference and candidate in separate worktrees and build
+directories. Do not rebuild two revisions into the same directory. The test
+coordinator must provide both full SHAs in the campaign record before testing
+starts; stop and request them if either revision is ambiguous.
 
-Healthy current and particle initiation remained below approximately 0.01 s.
-The key amplification mechanism was an application-wide OpenMP critical section
-around MPI calls.  If one worker blocked in an MPI wait, every other worker on
-that rank was prevented from entering MPI, producing an MPI-lock convoy.  
-
-Particle traffic or MPI progress may still be the initiating source of a delayed
-message.  The thread-mode change removes the lock convoy; it does not assume that
-all underlying communication variability disappears.  This distinction is
-important when interpreting results.  
-
-## Implementation Under Test
-
-Set the mode under `[application.option]`:  
+The candidate also supports these runtime modes under `[application.option]`:
 
 ```toml
 [application.option]
 mpi_thread_mode = "funneled" # or "multiple" or "auto"
 ```
 
-The modes behave as follows:  
-
 | Mode | Behavior |
 | --- | --- |
-| `funneled` | OpenMP workers perform packing, computation, and unpacking; OpenMP thread 0 performs MPI in explicit communication phases. |
-| `multiple` | Workers retain dynamic chunk scheduling and may call MPI concurrently. Requires `MPI_THREAD_MULTIPLE`. |
-| `auto` | Selects MULTIPLE when the runtime provides it and otherwise selects FUNNELED. |
+| `funneled` | OpenMP workers perform computation, packing, and unpacking. OpenMP thread 0 performs MPI calls in explicit communication phases. |
+| `multiple` | Workers may call MPI concurrently. This requires `MPI_THREAD_MULTIPLE`. |
+| `auto` | Selects MULTIPLE when the runtime provides it, selects FUNNELED for any other provided level at least as strong as `MPI_THREAD_FUNNELED`, and rejects lower levels. |
 
-An explicit mode controls the level requested from `MPI_Init_thread`.  A forced
-MULTIPLE run aborts during initialization if the runtime does not provide
-`MPI_THREAD_MULTIPLE`.  This is an expected compatibility guard, not a benchmark
-failure.  Fugaku currently rejects forced MULTIPLE and must use FUNNELED.  
+Use explicit modes for performance comparisons. Use `auto` only as a
+portability and mode-selection check.
 
-The `MPI_THREAD_MULTIPLE` CMake option controls the request used by `auto` and is
-`ON` by default.  Record its value from the build's `CMakeCache.txt`; do not
-infer it from the runtime configuration.  
+## Required Test Matrix
 
-## Required Correctness Checks
+Run all applicable cases below. A system without `MPI_THREAD_MULTIPLE` may omit
+the MULTIPLE performance case, but it must run the rejection check.
 
-Performance data is valid only after these checks pass:  
+| Case | Source revision | Build option | Runtime mode | Purpose |
+| --- | --- | --- | --- | --- |
+| A | Ordered reference | `MPI_THREAD_MULTIPLE=OFF` | `funneled` | Establish ordered-completion correctness and performance. |
+| B | Fair-polling candidate | `MPI_THREAD_MULTIPLE=OFF` | `funneled` | Measure the effect of fair completion polling. |
+| C | Fair-polling candidate | `MPI_THREAD_MULTIPLE=ON` | `multiple` | Validate worker-driven MPI on a MULTIPLE-capable system. |
+| D1 | Fair-polling candidate | `MPI_THREAD_MULTIPLE=OFF` | `auto` | Confirm AUTO behavior when the build requests SERIALIZED. |
+| D2 | Fair-polling candidate | `MPI_THREAD_MULTIPLE=ON` | `auto` | Confirm AUTO behavior when the build requests MULTIPLE. |
+| E | Fair-polling candidate | `MPI_THREAD_MULTIPLE=OFF` | forced `multiple` | Confirm clean rejection when MULTIPLE is unavailable. |
 
-1. Build with tests enabled and run the focused application test.
-2. Use at least two OpenMP threads with dynamic team sizing disabled.
-3. Run a portable build with `MPI_THREAD_MULTIPLE=OFF` to cover FUNNELED on
-   systems that provide only SERIALIZED or FUNNELED support.
-4. On systems that provide MULTIPLE, run a second build with
-   `MPI_THREAD_MULTIPLE=ON` and confirm both mode sections pass.
-5. On systems without MULTIPLE, confirm a production executable forced to
-   `mpi_thread_mode = "multiple"` exits nonzero during initialization.
-6. Run a small representative simulation through setup, moment deposition,
-   particle push, field exchange, and finalization.
-7. Verify the final checkpoint status is `complete` and records the expected MPI
-   process count and final step.
-8. Compare physical histories or invariants between modes within an explicitly
-   stated numerical tolerance.
+Cases A and B are the primary comparison for completion polling. Cases B and C
+compare MPI execution modes, not only completion order, and must be reported as
+a separate comparison. Cases D1 and D2 are portability checks and must not be
+combined unless they selected the same effective mode.
 
-Recommended focused test command:  
+Run at least three repetitions of each performance case when allocation cost
+permits. Alternate or randomize case order when system load may vary.
 
-```sh
-export OMP_NUM_THREADS=2
-export OMP_DYNAMIC=FALSE
-ctest --test-dir build-funneled -R test_pic_application --output-on-failure
-# On a MULTIPLE-capable system, repeat with --test-dir build-multiple.
-```
+## Build Requirements
 
-The 8-rank `test_pic_application` path exercises setup exchange, moment exchange,
-particle push, Gauss-law checks, and checkpoint handling.  The test runner itself
-requests the thread level selected at build time.  A build with
-`MPI_THREAD_MULTIPLE=ON` therefore cannot run on an MPI implementation that does
-not provide MULTIPLE; use the portable OFF build there.  
+Use optimized builds representative of production. Start from the general
+instructions in [`DEVELOPMENT.md`](../../DEVELOPMENT.md).
 
-## Build Record
-
-Use optimized builds representative of production.  Start from the general
-instructions in [`DEVELOPMENT.md`](../../DEVELOPMENT.md).  Configure a portable
-FUNNELED test build on every system:  
+Configure a portable build on every system:
 
 ```sh
 cmake -S . -B build-funneled \
@@ -125,8 +91,7 @@ cmake -S . -B build-funneled \
 cmake --build build-funneled --parallel
 ```
 
-If the MPI runtime provides `MPI_THREAD_MULTIPLE`, configure a separate MULTIPLE
-build:  
+On a system that provides `MPI_THREAD_MULTIPLE`, configure a separate build:
 
 ```sh
 cmake -S . -B build-multiple \
@@ -137,133 +102,176 @@ cmake -S . -B build-multiple \
 cmake --build build-multiple --parallel
 ```
 
-Record all of the following before running:  
+The `MPI_THREAD_MULTIPLE` CMake option controls the level requested by the test
+runner and by `auto`. Record its value from `CMakeCache.txt`; do not infer it
+from the runtime configuration.
+
+The commands use `mpicxx` and `mpiexec` as placeholders. Substitute the target
+platform's MPI compiler wrapper and scheduler launcher when they differ.
+
+Keep compiler versions, optimization flags, vectorization settings, optional
+dependencies, and floating-point options identical between matched reference
+and candidate builds.
+
+## Environment Record
+
+Record the following before running tests:
 
 | Category | Required information |
 | --- | --- |
-| Source | Commit SHA, branch, and whether the worktree is dirty |
+| Source | Full commit SHA, branch or tag, and whether the worktree is dirty |
 | Hardware | CPU model, sockets, cores, NUMA layout, memory, and interconnect |
-| Software | Compiler and flags, MPI implementation and version, OpenMP runtime |
-| Build | `CMAKE_BUILD_TYPE`, `MPI_THREAD_MULTIPLE`, vectorization flags, optional dependencies |
-| Launch | Scheduler, MPI ranks, ranks per node, binding/mapping options |
-| OpenMP | `OMP_NUM_THREADS`, `OMP_DYNAMIC`, `OMP_PROC_BIND`, `OMP_PLACES` |
-| Workload | Configuration file, grid, chunks, particles per cell, species, restart step |
-| Diagnostics | Every enabled diagnostic and its interval |
+| Software | Compiler, MPI implementation and version, and OpenMP runtime |
+| Build | Build type, CMake options, compiler flags, and optional dependencies |
+| Launch | Scheduler, node count, rank count, ranks per node, and binding options |
+| OpenMP | `OMP_NUM_THREADS`, `OMP_DYNAMIC`, `OMP_PROC_BIND`, and `OMP_PLACES` |
+| Workload | Configuration, grid, chunks, particles per cell, species, and initial step |
+| Output | Diagnostics, profiler interval, checkpoint settings, and measured steps |
 
-Do not compare executables built with different optimization, vectorization, or
-floating-point settings unless the purpose is specifically to measure those
-differences.  
+Record the MPI thread level requested by the build and provided by the runtime.
+Do not label an `auto` result as FUNNELED or MULTIPLE from its TOML value alone.
 
-## Benchmark Matrix
-
-Use explicit modes for the primary comparison.  `auto` is a portability check,
-not a substitute for identifying which algorithm ran.  
-
-| Case | Source | Build option | Runtime mode | Purpose |
-| --- | --- | --- | --- | --- |
-| A | `00fcea6` or later | Same for all current cases | `funneled` | Measure the portable lock-free funnel path. |
-| B | Same commit as A | Same as A | `multiple` | Measure concurrent MPI when supported. |
-| C | Same commit as A | Same as A | `auto` | Confirm platform selection behavior. |
-| D, optional | `0f8358a` | `MPI_THREAD_MULTIPLE=OFF` | Not available in old code | Reproduce the former SERIALIZED critical-section baseline. |
-| E, optional | `0f8358a` | `MPI_THREAD_MULTIPLE=ON` | Not available in old code | Compare the former worker-driven MULTIPLE path. |
-
-On a MULTIPLE-capable system, use the same `build-multiple` executable for cases
-A, B, and C so build differences cannot affect the mode comparison.  Use
-`build-funneled` for portable FUNNELED testing on a system without MULTIPLE.  
-
-Use separate build directories or Git worktrees for historical baselines.  Do
-not rebuild different commits into the same directory.  
-
-Run at least three repetitions per case when allocation cost permits.  Randomize
-or alternate case order if system load varies over time.  A useful workload has
-multiple chunks per rank, particle crossings between chunks, and enough steps to
-move beyond initialization and warm-up behavior.  
-
-### Establishing the AUTO mode
-
-The current log does not record the MPI-provided thread level or effective AUTO
-mode.  Do not label an AUTO result as FUNNELED or MULTIPLE from the TOML value
-alone.  For a normal executable that initializes MPI itself, query the provided
-level with the same request used by its build:  
+The application does not currently write its effective AUTO mode to the
+performance log. Use a small probe that requests the same build-time level:
 
 ```sh
 mpicxx -O2 -x c++ -o mpi-thread-level - <<'CPP'
 #include <mpi.h>
-#include <cstring>
+
+#include <cstdlib>
 #include <iostream>
 
 int main(int argc, char** argv)
 {
-  const bool build_multiple = argc < 2 || std::strcmp(argv[1], "serialized") != 0;
-  const int requested = build_multiple ? MPI_THREAD_MULTIPLE : MPI_THREAD_SERIALIZED;
+  const bool request_multiple = argc == 2 && std::atoi(argv[1]) != 0;
+  const int requested = request_multiple ? MPI_THREAD_MULTIPLE : MPI_THREAD_SERIALIZED;
   int provided = MPI_THREAD_SINGLE;
   MPI_Init_thread(&argc, &argv, requested, &provided);
+
+  std::cout << "requested=" << requested << " provided=" << provided;
   if (provided >= MPI_THREAD_MULTIPLE) {
-    std::cout << "provided=MPI_THREAD_MULTIPLE effective=multiple\n";
+    std::cout << " effective=multiple\n";
   } else if (provided >= MPI_THREAD_FUNNELED) {
-    std::cout << "provided=" << provided << " effective=funneled\n";
+    std::cout << " effective=funneled\n";
   } else {
-    std::cout << "provided=" << provided << " effective=unsupported\n";
+    std::cout << " effective=unsupported\n";
   }
+
   MPI_Finalize();
 }
 CPP
 
-# Match a build with MPI_THREAD_MULTIPLE=ON.
-mpiexec -n 1 ./mpi-thread-level multiple
-
-# Match a build with MPI_THREAD_MULTIPLE=OFF.
-mpiexec -n 1 ./mpi-thread-level serialized
+# Match MPI_THREAD_MULTIPLE=OFF and MPI_THREAD_MULTIPLE=ON builds, respectively.
+mpiexec -n 1 ./mpi-thread-level 0
+mpiexec -n 1 ./mpi-thread-level 1
 ```
 
-Record both the requested and provided levels.  For primary performance results,
-prefer explicit FUNNELED or MULTIPLE configurations so the executed algorithm is
-unambiguous.  
+Run the probe through the same launcher and software environment as the
+application. Record the numeric requested/provided values and interpreted
+effective mode. The `-x c++ -` compilation syntax is illustrative; use an
+equivalent source file and compiler-wrapper syntax when the platform does not
+accept GCC-style standard-input compilation.
 
-## Concrete Run Procedure
+## Correctness Tests
 
-The repository shock example provides a communication-heavy PIC workload.  Its
-supplied configuration is one-dimensional and exercises communication only in
-the x direction.  Its executable is
-`<build>/pic/example/shock/main.out`, and its starting configuration is
-[`pic/example/shock/config.toml`](../../pic/example/shock/config.toml).  Adapt the
-grid and particle count to the available allocation while retaining multiple
-chunks per rank in active dimensions.  For multidimensional testing, set `Ny`
-and/or `Nz` and the corresponding chunk counts above one, then validate that
-adapted workload separately before using its timing results.  
+Performance results are valid only after all applicable correctness checks pass.
 
-For every mode and repetition:  
+1. Run the focused application test with at least two OpenMP threads and dynamic
+   team sizing disabled:
 
-1. Create a new empty run directory outside the source tree, for example
-   `campaign/<system>/<mode>/run-01/`.
-2. Copy the same validated input configuration into each run directory.
-3. Use a unique `basedir = "data"` inside each run directory; never share a data
-   directory, log, or output checkpoint between cases.
-4. Set only the intended `mpi_thread_mode` difference between matched cases.
-5. For runs initialized independently, set `seed_type = "fixed"` under
-   `[application.option]`.  The default is random and will not reproduce the
-   same particles from identical TOML files.  An immutable common checkpoint is
-   the preferred alternative for restart comparisons.
-6. Add the performance configuration shown below.
-7. Remove the `field` and `particle` diagnostic blocks from the copied shock
-   configuration, or set their `begin` values beyond the final measured step.
-   Retain `history` and `resource` only if their intervals are identical across
-   cases.
-8. Start every matched run from the same initial condition or immutable input
-   checkpoint.  Write each output checkpoint to its own run directory.
-9. Launch from the run directory and preserve scheduler stdout/stderr with the
-   MessagePack log.
+   ```sh
+   export OMP_NUM_THREADS=2
+   export OMP_DYNAMIC=FALSE
+   ctest --test-dir build-funneled \
+     -R test_pic_application --output-on-failure
+   ```
 
-Example launch from one isolated run directory:  
+2. Run the boundary and profiler tests under multiple MPI ranks. Include at
+   least 2 and 8 ranks when the system permits.
+3. On a MULTIPLE-capable system, repeat the application and profiler tests with
+   the MULTIPLE build.
+4. Run a representative simulation through setup, moment deposition, particle
+   exchange, field exchange, diagnostics, and finalization.
+5. Verify that the final checkpoint status is `complete` and contains the
+   expected MPI process count, final step, and physical time.
+6. Restart from the checkpoint and advance at least one additional step.
+7. Compare physical histories, conserved quantities, particle counts, and
+   Gauss-law error between matched cases. Define numerical tolerances before
+   examining results and report them with the comparison.
+8. On a system without MULTIPLE, force `mpi_thread_mode = "multiple"` and verify
+   that initialization exits nonzero with the expected compatibility error.
+
+The 8-rank `test_pic_application` path exercises setup exchange, moment
+exchange, particle push, Gauss-law checks, and checkpoint handling. It does not
+replace a representative application run with the target compiler, MPI library,
+binding, and workload.
+
+## Workload Design
+
+Use a workload with all of these properties:
+
+- More than one chunk per MPI rank.
+- Particle crossings between chunks.
+- Communication in every dimension used by the intended production workload.
+- Enough particles per rank to represent production compute and message sizes.
+- Enough steps to separate initialization and warm-up from steady operation.
+- At least one load-balancing event if dynamic load balancing is used in
+  production.
+
+The shock example at `pic/example/shock/` is a convenient starting point. Its
+default configuration is one-dimensional, so increase `Ny`, `Nz`, `Cy`, and
+`Cz` when multidimensional communication is part of the target workload.
+Validate any adapted configuration before using its timing results.
+
+Use at least three scales when practical:
+
+| Scale | Purpose |
+| --- | --- |
+| Functional | Fast correctness, checkpoint, and profiler-schema validation |
+| Intermediate | Inter-node communication and repeated-run comparison |
+| Representative | Production-like chunks, particles, topology, and node count |
+
+For weak scaling, keep cells, chunks, and particles per rank approximately
+constant. For strong scaling, keep the global problem fixed and report the
+changing work per rank. State explicitly which scaling method is used.
+
+## Controlled Run Procedure
+
+For every mode and repetition:
+
+1. Create a new empty run directory outside the source tree.
+2. Copy the same validated input configuration into every matched directory.
+3. Use a unique output directory for every run. Never share logs or checkpoints
+   between cases.
+4. Set only the intended source revision or `mpi_thread_mode` difference.
+5. Use `seed_type = "fixed"` for independently initialized comparisons, or start
+   every case from the same immutable checkpoint.
+6. Use identical rank placement, OpenMP affinity, rebalance settings, profiler
+   settings, diagnostics, wall-clock limit, and final physical time.
+7. Disable large field and particle output during the measured interval unless
+   I/O is the subject of the test.
+8. Preserve the configuration, executable SHA, scheduler script, stdout,
+   stderr, MessagePack log, and checkpoint status.
+
+Example OpenMP controls:
 
 ```sh
 export OMP_NUM_THREADS=6
 export OMP_DYNAMIC=FALSE
 export OMP_PROC_BIND=close
 export OMP_PLACES=cores
+```
 
+Use the site's recommended MPI binding and verify actual placement instead of
+assuming launcher defaults. Replace `mpiexec` in the examples with the site's
+scheduler launcher when required.
+
+Example launch:
+
+```sh
 RANKS=8
-EXE=/absolute/path/to/build-funneled/pic/example/shock/main.out
+EXE=/absolute/path/to/build/pic/example/shock/main.out
+
 mpiexec -n "$RANKS" "$EXE" \
   -c config.toml \
   -t 50 \
@@ -271,60 +279,13 @@ mpiexec -n "$RANKS" "$EXE" \
   -s final
 ```
 
-Here `-t` is maximum physical time and `-e` is maximum elapsed seconds.  Treat
-`-e` only as a safety margin and set it high enough for every mode to reach the
-same `-t`.  Reject or rerun a case that ends at a different final step or
-physical time, even if it writes a complete checkpoint.  For a restart
-comparison, add `-l /absolute/path/to/immutable/input-checkpoint` and use a unique
-`-s` output prefix.  The example value `-t 50` is illustrative; choose a duration
-that includes warm-up followed by a sufficiently long common measurement
-window.  
-
-On a system expected not to provide MULTIPLE, copy the validated configuration
-to an isolated directory, set `mpi_thread_mode = "multiple"`, and run a minimal
-launch.  A nonzero exit with
-`` `mpi_thread_mode = multiple` requires MPI_THREAD_MULTIPLE `` is the expected guard
-result:  
-
-```sh
-mpiexec -n 1 /absolute/path/to/build-funneled/pic/example/shock/main.out \
-  -c config-multiple.toml -t 0 -e 60
-test "$?" -ne 0
-```
-
-## Runtime Controls
-
-Keep these controls identical across compared cases:  
-
-- MPI rank count and rank placement.
-- OpenMP thread count, affinity, and dynamic-team setting.
-- Grid and chunk decomposition.
-- Particle count and random seed.
-- Restart checkpoint or initial condition.
-- Rebalance configuration.
-- Diagnostic and profiler intervals.
-- Requested wall-clock and physical-time limits.
-
-Disable large field and particle output during the measured interval unless I/O
-is itself under investigation.  Retain only the lightweight diagnostics needed
-to validate physics and load balance.  
-
-Pin OpenMP behavior explicitly.  Site-specific values may differ, but record
-them verbatim:  
-
-```sh
-export OMP_NUM_THREADS=6
-export OMP_DYNAMIC=FALSE
-export OMP_PROC_BIND=close
-export OMP_PLACES=cores
-```
-
-Use the site's recommended MPI process and thread binding.  Verify the actual
-placement rather than assuming launcher defaults.  
+Here `-t` is the maximum physical time and `-e` is an elapsed-time safety limit.
+Every matched case must reach the same final step and physical time. Reject or
+rerun a truncated case even if it writes a complete checkpoint.
 
 ## Profiler Configuration
 
-Enable sampled schema-v2 profiling under `[application.performance]`:  
+Enable sampled profiling in every performance run:
 
 ```toml
 [application.performance]
@@ -333,32 +294,66 @@ interval = 100
 offset = 0
 ```
 
-Sampling every step is useful for small validation runs.  For production runs,
-an interval such as 100 limits profiler and log overhead while retaining trend
-information.  Use the same interval and offset in compared cases.  
+Sampling every step is useful for short validation runs. A larger interval
+reduces overhead in long runs. Use the same interval and offset for every
+matched case.
 
-The profiler records:  
+The profiler records:
 
-- Rank-local push time and final `MPI_Barrier` wait.
-- Phase wall time, OpenMP efficiency, and maximum chunk time for `advance`,
-  `current_field`, `particle_probe`, `particle_exchange`, and `field_exchange`.
-- MPI-operation timing for `current_begin`, `particle_begin`,
-  `current_waitall`, `field_begin`, `particle_probe`, `particle_waitall`, and
-  `field_waitall`.
-- Across-rank summary statistics including mean, median, p95, maximum, and the
-  rank owning the maximum.
+- Rank-local push time and final-barrier wait.
+- Phase wall time, OpenMP efficiency, and maximum chunk time.
+- MPI initiation, probe, wait, and polling operation timings.
+- Across-rank mean, median, p95, maximum, and rank owning the maximum.
 
-FUNNELED operation totals are recorded on the master thread, whereas MULTIPLE
-operation work is distributed among workers.  Compare total push, barrier, and
-phase wall time directly.  Interpret operation `thread_max` and OpenMP
-efficiency together with the execution mode rather than assuming identical
-thread-level distributions.  
+Schema 2 records blocking completion under `current_waitall`,
+`particle_waitall`, and `field_waitall`. Schema 3 adds `current_poll`,
+`particle_poll`, and `field_poll` for fair FUNNELED completion.
 
-## Analysis Commands
+Use the analyzer from the candidate revision for both schema-2 and schema-3
+logs. It supports both formats. Treat operations that are inactive for an
+implementation as `N/A`; do not compare their emitted zero values as timings.
 
-Install the Python package as described in
-[`DEVELOPMENT.md`](../../DEVELOPMENT.md#python-analysis-package-picnix), then
-analyze the MessagePack log:  
+## Required Performance Measurements
+
+Report temporal median, p95, and maximum over a common steady-state step range.
+Do not report only whole-run averages.
+
+### Overall
+
+- Rank-local push time.
+- Final-barrier wait and its fraction of total push time.
+- Steps per second or particle updates per second.
+- Run-to-run variation.
+
+### OpenMP
+
+- Phase wall time and OpenMP efficiency.
+- Maximum chunk time.
+- Worker idle time or CPU utilization when system tools provide it.
+- Time spent at internal FUNNELED phase barriers when an external OpenMP
+  profiler or an instrumented build can measure it. The built-in profiler does
+  not record these internal barriers separately.
+
+### MPI
+
+- Current, particle, and field completion phase wall time.
+- Blocking wait tails for the ordered implementation.
+- Polling phase and individual-call tails for the fair implementation.
+- Particle-probe duration.
+- MPI initiation time; inflation here can indicate MPI thread contention.
+- Rank owning each maximum and whether slow ranks recur.
+- Message rate, progress-engine behavior, and network counters when available.
+
+### Load And Physics
+
+- Chunk, cell, and particle distribution across ranks.
+- Rebalance events near timing discontinuities.
+- Conserved quantities, history diagnostics, and Gauss-law error.
+- Checkpoint completeness and restart success.
+
+## Analysis Procedure
+
+Generate a per-step CSV and preserve the original MessagePack log:
 
 ```sh
 .venv/bin/picnix-log-analyze /path/to/run/data/log.msgpack \
@@ -367,147 +362,198 @@ analyze the MessagePack log:
   --no-progress
 ```
 
-The analyzer accepts either `log.msgpack` or a profile path from which the log
-can be resolved.  Preserve the original MessagePack logs; CSV and plots are
-derived artifacts.  
+Use the same inclusive step range for all matched cases. Exclude initialization,
+checkpoint, and diagnostic steps unless they are being measured.
 
-Use matched step ranges for comparisons.  Exclude startup, checkpoint, and
-diagnostic steps unless they are the subject of the test.  Report at least the
-median, p95, and maximum, because the original issue was dominated by tail
-latency rather than mean compute growth.  
+The analyzer's text report includes averages across sampled records. Calculate
+temporal statistics from the CSV rather than copying an `avg` column from the
+text report. Set an inclusive step range and list any diagnostic, checkpoint, or
+rebalance steps that must be excluded. This standard-library example prints the
+temporal median, p95, and maximum for selected metrics:
 
-## What To Analyze
+```sh
+export START_STEP=100
+export END_STEP=1000
+export EXCLUDE_STEPS=200,400
 
-### Overall behavior
+python - timing.csv <<'PY'
+import csv
+import math
+import os
+import statistics
+import sys
 
-- Median, p95, and maximum rank-local push time.
-- Final-barrier wait.  If a scalar fraction is needed, compute
-  `barrier.mean / (local.mean + barrier.mean)` for each sampled step and report
-  its temporal distribution as a ratio of rank means.  Do not divide unrelated
-  medians or p95 values.
-- Steps per second or particle updates per second.
-- Run-to-run variability.
+metrics = (
+    "performance.push.local.median",
+    "performance.push.local.p95",
+    "performance.push.local.max",
+    "performance.push.barrier.median",
+    "performance.phase.current_field.wall.p95",
+    "performance.phase.particle_exchange.wall.p95",
+    "performance.phase.field_exchange.wall.p95",
+)
 
-### OpenMP behavior
+with open(sys.argv[1], newline="", encoding="utf-8") as stream:
+    rows = list(csv.DictReader(stream))
 
-- Phase wall time and `omp_efficiency`.
-- Maximum chunk time and whether it grows with the slow-rank tail.
-- CPU utilization and idle time if system profilers are available.
-- Whether FUNNELED barriers create unacceptable worker idle time.
+start = int(os.environ["START_STEP"])
+end = int(os.environ["END_STEP"])
+excluded = {
+    int(value)
+    for value in os.environ.get("EXCLUDE_STEPS", "").split(",")
+    if value.strip()
+}
+rows = [
+    row
+    for row in rows
+    if row.get("step") and start <= int(row["step"]) <= end and int(row["step"]) not in excluded
+]
 
-### MPI behavior
+if len(rows) >= 2 and not excluded:
+    first = rows[0]
+    last = rows[-1]
+    elapsed = float(last["timestamp_unixtime"]) - float(first["timestamp_unixtime"])
+    advanced_steps = int(last["step"]) - int(first["step"])
+    print(f"steps_per_second={advanced_steps / elapsed:.9g}")
+elif excluded:
+    print("steps_per_second=N/A: select a contiguous interval without exclusions")
 
-- `current_waitall`, `particle_waitall`, and `field_waitall` tails.
-- `field_begin` inflation, which was a signature of the former lock convoy.
-- Particle-probe duration and evidence of head-of-line blocking.
-- Rank owning each maximum and whether the same ranks recur.
-- MPI progress, message rate, and network counters when site tools expose them.
+def percentile(values, fraction):
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * fraction
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
 
-Schema-v2 operation entries contain `total`, `thread_max`, and `max_call`, and
-each is summarized across ranks for every sampled step.  Always name the full
-metric path and the temporal aggregation.  For example:  
-
-```text
-median over sampled steps of
-performance.operation.current_waitall.max_call.p95
+for metric in metrics:
+    values = [float(row[metric]) for row in rows if row.get(metric)]
+    if values:
+        print(
+            f"{metric}: median={statistics.median(values):.9g} "
+            f"p95={percentile(values, 0.95):.9g} max={max(values):.9g}"
+        )
+PY
 ```
 
-Here the inner `p95` is across ranks at one sampled step; the outer median is
-across sampled steps.  Do not interpret operation `total` as elapsed wall time
-when comparing FUNNELED and MULTIPLE: MULTIPLE totals may sum overlapping worker
-calls.  Use push and phase wall metrics for elapsed-time comparisons, and use
-`max_call` to study operation tails.  
+Add schema-specific wait or poll metric paths to `metrics` as needed. Record the
+step filter and exact aggregation for every reported value.
 
-### Load and physics behavior
+End-to-end steps per second requires a contiguous interval with no excluded
+intermediate steps. Choose a clean contiguous interval for throughput, or report
+throughput as `N/A`; do not subtract selected steps while retaining their wall
+time between the endpoints.
 
-- Chunk and particle load distribution at matched steps.
-- Rebalance events near timing discontinuities.
-- Conserved quantities, history diagnostics, and Gauss-law error.
-- Checkpoint completeness and restart success.
+An operation path contains two levels of aggregation. For example,
+`performance.operation.current_poll.max_call.p95` is the p95 across ranks at
+one sampled step. Taking its median across CSV rows produces the temporal median
+of that per-step rank p95.
 
-## Interpretation Guide
+Operation `total` is accumulated time inside MPI calls. It is not necessarily
+elapsed wall time when calls overlap across MULTIPLE worker threads. Use push
+and phase wall metrics for elapsed-time comparisons; use `max_call` and `total`
+to investigate operation behavior.
 
-| Observation | Likely interpretation |
+## Interpretation Rules
+
+| Observation | Interpretation to investigate |
 | --- | --- |
-| FUNNELED sharply reduces p95/max push and barrier wait | The former critical-section convoy was a major amplifier. |
-| FUNNELED removes `field_begin` inflation but waits remain | The lock convoy is fixed, but delayed messages or MPI progress remain. |
-| MULTIPLE is faster with stable tails | The platform has useful `MPI_THREAD_MULTIPLE` support. |
-| MULTIPLE has worse tails or CPU overhead | The MPI implementation's thread synchronization or progress path is expensive. |
-| FUNNELED has low phase efficiency but stable MPI | Bulk synchronization is correct but may need overlap or task-based optimization. |
-| Both modes slow at the same steps | Investigate particle traffic, load migration, topology, or network behavior beyond the removed lock. |
-| Barrier wait grows while one rank's push grows | Barrier time is primarily a symptom of rank imbalance, not an independent root cause. |
+| Fair polling reduces completion p95/max and barrier wait | Ordered completion was causing head-of-line blocking or insufficient progress. |
+| Fair polling changes poll-call timing but not phase wall time | Polling order changed without improving end-to-end completion. |
+| Fair polling increases CPU use or phase wall time | Polling overhead may exceed its progress benefit for this workload. |
+| MULTIPLE is faster with stable tails | The MPI implementation provides effective concurrent progress. |
+| MULTIPLE has worse tails or CPU overhead | MPI thread synchronization may be expensive on this platform. |
+| All implementations slow at the same steps | Investigate load migration, particle traffic, topology, or network behavior. |
+| Barrier wait grows with one rank's push time | The barrier is exposing rank imbalance rather than causing it. |
 
-Do not claim that an MPI operation caused a slowdown solely because its wait time
-is large.  A wait may reveal that the matching sender or progress engine was
-delayed elsewhere.  Correlate operation timing with rank ownership, phase time,
-chunk load, and network data.  
+A long MPI wait does not prove that MPI caused the delay. The matching sender,
+load imbalance, process scheduling, or the progress engine may be responsible.
+Correlate operation timing with phase wall time, slow-rank identity, load, and
+system counters.
+
+## Acceptance Criteria
+
+Define project-specific performance thresholds before examining candidate
+results. At minimum, a candidate is acceptable only when:
+
+- All required correctness tests pass.
+- Checkpoint and restart behavior are valid.
+- Physics and invariant differences remain within the predefined tolerances.
+- No deadlock, timeout, MPI error, or unbounded memory growth occurs.
+- The candidate does not introduce an unexplained regression in median
+  throughput, tail latency, or OpenMP efficiency.
+- Results are consistent across repetitions and at more than one scale.
+- Any unsupported MPI thread mode fails clearly rather than silently selecting
+  unsafe behavior.
+
+A candidate that passes functional testing but lacks inter-node or
+representative-scale evidence should remain experimental.
 
 ## Result Template
 
-Create one result record per system and test campaign:  
-
 ```markdown
-# MPI Thread-Mode Results: <system>
+# MPI Communication Results: <system>
 
 ## Environment
-- Commit:
-- Dirty worktree:
-- CPU/node:
-- Interconnect:
-- Compiler:
+- Reference commit:
+- Candidate commit:
+- Dirty worktrees:
+- CPU/node and interconnect:
+- Compiler and flags:
 - MPI implementation/version:
 - MPI thread level requested/provided:
-- Requested/effective application mode:
-- CMake `MPI_THREAD_MULTIPLE`:
-- Ranks/nodes/ranks per node:
+- CMake options:
+- Nodes/ranks/ranks per node:
 - OpenMP environment and binding:
 
 ## Workload
-- Configuration:
-- Initial or restart step:
+- Configuration and checksum:
+- Initial condition or checkpoint:
 - Grid/chunks/particles:
-- Measured step range:
+- Scaling method:
+- Warm-up and measured step ranges:
 - Repetitions:
-- Enabled diagnostics:
-- Profiler interval/offset:
+- Diagnostics and profiler interval:
 
 ## Correctness
 - Focused tests:
-- Checkpoint status:
+- Final checkpoint status:
 - Restart result:
-- Physics/invariant comparison and tolerance:
+- Physics/invariant tolerance and result:
 
 ## Performance
-| Metric | FUNNELED | MULTIPLE | AUTO | Historical baseline |
-| --- | ---: | ---: | ---: | ---: |
-| Temporal median of `performance.push.local.median` | | | | |
-| Temporal median of `performance.push.local.p95` | | | | |
-| Temporal maximum of `performance.push.local.max` | | | | |
-| Temporal median of `performance.push.barrier.median` | | | | |
-| Temporal median of `performance.operation.current_waitall.max_call.p95` | | | | |
-| Temporal median of `performance.operation.field_begin.max_call.p95` | | | | |
-| Temporal median of `performance.operation.particle_probe.max_call.p95` | | | | |
+| Metric | Ordered FUNNELED | Fair FUNNELED | MULTIPLE | AUTO/OFF | AUTO/ON |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `median(performance.push.local.median)` | | | | | |
+| `median(performance.push.local.p95)` | | | | | |
+| `max(performance.push.local.max)` | | | | | |
+| `median(performance.push.barrier.median)` | | | | | |
+| `median(performance.phase.current_field.wall.p95)` | | | | | |
+| `median(performance.phase.particle_exchange.wall.p95)` | | | | | |
+| `median(performance.phase.field_exchange.wall.p95)` | | | | | |
+| `median(performance.phase.current_field.omp_efficiency.median)` | | | | | |
+| `median(performance.phase.particle_exchange.omp_efficiency.median)` | | | | | |
+| `median(performance.phase.field_exchange.omp_efficiency.median)` | | | | | |
+| `median(performance.operation.current_waitall.max_call.p95)` | | N/A | | | |
+| `median(performance.operation.particle_waitall.max_call.p95)` | | N/A | | | |
+| `median(performance.operation.field_waitall.max_call.p95)` | | N/A | | | |
+| `median(performance.operation.current_poll.max_call.p95)` | N/A | | N/A | | |
+| `median(performance.operation.particle_poll.max_call.p95)` | N/A | | N/A | | |
+| `median(performance.operation.field_poll.max_call.p95)` | N/A | | N/A | | |
+| `(last_step - first_step) / (last_timestamp - first_timestamp)` over a contiguous interval | | | | | |
 
 ## Findings
 -
 
 ## Raw Artifacts
-- Log:
-- CSV:
-- Plot:
-- Scheduler output:
+- Configuration:
+- MessagePack log:
+- CSV and plot:
+- Scheduler stdout/stderr:
+- Checkpoint status:
 ```
 
-## Current Fugaku Status
-
-The small Fugaku FUNNELED validation completed five steps using 8 MPI ranks and
-2 OpenMP threads, produced schema-v2 operation records, and wrote a complete
-checkpoint.  Mean push time was approximately 31 ms for that functional case.
-A forced MULTIPLE validation was rejected by the runtime guard because Fugaku
-does not provide `MPI_THREAD_MULTIPLE`.  
-
-The 1,536-node FUNNELED production validation is job `49998836`.  It restarts
-from step 38479 with regular field and particle output disabled in the measured
-window.  Its results are pending and should be compared with the archived
-schema-v1 job `49961148` and controlled schema-v2 job `49969653`.  Job identifiers
-and absolute run paths are site-local context, not portable benchmark inputs.  
+For AUTO, fill wait or poll rows according to its recorded effective mode and
+source implementation. Mark inactive operations `N/A` rather than zero.
