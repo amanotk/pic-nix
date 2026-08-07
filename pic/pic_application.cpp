@@ -1,9 +1,11 @@
 // -*- C++ -*-
 #include "pic_application.hpp"
+
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
 #include "pic_poisson.hpp"
 #include "pic_poisson_factory.hpp"
+#include <malloc.h>
 
 #include "diag/field.hpp"
 #include "diag/history.hpp"
@@ -39,6 +41,14 @@ void PicApplicationInterface::calculate_moment()
 PicApplication::PicApplication(int argc, char** argv, PtrInterface interface)
     : base_type(argc, argv, interface), Ns(1), momstep(-1)
 {
+  // Force the glibc allocator to use mmap for large allocations (particle
+  // arrays) so that freed buffers are returned to the OS instead of being
+  // retained in the heap arena. glibc's adaptive mmap threshold otherwise
+  // rises after repeated large alloc/free cycles (e.g. particle array
+  // resizes and chunk rebalancing), keeping the peak allocation resident.
+#if defined(__GLIBC__)
+  mallopt(M_MMAP_THRESHOLD, 1024 * 1024);
+#endif
 }
 
 int PicApplication::get_num_species() const

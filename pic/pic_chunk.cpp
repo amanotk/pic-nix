@@ -269,9 +269,8 @@ void PicChunk::setup(json& config)
 
   // misc
   {
-    option["friedman"]     = opt.value("friedman", 0.0);
-    option["cell_load"]    = opt.value("cell_load", 1.0);
-    option["buffer_ratio"] = opt.value("buffer_ratio", 0.2);
+    option["friedman"]  = opt.value("friedman", 0.0);
+    option["cell_load"] = opt.value("cell_load", 1.0);
   }
 }
 

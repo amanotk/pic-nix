@@ -236,12 +236,6 @@ public:
     return mpibufvec[mode];
   }
 
-  /// @brief get buffer ratio (relative to the required size)
-  float64 get_buffer_ratio()
-  {
-    return option.value("buffer_ratio", 0.2);
-  }
-
   /// @brief set boundary margin
   void set_boundary_margin(int margin)
   {
