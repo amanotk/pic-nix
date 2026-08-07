@@ -26,7 +26,8 @@ PicChunk::PicChunk(nix::Dims3D dims, nix::Bool3D has_dim, int id)
   // initialize MPI buffer
   mpibufvec.resize(NumBoundaryMode);
   for (int i = 0; i < NumBoundaryMode; i++) {
-    mpibufvec[i] = std::make_shared<MpiBuffer>();
+    mpibufvec[i]       = std::make_shared<MpiBuffer>();
+    mpibufvec[i]->mode = i;
   }
 
   // reset load

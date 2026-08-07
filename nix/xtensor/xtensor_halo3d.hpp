@@ -305,10 +305,10 @@ public:
     // allocate buffer
     //
     {
-      int bufsize = 0;
+      int total_bytes = 0;
 
-      mpibuf->bufsize.fill(0);
-      mpibuf->bufaddr.fill(0);
+      mpibuf->send_size.fill(0);
+      mpibuf->send_addr.fill(0);
 
       for (int iz = indexlb[0]; iz <= indexub[0]; iz++) {
         for (int iy = indexlb[1]; iy <= indexub[1]; iy++) {
@@ -317,14 +317,14 @@ public:
             if (iz == 1 && iy == 1 && ix == 1)
               continue;
 
-            mpibuf->bufsize(iz, iy, ix) = elem_byte * send_count(Ns, iz, iy, ix) + head_byte * Ns;
-            mpibuf->bufaddr(iz, iy, ix) = bufsize;
-            bufsize += mpibuf->bufsize(iz, iy, ix);
+            mpibuf->send_size(iz, iy, ix) = elem_byte * send_count(Ns, iz, iy, ix) + head_byte * Ns;
+            mpibuf->send_addr(iz, iy, ix) = total_bytes;
+            total_bytes += mpibuf->send_size(iz, iy, ix);
           }
         }
       }
 
-      mpibuf->sendbuf.resize(bufsize);
+      mpibuf->sendbuf.resize(total_bytes);
     }
 
     //
@@ -338,7 +338,7 @@ public:
             if (iz == 1 && iy == 1 && ix == 1)
               continue;
 
-            int addr = mpibuf->bufaddr(iz, iy, ix);
+            int addr = mpibuf->send_addr(iz, iy, ix);
             for (int is = 0; is < Ns; is++) {
               std::memcpy(mpibuf->sendbuf.get(addr), &send_count(is, iz, iy, ix), head_byte);
               addr += head_byte + elem_byte * send_count(is, iz, iy, ix);
@@ -352,7 +352,7 @@ public:
     // pack out-of-bounds particles
     //
     {
-      auto addr = mpibuf->bufaddr;
+      auto addr = mpibuf->send_addr;
 
       for (int is = 0; is < Ns; is++) {
         // skip header
@@ -449,7 +449,7 @@ public:
             continue;
 
           int rcnt = 0;
-          int addr = mpibuf->bufaddr(iz, iy, ix);
+          int addr = mpibuf->recv_addr(iz, iy, ix);
           for (int is = 0; is < Ns; is++) {
             std::memcpy(&rcnt, mpibuf->recvbuf.get(addr), head_byte);
             addr += head_byte + elem_byte * rcnt;
@@ -494,8 +494,8 @@ public:
     //
     // copy to the end of particle array
     //
-    uint8_t* recvptr = mpibuf->recvbuf.get(mpibuf->bufaddr(iz, iy, ix));
-    int      recvcnt = mpibuf->bufsize(iz, iy, ix);
+    uint8_t* recvptr = mpibuf->recvbuf.get(mpibuf->recv_addr(iz, iy, ix));
+    int      recvcnt = mpibuf->recv_size(iz, iy, ix);
 
     // check message size
     if (recvcnt < Ns * head_byte) {

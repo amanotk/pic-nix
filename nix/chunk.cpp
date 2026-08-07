@@ -105,8 +105,9 @@ int Chunk::unpack(void* buffer, int address)
     mpibufvec.resize(nmode);
 
     for (int mode = 0; mode < nmode; mode++) {
-      mpibufvec[mode] = std::make_shared<MpiBuffer>();
-      address         = mpibufvec[mode]->unpack(buffer, address);
+      mpibufvec[mode]       = std::make_shared<MpiBuffer>();
+      mpibufvec[mode]->mode = mode;
+      address               = mpibufvec[mode]->unpack(buffer, address);
     }
   }
 
@@ -262,16 +263,20 @@ void Chunk::set_mpi_buffer(MpiBufferPtr mpibuf, int mode, int headbyte, int elem
     for (int iy = 0; iy <= 2; iy++) {
       for (int ix = 0; ix <= 2; ix++) {
         if (iz == 1 && iy == 1 && ix == 1) {
-          mpibuf->bufsize(iz, iy, ix) = 0;
-          mpibuf->bufaddr(iz, iy, ix) = size;
+          mpibuf->send_size(iz, iy, ix) = 0;
+          mpibuf->send_addr(iz, iy, ix) = size;
+          mpibuf->recv_size(iz, iy, ix) = 0;
+          mpibuf->recv_addr(iz, iy, ix) = size;
         } else {
           int nz = recvub[0][iz] - recvlb[0][iz] + 1;
           int ny = recvub[1][iy] - recvlb[1][iy] + 1;
           int nx = recvub[2][ix] - recvlb[2][ix] + 1;
 
-          mpibuf->bufsize(iz, iy, ix) = headbyte + elembyte * nz * ny * nx;
-          mpibuf->bufaddr(iz, iy, ix) = size;
-          size += mpibuf->bufsize(iz, iy, ix);
+          mpibuf->send_size(iz, iy, ix) = headbyte + elembyte * nz * ny * nx;
+          mpibuf->send_addr(iz, iy, ix) = size;
+          mpibuf->recv_size(iz, iy, ix) = headbyte + elembyte * nz * ny * nx;
+          mpibuf->recv_addr(iz, iy, ix) = size;
+          size += mpibuf->send_size(iz, iy, ix);
         }
       }
     }
@@ -310,14 +315,13 @@ int Chunk::set_boundary_query(int mode, int sendrecv)
 
 int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
 {
-
   if (mpibuf->recvwait == true)
     return 1;
 
   bool is_everyone_ready = true;
 
-  mpibuf->bufsize.fill(0);
-  mpibuf->bufaddr.fill(0);
+  mpibuf->recv_size.fill(0);
+  mpibuf->recv_addr.fill(0);
 
   for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
     for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
@@ -325,6 +329,18 @@ int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
 
         if (iz == 1 && iy == 1 && ix == 1)
           continue;
+
+        if (get_nb_chunk(dirz, diry, dirx) != nullptr) {
+          // same-rank neighbor: the size is the sender's send-side size
+          // (stable; the send-side layout is never re-laid out). Data is
+          // ready; the transfer itself happens in end().
+          int  iz2      = 2 - iz;
+          int  iy2      = 2 - iy;
+          int  ix2      = 2 - ix;
+          auto nbmpibuf = get_nb_chunk(dirz, diry, dirx)->get_mpi_buffer(mpibuf->mode);
+          mpibuf->recv_size(iz, iy, ix) = nbmpibuf->send_size(iz2, iy2, ix2);
+          continue;
+        }
 
         MPI_Status status;
         int        is_ready = 0;
@@ -341,7 +357,7 @@ int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
           int typebyte = 0;
           MPI_Get_count(&status, recvtype, &count);
           MPI_Type_size(recvtype, &typebyte);
-          mpibuf->bufsize(iz, iy, ix) = count * typebyte;
+          mpibuf->recv_size(iz, iy, ix) = count * typebyte;
         } else {
 
           is_everyone_ready = false;
@@ -354,18 +370,18 @@ int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
     return 0;
 
   {
-    int bufsize = 0;
+    int total_bytes = 0;
 
     for (int iz = indexlb[0]; iz <= indexub[0]; iz++) {
       for (int iy = indexlb[1]; iy <= indexub[1]; iy++) {
         for (int ix = indexlb[2]; ix <= indexub[2]; ix++) {
-          mpibuf->recvreq(iz, iy, ix) = MPI_REQUEST_NULL;
-          mpibuf->bufaddr(iz, iy, ix) = bufsize;
-          bufsize += mpibuf->bufsize(iz, iy, ix);
+          mpibuf->recvreq(iz, iy, ix)   = MPI_REQUEST_NULL;
+          mpibuf->recv_addr(iz, iy, ix) = total_bytes;
+          total_bytes += mpibuf->recv_size(iz, iy, ix);
         }
       }
     }
-    mpibuf->recvbuf.resize(bufsize);
+    mpibuf->recvbuf.resize(total_bytes);
 
     for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
       for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
@@ -374,13 +390,18 @@ int Chunk::probe_bc_exchange(MpiBufferPtr mpibuf)
           if (iz == 1 && iy == 1 && ix == 1)
             continue;
 
+          if (get_nb_chunk(dirz, diry, dirx) != nullptr) {
+            // same-rank neighbor: no Irecv; end() performs the copy.
+            continue;
+          }
+
           auto& recvcomm = mpibuf->comm(1 - dirz, 1 - diry, 1 - dirx);
           auto& recvtype = mpibuf->recvtype(iz, iy, ix);
           auto& recvreq  = mpibuf->recvreq(iz, iy, ix);
           int   nbrank   = get_nb_rank(dirz, diry, dirx);
           int   recvtag  = get_rcvtag(dirz, diry, dirx);
           void* recvptr  = mpibuf->get_recv_buffer(iz, iy, ix);
-          int   recvcnt  = mpibuf->bufsize(iz, iy, ix);
+          int   recvcnt  = mpibuf->recv_size(iz, iy, ix);
 
           MPI_Irecv(recvptr, recvcnt, recvtype, nbrank, recvtag, recvcomm, &recvreq);
         }
@@ -404,8 +425,10 @@ int64_t Chunk::MpiBuffer::get_size_byte() const
   size += sizeof(recvwait);
   size += sendbuf.size;
   size += recvbuf.size;
-  size += bufsize.size() * sizeof(int);
-  size += bufaddr.size() * sizeof(int);
+  size += send_size.size() * sizeof(int);
+  size += send_addr.size() * sizeof(int);
+  size += recv_size.size() * sizeof(int);
+  size += recv_addr.size() * sizeof(int);
   size += comm.size() * sizeof(MPI_Comm);
   size += sendreq.size() * sizeof(MPI_Request);
   size += recvreq.size() * sizeof(MPI_Request);
@@ -418,14 +441,16 @@ int Chunk::MpiBuffer::pack(void* buffer, int address)
 {
   int ssize = sendbuf.size;
   int rsize = recvbuf.size;
-  int asize = bufsize.size() * sizeof(int);
+  int asize = send_size.size() * sizeof(int);
 
   address += memcpy_count(buffer, &sendwait, sizeof(bool), address, 0);
   address += memcpy_count(buffer, &recvwait, sizeof(bool), address, 0);
   address += memcpy_count(buffer, &ssize, sizeof(int), address, 0);
   address += memcpy_count(buffer, &rsize, sizeof(int), address, 0);
-  address += memcpy_count(buffer, bufsize.data(), asize, address, 0);
-  address += memcpy_count(buffer, bufaddr.data(), asize, address, 0);
+  address += memcpy_count(buffer, send_size.data(), asize, address, 0);
+  address += memcpy_count(buffer, send_addr.data(), asize, address, 0);
+  address += memcpy_count(buffer, recv_size.data(), asize, address, 0);
+  address += memcpy_count(buffer, recv_addr.data(), asize, address, 0);
 
   return address;
 }
@@ -434,14 +459,16 @@ int Chunk::MpiBuffer::unpack(void* buffer, int address)
 {
   int ssize = 0;
   int rsize = 0;
-  int asize = bufsize.size() * sizeof(int);
+  int asize = send_size.size() * sizeof(int);
 
   address += memcpy_count(&sendwait, buffer, sizeof(bool), 0, address);
   address += memcpy_count(&recvwait, buffer, sizeof(bool), 0, address);
   address += memcpy_count(&ssize, buffer, sizeof(int), 0, address);
   address += memcpy_count(&rsize, buffer, sizeof(int), 0, address);
-  address += memcpy_count(bufsize.data(), buffer, asize, 0, address);
-  address += memcpy_count(bufaddr.data(), buffer, asize, 0, address);
+  address += memcpy_count(send_size.data(), buffer, asize, 0, address);
+  address += memcpy_count(send_addr.data(), buffer, asize, 0, address);
+  address += memcpy_count(recv_size.data(), buffer, asize, 0, address);
+  address += memcpy_count(recv_addr.data(), buffer, asize, 0, address);
 
   // memory allocation
   sendbuf.resize(ssize);

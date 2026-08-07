@@ -58,6 +58,7 @@ public:
     for (int i = 0; i < this->size(); i++) {
       int id            = (*this)[i]->get_id();
       auto [iz, iy, ix] = chunkmap->get_coordinate(id);
+      int myrank        = chunkmap->get_rank(id);
 
       for (int dirz = -1; dirz <= +1; dirz++) {
         for (int diry = -1; diry <= +1; diry++) {
@@ -74,6 +75,18 @@ public:
             // set neighbor rank
             int nbrank = chunkmap->get_rank(nbid);
             (*this)[i]->set_nb_rank(dirz, diry, dirx, nbrank);
+
+            // same-rank neighbor: record the local chunk pointer
+            typename PtrChunk::element_type* nbchunk = nullptr;
+            if (nbrank == myrank && nbid >= 0) {
+              for (auto& c : *this) {
+                if (c->get_id() == nbid) {
+                  nbchunk = c.get();
+                  break;
+                }
+              }
+            }
+            (*this)[i]->set_nb_chunk(dirz, diry, dirx, nbchunk);
           }
         }
       }
