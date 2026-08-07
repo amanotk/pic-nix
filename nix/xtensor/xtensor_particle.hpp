@@ -90,11 +90,12 @@ public:
     {
       const std::size_t npu = static_cast<std::size_t>(np_new);
       const std::size_t ncu = static_cast<std::size_t>(Nc);
-      grow_array(xu, Particle::to_size(np_new, Nc),
-                 std::min(xu.size(), npu * ncu) * sizeof(float64));
-      grow_array(xv, Particle::to_size(np_new, Nc),
-                 std::min(xv.size(), npu * ncu) * sizeof(float64));
-      grow_array(gindex, Particle::to_size(np_new), std::min(gindex.size(), npu) * sizeof(int32));
+      realloc_array(xu, Particle::to_size(np_new, Nc),
+                    std::min(xu.size(), npu * ncu) * sizeof(float64));
+      realloc_array(xv, Particle::to_size(np_new, Nc),
+                    std::min(xv.size(), npu * ncu) * sizeof(float64));
+      realloc_array(gindex, Particle::to_size(np_new),
+                    std::min(gindex.size(), npu) * sizeof(int32));
     }
 
     // set new total number of particles
@@ -363,12 +364,14 @@ public:
   }
 
 private:
-  /// @brief grow a particle array to a new capacity with a single copy
-  /// @note xtensor's resize() does not preserve elements; allocate the new
-  /// buffer, copy the old data once, and move the storage in place.
+  /// @brief reallocate a particle array to a new shape with a single copy
+  /// @note semantics follow C realloc(): the new buffer is allocated, the
+  /// min(old, new) bytes of old data copied once, and the storage moved in
+  /// place (the move-assignment releases the old buffer). Handles both growth
+  /// and shrink.
   template <typename T, std::size_t N>
-  static void grow_array(xt::xtensor<T, N>& arr, std::array<std::size_t, N> shape,
-                         std::size_t copy_bytes)
+  static void realloc_array(xt::xtensor<T, N>& arr, std::array<std::size_t, N> shape,
+                            std::size_t copy_bytes)
   {
     xt::xtensor<T, N> nx;
     nx.resize(shape);
