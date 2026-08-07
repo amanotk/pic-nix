@@ -87,7 +87,7 @@ TEST_CASE("XtensorHaloField3D pack/unpack +x")
   const int iz      = 1;
   const int iy      = 1;
   const int ix      = 2;
-  const int bufsize = mpibuf->bufsize(iz, iy, ix);
+  const int bufsize = mpibuf->send_size(iz, iy, ix);
   std::memcpy(mpibuf->get_recv_buffer(iz, iy, ix), mpibuf->get_send_buffer(iz, iy, ix), bufsize);
 
   chunk.unpack_bc_exchange(mpibuf, halo);
@@ -145,7 +145,7 @@ TEST_CASE("XtensorHaloCurrent3D pack/unpack +x adds to boundary")
   const int iz      = 1;
   const int iy      = 1;
   const int ix      = 2;
-  const int bufsize = mpibuf->bufsize(iz, iy, ix);
+  const int bufsize = mpibuf->send_size(iz, iy, ix);
   std::memcpy(mpibuf->get_recv_buffer(iz, iy, ix), mpibuf->get_send_buffer(iz, iy, ix), bufsize);
 
   chunk.unpack_bc_exchange(mpibuf, halo);
@@ -193,10 +193,14 @@ TEST_CASE("XtensorHaloParticle3D pack/unpack +x wraps particles")
   XtensorHaloParticle3D<TestChunk> halo(particles, chunk);
   chunk.pack_bc_exchange(mpibuf, halo);
 
-  const int iz      = 1;
-  const int iy      = 1;
-  const int ix      = 2;
-  const int bufsize = mpibuf->bufsize(iz, iy, ix);
+  const int iz = 1;
+  const int iy = 1;
+  const int ix = 2;
+  // Emulate the rank-local probe/end path: the receive layout follows the
+  // sender's send-side layout before the direct copy.
+  mpibuf->recv_size = mpibuf->send_size;
+  mpibuf->recv_addr = mpibuf->send_addr;
+  const int bufsize = mpibuf->recv_size(iz, iy, ix);
   mpibuf->recvbuf.resize(mpibuf->sendbuf.size);
   std::memcpy(mpibuf->get_recv_buffer(iz, iy, ix), mpibuf->get_send_buffer(iz, iy, ix), bufsize);
 
