@@ -386,6 +386,9 @@ void Application::setup_chunks()
   if (argparser->get_load() != "") {
     bool status = statehandler->load(get_interface(), argparser->get_load());
     assert_mpi(status == true, "invalid checkpoint status");
+    // the load path does not construct the neighbor pointers; rebuild them so
+    // that rank-local exchanges work from the first step after a restart
+    chunkvec.set_neighbors(chunkmap);
   } else {
     setup_chunks_init();
   }
