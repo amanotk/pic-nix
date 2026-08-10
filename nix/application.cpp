@@ -233,8 +233,10 @@ void Application::initialize_mpi_thread_mode()
 
   mpi_thread_mode = parse_mpi_thread_mode(configured);
   if (mpi_thread_mode == MpiThreadMode::Auto) {
-    mpi_thread_mode = mpi_thread_provided >= MPI_THREAD_MULTIPLE ? MpiThreadMode::Multiple
-                                                                 : MpiThreadMode::Funneled;
+    // FUNNELED is the safe default: MULTIPLE is slower on common
+    // thread-safe MPI runtimes (e.g. Intel MPI serialization) and is
+    // only used when explicitly requested and provided.
+    mpi_thread_mode = MpiThreadMode::Funneled;
   }
 
   assert_mpi(mpi_thread_mode != MpiThreadMode::Multiple ||

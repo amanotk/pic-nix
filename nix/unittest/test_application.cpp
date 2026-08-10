@@ -224,10 +224,10 @@ TEST_CASE("MPI thread mode selects a compatible execution strategy")
             MpiThreadMode::Funneled);
   }
 
-  SECTION("auto selects multiple when available")
+  SECTION("auto selects funneled when multiple is available")
   {
     REQUIRE(app.select_test_mpi_thread_mode(configuration, MPI_THREAD_MULTIPLE) ==
-            MpiThreadMode::Multiple);
+            MpiThreadMode::Funneled);
   }
 
   SECTION("funneled can be forced with multiple support")
