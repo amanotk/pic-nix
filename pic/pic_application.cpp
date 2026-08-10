@@ -524,25 +524,43 @@ void PicApplication::push_openmp_funneled()
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
       performance.begin_chunk(PicPerformance::Phase::Advance);
+
+      // reset load
       chunk->reset_load();
+
+      // push B for a half step
       chunk->push_bfd(0.5 * delt);
+
+      // push particle
       chunk->push_velocity(delt);
       chunk->push_position(delt);
+
+      // calculate current
       chunk->deposit_current(delt);
+
+      // begin boundary exchange for current
       chunk->set_boundary_pack(BoundaryCur);
+
+      // begin boundary exchange for particle
       chunk->set_boundary_pack(BoundaryParticle);
+
+      // push B for a half step
       chunk->push_bfd(0.5 * delt);
+
       performance.end_chunk(PicPerformance::Phase::Advance);
     }
 
 #pragma omp master
     {
+      // begin boundary exchange for current
       for (auto& chunk_ptr : chunkvec) {
         auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
         performance.begin_operation(PicPerformance::Operation::CurrentBegin);
         chunk->set_boundary_begin(BoundaryCur);
         performance.end_operation(PicPerformance::Operation::CurrentBegin);
       }
+
+      // begin boundary exchange for particle
       for (auto& chunk_ptr : chunkvec) {
         auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
         performance.begin_operation(PicPerformance::Operation::ParticleBegin);
@@ -565,14 +583,21 @@ void PicApplication::push_openmp_funneled()
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
       performance.begin_chunk(PicPerformance::Phase::CurrentField);
+
       chunk->set_boundary_unpack(BoundaryCur);
+
+      // push E
       chunk->push_efd(delt);
+
+      // begin boundary exchange for field
       chunk->set_boundary_pack(BoundaryEmf);
+
       performance.end_chunk(PicPerformance::Phase::CurrentField);
     }
 
 #pragma omp master
     {
+      // begin boundary exchange for field
       for (auto& chunk_ptr : chunkvec) {
         auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
         performance.begin_operation(PicPerformance::Operation::FieldBegin);
@@ -617,7 +642,9 @@ void PicApplication::push_openmp_funneled()
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
       performance.begin_chunk(PicPerformance::Phase::ParticleExchange);
+
       chunk->set_boundary_unpack(BoundaryParticle);
+
       performance.end_chunk(PicPerformance::Phase::ParticleExchange);
     }
 
@@ -634,7 +661,9 @@ void PicApplication::push_openmp_funneled()
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
       performance.begin_chunk(PicPerformance::Phase::FieldExchange);
+
       chunk->set_boundary_unpack(BoundaryEmf);
+
       performance.end_chunk(PicPerformance::Phase::FieldExchange);
     }
 

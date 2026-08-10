@@ -82,10 +82,7 @@ public:
     }
 
     //
-    // Grow the particle arrays with a single copy each. xtensor's resize()
-    // does not preserve the elements, so the new buffer is allocated, the old
-    // data copied once, and the storage moved in place (the move-assignment
-    // releases the old buffer).
+    // reallocate the particle arrays with a single copy for each
     //
     {
       const std::size_t npu = static_cast<std::size_t>(np_new);

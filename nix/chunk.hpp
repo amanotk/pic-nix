@@ -30,13 +30,13 @@ public:
   struct MpiBuffer {
     bool     sendwait;
     bool     recvwait;
-    int      mode = -1; ///< boundary mode (BoundaryMode) this buffer belongs to
+    int      mode = -1;
     Buffer   sendbuf;
     Buffer   recvbuf;
-    IntArray send_size = {}; ///< send-side size (bytes) per direction
-    IntArray send_addr = {}; ///< send-side byte offset per direction
-    IntArray recv_size = {}; ///< receive-side size (bytes) per direction
-    IntArray recv_addr = {}; ///< receive-side byte offset per direction
+    IntArray send_size = {};
+    IntArray send_addr = {};
+    IntArray recv_size = {};
+    IntArray recv_addr = {};
     Comm     comm      = {};
     Request  sendreq   = {};
     Request  recvreq   = {};
