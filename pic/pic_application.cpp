@@ -395,6 +395,8 @@ void PicApplication::push_openmp_multiple()
 
     performance.end_wall(PicPerformance::Phase::Advance);
 
+    performance.begin_wall(PicPerformance::Phase::CurrentField);
+
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
@@ -420,6 +422,8 @@ void PicApplication::push_openmp_multiple()
 
     performance.end_wall(PicPerformance::Phase::CurrentField);
 
+    performance.begin_wall(PicPerformance::Phase::ParticleProbe);
+
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
@@ -434,6 +438,8 @@ void PicApplication::push_openmp_multiple()
     }
 
     performance.end_wall(PicPerformance::Phase::ParticleProbe);
+
+    performance.begin_wall(PicPerformance::Phase::ParticleExchange);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
@@ -450,6 +456,8 @@ void PicApplication::push_openmp_multiple()
     }
 
     performance.end_wall(PicPerformance::Phase::ParticleExchange);
+
+    performance.begin_wall(PicPerformance::Phase::FieldExchange);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
@@ -572,6 +580,8 @@ void PicApplication::push_openmp_funneled()
 
     performance.end_wall(PicPerformance::Phase::Advance);
 
+    performance.begin_wall(PicPerformance::Phase::CurrentField);
+
 #pragma omp master
     {
       complete_boundaries_funneled(BoundaryCur, PicPerformance::Operation::CurrentPoll);
@@ -609,6 +619,8 @@ void PicApplication::push_openmp_funneled()
 
     performance.end_wall(PicPerformance::Phase::CurrentField);
 
+    performance.begin_wall(PicPerformance::Phase::ParticleProbe);
+
 #pragma omp master
     {
       size_t incomplete = particle_ready.size();
@@ -631,6 +643,8 @@ void PicApplication::push_openmp_funneled()
 
     performance.end_wall(PicPerformance::Phase::ParticleProbe);
 
+    performance.begin_wall(PicPerformance::Phase::ParticleExchange);
+
 #pragma omp master
     {
       complete_boundaries_funneled(BoundaryParticle, PicPerformance::Operation::ParticlePoll);
@@ -649,6 +663,8 @@ void PicApplication::push_openmp_funneled()
     }
 
     performance.end_wall(PicPerformance::Phase::ParticleExchange);
+
+    performance.begin_wall(PicPerformance::Phase::FieldExchange);
 
 #pragma omp master
     {
