@@ -16,9 +16,6 @@ line tools are available from the environment's `bin/` directory.
 - [Ohm's Law Solver](ohms-law.md): technical note for the generalized Ohm's law solver.
 - [Ascent In-Situ Diagnostics](ascent.md): optional MPI-enabled publication,
   Python extracts, and visualization.
-- [MPI Thread-Mode Performance Validation](mpi-thread-performance.md): context,
-  benchmark matrix, correctness gates, and analysis procedure for FUNNELED and
-  MULTIPLE execution.
 
 ## Documentation Scope
 
