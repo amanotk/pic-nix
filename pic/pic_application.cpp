@@ -1,5 +1,6 @@
 // -*- C++ -*-
 #include "pic_application.hpp"
+
 #include "pic_chunk.hpp"
 #include "pic_diag.hpp"
 #include "pic_poisson.hpp"
@@ -68,6 +69,9 @@ void PicApplication::initialize(int argc, char** argv)
 
   // get number of species
   Ns = cfgparser->get_parameter()["Ns"];
+
+  assert_mpi(performance.configure(cfgparser->get_application()),
+             "invalid `application.performance` configuration");
 
   // initialize communicators
   for (int mode = 0; mode < NumBoundaryMode; mode++) {
@@ -148,23 +152,54 @@ void PicApplication::setup_chunks()
   base_type::setup_chunks();
   set_chunk_communicator();
 
-  // apply boundary condition just in case
+  if (get_mpi_thread_mode() == nix::MpiThreadMode::Multiple) {
+#pragma omp parallel
+    {
+#pragma omp for schedule(dynamic)
+      for (int i = 0; i < chunkvec.size(); i++) {
+        auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+        chunk->set_boundary_pack(BoundaryEmf);
+        chunk->set_boundary_begin(BoundaryEmf);
+      }
+
+#pragma omp for schedule(dynamic)
+      for (int i = 0; i < chunkvec.size(); i++) {
+        auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+        chunk->set_boundary_end(BoundaryEmf);
+        chunk->set_boundary_unpack(BoundaryEmf);
+      }
+    }
+    return;
+  }
+
 #pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
-
-      chunk->set_boundary_pack(BoundaryEmf);
-      chunk->set_boundary_begin(BoundaryEmf);
+      static_cast<PicChunk*>(chunkvec[i].get())->set_boundary_pack(BoundaryEmf);
     }
+
+#pragma omp master
+    {
+      for (auto& chunk_ptr : chunkvec) {
+        static_cast<PicChunk*>(chunk_ptr.get())->set_boundary_begin(BoundaryEmf);
+      }
+    }
+#pragma omp barrier
+
+#pragma omp master
+    {
+      for (auto& chunk_ptr : chunkvec) {
+        static_cast<PicChunk*>(chunk_ptr.get())->set_boundary_end(BoundaryEmf);
+      }
+    }
+#pragma omp barrier
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
-
-      chunk->set_boundary_end(BoundaryEmf);
-      chunk->set_boundary_unpack(BoundaryEmf);
+      static_cast<PicChunk*>(chunkvec[i].get())->set_boundary_unpack(BoundaryEmf);
     }
   }
 }
@@ -275,28 +310,57 @@ void PicApplication::push()
   DEBUG2 << "push() start";
   float64 wclock1 = nix::wall_clock();
 
+  bool sample_performance = performance.begin_step(curstep, nthread);
+
   DEBUG2 << "push_openmp() start";
-  push_openmp();
+  if (get_mpi_thread_mode() == nix::MpiThreadMode::Multiple) {
+    push_openmp_multiple();
+  } else {
+    push_openmp_funneled();
+  }
   DEBUG2 << "push_openmp() end";
 
+  float64 push_end      = nix::wall_clock();
+  float64 barrier_begin = push_end;
+
   MPI_Barrier(MPI_COMM_WORLD);
+  float64 barrier_end = nix::wall_clock();
 
   DEBUG2 << "push() end";
   float64 wclock2 = nix::wall_clock();
 
   json log = {{"elapsed", wclock2 - wclock1}};
   logger->append(curstep, "push", log);
+
+  if (sample_performance) {
+    json performance_log =
+        performance.finish_step(push_end - wclock1, barrier_end - barrier_begin, MPI_COMM_WORLD);
+    logger->append(curstep, "performance", performance_log);
+  }
 }
 
-void PicApplication::push_openmp()
+void PicApplication::push_openmp_multiple()
 {
 #pragma omp parallel
   {
     const float64 delt = cfgparser->get_delt();
 
+    if (performance.is_sampling()) {
+      int parallel_threads = 1;
+#ifdef _OPENMP
+      parallel_threads = omp_get_num_threads();
+#endif
+#pragma omp single
+      performance.set_parallel_threads(parallel_threads);
+    }
+
+    performance.begin_wall(PicPerformance::Phase::Advance);
+
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::Advance);
 
       // reset load
       chunk->reset_load();
@@ -313,21 +377,35 @@ void PicApplication::push_openmp()
 
       // begin boundary exchange for current
       chunk->set_boundary_pack(BoundaryCur);
+      performance.begin_operation(PicPerformance::Operation::CurrentBegin);
       chunk->set_boundary_begin(BoundaryCur);
+      performance.end_operation(PicPerformance::Operation::CurrentBegin);
 
       // begin boundary exchange for particle
       chunk->set_boundary_pack(BoundaryParticle);
+      performance.begin_operation(PicPerformance::Operation::ParticleBegin);
       chunk->set_boundary_begin(BoundaryParticle);
+      performance.end_operation(PicPerformance::Operation::ParticleBegin);
 
       // push B for a half step
       chunk->push_bfd(0.5 * delt);
+
+      performance.end_chunk(PicPerformance::Phase::Advance);
     }
+
+    performance.end_wall(PicPerformance::Phase::Advance);
+
+    performance.begin_wall(PicPerformance::Phase::CurrentField);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
+      performance.begin_chunk(PicPerformance::Phase::CurrentField);
+
+      performance.begin_operation(PicPerformance::Operation::CurrentWaitall);
       chunk->set_boundary_end(BoundaryCur);
+      performance.end_operation(PicPerformance::Operation::CurrentWaitall);
       chunk->set_boundary_unpack(BoundaryCur);
 
       // push E
@@ -335,53 +413,333 @@ void PicApplication::push_openmp()
 
       // begin boundary exchange for field
       chunk->set_boundary_pack(BoundaryEmf);
+      performance.begin_operation(PicPerformance::Operation::FieldBegin);
       chunk->set_boundary_begin(BoundaryEmf);
+      performance.end_operation(PicPerformance::Operation::FieldBegin);
+
+      performance.end_chunk(PicPerformance::Phase::CurrentField);
     }
+
+    performance.end_wall(PicPerformance::Phase::CurrentField);
+
+    performance.begin_wall(PicPerformance::Phase::ParticleProbe);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
+      performance.begin_chunk(PicPerformance::Phase::ParticleProbe);
+
+      performance.begin_operation(PicPerformance::Operation::ParticleProbe);
       chunk->set_boundary_probe(BoundaryParticle, true);
+      performance.end_operation(PicPerformance::Operation::ParticleProbe);
+
+      performance.end_chunk(PicPerformance::Phase::ParticleProbe);
     }
+
+    performance.end_wall(PicPerformance::Phase::ParticleProbe);
+
+    performance.begin_wall(PicPerformance::Phase::ParticleExchange);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
+      performance.begin_chunk(PicPerformance::Phase::ParticleExchange);
+
+      performance.begin_operation(PicPerformance::Operation::ParticleWaitall);
       chunk->set_boundary_end(BoundaryParticle);
+      performance.end_operation(PicPerformance::Operation::ParticleWaitall);
       chunk->set_boundary_unpack(BoundaryParticle);
+
+      performance.end_chunk(PicPerformance::Phase::ParticleExchange);
     }
+
+    performance.end_wall(PicPerformance::Phase::ParticleExchange);
+
+    performance.begin_wall(PicPerformance::Phase::FieldExchange);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
+      performance.begin_chunk(PicPerformance::Phase::FieldExchange);
+
+      performance.begin_operation(PicPerformance::Operation::FieldWaitall);
       chunk->set_boundary_end(BoundaryEmf);
+      performance.end_operation(PicPerformance::Operation::FieldWaitall);
       chunk->set_boundary_unpack(BoundaryEmf);
+
+      performance.end_chunk(PicPerformance::Phase::FieldExchange);
     }
+
+    performance.end_wall(PicPerformance::Phase::FieldExchange);
+  }
+}
+
+void PicApplication::complete_boundaries_funneled(int mode, PicPerformance::Operation operation)
+{
+  std::vector<char> complete(chunkvec.size(), false);
+  size_t            incomplete = complete.size();
+
+  while (incomplete > 0) {
+    // Thread 0 must keep entering MPI because no other thread can drive progress
+    // under MPI_THREAD_FUNNELED.
+    for (size_t i = 0; i < complete.size(); i++) {
+      if (complete[i]) {
+        continue;
+      }
+
+      auto* chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_operation(operation);
+      bool send_complete = chunk->set_boundary_query(mode, +1);
+      performance.end_operation(operation);
+
+      performance.begin_operation(operation);
+      bool recv_complete = chunk->set_boundary_query(mode, -1);
+      performance.end_operation(operation);
+
+      if (send_complete && recv_complete) {
+        performance.begin_operation(operation);
+        chunk->set_boundary_end(mode);
+        performance.end_operation(operation);
+        complete[i] = true;
+        incomplete--;
+      }
+    }
+  }
+}
+
+void PicApplication::push_openmp_funneled()
+{
+  std::vector<char> particle_ready(chunkvec.size(), false);
+
+#pragma omp parallel
+  {
+    const float64 delt = cfgparser->get_delt();
+
+    if (performance.is_sampling()) {
+#pragma omp master
+      performance.set_parallel_threads(nix::get_num_threads());
+#pragma omp barrier
+    }
+
+    performance.begin_wall(PicPerformance::Phase::Advance);
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < chunkvec.size(); i++) {
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::Advance);
+
+      // reset load
+      chunk->reset_load();
+
+      // push B for a half step
+      chunk->push_bfd(0.5 * delt);
+
+      // push particle
+      chunk->push_velocity(delt);
+      chunk->push_position(delt);
+
+      // calculate current
+      chunk->deposit_current(delt);
+
+      // begin boundary exchange for current
+      chunk->set_boundary_pack(BoundaryCur);
+
+      // begin boundary exchange for particle
+      chunk->set_boundary_pack(BoundaryParticle);
+
+      // push B for a half step
+      chunk->push_bfd(0.5 * delt);
+
+      performance.end_chunk(PicPerformance::Phase::Advance);
+    }
+
+#pragma omp master
+    {
+      // begin boundary exchange for current
+      for (auto& chunk_ptr : chunkvec) {
+        auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
+        performance.begin_operation(PicPerformance::Operation::CurrentBegin);
+        chunk->set_boundary_begin(BoundaryCur);
+        performance.end_operation(PicPerformance::Operation::CurrentBegin);
+      }
+
+      // begin boundary exchange for particle
+      for (auto& chunk_ptr : chunkvec) {
+        auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
+        performance.begin_operation(PicPerformance::Operation::ParticleBegin);
+        chunk->set_boundary_begin(BoundaryParticle);
+        performance.end_operation(PicPerformance::Operation::ParticleBegin);
+      }
+    }
+#pragma omp barrier
+
+    performance.end_wall(PicPerformance::Phase::Advance);
+
+    performance.begin_wall(PicPerformance::Phase::CurrentField);
+
+#pragma omp master
+    {
+      complete_boundaries_funneled(BoundaryCur, PicPerformance::Operation::CurrentPoll);
+    }
+#pragma omp barrier
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < chunkvec.size(); i++) {
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::CurrentField);
+
+      chunk->set_boundary_unpack(BoundaryCur);
+
+      // push E
+      chunk->push_efd(delt);
+
+      // begin boundary exchange for field
+      chunk->set_boundary_pack(BoundaryEmf);
+
+      performance.end_chunk(PicPerformance::Phase::CurrentField);
+    }
+
+#pragma omp master
+    {
+      // begin boundary exchange for field
+      for (auto& chunk_ptr : chunkvec) {
+        auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
+        performance.begin_operation(PicPerformance::Operation::FieldBegin);
+        chunk->set_boundary_begin(BoundaryEmf);
+        performance.end_operation(PicPerformance::Operation::FieldBegin);
+      }
+    }
+#pragma omp barrier
+
+    performance.end_wall(PicPerformance::Phase::CurrentField);
+
+    performance.begin_wall(PicPerformance::Phase::ParticleProbe);
+
+#pragma omp master
+    {
+      size_t incomplete = particle_ready.size();
+      performance.begin_operation(PicPerformance::Operation::ParticleProbe);
+      while (incomplete > 0) {
+        for (size_t i = 0; i < particle_ready.size(); i++) {
+          if (particle_ready[i]) {
+            continue;
+          }
+          auto* chunk = static_cast<PicChunk*>(chunkvec[i].get());
+          if (chunk->set_boundary_probe(BoundaryParticle, false)) {
+            particle_ready[i] = true;
+            incomplete--;
+          }
+        }
+      }
+      performance.end_operation(PicPerformance::Operation::ParticleProbe);
+    }
+#pragma omp barrier
+
+    performance.end_wall(PicPerformance::Phase::ParticleProbe);
+
+    performance.begin_wall(PicPerformance::Phase::ParticleExchange);
+
+#pragma omp master
+    {
+      complete_boundaries_funneled(BoundaryParticle, PicPerformance::Operation::ParticlePoll);
+    }
+#pragma omp barrier
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < chunkvec.size(); i++) {
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::ParticleExchange);
+
+      chunk->set_boundary_unpack(BoundaryParticle);
+
+      performance.end_chunk(PicPerformance::Phase::ParticleExchange);
+    }
+
+    performance.end_wall(PicPerformance::Phase::ParticleExchange);
+
+    performance.begin_wall(PicPerformance::Phase::FieldExchange);
+
+#pragma omp master
+    {
+      complete_boundaries_funneled(BoundaryEmf, PicPerformance::Operation::FieldPoll);
+    }
+#pragma omp barrier
+
+#pragma omp for schedule(dynamic)
+    for (int i = 0; i < chunkvec.size(); i++) {
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::FieldExchange);
+
+      chunk->set_boundary_unpack(BoundaryEmf);
+
+      performance.end_chunk(PicPerformance::Phase::FieldExchange);
+    }
+
+    performance.end_wall(PicPerformance::Phase::FieldExchange);
   }
 }
 
 void PicApplication::calculate_moment_openmp()
 {
-#pragma parallel
+  if (get_mpi_thread_mode() == nix::MpiThreadMode::Multiple) {
+#pragma omp parallel
+    {
+#pragma omp for schedule(dynamic)
+      for (int i = 0; i < chunkvec.size(); i++) {
+        auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+        chunk->deposit_moment();
+        chunk->set_boundary_pack(BoundaryMom);
+        chunk->set_boundary_begin(BoundaryMom);
+      }
+
+#pragma omp for schedule(dynamic)
+      for (int i = 0; i < chunkvec.size(); i++) {
+        auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+        chunk->set_boundary_end(BoundaryMom);
+        chunk->set_boundary_unpack(BoundaryMom);
+      }
+    }
+    return;
+  }
+
+#pragma omp parallel
   {
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
-
       chunk->deposit_moment();
       chunk->set_boundary_pack(BoundaryMom);
-      chunk->set_boundary_begin(BoundaryMom);
     }
+
+#pragma omp master
+    {
+      for (auto& chunk_ptr : chunkvec) {
+        static_cast<PicChunk*>(chunk_ptr.get())->set_boundary_begin(BoundaryMom);
+      }
+    }
+#pragma omp barrier
+
+#pragma omp master
+    {
+      for (auto& chunk_ptr : chunkvec) {
+        static_cast<PicChunk*>(chunk_ptr.get())->set_boundary_end(BoundaryMom);
+      }
+    }
+#pragma omp barrier
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
-
-      chunk->set_boundary_end(BoundaryMom);
-      chunk->set_boundary_unpack(BoundaryMom);
+      static_cast<PicChunk*>(chunkvec[i].get())->set_boundary_unpack(BoundaryMom);
     }
   }
 }

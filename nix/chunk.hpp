@@ -22,6 +22,7 @@ public:
   using Comm         = FixedArray3D<MPI_Comm, 3, 3, 3>;
   using Request      = FixedArray3D<MPI_Request, 3, 3, 3>;
   using Datatype     = FixedArray3D<MPI_Datatype, 3, 3, 3>;
+  using PtrArray     = FixedArray3D<void*, 3, 3, 3>;
   using MpiBufferPtr = std::shared_ptr<MpiBuffer>;
   using MpiBufferVec = std::vector<MpiBufferPtr>;
 
@@ -29,15 +30,18 @@ public:
   struct MpiBuffer {
     bool     sendwait;
     bool     recvwait;
+    int      mode = -1;
     Buffer   sendbuf;
     Buffer   recvbuf;
-    IntArray bufsize  = {};
-    IntArray bufaddr  = {};
-    Comm     comm     = {};
-    Request  sendreq  = {};
-    Request  recvreq  = {};
-    Datatype sendtype = {};
-    Datatype recvtype = {};
+    IntArray send_size = {};
+    IntArray send_addr = {};
+    IntArray recv_size = {};
+    IntArray recv_addr = {};
+    Comm     comm      = {};
+    Request  sendreq   = {};
+    Request  recvreq   = {};
+    Datatype sendtype  = {};
+    Datatype recvtype  = {};
 
     /// constructor
     MpiBuffer() : sendwait(false), recvwait(false)
@@ -47,13 +51,13 @@ public:
     /// @brief return send buffer for given direction
     void* get_send_buffer(int iz, int iy, int ix)
     {
-      return sendbuf.get(bufaddr(iz, iy, ix));
+      return sendbuf.get(send_addr(iz, iy, ix));
     }
 
     /// @brief return recv buffer for given direction
     void* get_recv_buffer(int iz, int iy, int ix)
     {
-      return recvbuf.get(bufaddr(iz, iy, ix));
+      return recvbuf.get(recv_addr(iz, iy, ix));
     }
 
     /// @brief get size of buffer in bytes
@@ -67,28 +71,29 @@ public:
   };
 
 protected:
-  int  myid;            ///< chunk ID
-  int  nbid[nbsize];    ///< neighboring chunk ID
-  int  nbrank[nbsize];  ///< neighboring chunk MPI rank
-  int  boundary_margin; ///< boundary margin
-  int  dims[3];         ///< number of grids
-  bool has_dim[3];      ///< flag to indicate if the dimension is ignorable
-  int  gdims[3];        ///< global number of grids
-  int  offset[3];       ///< global index offset
-  int  Lbx;             ///< lower bound in x
-  int  Ubx;             ///< upper bound in x
-  int  Lby;             ///< lower bound in y
-  int  Uby;             ///< upper bound in y
-  int  Lbz;             ///< lower bound in z
-  int  Ubz;             ///< upper bound in z
-  int  indexlb[3];      ///< index lower bound for MPI data exchange
-  int  indexub[3];      ///< index upper bound for MPI data exchange
-  int  dirlb[3];        ///< direction lower bound for MPI data exchange
-  int  dirub[3];        ///< direction upper bound for MPI data exchange
-  int  sendlb[3][3];    ///< lower bound for send
-  int  sendub[3][3];    ///< upper bound for send
-  int  recvlb[3][3];    ///< lower bound for recv
-  int  recvub[3][3];    ///< upper bound for recv
+  int    myid;                 ///< chunk ID
+  int    nbid[nbsize];         ///< neighboring chunk ID
+  int    nbrank[nbsize];       ///< neighboring chunk MPI rank
+  Chunk* nbchunk[nbsize] = {}; ///< neighboring chunk pointer (same-rank only)
+  int    boundary_margin;      ///< boundary margin
+  int    dims[3];              ///< number of grids
+  bool   has_dim[3];           ///< flag to indicate if the dimension is ignorable
+  int    gdims[3];             ///< global number of grids
+  int    offset[3];            ///< global index offset
+  int    Lbx;                  ///< lower bound in x
+  int    Ubx;                  ///< upper bound in x
+  int    Lby;                  ///< lower bound in y
+  int    Uby;                  ///< upper bound in y
+  int    Lbz;                  ///< lower bound in z
+  int    Ubz;                  ///< upper bound in z
+  int    indexlb[3];           ///< index lower bound for MPI data exchange
+  int    indexub[3];           ///< index upper bound for MPI data exchange
+  int    dirlb[3];             ///< direction lower bound for MPI data exchange
+  int    dirub[3];             ///< direction upper bound for MPI data exchange
+  int    sendlb[3][3];         ///< lower bound for send
+  int    sendub[3][3];         ///< upper bound for send
+  int    recvlb[3][3];         ///< lower bound for recv
+  int    recvub[3][3];         ///< upper bound for recv
 
   float64              delx;      ///< grid size in x
   float64              dely;      ///< grid size in y
@@ -196,6 +201,18 @@ public:
     return nbrank[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)];
   }
 
+  /// @brief set neighbor chunk pointer (same-rank neighbors only; nullptr otherwise)
+  void set_nb_chunk(int dirz, int diry, int dirx, Chunk* chunk)
+  {
+    nbchunk[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)] = chunk;
+  }
+
+  /// @brief get neighbor chunk pointer (nullptr for off-rank neighbors)
+  Chunk* get_nb_chunk(int dirz, int diry, int dirx) const
+  {
+    return nbchunk[9 * (dirz + 1) + 3 * (diry + 1) + (dirx + 1)];
+  }
+
   /// @brief get send tag for MPI
   int get_sndtag(int dirz, int diry, int dirx) const
   {
@@ -217,12 +234,6 @@ public:
   MpiBufferPtr get_mpi_buffer(int mode)
   {
     return mpibufvec[mode];
-  }
-
-  /// @brief get buffer ratio (relative to the required size)
-  float64 get_buffer_ratio()
-  {
-    return option.value("buffer_ratio", 0.2);
   }
 
   /// @brief set boundary margin
@@ -365,6 +376,7 @@ public:
   }
 
   /// @brief probe incoming messages and call recv if ready
+  /// @note caller must obey the MPI thread-support contract
   virtual bool set_boundary_probe(int mode, bool wait)
   {
     return false; // override me
@@ -383,12 +395,14 @@ public:
   }
 
   /// @brief begin boundary exchange
+  /// @note caller must obey the MPI thread-support contract
   virtual void set_boundary_begin(int mode)
   {
     // override me
   }
 
   /// @brief end boundary exchange
+  /// @note caller must obey the MPI thread-support contract
   virtual void set_boundary_end(int mode)
   {
     // override me
@@ -491,14 +505,30 @@ public:
       }
     }
 
-    OMP_MAYBE_CRITICAL
     for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
       for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
         for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
           if (iz == 1 && iy == 1 && ix == 1)
             continue;
 
-          int nbrank = get_nb_rank(dirz, diry, dirx);
+          int    nbrank  = get_nb_rank(dirz, diry, dirx);
+          Chunk* nbchunk = get_nb_chunk(dirz, diry, dirx);
+
+          if (nbchunk != nullptr) {
+            // same-rank neighbor: no MPI needed. Requests stay
+            // MPI_REQUEST_NULL so Waitall/Testall ignore them. The actual
+            // data transfer happens in end() (end makes recvbuf complete).
+            //
+            // ORDERING INVARIANT (all callers must obey): every chunk packs
+            // its send buffer for a given mode before any chunk's end() runs
+            // for that mode, and no chunk repacks the same mode until every
+            // local receiver's end() has copied it. All current callers
+            // (funneled push, multiple push, phi solver) use the bulk
+            // pack-all -> begin-all -> probe -> end-all -> unpack-all phase
+            // structure, which guarantees this.
+            continue;
+          }
+
           // send
           if constexpr (is_send_required == true) {
             int   sendtag  = get_sndtag(dirz, diry, dirx);
@@ -506,7 +536,7 @@ public:
             auto& sendtype = mpibuf->sendtype(iz, iy, ix);
             auto& sendreq  = mpibuf->sendreq(iz, iy, ix);
             void* sendptr  = mpibuf->get_send_buffer(iz, iy, ix);
-            int   sendcnt  = mpibuf->bufsize(iz, iy, ix);
+            int   sendcnt  = mpibuf->send_size(iz, iy, ix);
 
             MPI_Isend(sendptr, sendcnt, sendtype, nbrank, sendtag, sendcomm, &sendreq);
           }
@@ -518,7 +548,7 @@ public:
             auto& recvtype = mpibuf->recvtype(iz, iy, ix);
             auto& recvreq  = mpibuf->recvreq(iz, iy, ix);
             void* recvptr  = mpibuf->get_recv_buffer(iz, iy, ix);
-            int   recvcnt  = mpibuf->bufsize(iz, iy, ix);
+            int   recvcnt  = mpibuf->recv_size(iz, iy, ix);
 
             MPI_Irecv(recvptr, recvcnt, recvtype, nbrank, recvtag, recvcomm, &recvreq);
           }
@@ -540,16 +570,37 @@ public:
   void end_bc_exchange(MpiBufferPtr mpibuf, Halo& halo)
   {
     // wait for MPI send/recv calls to complete
-    OMP_MAYBE_CRITICAL
-    {
-      if (mpibuf->sendwait == true) {
-        MPI_Waitall(27, mpibuf->sendreq.data(), MPI_STATUSES_IGNORE);
-        mpibuf->sendwait = false;
-      }
+    if (mpibuf->sendwait == true) {
+      MPI_Waitall(27, mpibuf->sendreq.data(), MPI_STATUSES_IGNORE);
+      mpibuf->sendwait = false;
+    }
 
-      if (mpibuf->recvwait == true) {
-        MPI_Waitall(27, mpibuf->recvreq.data(), MPI_STATUSES_IGNORE);
-        mpibuf->recvwait = false;
+    if (mpibuf->recvwait == true) {
+      MPI_Waitall(27, mpibuf->recvreq.data(), MPI_STATUSES_IGNORE);
+      mpibuf->recvwait = false;
+    }
+
+    // complete rank-local transfers: copy the sender's packed buffer into
+    // our receive buffer. After this, recvbuf is complete for every active
+    // neighbor regardless of transport.
+    for (int dirz = dirlb[0], iz = indexlb[0]; dirz <= dirub[0]; dirz++, iz++) {
+      for (int diry = dirlb[1], iy = indexlb[1]; diry <= dirub[1]; diry++, iy++) {
+        for (int dirx = dirlb[2], ix = indexlb[2]; dirx <= dirub[2]; dirx++, ix++) {
+          if (iz == 1 && iy == 1 && ix == 1)
+            continue;
+
+          Chunk* nbchunk = get_nb_chunk(dirz, diry, dirx);
+          if (nbchunk == nullptr)
+            continue;
+
+          int   iz2      = 2 - iz;
+          int   iy2      = 2 - iy;
+          int   ix2      = 2 - ix;
+          auto  nbmpibuf = nbchunk->get_mpi_buffer(mpibuf->mode);
+          void* dst      = mpibuf->get_recv_buffer(iz, iy, ix);
+          void* src      = nbmpibuf->get_send_buffer(iz2, iy2, ix2);
+          std::memcpy(dst, src, mpibuf->recv_size(iz, iy, ix));
+        }
       }
     }
   }

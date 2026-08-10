@@ -60,6 +60,10 @@ public:
   void set_nb_rank(int dirz, int diry, int dirx, int rank)
   {
   }
+
+  void set_nb_chunk(int dirz, int diry, int dirx, MockChunk* chunk)
+  {
+  }
 };
 
 class ChunkVectorTest : public ChunkVector<std::unique_ptr<MockChunk>>
@@ -146,4 +150,3 @@ TEST_CASE("set_neighbors")
   // just check if call does not crash
   chunktest.set_neighbors(chunkmap);
 }
-

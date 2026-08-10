@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
 import argparse
@@ -14,11 +11,43 @@ import tqdm
 
 from picnix import DEFAULT_LOG_PREFIX
 
-
 PHASES = ("diagnostic", "push", "rebalance")
+PERFORMANCE_PUSH_KINDS = ("local", "barrier")
+PERFORMANCE_PHASES = (
+    "advance",
+    "current_field",
+    "particle_probe",
+    "particle_exchange",
+    "field_exchange",
+)
+PERFORMANCE_PHASE_METRICS = ("wall", "omp_efficiency", "max_chunk")
+PERFORMANCE_OPERATIONS = (
+    "current_begin",
+    "particle_begin",
+    "current_waitall",
+    "field_begin",
+    "particle_probe",
+    "particle_waitall",
+    "field_waitall",
+    "current_poll",
+    "particle_poll",
+    "field_poll",
+)
+PERFORMANCE_OPERATION_METRICS = ("total", "thread_max", "max_call")
+PERFORMANCE_STATS = (
+    "size",
+    "min",
+    "max",
+    "mean",
+    "median",
+    "p95",
+    "min_rank",
+    "max_rank",
+)
 DEFAULT_MAX_PLOT_POINTS = 5000
 DEFAULT_PLOT_BINS = 100
 READ_CHUNK_BYTES = 1024 * 1024
+PERFORMANCE_SCHEMA_VERSIONS = (1, 2, 3)
 
 
 def iter_msgpack_records(filename, progress=False):
@@ -100,8 +129,17 @@ def extract_timing_rows(records):
         if isinstance(rebalance, dict) and "status" in rebalance:
             row["rebalance_status"] = bool(rebalance["status"])
 
-        if row["step"] is not None or any(
-            row[f"{phase}_elapsed"] is not None for phase in PHASES
+        performance = record.get("performance")
+        if (
+            isinstance(performance, dict)
+            and performance.get("schema_version") in PERFORMANCE_SCHEMA_VERSIONS
+        ):
+            row["performance"] = performance
+
+        if (
+            row["step"] is not None
+            or any(row[f"{phase}_elapsed"] is not None for phase in PHASES)
+            or "performance" in row
         ):
             rows.append(row)
 
@@ -192,6 +230,71 @@ def format_summary_value(value):
     return f"{value:.3f}"
 
 
+def iter_performance_stats(performance):
+    push = performance.get("push")
+    if isinstance(push, dict):
+        for kind in PERFORMANCE_PUSH_KINDS:
+            stats = push.get(kind)
+            if isinstance(stats, dict):
+                yield f"push.{kind}", stats
+
+    phases = performance.get("phase")
+    if isinstance(phases, dict):
+        for phase in PERFORMANCE_PHASES:
+            metrics = phases.get(phase)
+            if not isinstance(metrics, dict):
+                continue
+            for metric in PERFORMANCE_PHASE_METRICS:
+                stats = metrics.get(metric)
+                if isinstance(stats, dict):
+                    yield f"phase.{phase}.{metric}", stats
+
+    operations = performance.get("operation")
+    if isinstance(operations, dict):
+        for operation in PERFORMANCE_OPERATIONS:
+            metrics = operations.get(operation)
+            if not isinstance(metrics, dict):
+                continue
+            for metric in PERFORMANCE_OPERATION_METRICS:
+                stats = metrics.get(metric)
+                if isinstance(stats, dict):
+                    yield f"operation.{operation}.{metric}", stats
+
+
+def summarize_performance(rows):
+    grouped = {}
+    for row in rows:
+        performance = row.get("performance")
+        if not isinstance(performance, dict):
+            continue
+        for name, stats in iter_performance_stats(performance):
+            grouped.setdefault(name, []).append(stats)
+
+    summary = {}
+    for name, items in grouped.items():
+        required = ("size", "min", "max", "mean", "median", "p95")
+        items = [
+            item
+            for item in items
+            if all(item.get(stat) is not None for stat in required)
+        ]
+        if not items:
+            continue
+        maxima = [item for item in items if item.get("max") is not None]
+        peak = max(maxima, key=lambda item: float(item["max"])) if maxima else {}
+        summary[name] = {
+            "records": len(items),
+            "size": float(np.mean([item["size"] for item in items])),
+            "min": min(float(item["min"]) for item in items),
+            "mean": float(np.mean([item["mean"] for item in items])),
+            "median": float(np.mean([item["median"] for item in items])),
+            "p95": float(np.mean([item["p95"] for item in items])),
+            "max": float(peak["max"]) if peak else np.nan,
+            "max_rank": peak.get("max_rank"),
+        }
+    return summary
+
+
 def format_report(rows, log_filename, top=10):
     phase_summary = summarize_phases(rows)
     rebalance_summary = summarize_rebalance(rows)
@@ -230,7 +333,26 @@ def format_report(rows, log_filename, top=10):
         lines.extend(["", f"Worst {top} Phase Timings"])
         lines.append("step       phase        elapsed[s]")
         for elapsed, step, phase in worst_phase_steps(rows, top):
-            lines.append(f"{str(step):<11}{phase:<12}{format_seconds(elapsed):>10}")
+            lines.append(f"{step!s:<11}{phase:<12}{format_seconds(elapsed):>10}")
+
+    performance_summary = summarize_performance(rows)
+    if performance_summary:
+        lines.extend(["", "Performance Summary"])
+        lines.append(
+            "metric                                  records  avg size         min    avg mean  avg median     avg p95         max  max rank"
+        )
+        for name, item in performance_summary.items():
+            lines.append(
+                f"{name:<40}"
+                f"{item['records']:>7}"
+                f"{format_summary_value(item['size']):>10}"
+                f"{format_summary_value(item['min']):>12}"
+                f"{format_summary_value(item['mean']):>12}"
+                f"{format_summary_value(item['median']):>12}"
+                f"{format_summary_value(item['p95']):>12}"
+                f"{format_summary_value(item['max']):>12}"
+                f"{item['max_rank']!s:>10}"
+            )
 
     return "\n".join(lines)
 
@@ -246,11 +368,36 @@ def write_csv(rows, filename):
         "rebalance_status",
         "total_elapsed",
     ]
+    has_performance = any("performance" in row for row in rows)
+    if has_performance:
+        fields.append("performance.schema_version")
+        for name in (
+            *(f"push.{kind}" for kind in PERFORMANCE_PUSH_KINDS),
+            *(
+                f"phase.{phase}.{metric}"
+                for phase in PERFORMANCE_PHASES
+                for metric in PERFORMANCE_PHASE_METRICS
+            ),
+            *(
+                f"operation.{operation}.{metric}"
+                for operation in PERFORMANCE_OPERATIONS
+                for metric in PERFORMANCE_OPERATION_METRICS
+            ),
+        ):
+            fields.extend(f"performance.{name}.{stat}" for stat in PERFORMANCE_STATS)
+
     with Path(filename).open("w", newline="") as fp:
         writer = csv.DictWriter(fp, fieldnames=fields)
         writer.writeheader()
         for row in rows:
-            writer.writerow(row)
+            output = {field: row.get(field) for field in fields}
+            performance = row.get("performance")
+            if isinstance(performance, dict):
+                output["performance.schema_version"] = performance.get("schema_version")
+                for name, stats in iter_performance_stats(performance):
+                    for stat in PERFORMANCE_STATS:
+                        output[f"performance.{name}.{stat}"] = stats.get(stat)
+            writer.writerow(output)
 
 
 def rolling_mean(values, window):
@@ -353,13 +500,92 @@ def style_timing_axis(ax, xmin, xmax):
     ax.legend(loc="upper left", frameon=True, framealpha=0.9)
 
 
+def get_performance_axis(rows, section, name, metric, stat="mean"):
+    values = []
+    for row in rows:
+        performance = row.get("performance", {})
+        group = performance.get(section, {}) if isinstance(performance, dict) else {}
+        item = group.get(name, {}) if isinstance(group, dict) else {}
+        if metric is not None:
+            item = item.get(metric, {}) if isinstance(item, dict) else {}
+        value = item.get(stat) if isinstance(item, dict) else None
+        values.append(np.nan if value is None else float(value))
+    return np.array(values, dtype=np.float64)
+
+
+def plot_performance_axes(axes, x, rows):
+    for kind, color in zip(PERFORMANCE_PUSH_KINDS, ("tab:blue", "tab:orange")):
+        axes[0].plot(
+            x,
+            get_performance_axis(rows, "push", kind, None),
+            color=color,
+            label=f"{kind} mean",
+        )
+        axes[0].plot(
+            x,
+            get_performance_axis(rows, "push", kind, None, "p95"),
+            color=color,
+            linestyle="--",
+            linewidth=1.0,
+            label=f"{kind} p95",
+        )
+
+    for phase in PERFORMANCE_PHASES:
+        axes[1].plot(
+            x,
+            get_performance_axis(rows, "phase", phase, "wall"),
+            label=phase,
+        )
+        axes[2].plot(
+            x,
+            get_performance_axis(rows, "phase", phase, "omp_efficiency"),
+            label=phase,
+        )
+        axes[3].plot(
+            x,
+            get_performance_axis(rows, "phase", phase, "max_chunk"),
+            label=phase,
+        )
+
+    if len(axes) > 4:
+        for operation in PERFORMANCE_OPERATIONS:
+            axes[4].plot(
+                x,
+                get_performance_axis(rows, "operation", operation, "max_call", "p95"),
+                label=operation,
+            )
+
+    axes[0].set_ylabel("push [s]")
+    axes[1].set_ylabel("phase wall [s]")
+    axes[2].set_ylabel("OMP efficiency")
+    axes[3].set_ylabel("max chunk [s]")
+    if len(axes) > 4:
+        axes[4].set_ylabel("MPI call p95 [s]")
+
+
+def performance_plot_rows(rows):
+    return [row for row in rows if isinstance(row.get("performance"), dict)]
+
+
+def has_performance_operations(rows):
+    return any(
+        isinstance(row["performance"].get("operation"), dict)
+        and bool(row["performance"]["operation"])
+        for row in rows
+        if isinstance(row.get("performance"), dict)
+    )
+
+
 def plot_binned_rows(rows, filename):
     import matplotlib.pyplot as plt
 
     timing = binned_timing(rows)
     xmin, xmax = get_step_range(rows)
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+    performance_rows = performance_plot_rows(rows)
+    has_operations = has_performance_operations(performance_rows)
+    axis_count = 8 if has_operations else 7 if performance_rows else 3
+    fig, axes = plt.subplots(axis_count, 1, figsize=(10, axis_count * 3), sharex=True)
 
     axes[0].fill_between(
         timing["x"],
@@ -422,12 +648,60 @@ def plot_binned_rows(rows, filename):
         label="rebalance max",
     )
 
-    for ax in axes:
+    if performance_rows:
+        groups = np.array_split(
+            np.arange(len(performance_rows)),
+            min(DEFAULT_PLOT_BINS, len(performance_rows)),
+        )
+        performance_x = get_step_axis(performance_rows)
+        binned_rows = []
+        for group in groups:
+            row = {
+                "index": len(binned_rows),
+                "step": float(np.median(performance_x[group])),
+                "performance": {"push": {}, "phase": {}},
+            }
+            for kind in PERFORMANCE_PUSH_KINDS:
+                row["performance"]["push"][kind] = {}
+                for stat in ("mean", "p95"):
+                    values = get_performance_axis(
+                        performance_rows, "push", kind, None, stat
+                    )[group]
+                    row["performance"]["push"][kind][stat] = float(np.nanmedian(values))
+            for phase in PERFORMANCE_PHASES:
+                row["performance"]["phase"][phase] = {}
+                for metric in PERFORMANCE_PHASE_METRICS:
+                    values = get_performance_axis(
+                        performance_rows, "phase", phase, metric
+                    )[group]
+                    row["performance"]["phase"][phase][metric] = {
+                        "mean": float(np.nanmedian(values))
+                    }
+            if has_operations:
+                row["performance"]["operation"] = {}
+                for operation in PERFORMANCE_OPERATIONS:
+                    row["performance"]["operation"][operation] = {"max_call": {}}
+                    values = get_performance_axis(
+                        performance_rows,
+                        "operation",
+                        operation,
+                        "max_call",
+                        "p95",
+                    )[group]
+                    values = values[np.isfinite(values)]
+                    row["performance"]["operation"][operation]["max_call"]["p95"] = (
+                        float(np.median(values)) if values.size else np.nan
+                    )
+            binned_rows.append(row)
+        plot_performance_axes(axes[3:], get_step_axis(binned_rows), binned_rows)
+
+    for ax in axes[:3]:
         ax.set_ylabel("elapsed [s]")
+    for ax in axes:
         style_timing_axis(ax, xmin, xmax)
 
     axes[0].set_title(f"PIC-NIX timing ({len(timing['x'])} bins)")
-    axes[2].set_xlabel("step")
+    axes[-1].set_xlabel("step")
 
     fig.tight_layout()
     fig.savefig(filename, dpi=150)
@@ -448,7 +722,15 @@ def plot_rows(rows, filename, rolling=50, max_points=DEFAULT_MAX_PLOT_POINTS):
     diagnostic = get_phase_axis(rows, "diagnostic")
     rebalance = get_phase_axis(rows, "rebalance")
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+    performance_rows = performance_plot_rows(rows)
+    axis_count = (
+        8
+        if has_performance_operations(performance_rows)
+        else 7
+        if performance_rows
+        else 3
+    )
+    fig, axes = plt.subplots(axis_count, 1, figsize=(10, axis_count * 3), sharex=True)
 
     axes[0].plot(x, total, label="total", color="black", linewidth=1.0)
     axes[0].plot(x, push, label="push", color="tab:blue", linewidth=1.0)
@@ -458,6 +740,10 @@ def plot_rows(rows, filename, rolling=50, max_points=DEFAULT_MAX_PLOT_POINTS):
     axes[1].plot(x, diagnostic, label="diagnostic", color="tab:green", linewidth=1.0)
 
     axes[2].plot(x, rebalance, label="rebalance", color="tab:orange", linewidth=1.0)
+    if performance_rows:
+        plot_performance_axes(
+            axes[3:], get_step_axis(performance_rows), performance_rows
+        )
     smoothed = rolling_mean(total, rolling)
     if smoothed is not None:
         axes[0].plot(
@@ -467,7 +753,7 @@ def plot_rows(rows, filename, rolling=50, max_points=DEFAULT_MAX_PLOT_POINTS):
             linewidth=1.5,
         )
     axes[1].set_ylabel("elapsed [s]")
-    axes[2].set_xlabel("step")
+    axes[-1].set_xlabel("step")
     axes[2].set_ylabel("elapsed [s]")
 
     for ax in axes:

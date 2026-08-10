@@ -82,32 +82,17 @@ public:
     }
 
     //
-    // The following implementation of resize is not ideal as it requires copy of buffer twice, one
-    // from the original to the temporary and another from the temporary to the resized buffer.
+    // reallocate the particle arrays with a single copy for each
     //
-
     {
-      const size_t size = std::min(xu.size(), static_cast<size_t>(np_new) * Nc) * sizeof(float64);
-      auto         tmp(xu);
-
-      xu.resize(Particle::to_size(np_new, Nc));
-      std::memcpy(xu.data(), tmp.data(), size);
-    }
-
-    {
-      const size_t size = std::min(xv.size(), static_cast<size_t>(np_new) * Nc) * sizeof(float64);
-      auto         tmp(xv);
-
-      xv.resize(Particle::to_size(np_new, Nc));
-      std::memcpy(xv.data(), tmp.data(), size);
-    }
-
-    {
-      const size_t size = std::min(gindex.size(), static_cast<size_t>(np_new)) * sizeof(int32);
-      auto         tmp(gindex);
-
-      gindex.resize(Particle::to_size(np_new));
-      std::memcpy(gindex.data(), tmp.data(), size);
+      const std::size_t npu = static_cast<std::size_t>(np_new);
+      const std::size_t ncu = static_cast<std::size_t>(Nc);
+      realloc_array(xu, Particle::to_size(np_new, Nc),
+                    std::min(xu.size(), npu * ncu) * sizeof(float64));
+      realloc_array(xv, Particle::to_size(np_new, Nc),
+                    std::min(xv.size(), npu * ncu) * sizeof(float64));
+      realloc_array(gindex, Particle::to_size(np_new),
+                    std::min(gindex.size(), npu) * sizeof(int32));
     }
 
     // set new total number of particles
@@ -373,6 +358,22 @@ public:
       xu(ip, 1) += (xu(ip, 1) < Y1) * Y - (xu(ip, 1) >= Y2) * Y;
       xu(ip, 2) += (xu(ip, 2) < Z1) * Z - (xu(ip, 2) >= Z2) * Z;
     }
+  }
+
+private:
+  /// @brief reallocate a particle array to a new shape with a single copy
+  /// @note semantics follow C realloc(): the new buffer is allocated, the
+  /// min(old, new) bytes of old data copied once, and the storage moved in
+  /// place (the move-assignment releases the old buffer). Handles both growth
+  /// and shrink.
+  template <typename T, std::size_t N>
+  static void realloc_array(xt::xtensor<T, N>& arr, std::array<std::size_t, N> shape,
+                            std::size_t copy_bytes)
+  {
+    xt::xtensor<T, N> nx;
+    nx.resize(shape);
+    std::memcpy(nx.data(), arr.data(), copy_bytes);
+    arr = std::move(nx);
   }
 };
 

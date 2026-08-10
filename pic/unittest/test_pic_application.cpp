@@ -84,6 +84,16 @@ public:
     PicApplication::push();
   }
 
+  void complete_boundaries_for_test(std::vector<PtrChunk> chunks)
+  {
+    chunkvec.resize(0);
+    for (auto& chunk : chunks) {
+      chunkvec.push_back(std::move(chunk));
+    }
+    PicApplication::complete_boundaries_funneled(BoundaryCur,
+                                                 PicPerformance::Operation::CurrentPoll);
+  }
+
   void require_poisson_error_below(int mz, int my, int mx, float64 tol)
   {
     const float64 rms_err = compute_poisson_error(mz, my, mx);
@@ -379,7 +389,6 @@ public:
 
     // initialize particles
     {
-      float64           target      = 1 + this->get_buffer_ratio();
       int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
@@ -399,7 +408,7 @@ public:
 
         id *= this->myid;
 
-        up[is]     = std::make_shared<ParticleType>(mp * target, *this);
+        up[is]     = std::make_shared<ParticleType>(mp, *this);
         up[is]->m  = ro / np;
         up[is]->q  = qm * up[is]->m;
         up[is]->Np = mp;
@@ -425,6 +434,34 @@ public:
   }
 };
 
+class PollingChunk : public PicChunk
+{
+public:
+  PollingChunk(int id, int incomplete_queries, std::vector<int>& completion_order)
+      : PicChunk({1, 1, 1}, {false, false, true}, id), incomplete_queries(incomplete_queries),
+        completion_order(completion_order)
+  {
+  }
+
+  int set_boundary_query(int, int sendrecv) override
+  {
+    if (sendrecv == -1 && incomplete_queries > 0) {
+      incomplete_queries--;
+      return 0;
+    }
+    return 1;
+  }
+
+  void set_boundary_end(int) override
+  {
+    completion_order.push_back(get_id());
+  }
+
+private:
+  int               incomplete_queries;
+  std::vector<int>& completion_order;
+};
+
 class TestInterface : public PicApplicationInterface
 {
 public:
@@ -445,7 +482,8 @@ std::string replace_all(std::string text, const std::string& needle, const std::
 }
 
 std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
-                                            bool with_ascent = false)
+                                            bool               with_ascent     = false,
+                                            const std::string& mpi_thread_mode = "auto")
 {
   const char*           tmpdir_env = std::getenv("PICNIX_TMPDIR");
   std::filesystem::path base       = tmpdir_env != nullptr ? tmpdir_env : ".";
@@ -459,6 +497,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
  [application]
    [application.option]
       seed_type = 'fixed'
+      mpi_thread_mode = '@MPI_THREAD_MODE@'
    [application.poisson_petsc]
     ksp_type = 'cg'
     pc_type = 'gamg'
@@ -504,7 +543,8 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
   const char* config_template = R"TOML(
  [application]
    [application.option]
-     seed_type = 'fixed'
+      seed_type = 'fixed'
+      mpi_thread_mode = '@MPI_THREAD_MODE@'
    [application.poisson_basic]
      max_iter = 2000
      tol = 1.0e-12
@@ -555,6 +595,7 @@ std::filesystem::path write_config_for_grid(const GridConfig& cfg, int rank,
     config             = replace_all(config, "@CX@", std::to_string(cfg.cx));
     config             = replace_all(config, "@CY@", std::to_string(cfg.cy));
     config             = replace_all(config, "@CZ@", std::to_string(cfg.cz));
+    config             = replace_all(config, "@MPI_THREAD_MODE@", mpi_thread_mode);
     config             = replace_all(config, "@ASCENT_DIAGNOSTIC@",
                          with_ascent ? "\n[[diagnostic]]\n  name = 'ascent'\n  begin = 0\n  "
                                                    "interval = 1\n  actions = 'ascent_empty_actions.yaml'\n  "
@@ -667,6 +708,20 @@ TEST_CASE("pic_application_interface_smoke", "[np=1][np=8]")
   cleanup_config_and_tmpdir(config_path, rank);
 }
 
+TEST_CASE("FUNNELED completion polls past an incomplete chunk")
+{
+  std::vector<int>                        completion_order;
+  std::vector<nix::Application::PtrChunk> chunks;
+  chunks.push_back(std::make_unique<PollingChunk>(0, 2, completion_order));
+  chunks.push_back(std::make_unique<PollingChunk>(1, 0, completion_order));
+
+  auto            interface = std::make_shared<TestInterface>();
+  TestApplication app(0, nullptr, interface);
+  app.complete_boundaries_for_test(std::move(chunks));
+
+  REQUIRE(completion_order == std::vector<int>{1, 0});
+}
+
 #if PICNIX_ENABLE_ASCENT
 TEST_CASE("PicApplication runs Ascent diagnostic through finalization", "[ASCENT][np=1]")
 {
@@ -764,34 +819,45 @@ TEST_CASE("PicApplication solve_poisson analytic periodic", "[np=8]")
   cleanup_config_and_tmpdir(config_path, rank);
 }
 
-TEST_CASE("PicApplication preserves Gauss's law", "[np=8]")
+TEST_CASE("PicApplication preserves Gauss's law in each MPI thread mode", "[np=8]")
 {
   if (!require_mpi_size(8)) {
     return;
   }
 
-  const float64         tol         = 1.0e-12;
-  const int             rank        = get_mpi_rank();
-  const GridConfig      grid_config = GridConfig{32, 32, 32, 4, 4, 4};
-  std::filesystem::path config_path = write_config_for_grid(grid_config, rank);
+  const float64    tol         = 1.0e-12;
+  const int        rank        = get_mpi_rank();
+  const GridConfig grid_config = GridConfig{32, 32, 32, 4, 4, 4};
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  int                      thread_provided = MPI_THREAD_SINGLE;
+  std::vector<std::string> modes           = {"funneled"};
+  MPI_Query_thread(&thread_provided);
+  if (thread_provided >= MPI_THREAD_MULTIPLE) {
+    modes.push_back("multiple");
+  }
 
-  CliArgs         cli       = make_cli_args(config_path);
-  auto            interface = std::make_shared<TestInterface>();
-  TestApplication app(cli.argc(), cli.cargv(), interface);
+  for (const auto& mode : modes) {
+    DYNAMIC_SECTION(mode)
+    {
+      std::filesystem::path config_path = write_config_for_grid(grid_config, rank, false, mode);
 
-  app.initialize_for_test(cli.argc(), cli.cargv());
+      MPI_Barrier(MPI_COMM_WORLD);
 
-  // check Gauss's law before particle push
-  app.update_poisson_efield_from_particle();
-  app.require_divergence_error_below(tol);
+      CliArgs         cli       = make_cli_args(config_path);
+      auto            interface = std::make_shared<TestInterface>();
+      TestApplication app(cli.argc(), cli.cargv(), interface);
 
-  // check Gauss's law after particle push
-  app.push();
-  app.require_divergence_error_below(tol);
+      app.initialize_for_test(cli.argc(), cli.cargv());
 
-  app.finalize_for_test();
+      app.update_poisson_efield_from_particle();
+      app.require_divergence_error_below(tol);
 
-  cleanup_config_and_tmpdir(config_path, rank);
+      app.push();
+      app.require_divergence_error_below(tol);
+
+      app.finalize_for_test();
+
+      cleanup_config_and_tmpdir(config_path, rank);
+    }
+  }
 }

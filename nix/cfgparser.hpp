@@ -196,19 +196,30 @@ public:
       return false;
     }
 
-    if (option.contains("sfc_first_axis") == false) {
-      return true;
+    if (option.contains("sfc_first_axis")) {
+      if (option["sfc_first_axis"].is_string() == false) {
+        std::cerr << "`sfc_first_axis` must be one of: x, y, z\n";
+        return false;
+      }
+
+      std::string axis = option["sfc_first_axis"].get<std::string>();
+      if (sfc::parse_axis(axis) == sfc::SfcAxis::None) {
+        std::cerr << fmt::format("Unknown `sfc_first_axis`: {}\n", axis);
+        return false;
+      }
     }
 
-    if (option["sfc_first_axis"].is_string() == false) {
-      std::cerr << "`sfc_first_axis` must be one of: x, y, z\n";
-      return false;
-    }
+    if (option.contains("mpi_thread_mode")) {
+      if (option["mpi_thread_mode"].is_string() == false) {
+        std::cerr << "`mpi_thread_mode` must be one of: auto, multiple, funneled\n";
+        return false;
+      }
 
-    std::string axis = option["sfc_first_axis"].get<std::string>();
-    if (sfc::parse_axis(axis) == sfc::SfcAxis::None) {
-      std::cerr << fmt::format("Unknown `sfc_first_axis`: {}\n", axis);
-      return false;
+      std::string mode = option["mpi_thread_mode"].get<std::string>();
+      if (mode != "auto" && mode != "multiple" && mode != "funneled") {
+        std::cerr << fmt::format("Unknown `mpi_thread_mode`: {}\n", mode);
+        return false;
+      }
     }
 
     return true;
