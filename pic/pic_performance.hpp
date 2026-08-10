@@ -55,11 +55,29 @@ public:
 
   void record_operation_summary(Operation operation, nix::float64 total, nix::float64 max_call);
 
+  // begin/end pairs: measure a region with a single call at each end. The
+  // wall-clock read and the recording are skipped entirely when the sampler
+  // is inactive, so call sites need no sampling branches.
+  void begin_chunk(Phase phase);
+
+  void end_chunk(Phase phase);
+
+  void begin_wall(Phase phase);
+
+  void end_wall(Phase phase);
+
+  void begin_operation(Operation operation);
+
+  void end_operation(Operation operation);
+
   nix::json finish_step(nix::float64 local_push, nix::float64 barrier_wait,
                         MPI_Comm comm = MPI_COMM_WORLD);
 
 private:
   struct ThreadTiming {
+    std::array<nix::float64, NumPhases>     begin_chunk{};
+    std::array<nix::float64, NumPhases>     begin_wall{};
+    std::array<nix::float64, NumOperations> begin_operation{};
     std::array<nix::float64, NumPhases>     busy{};
     std::array<nix::float64, NumPhases>     max_chunk{};
     std::array<nix::float64, NumPhases>     wall{};

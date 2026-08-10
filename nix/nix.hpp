@@ -199,6 +199,32 @@ inline int get_max_threads()
 #endif
 }
 
+///
+/// @brief return the number of threads in the current OpenMP team
+/// @return 1 when OpenMP is not enabled
+///
+inline int get_num_threads()
+{
+#ifdef _OPENMP
+  return omp_get_num_threads();
+#else
+  return 1;
+#endif
+}
+
+///
+/// @brief return the index of the calling thread in the current OpenMP team
+/// @return 0 when OpenMP is not enabled
+///
+inline int get_thread_num()
+{
+#ifdef _OPENMP
+  return omp_get_thread_num();
+#else
+  return 0;
+#endif
+}
+
 inline int sync_directory(std::string dirname)
 {
   int status = 0;

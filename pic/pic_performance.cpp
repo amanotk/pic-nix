@@ -79,10 +79,7 @@ void PicPerformance::record_chunk(Phase phase, nix::float64 elapsed)
     return;
   }
 
-  int thread = 0;
-#ifdef _OPENMP
-  thread = omp_get_thread_num();
-#endif
+  int thread = nix::get_thread_num();
 
   int index = phase_index(phase);
   thread_timing[thread].busy[index] += elapsed;
@@ -96,10 +93,7 @@ void PicPerformance::record_phase_wall(Phase phase, nix::float64 elapsed)
     return;
   }
 
-  int thread = 0;
-#ifdef _OPENMP
-  thread = omp_get_thread_num();
-#endif
+  int thread = nix::get_thread_num();
 
   thread_timing[thread].wall[phase_index(phase)] = elapsed;
 }
@@ -109,6 +103,75 @@ void PicPerformance::record_operation(Operation operation, nix::float64 elapsed)
   record_operation_summary(operation, elapsed, elapsed);
 }
 
+void PicPerformance::begin_chunk(Phase phase)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = nix::get_thread_num();
+
+  thread_timing[thread].begin_chunk[phase_index(phase)] = nix::wall_clock();
+}
+
+void PicPerformance::end_chunk(Phase phase)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = nix::get_thread_num();
+
+  record_chunk(phase, nix::wall_clock() - thread_timing[thread].begin_chunk[phase_index(phase)]);
+}
+
+void PicPerformance::begin_wall(Phase phase)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = nix::get_thread_num();
+
+  thread_timing[thread].begin_wall[phase_index(phase)] = nix::wall_clock();
+}
+
+void PicPerformance::end_wall(Phase phase)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = nix::get_thread_num();
+
+  record_phase_wall(phase,
+                    nix::wall_clock() - thread_timing[thread].begin_wall[phase_index(phase)]);
+}
+
+void PicPerformance::begin_operation(Operation operation)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = nix::get_thread_num();
+
+  thread_timing[thread].begin_operation[operation_index(operation)] = nix::wall_clock();
+}
+
+void PicPerformance::end_operation(Operation operation)
+{
+  if (sampling == false) {
+    return;
+  }
+
+  int thread = nix::get_thread_num();
+
+  record_operation(operation,
+                   nix::wall_clock() -
+                       thread_timing[thread].begin_operation[operation_index(operation)]);
+}
+
 void PicPerformance::record_operation_summary(Operation operation, nix::float64 total,
                                               nix::float64 max_call)
 {
@@ -116,10 +179,7 @@ void PicPerformance::record_operation_summary(Operation operation, nix::float64 
     return;
   }
 
-  int thread = 0;
-#ifdef _OPENMP
-  thread = omp_get_thread_num();
-#endif
+  int thread = nix::get_thread_num();
 
   int index = operation_index(operation);
   thread_timing[thread].operation_total[index] += total;

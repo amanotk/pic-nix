@@ -86,8 +86,6 @@ protected:
 
   virtual void push() override;
 
-  virtual void push_openmp();
-
   virtual void push_openmp_multiple();
 
   virtual void push_openmp_funneled();

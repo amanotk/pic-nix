@@ -313,7 +313,11 @@ void PicApplication::push()
   bool sample_performance = performance.begin_step(curstep, nthread);
 
   DEBUG2 << "push_openmp() start";
-  push_openmp();
+  if (get_mpi_thread_mode() == nix::MpiThreadMode::Multiple) {
+    push_openmp_multiple();
+  } else {
+    push_openmp_funneled();
+  }
   DEBUG2 << "push_openmp() end";
 
   float64 push_end      = nix::wall_clock();
@@ -335,23 +339,13 @@ void PicApplication::push()
   }
 }
 
-void PicApplication::push_openmp()
-{
-  if (get_mpi_thread_mode() == nix::MpiThreadMode::Multiple) {
-    push_openmp_multiple();
-  } else {
-    push_openmp_funneled();
-  }
-}
-
 void PicApplication::push_openmp_multiple()
 {
 #pragma omp parallel
   {
-    const float64 delt               = cfgparser->get_delt();
-    const bool    sample_performance = performance.is_sampling();
+    const float64 delt = cfgparser->get_delt();
 
-    if (sample_performance) {
+    if (performance.is_sampling()) {
       int parallel_threads = 1;
 #ifdef _OPENMP
       parallel_threads = omp_get_num_threads();
@@ -360,12 +354,13 @@ void PicApplication::push_openmp_multiple()
       performance.set_parallel_threads(parallel_threads);
     }
 
-    float64 phase_begin = sample_performance ? nix::wall_clock() : 0.0;
+    performance.begin_wall(PicPerformance::Phase::Advance);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::Advance);
 
       // reset load
       chunk->reset_load();
@@ -382,47 +377,33 @@ void PicApplication::push_openmp_multiple()
 
       // begin boundary exchange for current
       chunk->set_boundary_pack(BoundaryCur);
-      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_operation(PicPerformance::Operation::CurrentBegin);
       chunk->set_boundary_begin(BoundaryCur);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::CurrentBegin,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::CurrentBegin);
 
       // begin boundary exchange for particle
       chunk->set_boundary_pack(BoundaryParticle);
-      operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_operation(PicPerformance::Operation::ParticleBegin);
       chunk->set_boundary_begin(BoundaryParticle);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::ParticleBegin,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::ParticleBegin);
 
       // push B for a half step
       chunk->push_bfd(0.5 * delt);
 
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::Advance, nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::Advance);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::Advance,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::Advance);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
-      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_chunk(PicPerformance::Phase::CurrentField);
+
+      performance.begin_operation(PicPerformance::Operation::CurrentWaitall);
       chunk->set_boundary_end(BoundaryCur);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::CurrentWaitall,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::CurrentWaitall);
       chunk->set_boundary_unpack(BoundaryCur);
 
       // push E
@@ -430,115 +411,68 @@ void PicApplication::push_openmp_multiple()
 
       // begin boundary exchange for field
       chunk->set_boundary_pack(BoundaryEmf);
-      operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_operation(PicPerformance::Operation::FieldBegin);
       chunk->set_boundary_begin(BoundaryEmf);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::FieldBegin,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::FieldBegin);
 
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::CurrentField,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::CurrentField);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::CurrentField,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::CurrentField);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
-      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_chunk(PicPerformance::Phase::ParticleProbe);
+
+      performance.begin_operation(PicPerformance::Operation::ParticleProbe);
       chunk->set_boundary_probe(BoundaryParticle, true);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::ParticleProbe,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::ParticleProbe);
 
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::ParticleProbe,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::ParticleProbe);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::ParticleProbe,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::ParticleProbe);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
-      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_chunk(PicPerformance::Phase::ParticleExchange);
+
+      performance.begin_operation(PicPerformance::Operation::ParticleWaitall);
       chunk->set_boundary_end(BoundaryParticle);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::ParticleWaitall,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::ParticleWaitall);
       chunk->set_boundary_unpack(BoundaryParticle);
 
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::ParticleExchange,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::ParticleExchange);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::ParticleExchange,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::ParticleExchange);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
-      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_chunk(PicPerformance::Phase::FieldExchange);
+
+      performance.begin_operation(PicPerformance::Operation::FieldWaitall);
       chunk->set_boundary_end(BoundaryEmf);
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::FieldWaitall,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::FieldWaitall);
       chunk->set_boundary_unpack(BoundaryEmf);
 
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::FieldExchange,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::FieldExchange);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::FieldExchange,
-                                    nix::wall_clock() - phase_begin);
-    }
+    performance.end_wall(PicPerformance::Phase::FieldExchange);
   }
 }
 
 void PicApplication::complete_boundaries_funneled(int mode, PicPerformance::Operation operation)
 {
-  const bool        sample_performance = performance.is_sampling();
   std::vector<char> complete(chunkvec.size(), false);
-  size_t            incomplete      = complete.size();
-  float64           operation_total = 0.0;
-  float64           operation_max   = 0.0;
-
-  const auto record_call = [&](float64 begin) {
-    if (sample_performance) {
-      float64 elapsed = nix::wall_clock() - begin;
-      operation_total += elapsed;
-      operation_max = std::max(operation_max, elapsed);
-    }
-  };
+  size_t            incomplete = complete.size();
 
   while (incomplete > 0) {
     // Thread 0 must keep entering MPI because no other thread can drive progress
@@ -548,56 +482,48 @@ void PicApplication::complete_boundaries_funneled(int mode, PicPerformance::Oper
         continue;
       }
 
-      auto*   chunk         = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 call_begin    = sample_performance ? nix::wall_clock() : 0.0;
-      bool    send_complete = chunk->set_boundary_query(mode, +1);
-      record_call(call_begin);
+      auto* chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
-      call_begin         = sample_performance ? nix::wall_clock() : 0.0;
+      performance.begin_operation(operation);
+      bool send_complete = chunk->set_boundary_query(mode, +1);
+      performance.end_operation(operation);
+
+      performance.begin_operation(operation);
       bool recv_complete = chunk->set_boundary_query(mode, -1);
-      record_call(call_begin);
+      performance.end_operation(operation);
 
       if (send_complete && recv_complete) {
-        call_begin = sample_performance ? nix::wall_clock() : 0.0;
+        performance.begin_operation(operation);
         chunk->set_boundary_end(mode);
-        record_call(call_begin);
+        performance.end_operation(operation);
         complete[i] = true;
         incomplete--;
       }
     }
   }
-
-  if (sample_performance) {
-    performance.record_operation_summary(operation, operation_total, operation_max);
-  }
 }
 
 void PicApplication::push_openmp_funneled()
 {
-  const bool        sample_performance = performance.is_sampling();
   std::vector<char> particle_ready(chunkvec.size(), false);
 
 #pragma omp parallel
   {
     const float64 delt = cfgparser->get_delt();
 
-    if (sample_performance) {
-      int parallel_threads = 1;
-#ifdef _OPENMP
-      parallel_threads = omp_get_num_threads();
-#endif
+    if (performance.is_sampling()) {
 #pragma omp master
-      performance.set_parallel_threads(parallel_threads);
+      performance.set_parallel_threads(nix::get_num_threads());
 #pragma omp barrier
     }
 
-    float64 phase_begin = sample_performance ? nix::wall_clock() : 0.0;
+    performance.begin_wall(PicPerformance::Phase::Advance);
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
+      performance.begin_chunk(PicPerformance::Phase::Advance);
       chunk->reset_load();
       chunk->push_bfd(0.5 * delt);
       chunk->push_velocity(delt);
@@ -606,40 +532,27 @@ void PicApplication::push_openmp_funneled()
       chunk->set_boundary_pack(BoundaryCur);
       chunk->set_boundary_pack(BoundaryParticle);
       chunk->push_bfd(0.5 * delt);
-
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::Advance, nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::Advance);
     }
 
 #pragma omp master
     {
       for (auto& chunk_ptr : chunkvec) {
-        auto*   chunk           = static_cast<PicChunk*>(chunk_ptr.get());
-        float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+        auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
+        performance.begin_operation(PicPerformance::Operation::CurrentBegin);
         chunk->set_boundary_begin(BoundaryCur);
-        if (sample_performance) {
-          performance.record_operation(PicPerformance::Operation::CurrentBegin,
-                                       nix::wall_clock() - operation_begin);
-        }
+        performance.end_operation(PicPerformance::Operation::CurrentBegin);
       }
       for (auto& chunk_ptr : chunkvec) {
-        auto*   chunk           = static_cast<PicChunk*>(chunk_ptr.get());
-        float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+        auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
+        performance.begin_operation(PicPerformance::Operation::ParticleBegin);
         chunk->set_boundary_begin(BoundaryParticle);
-        if (sample_performance) {
-          performance.record_operation(PicPerformance::Operation::ParticleBegin,
-                                       nix::wall_clock() - operation_begin);
-        }
+        performance.end_operation(PicPerformance::Operation::ParticleBegin);
       }
     }
 #pragma omp barrier
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::Advance,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::Advance);
 
 #pragma omp master
     {
@@ -649,43 +562,32 @@ void PicApplication::push_openmp_funneled()
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
 
+      performance.begin_chunk(PicPerformance::Phase::CurrentField);
       chunk->set_boundary_unpack(BoundaryCur);
       chunk->push_efd(delt);
       chunk->set_boundary_pack(BoundaryEmf);
-
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::CurrentField,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::CurrentField);
     }
 
 #pragma omp master
     {
       for (auto& chunk_ptr : chunkvec) {
-        auto*   chunk           = static_cast<PicChunk*>(chunk_ptr.get());
-        float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
+        auto* chunk = static_cast<PicChunk*>(chunk_ptr.get());
+        performance.begin_operation(PicPerformance::Operation::FieldBegin);
         chunk->set_boundary_begin(BoundaryEmf);
-        if (sample_performance) {
-          performance.record_operation(PicPerformance::Operation::FieldBegin,
-                                       nix::wall_clock() - operation_begin);
-        }
+        performance.end_operation(PicPerformance::Operation::FieldBegin);
       }
     }
 #pragma omp barrier
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::CurrentField,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::CurrentField);
 
 #pragma omp master
     {
-      float64 operation_begin = sample_performance ? nix::wall_clock() : 0.0;
-      size_t  incomplete      = particle_ready.size();
+      size_t incomplete = particle_ready.size();
+      performance.begin_operation(PicPerformance::Operation::ParticleProbe);
       while (incomplete > 0) {
         for (size_t i = 0; i < particle_ready.size(); i++) {
           if (particle_ready[i]) {
@@ -698,18 +600,11 @@ void PicApplication::push_openmp_funneled()
           }
         }
       }
-      if (sample_performance) {
-        performance.record_operation(PicPerformance::Operation::ParticleProbe,
-                                     nix::wall_clock() - operation_begin);
-      }
+      performance.end_operation(PicPerformance::Operation::ParticleProbe);
     }
 #pragma omp barrier
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::ParticleProbe,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::ParticleProbe);
 
 #pragma omp master
     {
@@ -719,20 +614,14 @@ void PicApplication::push_openmp_funneled()
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::ParticleExchange);
       chunk->set_boundary_unpack(BoundaryParticle);
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::ParticleExchange,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::ParticleExchange);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::ParticleExchange,
-                                    nix::wall_clock() - phase_begin);
-      phase_begin = nix::wall_clock();
-    }
+    performance.end_wall(PicPerformance::Phase::ParticleExchange);
 
 #pragma omp master
     {
@@ -742,19 +631,14 @@ void PicApplication::push_openmp_funneled()
 
 #pragma omp for schedule(dynamic)
     for (int i = 0; i < chunkvec.size(); i++) {
-      auto    chunk       = static_cast<PicChunk*>(chunkvec[i].get());
-      float64 chunk_begin = sample_performance ? nix::wall_clock() : 0.0;
+      auto chunk = static_cast<PicChunk*>(chunkvec[i].get());
+
+      performance.begin_chunk(PicPerformance::Phase::FieldExchange);
       chunk->set_boundary_unpack(BoundaryEmf);
-      if (sample_performance) {
-        performance.record_chunk(PicPerformance::Phase::FieldExchange,
-                                 nix::wall_clock() - chunk_begin);
-      }
+      performance.end_chunk(PicPerformance::Phase::FieldExchange);
     }
 
-    if (sample_performance) {
-      performance.record_phase_wall(PicPerformance::Phase::FieldExchange,
-                                    nix::wall_clock() - phase_begin);
-    }
+    performance.end_wall(PicPerformance::Phase::FieldExchange);
   }
 }
 
