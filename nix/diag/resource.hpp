@@ -3,6 +3,7 @@
 #define _DIAG_RESOURCE_HPP_
 
 #include "diag.hpp"
+#include "memory.hpp"
 #include "nixio.hpp"
 
 NIX_NAMESPACE_BEGIN
@@ -31,15 +32,18 @@ public:
     const float64        to_gb        = 1.0 / (1024 * 1024 * 1024);
     int                  local_chunk  = 0;
     float64              local_memory = 0;
+    float64              local_rss    = 0;
     float64              local_load   = 0;
     float64              total_load   = 0;
     std::vector<float64> memoryvec;
     std::vector<float64> loadvec;
     std::vector<int>     node_chunk;
     std::vector<float64> node_memory;
+    std::vector<float64> node_rss;
     std::vector<float64> node_load;
     std::vector<int>     rank_chunk;
     std::vector<float64> rank_memory;
+    std::vector<float64> rank_rss;
     std::vector<float64> rank_load;
 
     //
@@ -54,6 +58,7 @@ public:
     }
     local_memory = std::accumulate(memoryvec.begin(), memoryvec.end(), 0.0);
     local_load   = std::accumulate(loadvec.begin(), loadvec.end(), 0.0);
+    local_rss    = nix::get_process_rss() * to_gb;
 
     // total load
     MPI_Reduce(&local_load, &total_load, 1, MPI_FLOAT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -81,6 +86,18 @@ public:
         if (this->info->intra_rank == 0) {
           node_memory.resize(this->info->inter_size, 0);
           MPI_Gather(&sum, 1, MPI_FLOAT64_T, node_memory.data(), 1, MPI_FLOAT64_T, 0,
+                     this->info->inter_comm);
+        }
+      }
+
+      // live RSS
+      {
+        float64 sum = 0;
+        MPI_Reduce(&local_rss, &sum, 1, MPI_FLOAT64_T, MPI_SUM, 0, this->info->intra_comm);
+
+        if (this->info->intra_rank == 0) {
+          node_rss.resize(this->info->inter_size, 0);
+          MPI_Gather(&sum, 1, MPI_FLOAT64_T, node_rss.data(), 1, MPI_FLOAT64_T, 0,
                      this->info->inter_comm);
         }
       }
@@ -113,6 +130,11 @@ public:
       MPI_Gather(&local_memory, 1, MPI_FLOAT64_T, rank_memory.data(), 1, MPI_FLOAT64_T, 0,
                  MPI_COMM_WORLD);
 
+      // live RSS
+      rank_rss.resize(data.nprocess, 0);
+      MPI_Gather(&local_rss, 1, MPI_FLOAT64_T, rank_rss.data(), 1, MPI_FLOAT64_T, 0,
+                 MPI_COMM_WORLD);
+
       // load
       rank_load.resize(data.nprocess, 0);
       MPI_Gather(&local_load, 1, MPI_FLOAT64_T, rank_load.data(), 1, MPI_FLOAT64_T, 0,
@@ -125,8 +147,9 @@ public:
     {
       json result = {
           {"step", data.curstep},     {"rank", data.thisrank},      {"time", data.curtime},
-          {"node_chunk", node_chunk}, {"node_memory", node_memory}, {"node_load", node_load},
-          {"rank_chunk", rank_chunk}, {"rank_memory", rank_memory}, {"rank_load", rank_load}};
+          {"node_chunk", node_chunk}, {"node_memory", node_memory}, {"node_rss", node_rss},
+          {"node_load", node_load},   {"rank_chunk", rank_chunk},   {"rank_memory", rank_memory},
+          {"rank_rss", rank_rss},     {"rank_load", rank_load}};
 
       if (data.thisrank == 0) {
         savefile(config, result);
@@ -147,48 +170,56 @@ public:
     if (config.contains("node") == true) {
       auto node_chunk  = result["node_chunk"].get<std::vector<int>>();
       auto node_memory = result["node_memory"].get<std::vector<float64>>();
+      auto node_rss    = result["node_rss"].get<std::vector<float64>>();
       auto node_load   = result["node_load"].get<std::vector<float64>>();
       json chunk       = {};
       json memory      = {};
+      json rss         = {};
       json load        = {};
 
       if (config["node"] == "stats" || config["node"] == "full") {
         chunk["stats"]  = statistics(node_chunk);
         memory["stats"] = statistics(node_memory);
+        rss["stats"]    = statistics(node_rss);
         load["stats"]   = statistics(node_load);
       }
 
       if (config["node"] == "full") {
         chunk["full"]  = node_chunk;
         memory["full"] = node_memory;
+        rss["full"]    = node_rss;
         load["full"]   = node_load;
       }
 
-      record["node"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+      record["node"] = {{"chunk", chunk}, {"memory", memory}, {"rss", rss}, {"load", load}};
     }
 
     // rank
     if (config.contains("rank") == true) {
       auto rank_chunk  = result["rank_chunk"].get<std::vector<int>>();
       auto rank_memory = result["rank_memory"].get<std::vector<float64>>();
+      auto rank_rss    = result["rank_rss"].get<std::vector<float64>>();
       auto rank_load   = result["rank_load"].get<std::vector<float64>>();
       json chunk       = {};
       json memory      = {};
+      json rss         = {};
       json load        = {};
 
       if (config["rank"] == "stats" || config["rank"] == "full") {
         chunk["stats"]  = statistics(rank_chunk);
         memory["stats"] = statistics(rank_memory);
+        rss["stats"]    = statistics(rank_rss);
         load["stats"]   = statistics(rank_load);
       }
 
       if (config["rank"] == "full") {
         chunk["full"]  = rank_chunk;
         memory["full"] = rank_memory;
+        rss["full"]    = rank_rss;
         load["full"]   = rank_load;
       }
 
-      record["rank"] = {{"chunk", chunk}, {"memory", memory}, {"load", load}};
+      record["rank"] = {{"chunk", chunk}, {"memory", memory}, {"rss", rss}, {"load", load}};
     }
 
     // initial call

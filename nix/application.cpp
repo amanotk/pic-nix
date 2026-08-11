@@ -4,6 +4,7 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "memory.hpp"
 #include "mpistream.hpp"
 
 NIX_NAMESPACE_BEGIN
@@ -94,6 +95,9 @@ void Application::initialize(int argc, char** argv)
 {
   curstep = 0;
   curtime = 0.0;
+
+  // process-wide malloc arena policy; must run before any large allocation
+  nix::configure_allocator();
 
   argparser = create_argparser();
   argparser->parse_check(argc, argv);
