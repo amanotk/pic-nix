@@ -77,6 +77,11 @@ int Application::main()
     take_log();
     DEBUG1 << fmt::format("step[{}] logging", format_step(curstep));
 
+    if (check_memory_limit()) {
+      DEBUG1 << fmt::format("step[{}] memory limit exceeded", format_step(curstep));
+      break;
+    }
+
     increment_time();
 
     if (get_available_etime() < 0) {
@@ -88,7 +93,7 @@ int Application::main()
   DEBUG1 << fmt::format("finalize");
   finalize();
 
-  return 0;
+  return memory_limit_hit ? 2 : 0;
 }
 
 void Application::initialize(int argc, char** argv)
@@ -104,6 +109,16 @@ void Application::initialize(int argc, char** argv)
 
   cfgparser = create_cfgparser();
   cfgparser->parse_file(argparser->get_config());
+
+  // memory limit monitoring options
+  {
+    auto option = cfgparser->get_application()["option"];
+    if (option.is_object()) {
+      rank_memory_limit_gb  = option.value("rank_memory_limit_gb", 0.0);
+      node_memory_limit_gb  = option.value("node_memory_limit_gb", 0.0);
+      memory_check_interval = option.value("memory_check_interval", 100);
+    }
+  }
 
   initialize_mpi(&argc, &argv);
   initialize_mpi_thread_mode();
@@ -505,6 +520,68 @@ bool Application::is_push_needed()
     return true;
   }
   return false;
+}
+
+bool Application::check_memory_limit()
+{
+  if (memory_check_interval <= 0 || (rank_memory_limit_gb <= 0 && node_memory_limit_gb <= 0)) {
+    return false;
+  }
+  if (curstep % memory_check_interval != 0) {
+    return false;
+  }
+
+  bool         exceeded = false;
+  const double rank_rss = static_cast<double>(nix::get_process_rss());
+
+  if (rank_rss <= 0) {
+    // RSS is unavailable (non-Linux): monitoring cannot work, so skip the
+    // collective checks entirely rather than compare against zeros.
+    return false;
+  }
+
+  if (rank_memory_limit_gb > 0) {
+    // the worst rank decides
+    double max_rss = 0;
+    MPI_Allreduce(&rank_rss, &max_rss, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    exceeded = max_rss / 1.0e9 > rank_memory_limit_gb;
+  }
+
+  if (node_memory_limit_gb > 0) {
+    // the worst node decides; node sum via the intra-node reduce and the
+    // inter-node max. The node communicators are created on the fly (the
+    // same split pattern as Diag::Info) since the check runs only every
+    // memory_check_interval steps.
+    MPI_Comm intra_comm = MPI_COMM_NULL;
+    MPI_Comm inter_comm = MPI_COMM_NULL;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, thisrank, MPI_INFO_NULL, &intra_comm);
+    int intra_rank = 0;
+    MPI_Comm_rank(intra_comm, &intra_rank);
+    MPI_Comm_split(MPI_COMM_WORLD, intra_rank != 0, thisrank, &inter_comm);
+
+    double node_sum = 0;
+    double node_max = 0;
+    MPI_Reduce(&rank_rss, &node_sum, 1, MPI_DOUBLE, MPI_SUM, 0, intra_comm);
+    if (intra_rank == 0) {
+      MPI_Allreduce(&node_sum, &node_max, 1, MPI_DOUBLE, MPI_MAX, inter_comm);
+    }
+    MPI_Bcast(&node_max, 1, MPI_DOUBLE, 0, intra_comm);
+    exceeded = exceeded || (node_max / 1.0e9 > node_memory_limit_gb);
+
+    MPI_Comm_free(&intra_comm);
+    MPI_Comm_free(&inter_comm);
+  }
+
+  if (exceeded) {
+    memory_limit_hit = true;
+    json log         = {{"rank_rss_gb", rank_rss / 1.0e9},
+                        {"rank_memory_limit_gb", rank_memory_limit_gb},
+                        {"node_memory_limit_gb", node_memory_limit_gb}};
+    logger->append(curstep, "memory_limit", log);
+    logger->flush();
+  }
+
+  return exceeded;
 }
 
 std::string Application::get_basedir()
