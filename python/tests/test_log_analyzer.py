@@ -504,3 +504,19 @@ def test_format_resource_report_and_csv(tmp_path):
     assert "rank_rss_mean" in content
     assert "node_memory_mean" in content
     assert "rank_load_max" in content
+
+
+def test_format_resource_report_skips_missing_metrics():
+    records = sample_resource_records()
+    for record in records:
+        del record["node"]["rss"]
+        del record["rank"]["rss"]
+
+    rows = log_analyzer.extract_resource_rows(records)
+    report = log_analyzer.format_resource_report(rows, "resource.msgpack")
+
+    assert "Resource Summary" in report
+    assert "rank  memory" in report
+    assert "node  memory" in report
+    assert "rank  rss" not in report
+    assert "node  rss" not in report

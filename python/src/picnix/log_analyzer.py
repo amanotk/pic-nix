@@ -483,6 +483,11 @@ def write_csv(rows, filename):
             writer.writerow(output)
 
 
+def _resource_series(resource_rows, scope, metric, stat):
+    key = f"{scope}_{metric}_{stat}"
+    return [row[key] for row in resource_rows if row.get(key) is not None]
+
+
 def format_resource_report(resource_rows, resource_filename):
     if not resource_rows:
         return ""
@@ -496,14 +501,13 @@ def format_resource_report(resource_rows, resource_filename):
     ]
     for scope in ("rank", "node"):
         for metric in RESOURCE_METRICS:
-            peak = max(
-                (row.get(f"{scope}_{metric}_max") for row in resource_rows),
-                default=None,
-            )
-            first = resource_rows[0].get(f"{scope}_{metric}_mean")
-            last = resource_rows[-1].get(f"{scope}_{metric}_mean")
-            if peak is None or first is None or last is None:
+            peak_values = _resource_series(resource_rows, scope, metric, "max")
+            mean_values = _resource_series(resource_rows, scope, metric, "mean")
+            if not peak_values or not mean_values:
                 continue
+            peak = max(peak_values)
+            first = mean_values[0]
+            last = mean_values[-1]
             growth = last - first
             lines.append(
                 f"{scope:<6}{metric:<11}"
