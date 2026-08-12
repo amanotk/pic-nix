@@ -367,7 +367,140 @@ def test_format_report_keeps_large_values_separated():
     assert re.search(r"rebalance\s+.*\s+\d+\.\d{3}\s+17105\.017\s+100", report)
 
 
+def test_resolve_resource_filename_from_profile(tmp_path):
+    # non-default layout: the log under basedir/logs, the resource at basedir
+    base = tmp_path / "data"
+    log_dir = base / "logs"
+    log_dir.mkdir(parents=True)
+    (base / "resource.msgpack").write_bytes(b"resource")
+    (base / "profile.msgpack").write_bytes(
+        msgpack.packb(
+            {
+                "configuration": {
+                    "application": {
+                        "basedir": "data",
+                        "iomode": "mpiio",
+                        "log": {"path": "logs", "prefix": "log"},
+                    }
+                }
+            },
+            use_bin_type=True,
+        )
+    )
+    log = log_dir / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == base / "resource.msgpack"
+
+
+def test_resolve_resource_filename_posix_node_dirs(tmp_path):
+    base = tmp_path / "data"
+    node_dir = base / "node000000"
+    node_dir.mkdir(parents=True)
+    (node_dir / "resource.msgpack").write_bytes(b"resource")
+    (base / "profile.msgpack").write_bytes(
+        msgpack.packb(
+            {"configuration": {"application": {"iomode": "posix"}}},
+            use_bin_type=True,
+        )
+    )
+    log = base / "logs" / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == node_dir / "resource.msgpack"
+
+
+def test_resolve_resource_filename_falls_back_to_log_dir(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "resource.msgpack").write_bytes(b"resource")
+    log = log_dir / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == log_dir / "resource.msgpack"
+
+
 def test_format_summary_value_uses_scientific_for_extremes():
     assert log_analyzer.format_summary_value(64.286) == "64.286"
     assert log_analyzer.format_summary_value(219477.725) == "2.195e+05"
     assert log_analyzer.format_summary_value(0.0004) == "4.000e-04"
+
+
+def sample_resource_records():
+    def stats(value, size=2):
+        return {
+            "min": value,
+            "max": value + 0.5,
+            "mean": value + 0.2,
+            "quant1": value,
+            "quant2": value + 0.2,
+            "quant3": value + 0.4,
+            "size": size,
+        }
+
+    return [
+        {
+            "step": 0,
+            "time": 0.0,
+            "node": {
+                "memory": {"stats": stats(1.0)},
+                "rss": {"stats": stats(2.0)},
+                "load": {"stats": stats(0.5)},
+            },
+            "rank": {
+                "memory": {"stats": stats(1.0)},
+                "rss": {"stats": stats(2.0)},
+                "load": {"stats": stats(0.5)},
+            },
+        },
+        {
+            "step": 1000,
+            "time": 50.0,
+            "node": {
+                "memory": {"stats": stats(1.5)},
+                "rss": {"stats": stats(2.5)},
+                "load": {"stats": stats(0.6)},
+            },
+            "rank": {
+                "memory": {"stats": stats(1.5)},
+                "rss": {"stats": stats(2.5)},
+                "load": {"stats": stats(0.6)},
+            },
+        },
+    ]
+
+
+def test_extract_resource_rows_parses_rss():
+    rows = log_analyzer.extract_resource_rows(sample_resource_records())
+
+    assert len(rows) == 2
+    assert rows[0]["step"] == 0
+    assert rows[0]["rank_rss_mean"] == pytest.approx(2.2)
+    assert rows[0]["rank_rss_max"] == pytest.approx(2.5)
+    assert rows[0]["node_memory_mean"] == pytest.approx(1.2)
+    assert rows[0]["rank_load_max"] == pytest.approx(1.0)
+    assert rows[1]["rank_rss_mean"] == pytest.approx(2.7)
+
+
+def test_extract_resource_rows_skips_records_without_resource_fields():
+    rows = log_analyzer.extract_resource_rows(sample_records())
+
+    assert rows == []
+
+
+def test_format_resource_report_and_csv(tmp_path):
+    rows = log_analyzer.extract_resource_rows(sample_resource_records())
+    report = log_analyzer.format_resource_report(rows, "resource.msgpack")
+
+    assert "Resource log: resource.msgpack" in report
+    assert "Samples: 2" in report
+    assert "rank  rss" in report
+    assert "3.000" in report  # peak rank rss over the samples
+
+    csv_path = tmp_path / "resource.csv"
+    log_analyzer.write_resource_csv(rows, csv_path)
+    content = csv_path.read_text()
+
+    assert "rank_rss_mean" in content
+    assert "node_memory_mean" in content
+    assert "rank_load_max" in content

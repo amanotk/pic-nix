@@ -99,6 +99,47 @@ def resolve_log_filename(filename):
     return path.parent / log_path / f"{prefix}.msgpack"
 
 
+def resolve_resource_filename(filename, log_filename):
+    """Locate the resource diagnostic file from the profile's base directory.
+
+    ResourceDiag writes resource.msgpack under the diagnostic base directory:
+    ``basedir/resource.msgpack`` in mpiio mode and
+    ``basedir/nodeNNNNNN/resource.msgpack`` in posix mode. The profile
+    (profile.msgpack) lives at the base directory root, so it anchors the
+    lookup. Falls back to the timing log's directory when no profile is
+    available.
+    """
+    profile_path = None
+    if Path(filename).name == "profile.msgpack":
+        profile_path = Path(filename)
+    else:
+        candidates = [
+            log_filename.parent / "profile.msgpack",
+            log_filename.parent.parent / "profile.msgpack",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                profile_path = candidate
+                break
+
+    if profile_path is not None:
+        with profile_path.open("rb") as fp:
+            profile = msgpack.load(fp, raw=False, strict_map_key=False)
+        config = profile.get("configuration", {})
+        iomode = config.get("application", {}).get("iomode", "mpiio")
+        base = profile_path.parent
+        if iomode == "posix":
+            matches = sorted(base.glob("node*/resource.msgpack"))
+            if matches:
+                return matches[0]
+            return None
+        resource = base / "resource.msgpack"
+        if resource.exists():
+            return resource
+
+    return log_filename.parent / "resource.msgpack"
+
+
 def extract_timing_rows(records):
     rows = []
     for index, record in enumerate(records):
@@ -143,6 +184,48 @@ def extract_timing_rows(records):
         ):
             rows.append(row)
 
+    return rows
+
+
+RESOURCE_METRICS = ("memory", "rss", "load")
+
+
+def _resource_stats(record, scope, metric):
+    """Extract the stats dict (or None) for node/rank scope and metric."""
+    section = record.get(scope)
+    if not isinstance(section, dict):
+        return None
+    metric_section = section.get(metric)
+    if not isinstance(metric_section, dict):
+        return None
+    stats = metric_section.get("stats")
+    return stats if isinstance(stats, dict) else None
+
+
+def extract_resource_rows(records):
+    """Extract per-sample node/rank memory, live RSS, and load summaries.
+
+    Each record of the resource diagnostic contributes one row with the
+    temporal step/time and the statistics (min/mean/max/quartiles) of the
+    per-node and per-rank metrics, when present.
+    """
+    rows = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or "step" not in record:
+            continue
+        row = {"index": index, "step": record["step"], "time": record.get("time")}
+        for scope in ("node", "rank"):
+            for metric in RESOURCE_METRICS:
+                stats = _resource_stats(record, scope, metric)
+                if stats is None:
+                    continue
+                for stat in ("min", "mean", "max", "quant1", "quant2", "quant3"):
+                    value = stats.get(stat)
+                    row[f"{scope}_{metric}_{stat}"] = (
+                        float(value) if value is not None else None
+                    )
+        if any(key.endswith("_max") for key in row):
+            rows.append(row)
     return rows
 
 
@@ -398,6 +481,55 @@ def write_csv(rows, filename):
                     for stat in PERFORMANCE_STATS:
                         output[f"performance.{name}.{stat}"] = stats.get(stat)
             writer.writerow(output)
+
+
+def format_resource_report(resource_rows, resource_filename):
+    if not resource_rows:
+        return ""
+
+    lines = [
+        f"Resource log: {resource_filename}",
+        f"Samples: {len(resource_rows)}",
+        "",
+        "Resource Summary (GB for memory/rss)",
+        "scope metric       peak       last      first      growth",
+    ]
+    for scope in ("rank", "node"):
+        for metric in RESOURCE_METRICS:
+            peak = max(
+                (row.get(f"{scope}_{metric}_max") for row in resource_rows),
+                default=None,
+            )
+            first = resource_rows[0].get(f"{scope}_{metric}_mean")
+            last = resource_rows[-1].get(f"{scope}_{metric}_mean")
+            if peak is None or first is None or last is None:
+                continue
+            growth = last - first
+            lines.append(
+                f"{scope:<6}{metric:<11}"
+                f"{format_summary_value(peak):>10}"
+                f"{format_summary_value(last):>10}"
+                f"{format_summary_value(first):>10}"
+                f"{format_summary_value(growth):>10}"
+            )
+
+    return "\n".join(lines)
+
+
+def write_resource_csv(resource_rows, filename):
+    if not resource_rows:
+        return
+    fields = ["index", "step", "time"]
+    for scope in ("node", "rank"):
+        for metric in RESOURCE_METRICS:
+            for stat in ("min", "mean", "max", "quant1", "quant2", "quant3"):
+                fields.append(f"{scope}_{metric}_{stat}")
+
+    with Path(filename).open("w", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fields)
+        writer.writeheader()
+        for row in resource_rows:
+            writer.writerow({field: row.get(field) for field in fields})
 
 
 def rolling_mean(values, window):
@@ -792,6 +924,10 @@ def build_parser():
         action="store_true",
         help="disable msgpack read progress bar",
     )
+    parser.add_argument(
+        "--resource-csv",
+        help="write the resource diagnostic table (memory/rss/load) to CSV",
+    )
     return parser
 
 
@@ -810,8 +946,20 @@ def main(argv=None):
 
     print(format_report(rows, log_filename, top=args.top))
 
+    resource_filename = resolve_resource_filename(args.input, log_filename)
+    resource_rows = []
+    if resource_filename is not None and resource_filename.exists():
+        resource_records = iter_msgpack_records(resource_filename, progress=False)
+        resource_rows = extract_resource_rows(resource_records)
+        resource_report = format_resource_report(resource_rows, resource_filename)
+        if resource_report:
+            print("")
+            print(resource_report)
+
     if args.csv:
         write_csv(rows, args.csv)
+    if args.resource_csv and resource_rows:
+        write_resource_csv(resource_rows, args.resource_csv)
     if args.plot:
         plot_rows(rows, args.plot, rolling=args.rolling, max_points=args.max_points)
 

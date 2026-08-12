@@ -135,6 +135,15 @@ protected:
 
   bool is_mpi_init_called_by_me; ///< true if Application initialized MPI
 
+  /// per-rank live RSS threshold in GB (0 = disabled)
+  float64 rank_memory_limit_gb = 0.0;
+  /// per-node live RSS threshold in GB (0 = disabled)
+  float64 node_memory_limit_gb = 0.0;
+  /// steps between collective memory-limit checks (0 = disabled)
+  int memory_check_interval = 100;
+  /// true once a memory-limit exit has been triggered
+  bool memory_limit_hit = false;
+
 public:
   /// @brief default constructor
   Application() : Application(0, nullptr, nullptr)
@@ -400,6 +409,15 @@ protected:
   /// @return true if the maximum physical time is not yet reached and false otherwise
   ///
   virtual bool is_push_needed();
+
+  ///
+  /// @brief check the live RSS against the configured memory limits
+  /// @return true if a rank or node limit is exceeded (the main loop should
+  /// stop and finalize so the checkpoint is saved)
+  /// @note collective (MPI allreduce/reduce over the ranks and nodes);
+  /// called every memory_check_interval steps by main()
+  ///
+  bool check_memory_limit();
 
   ///
   /// @brief get basedir from configuration file
