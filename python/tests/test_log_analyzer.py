@@ -367,6 +367,59 @@ def test_format_report_keeps_large_values_separated():
     assert re.search(r"rebalance\s+.*\s+\d+\.\d{3}\s+17105\.017\s+100", report)
 
 
+def test_resolve_resource_filename_from_profile(tmp_path):
+    # non-default layout: the log under basedir/logs, the resource at basedir
+    base = tmp_path / "data"
+    log_dir = base / "logs"
+    log_dir.mkdir(parents=True)
+    (base / "resource.msgpack").write_bytes(b"resource")
+    (base / "profile.msgpack").write_bytes(
+        msgpack.packb(
+            {
+                "configuration": {
+                    "application": {
+                        "basedir": "data",
+                        "iomode": "mpiio",
+                        "log": {"path": "logs", "prefix": "log"},
+                    }
+                }
+            },
+            use_bin_type=True,
+        )
+    )
+    log = log_dir / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == base / "resource.msgpack"
+
+
+def test_resolve_resource_filename_posix_node_dirs(tmp_path):
+    base = tmp_path / "data"
+    node_dir = base / "node000000"
+    node_dir.mkdir(parents=True)
+    (node_dir / "resource.msgpack").write_bytes(b"resource")
+    (base / "profile.msgpack").write_bytes(
+        msgpack.packb(
+            {"configuration": {"application": {"iomode": "posix"}}},
+            use_bin_type=True,
+        )
+    )
+    log = base / "logs" / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == node_dir / "resource.msgpack"
+
+
+def test_resolve_resource_filename_falls_back_to_log_dir(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "resource.msgpack").write_bytes(b"resource")
+    log = log_dir / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == log_dir / "resource.msgpack"
+
+
 def test_format_summary_value_uses_scientific_for_extremes():
     assert log_analyzer.format_summary_value(64.286) == "64.286"
     assert log_analyzer.format_summary_value(219477.725) == "2.195e+05"

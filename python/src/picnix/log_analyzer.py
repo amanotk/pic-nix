@@ -99,6 +99,47 @@ def resolve_log_filename(filename):
     return path.parent / log_path / f"{prefix}.msgpack"
 
 
+def resolve_resource_filename(filename, log_filename):
+    """Locate the resource diagnostic file from the profile's base directory.
+
+    ResourceDiag writes resource.msgpack under the diagnostic base directory:
+    ``basedir/resource.msgpack`` in mpiio mode and
+    ``basedir/nodeNNNNNN/resource.msgpack`` in posix mode. The profile
+    (profile.msgpack) lives at the base directory root, so it anchors the
+    lookup. Falls back to the timing log's directory when no profile is
+    available.
+    """
+    profile_path = None
+    if Path(filename).name == "profile.msgpack":
+        profile_path = Path(filename)
+    else:
+        candidates = [
+            log_filename.parent / "profile.msgpack",
+            log_filename.parent.parent / "profile.msgpack",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                profile_path = candidate
+                break
+
+    if profile_path is not None:
+        with profile_path.open("rb") as fp:
+            profile = msgpack.load(fp, raw=False, strict_map_key=False)
+        config = profile.get("configuration", {})
+        iomode = config.get("application", {}).get("iomode", "mpiio")
+        base = profile_path.parent
+        if iomode == "posix":
+            matches = sorted(base.glob("node*/resource.msgpack"))
+            if matches:
+                return matches[0]
+            return None
+        resource = base / "resource.msgpack"
+        if resource.exists():
+            return resource
+
+    return log_filename.parent / "resource.msgpack"
+
+
 def extract_timing_rows(records):
     rows = []
     for index, record in enumerate(records):
@@ -905,9 +946,9 @@ def main(argv=None):
 
     print(format_report(rows, log_filename, top=args.top))
 
-    resource_filename = log_filename.parent / "resource.msgpack"
+    resource_filename = resolve_resource_filename(args.input, log_filename)
     resource_rows = []
-    if resource_filename.exists():
+    if resource_filename is not None and resource_filename.exists():
         resource_records = iter_msgpack_records(resource_filename, progress=False)
         resource_rows = extract_resource_rows(resource_records)
         resource_report = format_resource_report(resource_rows, resource_filename)

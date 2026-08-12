@@ -77,12 +77,12 @@ int Application::main()
     take_log();
     DEBUG1 << fmt::format("step[{}] logging", format_step(curstep));
 
+    increment_time();
+
     if (check_memory_limit()) {
       DEBUG1 << fmt::format("step[{}] memory limit exceeded", format_step(curstep));
       break;
     }
-
-    increment_time();
 
     if (get_available_etime() < 0) {
       DEBUG1 << fmt::format("step[{}] run out of time", format_step(curstep));
@@ -534,9 +534,9 @@ bool Application::check_memory_limit()
   bool         exceeded = false;
   const double rank_rss = static_cast<double>(nix::get_process_rss());
 
-  if (rank_rss <= 0) {
-    // RSS is unavailable (non-Linux): monitoring cannot work, so skip the
-    // collective checks entirely rather than compare against zeros.
+  int available = rank_rss > 0 ? 1 : 0;
+  MPI_Allreduce(MPI_IN_PLACE, &available, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+  if (available == 0) {
     return false;
   }
 
