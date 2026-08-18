@@ -154,7 +154,7 @@ public:
       const char name[]  = "uf";
       const char desc[]  = "electromagnetic field";
       int        ndim    = 5;
-      int        dims[5] = {nc, nz, ny, nx, 6};
+      int64      dims[5] = {nc, nz, ny, nx, 6};
       nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 
@@ -174,7 +174,7 @@ public:
       const char name[]  = "um";
       const char desc[]  = "moment";
       int        ndim    = 6;
-      int        dims[6] = {nc, nz, ny, nx, Ns, 14};
+      int64      dims[6] = {nc, nz, ny, nx, Ns, 14};
       nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
 

@@ -74,7 +74,12 @@ The human user primarily manages branch switching, but these rules apply when yo
   routine exception — see Merging Policy above).  
 - Never force-push to `main` or `develop`. Avoid force-push entirely unless explicitly instructed.  
 - Do not rebase or rewrite published history unless explicitly instructed.  
-- If the local branch is behind its remote, prefer fast-forward updates (`git pull --ff-only`) unless the user asks for another strategy.  
+- If the local branch is behind its remote, prefer fast-forward updates (`git pull --ff-only`) unless the user asks for another strategy.
+
+### 5. Git Hooks
+- The repository ships git hooks in `scripts/git-hooks/`: an `install.sh` and a `pre-commit` hook. Install them in a fresh clone with `bash scripts/git-hooks/install.sh`, which copies the hook to `.git/hooks/pre-commit`.
+- The `pre-commit` hook runs `clang-format -i` on the staged C/C++ files (added/modified/copied, per `git diff --cached`) and re-stages them, so C++ formatting is enforced automatically at commit time once installed. This is a plain git hook, not the `pre-commit` framework — no extra tooling required.
+- When committing for the user, install the hook if it is missing, and rely on it to format; the manual `clang-format` run described under Coding Style is then redundant but still acceptable.
 
 ## Directory Structure
 - `nix/` : Module for dynamic load balancing  

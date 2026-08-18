@@ -242,3 +242,59 @@ TEST_CASE("Attribute")
   }
 }
 
+//
+// put/get metadata with a shape dimension above 2^31. Regression for the
+// int32 overflow seen in test-run02's full particle output, where the
+// per-species particle count (3,175,598,925) wrapped negative in the json
+// shape (e.g. [-1119368371, 7]).
+//
+TEST_CASE("MetadataLargeShape")
+{
+  using json = nixio::json;
+
+  const int64_t dims[2]     = {3175598925LL, 7};
+  const int64_t dims_big[2] = {6000000000LL, 7}; // > 2^32 (4294967296)
+
+  //
+  // put_metadata must serialize the count without wrapping
+  //
+  {
+    json writer;
+    nixio::put_metadata(writer, "up00", "f8", "particle species 00", 0, 177833539800ULL, 2, dims);
+    nixio::put_metadata(writer, "up01", "f8", "particle species 01", 0, 336000000000ULL, 2,
+                        dims_big);
+
+    REQUIRE(writer["up00"]["shape"][0].get<int64_t>() == 3175598925LL);
+    REQUIRE(writer["up00"]["shape"][1].get<int64_t>() == 7);
+    REQUIRE(writer["up00"]["ndim"].get<int>() == 2);
+
+    // >2^32 count must serialize as the exact positive value
+    REQUIRE(writer["up01"]["shape"][0].get<int64_t>() == 6000000000LL);
+    REQUIRE(writer["up01"]["shape"][1].get<int64_t>() == 7);
+  }
+
+  //
+  // get_metadata must read the large shapes back identically
+  //
+  {
+    json        writer;
+    size_t      disp, size;
+    int32_t     ndim;
+    int64_t     dims_read[2];
+    std::string dtype, desc;
+
+    nixio::put_metadata(writer, "up00", "f8", "particle species 00", 0, 177833539800ULL, 2, dims);
+    nixio::put_metadata(writer, "up01", "f8", "particle species 01", 0, 336000000000ULL, 2,
+                        dims_big);
+    nixio::get_metadata(writer, "up00", dtype, desc, disp, size, ndim, dims_read);
+
+    REQUIRE(ndim == 2);
+    REQUIRE(dims_read[0] == 3175598925LL);
+    REQUIRE(dims_read[1] == 7);
+
+    nixio::get_metadata(writer, "up01", dtype, desc, disp, size, ndim, dims_read);
+    REQUIRE(ndim == 2);
+    REQUIRE(dims_read[0] == 6000000000LL);
+    REQUIRE(dims_read[1] == 7);
+  }
+}
