@@ -94,10 +94,10 @@ public:
         std::string name = fmt::format("up{:02d}", is);
         std::string desc = fmt::format("particle species {:02d}", is);
 
-        const int size    = ParticleType::get_particle_size();
-        const int Np      = nbyte / size;
-        const int ndim    = 2;
-        const int dims[2] = {Np, ParticleType::Nc};
+        const int   size    = ParticleType::get_particle_size();
+        const int64 Np      = nbyte / size;
+        const int   ndim    = 2;
+        const int64 dims[2] = {Np, ParticleType::Nc};
 
         nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
       }

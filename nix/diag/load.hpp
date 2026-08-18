@@ -111,11 +111,11 @@ public:
       const char name[]  = "load";
       const char desc[]  = "computational work load";
       int        ndim    = 2;
-      int        dims[2] = {0, static_cast<int>(load_size)};
+      int64      dims[2] = {0, static_cast<int64>(load_size)};
 
       if (load_size > 0) {
         size_t size = load_size * sizeof(float64);
-        dims[0]     = static_cast<int>(nbyte / size);
+        dims[0]     = static_cast<int64>(nbyte / size);
       }
       nixio::put_metadata(dataset, name, "f8", desc, disp0, nbyte, ndim, dims);
     }
@@ -135,7 +135,7 @@ public:
       const char name[]  = "rank";
       const char desc[]  = "MPI rank";
       int        ndim    = 1;
-      int        dims[1] = {nc};
+      int64      dims[1] = {nc};
       nixio::put_metadata(dataset, name, "i4", desc, disp0, nbyte, ndim, dims);
     }
 
