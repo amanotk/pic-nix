@@ -1,0 +1,186 @@
+{
+  "energy": {
+    "dtype": "float64",
+    "sha256": "d2fd65212b5b4820c5c6408897cc3fbea00bf9ba50f732e19fddb29a166d9bce",
+    "shape": [
+      5,
+      4
+    ]
+  },
+  "field_delt": {
+    "dtype": "float64",
+    "sha256": "33b870815ca553ddad32cd557b0406b57f7b540d9052f81552ba801aa4ddeb16",
+    "shape": [
+      5
+    ]
+  },
+  "field_eb": {
+    "dtype": "float64",
+    "sha256": "7067f4ab1115f92ef10011d17d146f84fa4857717da92fb35c1ab9dc11fc8f10",
+    "shape": [
+      5,
+      2,
+      2,
+      8,
+      6
+    ]
+  },
+  "field_time": {
+    "dtype": "float64",
+    "sha256": "819b20c627f235bd1aa48f4c5f9384f3e23deabda3fb835cc06d4b7d2b159aeb",
+    "shape": [
+      5
+    ]
+  },
+  "field_up": {
+    "dtype": "float64",
+    "sha256": "22e086d75908bb1689aade83a56c52d835596073546c32eea20743f09f5b75ad",
+    "shape": [
+      5,
+      2,
+      2,
+      8,
+      10
+    ]
+  },
+  "field_xig": {
+    "dtype": "float64",
+    "sha256": "f86edfe900f21d18f4b07dda1c0f5e64827c426eca2f071d5c751601a985afca",
+    "shape": [
+      8
+    ]
+  },
+  "field_yig": {
+    "dtype": "float64",
+    "sha256": "aeb057932b3ab642408451a3d2ec88c85bbd6b9820f6b7e2898146ca56af6e8c",
+    "shape": [
+      2
+    ]
+  },
+  "field_zig": {
+    "dtype": "float64",
+    "sha256": "aeb057932b3ab642408451a3d2ec88c85bbd6b9820f6b7e2898146ca56af6e8c",
+    "shape": [
+      2
+    ]
+  },
+  "mode_density": {
+    "dtype": "complex128",
+    "sha256": "884d0f1f4bbc83cf8c2360101c006f29a2e39df48516a33e915e0c557bf69d0d",
+    "shape": [
+      5,
+      5
+    ]
+  },
+  "mode_transverse_b": {
+    "dtype": "complex128",
+    "sha256": "e68cf0d8afa5e0c9ed42ade0f65889c23eb6fc20d1d3786d57ae5886f5151604",
+    "shape": [
+      5,
+      5
+    ]
+  },
+  "moment_delt": {
+    "dtype": "float64",
+    "sha256": "33b870815ca553ddad32cd557b0406b57f7b540d9052f81552ba801aa4ddeb16",
+    "shape": [
+      5
+    ]
+  },
+  "moment_mom": {
+    "dtype": "float64",
+    "sha256": "8d8bb29c0a2050219535353030f4a02cf303493dadb87076931ac7260edfe619",
+    "shape": [
+      5,
+      2,
+      2,
+      8,
+      2,
+      10
+    ]
+  },
+  "moment_time": {
+    "dtype": "float64",
+    "sha256": "819b20c627f235bd1aa48f4c5f9384f3e23deabda3fb835cc06d4b7d2b159aeb",
+    "shape": [
+      5
+    ]
+  },
+  "particle_00_id": {
+    "dtype": "int64",
+    "sha256": "6ac0ccfa01cc0b3b9d639aead9066a6924354e9c677eca2f018c14b6fe50da1e",
+    "shape": [
+      5,
+      128
+    ]
+  },
+  "particle_00_state": {
+    "dtype": "float64",
+    "sha256": "cf93ded88069922fa7b203712433b8b041e6b633863c85ed86aa6bac49e36446",
+    "shape": [
+      5,
+      128,
+      6
+    ]
+  },
+  "particle_01_id": {
+    "dtype": "int64",
+    "sha256": "6ac0ccfa01cc0b3b9d639aead9066a6924354e9c677eca2f018c14b6fe50da1e",
+    "shape": [
+      5,
+      128
+    ]
+  },
+  "particle_01_state": {
+    "dtype": "float64",
+    "sha256": "3eebda9fee1646b7088ed79c94e08b02831fe62bd5805d71b88edbe3c5b13faf",
+    "shape": [
+      5,
+      128,
+      6
+    ]
+  },
+  "particle_count": {
+    "dtype": "int64",
+    "sha256": "e5fc4677638b326835624435d0d7c2eb33bffc9c466bfd9a4a13f1a699498d9a",
+    "shape": [
+      5,
+      2
+    ]
+  },
+  "particle_delt": {
+    "dtype": "float64",
+    "sha256": "33b870815ca553ddad32cd557b0406b57f7b540d9052f81552ba801aa4ddeb16",
+    "shape": [
+      5
+    ]
+  },
+  "particle_time": {
+    "dtype": "float64",
+    "sha256": "819b20c627f235bd1aa48f4c5f9384f3e23deabda3fb835cc06d4b7d2b159aeb",
+    "shape": [
+      5
+    ]
+  },
+  "ssor_iteration": {
+    "dtype": "int32",
+    "sha256": "991c514be643644e9ee09f82b6ca93a98ffc252a03bd949d0515df5cf461c92e",
+    "shape": [
+      73
+    ]
+  },
+  "ssor_offset": {
+    "dtype": "int32",
+    "sha256": "48ab8aa48598d438f7bafb2dd589a96978f82027c637259482fb67876293eaf2",
+    "shape": [
+      13
+    ]
+  },
+  "ssor_relative_error": {
+    "dtype": "float64",
+    "sha256": "55b610ed159ee2f1a8e412656a062ddc4879f5a0781e1a46c6ecc96a6c673a9d",
+    "shape": [
+      73
+    ]
+  }
+}

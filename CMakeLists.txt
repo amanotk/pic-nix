@@ -14,6 +14,8 @@ include(CTest)
 option(PICNIX_BUILD_NIX "Build nix module" ON)
 option(PICNIX_BUILD_PIC "Build pic module" ON)
 option(PICNIX_BUILD_ELLIPTIC "Build elliptic module" OFF)
+option(PICNIX_BUILD_HYBRID "Build hybrid module" OFF)
+option(PICNIX_BUILD_HYBRID_EXAMPLE "Build hybrid examples" ON)
 option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" OFF)
 option(PICNIX_ENABLE_ASCENT "Enable Ascent in-situ diagnostics" OFF)
 
@@ -37,6 +39,10 @@ if(PICNIX_BUILD_PIC AND NOT PICNIX_BUILD_NIX)
   set(PICNIX_BUILD_NIX ON CACHE BOOL "Build nix module" FORCE)
 endif()
 
+if(PICNIX_BUILD_HYBRID AND NOT PICNIX_BUILD_NIX)
+  set(PICNIX_BUILD_NIX ON CACHE BOOL "Build nix module" FORCE)
+endif()
+
 if(PICNIX_BUILD_PIC AND NOT PICNIX_BUILD_ELLIPTIC)
   set(PICNIX_BUILD_ELLIPTIC ON CACHE BOOL "Build elliptic module" FORCE)
 endif()
@@ -48,6 +54,11 @@ endif()
 # Filesystem package
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/nix")
 find_package(Filesystem REQUIRED)
+
+# hybrid (optional)
+if(PICNIX_BUILD_HYBRID)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/hybrid ${CMAKE_CURRENT_BINARY_DIR}/hybrid)
+endif()
 
 # elliptic (optional)
 if(PICNIX_BUILD_ELLIPTIC)
