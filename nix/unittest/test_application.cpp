@@ -81,6 +81,17 @@ public:
     cfgparser->overwrite(configuration);
   }
 
+  void write_test_configuration(const json& configuration)
+  {
+    std::ofstream ofs(config_filename);
+    ofs << configuration.dump(2);
+  }
+
+  int get_test_curstep() const
+  {
+    return curstep;
+  }
+
   std::unique_ptr<ChunkMap> create_test_chunkmap()
   {
     return create_chunkmap();
@@ -117,6 +128,29 @@ public:
     }
   }
 };
+
+void cleanup_periodic_checkpoint(const std::string& prefix)
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (rank == 0) {
+    std::filesystem::remove(prefix + ".msgpack");
+    std::filesystem::remove(prefix + ".status.json");
+    std::filesystem::remove(prefix + ".status.json.tmp");
+    std::filesystem::remove_all(prefix);
+
+    for (int slot = 0; slot < 2; slot++) {
+      const std::string concrete_prefix = prefix + "." + std::to_string(slot);
+      std::filesystem::remove(concrete_prefix + ".msgpack");
+      std::filesystem::remove(concrete_prefix + ".status.json");
+      std::filesystem::remove(concrete_prefix + ".status.json.tmp");
+      std::filesystem::remove_all(concrete_prefix);
+    }
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
 
 class ShutdownDiag : public Diag
 {
@@ -169,6 +203,128 @@ TEST_CASE("test_main")
 
   REQUIRE(app.main() == 0);
 
+  std::filesystem::remove("profile.msgpack");
+  std::filesystem::remove("log.msgpack");
+}
+
+TEST_CASE("periodic checkpointing rotates two slots and loads the latest")
+{
+  const std::string checkpoint_prefix = "periodic_checkpoint";
+  cleanup_periodic_checkpoint(checkpoint_prefix);
+
+  json configuration                         = json::parse(config_content);
+  configuration["application"]["checkpoint"] = {
+      {"interval", 1.0e-9},
+      {"prefix", checkpoint_prefix},
+  };
+
+  std::vector<std::string> args = {"./test_application", "-c", config_filename, "-t", "3"};
+  std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(static_cast<int>(argv.size()), const_cast<char**>(argv.data()), interface);
+  app.write_test_configuration(configuration);
+
+  REQUIRE(app.main() == 0);
+
+  int steps[2]     = {-1, -1};
+  int status_valid = 1;
+  int latest_step  = -1;
+  int rank         = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  if (rank == 0) {
+    for (int slot = 0; slot < 2; slot++) {
+      const std::string concrete_prefix = checkpoint_prefix + "." + std::to_string(slot);
+      std::ifstream     ifs(concrete_prefix + ".status.json");
+      json              status = json::parse(ifs, nullptr, false);
+
+      status_valid &= ifs.is_open() && status.is_object() && status.contains("status") &&
+                      status["status"] == "complete" && status.contains("curstep") &&
+                      status["curstep"].is_number_integer();
+      if (status_valid != 0) {
+        steps[slot] = status["curstep"].get<int>();
+        latest_step = std::max(latest_step, steps[slot]);
+      }
+    }
+
+    status_valid &= steps[0] >= 0 && steps[1] >= 0 && steps[0] != steps[1];
+    status_valid &= std::filesystem::exists(checkpoint_prefix + ".latest") == false;
+  }
+  MPI_Bcast(&status_valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&latest_step, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  REQUIRE(status_valid == 1);
+
+  int restart_step = latest_step;
+  if (rank == 0) {
+    const int         newest_slot = steps[0] > steps[1] ? 0 : 1;
+    const std::string status_filename =
+        checkpoint_prefix + "." + std::to_string(newest_slot) + ".status.json";
+    json status;
+    {
+      std::ifstream ifs(status_filename);
+      status = json::parse(ifs, nullptr, false);
+    }
+    status["prefix"] = "not-a-checkpoint-prefix";
+
+    std::ofstream ofs(status_filename);
+    ofs << status.dump(2);
+    restart_step = std::min(steps[0], steps[1]);
+  }
+  MPI_Bcast(&restart_step, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  std::vector<std::string> restart_args = {
+      "./test_application", "-c", config_filename, "-l", checkpoint_prefix, "-t", "2"};
+  std::vector<const char*> restart_argv = ArgParser::convert_to_clargs(restart_args);
+
+  auto            restart_interface = std::make_shared<TestApplication::Interface>();
+  TestApplication restart(static_cast<int>(restart_argv.size()),
+                          const_cast<char**>(restart_argv.data()), restart_interface);
+  restart.write_test_configuration(configuration);
+
+  REQUIRE(restart.main() == 0);
+  REQUIRE(restart.get_test_curstep() == restart_step);
+
+  cleanup_periodic_checkpoint(checkpoint_prefix);
+  std::filesystem::remove("profile.msgpack");
+  std::filesystem::remove("log.msgpack");
+}
+
+TEST_CASE("logical periodic checkpoint load falls back to an exact checkpoint")
+{
+  const std::string checkpoint_prefix = "legacy_checkpoint";
+  cleanup_periodic_checkpoint(checkpoint_prefix);
+
+  json configuration                         = json::parse(config_content);
+  configuration["application"]["checkpoint"] = {
+      {"interval", 3600.0},
+      {"prefix", checkpoint_prefix},
+  };
+
+  std::vector<std::string> args = {"./test_application", "-c", config_filename, "-t", "0", "-s",
+                                   checkpoint_prefix};
+  std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(static_cast<int>(argv.size()), const_cast<char**>(argv.data()), interface);
+  app.write_test_configuration(configuration);
+
+  REQUIRE(app.main() == 0);
+
+  std::vector<std::string> restart_args = {
+      "./test_application", "-c", config_filename, "-l", checkpoint_prefix, "-t", "0"};
+  std::vector<const char*> restart_argv = ArgParser::convert_to_clargs(restart_args);
+
+  auto            restart_interface = std::make_shared<TestApplication::Interface>();
+  TestApplication restart(static_cast<int>(restart_argv.size()),
+                          const_cast<char**>(restart_argv.data()), restart_interface);
+  restart.write_test_configuration(configuration);
+
+  REQUIRE(restart.main() == 0);
+  REQUIRE(restart.get_test_curstep() == 1);
+
+  cleanup_periodic_checkpoint(checkpoint_prefix);
   std::filesystem::remove("profile.msgpack");
   std::filesystem::remove("log.msgpack");
 }

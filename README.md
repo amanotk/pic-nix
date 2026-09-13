@@ -82,6 +82,36 @@ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.toml
 In this example, you use 8 MPI processes, each launching 2 threads.  
 The simulation parameters will be read from the configuration file `config.toml`.
 
+### Periodic Checkpointing
+
+Periodic checkpointing is disabled by default.  Add a positive elapsed-time
+interval to enable two rotating checkpoints:
+
+```toml
+[application]
+  basedir = 'data'
+
+  [application.checkpoint]
+    interval = 3600.0
+    prefix = 'checkpoint'
+
+  [application.log]
+    interval = 5000
+
+  [application.rebalance]
+    interval = 10
+    loglevel = 1
+
+  [application.option]
+    vectorization = 'vector'
+```
+
+An interval of `0.0`, or an omitted checkpoint section, disables the feature.
+The prefix is resolved through the normal application base directory, including
+`PICNIX_TMPDIR` when it is set.  The two checkpoint slots are named
+`checkpoint.0` and `checkpoint.1`; loading the logical prefix with `-l checkpoint`
+selects the latest complete slot.
+
 Available command-line options will be shown with the `--help` option:
 
 ```

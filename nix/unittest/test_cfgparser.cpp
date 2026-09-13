@@ -15,9 +15,9 @@ TEST_CASE("get_root returns an isolated copy from a const parser")
 {
   CfgParser parser;
   json      configuration = {
-      {"application", {{"option", json::object()}}},
-      {"diagnostic", json::array()},
-      {"parameter",
+           {"application", {{"option", json::object()}}},
+           {"diagnostic", json::array()},
+           {"parameter",
             {{"Nx", 16},
              {"Ny", 16},
              {"Nz", 16},
@@ -256,6 +256,39 @@ TEST_CASE("check_application_options")
           {"delh", 1.0}}},
     };
     REQUIRE_FALSE(parser.validate(configuration));
+  }
+}
+
+TEST_CASE("check_checkpoint_configuration")
+{
+  CfgParser parser;
+
+  SECTION("disabled by zero interval")
+  {
+    json checkpoint = {{"interval", 0.0}};
+    REQUIRE(parser.check_checkpoint_configuration(checkpoint));
+  }
+
+  SECTION("positive interval and prefix")
+  {
+    json checkpoint = {{"interval", 3600.0}, {"prefix", "checkpoint"}};
+    REQUIRE(parser.check_checkpoint_configuration(checkpoint));
+  }
+
+  SECTION("interval must be a finite non-negative number")
+  {
+    json negative_interval = {{"interval", -1.0}};
+    json string_interval   = {{"interval", "3600"}};
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(negative_interval));
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(string_interval));
+  }
+
+  SECTION("prefix must be a non-empty string")
+  {
+    json empty_prefix   = {{"prefix", ""}};
+    json numeric_prefix = {{"prefix", 0}};
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(empty_prefix));
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(numeric_prefix));
   }
 }
 
