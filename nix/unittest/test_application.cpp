@@ -286,6 +286,19 @@ TEST_CASE("periodic checkpointing rotates two slots and loads the latest")
   REQUIRE(restart.main() == 0);
   REQUIRE(restart.get_test_curstep() == restart_step);
 
+  int stale_status_valid = 1;
+  if (rank == 0) {
+    const int         stale_slot = steps[0] > steps[1] ? 0 : 1;
+    const std::string status_filename =
+        checkpoint_prefix + "." + std::to_string(stale_slot) + ".status.json";
+    std::ifstream ifs(status_filename);
+    json          status = json::parse(ifs, nullptr, false);
+    stale_status_valid   = ifs.is_open() && status.is_object() && status.contains("status") &&
+                         status["status"] == "in_progress";
+  }
+  MPI_Bcast(&stale_status_valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  REQUIRE(stale_status_valid == 1);
+
   cleanup_periodic_checkpoint(checkpoint_prefix);
   std::filesystem::remove("profile.msgpack");
   std::filesystem::remove("log.msgpack");
@@ -298,7 +311,7 @@ TEST_CASE("logical periodic checkpoint load falls back to an exact checkpoint")
 
   json configuration                         = json::parse(config_content);
   configuration["application"]["checkpoint"] = {
-      {"interval", 3600.0},
+      {"interval", 0.0},
       {"prefix", checkpoint_prefix},
   };
 
@@ -323,6 +336,81 @@ TEST_CASE("logical periodic checkpoint load falls back to an exact checkpoint")
 
   REQUIRE(restart.main() == 0);
   REQUIRE(restart.get_test_curstep() == 1);
+
+  cleanup_periodic_checkpoint(checkpoint_prefix);
+  std::filesystem::remove("profile.msgpack");
+  std::filesystem::remove("log.msgpack");
+}
+
+TEST_CASE("periodic checkpointing selects the newest completion timestamp")
+{
+  const std::string checkpoint_prefix = "timestamp_checkpoint";
+  cleanup_periodic_checkpoint(checkpoint_prefix);
+
+  json configuration                         = json::parse(config_content);
+  configuration["application"]["checkpoint"] = {
+      {"interval", 1.0e-9},
+      {"prefix", checkpoint_prefix},
+  };
+
+  std::vector<std::string> args = {"./test_application", "-c", config_filename, "-t", "3"};
+  std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(static_cast<int>(argv.size()), const_cast<char**>(argv.data()), interface);
+  app.write_test_configuration(configuration);
+
+  REQUIRE(app.main() == 0);
+
+  int steps[2]     = {-1, -1};
+  int status_valid = 1;
+  int restart_step = -1;
+  int rank         = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  if (rank == 0) {
+    json statuses[2];
+    for (int slot = 0; slot < 2; slot++) {
+      const std::string status_filename =
+          checkpoint_prefix + "." + std::to_string(slot) + ".status.json";
+      std::ifstream ifs(status_filename);
+      statuses[slot] = json::parse(ifs, nullptr, false);
+
+      status_valid &=
+          ifs.is_open() && statuses[slot].is_object() && statuses[slot]["status"] == "complete" &&
+          statuses[slot]["curstep"].is_number_integer() && statuses[slot]["timestamp"].is_number();
+      if (status_valid != 0) {
+        steps[slot] = statuses[slot]["curstep"].get<int>();
+      }
+    }
+
+    if (status_valid != 0) {
+      const int older_slot              = steps[0] < steps[1] ? 0 : 1;
+      const int newer_slot              = 1 - older_slot;
+      statuses[older_slot]["timestamp"] = statuses[newer_slot]["timestamp"].get<float64>() + 1.0;
+
+      const std::string status_filename =
+          checkpoint_prefix + "." + std::to_string(older_slot) + ".status.json";
+      std::ofstream ofs(status_filename);
+      ofs << statuses[older_slot].dump(2);
+      restart_step = steps[older_slot];
+    }
+  }
+  MPI_Bcast(&status_valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&restart_step, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  REQUIRE(status_valid == 1);
+
+  std::vector<std::string> restart_args = {
+      "./test_application", "-c", config_filename, "-l", checkpoint_prefix, "-t", "2"};
+  std::vector<const char*> restart_argv = ArgParser::convert_to_clargs(restart_args);
+
+  auto            restart_interface = std::make_shared<TestApplication::Interface>();
+  TestApplication restart(static_cast<int>(restart_argv.size()),
+                          const_cast<char**>(restart_argv.data()), restart_interface);
+  restart.write_test_configuration(configuration);
+
+  REQUIRE(restart.main() == 0);
+  REQUIRE(restart.get_test_curstep() == restart_step);
 
   cleanup_periodic_checkpoint(checkpoint_prefix);
   std::filesystem::remove("profile.msgpack");

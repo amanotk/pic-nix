@@ -397,6 +397,16 @@ void Application::setup_chunks()
     std::string prefix = resolve_checkpoint_load_prefix(argparser->get_load());
     bool        status = prefix != "" && statehandler->load(get_interface(), prefix);
     assert_mpi(status == true, "invalid checkpoint status");
+
+    for (int slot = 0; slot < checkpoint_slot_count; slot++) {
+      if (prefix == get_checkpoint_prefix(slot)) {
+        checkpoint_slot = (slot + 1) % checkpoint_slot_count;
+        statehandler->write_status(get_interface(), get_checkpoint_prefix(checkpoint_slot),
+                                   "in_progress", false);
+        break;
+      }
+    }
+
     // the load path does not construct the neighbor pointers; rebuild them so
     // that rank-local exchanges work from the first step after a restart
     chunkvec.set_neighbors(chunkmap);
@@ -512,6 +522,19 @@ void Application::initialize_checkpoint_configuration()
     checkpoint_interval = checkpoint.value("interval", checkpoint_interval);
     checkpoint_prefix   = checkpoint.value("prefix", checkpoint_prefix);
   }
+
+  if (checkpoint_interval > 0.0 && argparser->get_save() != "") {
+    const std::string save_prefix = normalize_checkpoint_prefix(argparser->get_save());
+    for (int slot = -1; slot < checkpoint_slot_count; slot++) {
+      const std::string periodic_prefix =
+          normalize_checkpoint_prefix(slot < 0 ? checkpoint_prefix : get_checkpoint_prefix(slot));
+      if (save_prefix == periodic_prefix) {
+        std::cerr << "Final checkpoint prefix must differ from the periodic checkpoint prefix and "
+                     "its slots when periodic checkpointing is enabled\n";
+        exit(1);
+      }
+    }
+  }
 }
 
 void Application::initialize_checkpointing()
@@ -592,7 +615,8 @@ int Application::find_latest_checkpoint_slot()
   int latest_slot = -1;
 
   if (thisrank == 0) {
-    int latest_step = -1;
+    float64 latest_timestamp = -std::numeric_limits<float64>::infinity();
+    int     latest_step      = -1;
 
     for (int slot = 0; slot < checkpoint_slot_count; slot++) {
       const std::string status_filename =
@@ -602,25 +626,29 @@ int Application::find_latest_checkpoint_slot()
         continue;
       }
 
-      json              status = json::parse(ifs, nullptr, false);
-      const std::string expected_prefix =
-          std::filesystem::weakly_canonical(std::filesystem::path(get_basedir()) /
-                                            std::filesystem::path(get_checkpoint_prefix(slot)))
-              .string();
+      json              status          = json::parse(ifs, nullptr, false);
+      const std::string expected_prefix = normalize_checkpoint_prefix(get_checkpoint_prefix(slot));
       if (status.is_discarded() || status.is_object() == false ||
           status.contains("status") == false || status["status"].is_string() == false ||
           status["status"] != "complete" || status.contains("prefix") == false ||
           status["prefix"].is_string() == false || status["prefix"] != expected_prefix ||
           status.contains("curstep") == false || status["curstep"].is_number_integer() == false ||
+          status.contains("timestamp") == false || status["timestamp"].is_number() == false ||
           status.contains("nprocess") == false || status["nprocess"].is_number_integer() == false ||
           status["nprocess"].get<int>() != nprocess) {
         continue;
       }
 
-      const int step = status["curstep"].get<int>();
-      if (step > latest_step) {
-        latest_step = step;
-        latest_slot = slot;
+      const int     step      = status["curstep"].get<int>();
+      const float64 timestamp = status["timestamp"].get<float64>();
+      if (std::isfinite(timestamp) == false) {
+        continue;
+      }
+
+      if (timestamp > latest_timestamp || (timestamp == latest_timestamp && step > latest_step)) {
+        latest_timestamp = timestamp;
+        latest_step      = step;
+        latest_slot      = slot;
       }
     }
   }
@@ -632,6 +660,13 @@ int Application::find_latest_checkpoint_slot()
 std::string Application::get_checkpoint_prefix(int slot) const
 {
   return checkpoint_prefix + "." + std::to_string(slot);
+}
+
+std::string Application::normalize_checkpoint_prefix(const std::string& prefix)
+{
+  return std::filesystem::weakly_canonical(std::filesystem::path(get_basedir()) /
+                                           std::filesystem::path(prefix))
+      .string();
 }
 
 std::string Application::resolve_checkpoint_load_prefix(const std::string& prefix)

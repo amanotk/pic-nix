@@ -84,7 +84,7 @@ The simulation parameters will be read from the configuration file `config.toml`
 
 ### Periodic Checkpointing
 
-Periodic checkpointing is disabled by default.  Add a positive elapsed-time
+Periodic checkpointing is disabled by default.  Add a positive elapsed-time  
 interval to enable two rotating checkpoints:
 
 ```toml
@@ -106,11 +106,12 @@ interval to enable two rotating checkpoints:
     vectorization = 'vector'
 ```
 
-An interval of `0.0`, or an omitted checkpoint section, disables the feature.
-The prefix is resolved through the normal application base directory, including
+An interval of `0.0`, or an omitted checkpoint section, disables the feature.  
+The prefix is resolved through the normal application base directory, including  
 `PICNIX_TMPDIR` when it is set.  The two checkpoint slots are named
-`checkpoint.0` and `checkpoint.1`; loading the logical prefix with `-l checkpoint`
-selects the latest complete slot.
+`checkpoint.0` and `checkpoint.1`; loading the logical prefix with `-l checkpoint`  
+selects the latest complete slot.  If `-s` is used at the end of the run, its
+prefix must differ from the periodic prefix and both periodic slot prefixes.
 
 Available command-line options will be shown with the `--help` option:
 

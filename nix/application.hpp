@@ -475,6 +475,13 @@ protected:
   std::string resolve_checkpoint_load_prefix(const std::string& prefix);
 
   ///
+  /// @brief normalize a checkpoint prefix using the application base directory
+  /// @param prefix checkpoint prefix
+  /// @return normalized checkpoint prefix
+  ///
+  std::string normalize_checkpoint_prefix(const std::string& prefix);
+
+  ///
   /// @brief get basedir from configuration file
   /// @return return basedir
   ///
