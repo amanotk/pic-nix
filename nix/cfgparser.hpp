@@ -162,6 +162,11 @@ public:
       status = status & check_application_options(object["application"]["option"]);
     }
 
+    if (object["application"].contains("checkpoint") &&
+        object["application"]["checkpoint"].is_null() == false) {
+      status = status & check_checkpoint_configuration(object["application"]["checkpoint"]);
+    }
+
     // check the parameter section
     if (object["parameter"].is_null() == false) {
       status = status & check_mandatory_parameters(object["parameter"]);
@@ -218,6 +223,37 @@ public:
       std::string mode = option["mpi_thread_mode"].get<std::string>();
       if (mode != "auto" && mode != "multiple" && mode != "funneled") {
         std::cerr << fmt::format("Unknown `mpi_thread_mode`: {}\n", mode);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  virtual bool check_checkpoint_configuration(json& checkpoint)
+  {
+    if (checkpoint.is_object() == false) {
+      std::cerr << "`application.checkpoint` must be a table\n";
+      return false;
+    }
+
+    if (checkpoint.contains("interval")) {
+      if (checkpoint["interval"].is_number() == false) {
+        std::cerr << "`application.checkpoint.interval` must be a number\n";
+        return false;
+      }
+
+      const float64 interval = checkpoint["interval"].get<float64>();
+      if (std::isfinite(interval) == false || interval < 0.0) {
+        std::cerr << "`application.checkpoint.interval` must be finite and non-negative\n";
+        return false;
+      }
+    }
+
+    if (checkpoint.contains("prefix")) {
+      if (checkpoint["prefix"].is_string() == false ||
+          checkpoint["prefix"].get<std::string>().empty()) {
+        std::cerr << "`application.checkpoint.prefix` must be a non-empty string\n";
         return false;
       }
     }

@@ -144,6 +144,17 @@ protected:
   /// true once a memory-limit exit has been triggered
   bool memory_limit_hit = false;
 
+  /// number of rotating periodic checkpoint slots
+  static constexpr int checkpoint_slot_count = 2;
+  /// periodic checkpoint interval in seconds (0 = disabled)
+  float64 checkpoint_interval = 0.0;
+  /// wall clock time at which periodic checkpoint timing began/reset
+  float64 checkpoint_wclock = 0.0;
+  /// logical prefix for periodic checkpoints
+  std::string checkpoint_prefix = "checkpoint";
+  /// slot to use for the next periodic checkpoint
+  int checkpoint_slot = 0;
+
 public:
   /// @brief default constructor
   Application() : Application(0, nullptr, nullptr)
@@ -298,6 +309,16 @@ protected:
   virtual void initialize(int argc, char** argv);
 
   ///
+  /// @brief read periodic checkpoint configuration
+  ///
+  void initialize_checkpoint_configuration();
+
+  ///
+  /// @brief initialize periodic checkpoint timing and slot selection
+  ///
+  void initialize_checkpointing();
+
+  ///
   /// @brief finalize application
   ///
   virtual void finalize();
@@ -418,6 +439,47 @@ protected:
   /// called every memory_check_interval steps by main()
   ///
   bool check_memory_limit();
+
+  ///
+  /// @brief save a periodic checkpoint when its elapsed-time interval is due
+  /// @return true if a checkpoint was attempted and completed
+  ///
+  bool checkpoint_if_due();
+
+  ///
+  /// @brief save a checkpoint and write checkpoint timing logs
+  /// @param prefix checkpoint prefix
+  /// @param reason checkpoint reason, such as periodic or final
+  /// @return true if the state handler reports success
+  ///
+  virtual bool save_checkpoint(const std::string& prefix, const std::string& reason);
+
+  ///
+  /// @brief find the latest complete periodic checkpoint slot
+  /// @return slot index, or -1 when no compatible slot exists
+  ///
+  int find_latest_checkpoint_slot();
+
+  ///
+  /// @brief get the concrete prefix for a periodic checkpoint slot
+  /// @param slot slot index
+  /// @return concrete checkpoint prefix
+  ///
+  std::string get_checkpoint_prefix(int slot) const;
+
+  ///
+  /// @brief resolve the logical periodic checkpoint prefix for loading
+  /// @param prefix requested checkpoint prefix
+  /// @return concrete prefix, or the requested prefix when no periodic slot exists
+  ///
+  std::string resolve_checkpoint_load_prefix(const std::string& prefix);
+
+  ///
+  /// @brief normalize a checkpoint prefix using the application base directory
+  /// @param prefix checkpoint prefix
+  /// @return normalized checkpoint prefix
+  ///
+  std::string normalize_checkpoint_prefix(const std::string& prefix);
 
   ///
   /// @brief get basedir from configuration file

@@ -62,6 +62,7 @@ int Application::main()
   DEBUG1 << fmt::format("setup_chunks");
 
   save_profile();
+  initialize_checkpointing();
 
   while (is_push_needed()) {
 
@@ -78,6 +79,8 @@ int Application::main()
     DEBUG1 << fmt::format("step[{}] logging", format_step(curstep));
 
     increment_time();
+
+    checkpoint_if_due();
 
     if (check_memory_limit()) {
       DEBUG1 << fmt::format("step[{}] memory limit exceeded", format_step(curstep));
@@ -109,6 +112,7 @@ void Application::initialize(int argc, char** argv)
 
   cfgparser = create_cfgparser();
   cfgparser->parse_file(argparser->get_config());
+  initialize_checkpoint_configuration();
 
   // memory limit monitoring options
   {
@@ -143,26 +147,13 @@ void Application::finalize()
   logger->flush();
 
   if (argparser->get_save() != "") {
-    std::string prefix                = argparser->get_save();
-    float64     checkpoint_save_begin = nix::wall_clock();
-    log = {{"prefix", prefix}, {"unixtime", checkpoint_save_begin}, {"curtime", curtime}};
-    logger->append(curstep, "checkpoint_save_begin", log);
-    logger->flush();
-
-    statehandler->save(get_interface(), argparser->get_save());
-
-    float64 checkpoint_save_end = nix::wall_clock();
-    log                         = {{"prefix", prefix},
-                                   {"elapsed", checkpoint_save_end - checkpoint_save_begin},
-                                   {"unixtime", checkpoint_save_end},
-                                   {"curtime", curtime}};
-    logger->append(curstep, "checkpoint_save_end", log);
-    logger->flush();
+    std::string prefix = argparser->get_save();
+    save_checkpoint(prefix, "final");
   }
 
   float64 shutdown_end = nix::wall_clock();
   log                  = {
-      {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
+                       {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
   logger->append(curstep, "shutdown_end", log);
   logger->flush();
 
@@ -403,8 +394,19 @@ void Application::setup_chunks_init()
 void Application::setup_chunks()
 {
   if (argparser->get_load() != "") {
-    bool status = statehandler->load(get_interface(), argparser->get_load());
+    std::string prefix = resolve_checkpoint_load_prefix(argparser->get_load());
+    bool        status = prefix != "" && statehandler->load(get_interface(), prefix);
     assert_mpi(status == true, "invalid checkpoint status");
+
+    for (int slot = 0; slot < checkpoint_slot_count; slot++) {
+      if (prefix == get_checkpoint_prefix(slot)) {
+        checkpoint_slot = (slot + 1) % checkpoint_slot_count;
+        statehandler->write_status(get_interface(), get_checkpoint_prefix(checkpoint_slot),
+                                   "in_progress", false);
+        break;
+      }
+    }
+
     // the load path does not construct the neighbor pointers; rebuild them so
     // that rank-local exchanges work from the first step after a restart
     chunkvec.set_neighbors(chunkmap);
@@ -507,6 +509,183 @@ void Application::save_profile()
   if (is_initial_run() == true) {
     statehandler->save_application(get_interface(), "profile");
   }
+}
+
+void Application::initialize_checkpoint_configuration()
+{
+  checkpoint_interval = 0.0;
+  checkpoint_prefix   = "checkpoint";
+
+  auto application = cfgparser->get_application();
+  if (application.contains("checkpoint") && application["checkpoint"].is_object()) {
+    auto checkpoint     = application["checkpoint"];
+    checkpoint_interval = checkpoint.value("interval", checkpoint_interval);
+    checkpoint_prefix   = checkpoint.value("prefix", checkpoint_prefix);
+  }
+
+  if (checkpoint_interval > 0.0 && argparser->get_save() != "") {
+    const std::string save_prefix = normalize_checkpoint_prefix(argparser->get_save());
+    for (int slot = -1; slot < checkpoint_slot_count; slot++) {
+      const std::string periodic_prefix =
+          normalize_checkpoint_prefix(slot < 0 ? checkpoint_prefix : get_checkpoint_prefix(slot));
+      if (save_prefix == periodic_prefix) {
+        std::cerr << "Final checkpoint prefix must differ from the periodic checkpoint prefix and "
+                     "its slots when periodic checkpointing is enabled\n";
+        exit(1);
+      }
+    }
+  }
+}
+
+void Application::initialize_checkpointing()
+{
+  if (checkpoint_interval <= 0.0) {
+    return;
+  }
+
+  const int latest_slot = find_latest_checkpoint_slot();
+  checkpoint_slot       = (latest_slot + 1) % checkpoint_slot_count;
+
+  if (thisrank == 0) {
+    checkpoint_wclock = nix::wall_clock();
+  }
+  MPI_Bcast(&checkpoint_wclock, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+}
+
+bool Application::checkpoint_if_due()
+{
+  if (checkpoint_interval <= 0.0) {
+    return false;
+  }
+
+  bool due = false;
+  if (thisrank == 0) {
+    due = nix::wall_clock() - checkpoint_wclock >= checkpoint_interval;
+  }
+  MPI_Bcast(&due, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
+
+  if (due == false) {
+    return false;
+  }
+
+  const std::string prefix  = get_checkpoint_prefix(checkpoint_slot);
+  bool              status  = save_checkpoint(prefix, "periodic");
+  int               success = status ? 1 : 0;
+  MPI_Allreduce(MPI_IN_PLACE, &success, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+
+  if (success == 1) {
+    checkpoint_slot = (checkpoint_slot + 1) % checkpoint_slot_count;
+  }
+
+  if (thisrank == 0) {
+    checkpoint_wclock = nix::wall_clock();
+  }
+  MPI_Bcast(&checkpoint_wclock, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  return success == 1;
+}
+
+bool Application::save_checkpoint(const std::string& prefix, const std::string& reason)
+{
+  const float64 checkpoint_save_begin = nix::wall_clock();
+  json          log                   = {{"prefix", prefix},
+                                         {"reason", reason},
+                                         {"unixtime", checkpoint_save_begin},
+                                         {"curtime", curtime}};
+  logger->append(curstep, "checkpoint_save_begin", log);
+  logger->flush();
+
+  const bool status = statehandler->save(get_interface(), prefix);
+
+  const float64 checkpoint_save_end = nix::wall_clock();
+  log                               = {{"prefix", prefix},
+                                       {"reason", reason},
+                                       {"elapsed", checkpoint_save_end - checkpoint_save_begin},
+                                       {"unixtime", checkpoint_save_end},
+                                       {"curtime", curtime},
+                                       {"status", status}};
+  logger->append(curstep, "checkpoint_save_end", log);
+  logger->flush();
+
+  return status;
+}
+
+int Application::find_latest_checkpoint_slot()
+{
+  int latest_slot = -1;
+
+  if (thisrank == 0) {
+    float64 latest_timestamp = -std::numeric_limits<float64>::infinity();
+    int     latest_step      = -1;
+
+    for (int slot = 0; slot < checkpoint_slot_count; slot++) {
+      const std::string status_filename =
+          statehandler->get_status_filename(get_checkpoint_prefix(slot));
+      std::ifstream ifs(status_filename);
+      if (ifs.is_open() == false) {
+        continue;
+      }
+
+      json              status          = json::parse(ifs, nullptr, false);
+      const std::string expected_prefix = normalize_checkpoint_prefix(get_checkpoint_prefix(slot));
+      if (status.is_discarded() || status.is_object() == false ||
+          status.contains("status") == false || status["status"].is_string() == false ||
+          status["status"] != "complete" || status.contains("prefix") == false ||
+          status["prefix"].is_string() == false || status["prefix"] != expected_prefix ||
+          status.contains("curstep") == false || status["curstep"].is_number_integer() == false ||
+          status.contains("timestamp") == false || status["timestamp"].is_number() == false ||
+          status.contains("nprocess") == false || status["nprocess"].is_number_integer() == false ||
+          status["nprocess"].get<int>() != nprocess) {
+        continue;
+      }
+
+      const int     step      = status["curstep"].get<int>();
+      const float64 timestamp = status["timestamp"].get<float64>();
+      if (std::isfinite(timestamp) == false) {
+        continue;
+      }
+
+      if (timestamp > latest_timestamp || (timestamp == latest_timestamp && step > latest_step)) {
+        latest_timestamp = timestamp;
+        latest_step      = step;
+        latest_slot      = slot;
+      }
+    }
+  }
+
+  MPI_Bcast(&latest_slot, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  return latest_slot;
+}
+
+std::string Application::get_checkpoint_prefix(int slot) const
+{
+  return checkpoint_prefix + "." + std::to_string(slot);
+}
+
+std::string Application::normalize_checkpoint_prefix(const std::string& prefix)
+{
+  return std::filesystem::weakly_canonical(std::filesystem::path(get_basedir()) /
+                                           std::filesystem::path(prefix))
+      .string();
+}
+
+std::string Application::resolve_checkpoint_load_prefix(const std::string& prefix)
+{
+  if (prefix != checkpoint_prefix) {
+    return prefix;
+  }
+
+  const int latest_slot = find_latest_checkpoint_slot();
+  if (latest_slot < 0) {
+    if (thisrank == 0) {
+      DEBUG0 << fmt::format(
+          "No complete periodic checkpoint found for prefix {}; trying exact prefix", prefix);
+    }
+    return prefix;
+  }
+
+  checkpoint_slot = (latest_slot + 1) % checkpoint_slot_count;
+  return get_checkpoint_prefix(latest_slot);
 }
 
 bool Application::is_initial_run()
