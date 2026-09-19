@@ -4,8 +4,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <system_error>
-
 bool require_mpi_size(int expected);
 
 using namespace nix;
@@ -297,8 +295,16 @@ public:
 
   void test_save_load_checkpoint_status()
   {
-    const int   numchunk = 10;
-    std::string prefix   = "foo_checkpoint";
+    const int                   numchunk = 10;
+    const std::filesystem::path basedir  = "checkpoint_prefix_normalization";
+    const std::string           prefix   = (basedir / "alias" / "foo_checkpoint").string();
+
+    if (thisrank == 0) {
+      std::filesystem::remove_all(basedir);
+      std::filesystem::create_directories(basedir / "target");
+      std::filesystem::create_directory_symlink("target", basedir / "alias");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
 
     StateHandler statehandler;
     cleanup_checkpoint(prefix);
@@ -308,13 +314,12 @@ public:
 
     int status_valid = 1;
     if (thisrank == 0) {
-      std::error_code ec;
-      std::ifstream   ifs(statehandler.get_status_filename(prefix));
-      json            status            = json::parse(ifs, nullptr, false);
-      const auto      normalized_prefix = std::filesystem::weakly_canonical(prefix, ec);
+      std::ifstream ifs(statehandler.get_status_filename(prefix));
+      json          status            = json::parse(ifs, nullptr, false);
+      const auto    normalized_prefix = std::filesystem::absolute(prefix).lexically_normal();
 
       status_valid =
-          !ec && ifs.is_open() && status.is_object() && status.contains("status") &&
+          ifs.is_open() && status.is_object() && status.contains("status") &&
           status.contains("prefix") && status.contains("curstep") && status.contains("curtime") &&
           status.contains("nprocess") && status["status"] == "complete" &&
           status["prefix"] == normalized_prefix.string() && status["curstep"] == curstep &&
@@ -330,6 +335,10 @@ public:
     REQUIRE(validate_chunkvec(numchunk) == true);
 
     cleanup_checkpoint(prefix);
+    if (thisrank == 0) {
+      std::filesystem::remove_all(basedir);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 
   void test_load_accepts_legacy_missing_status()

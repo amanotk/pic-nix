@@ -92,6 +92,12 @@ public:
     return curstep;
   }
 
+  std::string normalize_test_checkpoint_prefix(json configuration, const std::string& prefix)
+  {
+    set_test_configuration(configuration);
+    return normalize_checkpoint_prefix(prefix);
+  }
+
   std::unique_ptr<ChunkMap> create_test_chunkmap()
   {
     return create_chunkmap();
@@ -205,6 +211,31 @@ TEST_CASE("test_main")
 
   std::filesystem::remove("profile.msgpack");
   std::filesystem::remove("log.msgpack");
+}
+
+TEST_CASE("checkpoint prefixes are normalized lexically")
+{
+  const std::filesystem::path basedir = "checkpoint_prefix_normalization";
+  std::filesystem::remove_all(basedir);
+  std::filesystem::create_directories(basedir / "target");
+  std::filesystem::create_directory_symlink("target", basedir / "alias");
+
+  json configuration                      = json::parse(config_content);
+  configuration["application"]["basedir"] = basedir.string();
+
+  std::vector<std::string> args = {"./test_application", "-c", config_filename};
+  std::vector<const char*> argv = ArgParser::convert_to_clargs(args);
+
+  auto            interface = std::make_shared<TestApplication::Interface>();
+  TestApplication app(static_cast<int>(argv.size()), const_cast<char**>(argv.data()), interface);
+
+  const std::filesystem::path prefix =
+      std::filesystem::path("alias") / "subdir" / ".." / "checkpoint";
+  const std::string expected = std::filesystem::absolute(basedir / "alias" / "checkpoint").string();
+
+  REQUIRE(app.normalize_test_checkpoint_prefix(configuration, prefix.string()) == expected);
+
+  std::filesystem::remove_all(basedir);
 }
 
 TEST_CASE("periodic checkpointing rotates two slots and loads the latest")

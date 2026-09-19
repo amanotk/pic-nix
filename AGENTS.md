@@ -93,6 +93,8 @@ The vendored single-header `nix/cmdline.hpp` should not be modified unless expli
 
 ## Testing
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  
+Run tests locally unless the user explicitly requests scheduler-based testing;  
+if local testing is unavailable, report that limitation instead.  
 PETSc support is opt-in; default configuration should not search for or
 link PETSc unless explicitly requested with `-DPICNIX_ENABLE_PETSC=ON`.  
 For full build/test instructions, language server setup, and the
