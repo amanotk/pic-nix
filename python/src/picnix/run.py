@@ -124,9 +124,7 @@ class Run(object):
                 handler = DiagHandler.create_handler(
                     diagnostic, basedir, iomode, self.method
                 )
-            except FileNotFoundError as exc:
-                if "no JSON diagnostic files found" not in str(exc):
-                    raise
+            except FileNotFoundError:
                 continue
             if handler is not None:
                 self.diag_handlers[handler.get_prefix()] = handler

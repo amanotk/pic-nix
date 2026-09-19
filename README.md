@@ -82,6 +82,45 @@ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.toml
 In this example, you use 8 MPI processes, each launching 2 threads.  
 The simulation parameters will be read from the configuration file `config.toml`.
 
+### ADIOS2 Diagnostics
+
+ADIOS2 diagnostics are optional and require an external ADIOS2 installation (version 2.11 or  
+newer).  Configure the build with an MPI-enabled ADIOS2 package:
+
+```sh
+cmake -S . -B build-adios2 -DCMAKE_CXX_COMPILER=mpicxx \
+    -DPICNIX_ENABLE_ADIOS2=ON -DPICNIX_ADIOS2_ROOT=/path/to/adios2
+cmake --build build-adios2
+```
+
+Enable the backend with one persistent BP5 dataset per diagnostic prefix:
+
+```toml
+[application]
+  basedir = 'data'
+  iomode = 'adios2'
+
+  [application.adios2]
+    engine = 'BP5'
+
+    [application.adios2.parameters]
+      AsyncWrite = false
+
+  [[diagnostic]]
+    name = 'field'
+    interval = 10
+```
+
+The default output path is `data/adios2/field.bp`.  Each ADIOS2 step stores the PIC-NIX simulation  
+`step` and physical `time` explicitly.  Field data uses typed arrays `uf[Nchunk,nz,ny,nx,6]` and  
+`um[Nchunk,nz,ny,nx,Ns,14]`.  Particle data uses Joined Arrays named `up00`, `up01`, and so on,  
+with matching `uint64` ID arrays named `up00_id`, `up01_id`, and so on.  `Run` discovers these  
+datasets from the profile's `basedir` and `prefix`; the Python reader is optional:
+
+```sh
+uv pip install --python .venv -e './python[adios2]'
+```
+
 ### Periodic Checkpointing
 
 Periodic checkpointing is disabled by default.  Add a positive elapsed-time  

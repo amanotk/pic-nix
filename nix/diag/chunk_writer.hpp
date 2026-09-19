@@ -33,7 +33,11 @@ protected:
   // check if the diagnostic is required
   virtual bool require_diagnostic(int curstep, json& config) override
   {
-    bool status    = BaseDiag::require_diagnostic(curstep, config);
+    bool status = BaseDiag::require_diagnostic(curstep, config);
+    if (BaseDiag::info->iomode == "adios2") {
+      return status;
+    }
+
     bool completed = handler->is_completed();
 
     if (status == true) {

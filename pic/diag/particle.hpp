@@ -4,6 +4,11 @@
 
 #include "chunk_writer.hpp"
 
+#if PICNIX_ENABLE_ADIOS2
+#include "adios2_writer.hpp"
+#include <map>
+#endif
+
 ///
 /// @brief Diagnostic for particle
 ///
@@ -53,15 +58,106 @@ protected:
     }
   };
 
+#if PICNIX_ENABLE_ADIOS2
+  struct Adios2State {
+    std::unique_ptr<nix::Adios2Writer> writer;
+    bool                               variables_defined = false;
+  };
+
+  std::map<std::string, Adios2State> adios2_state;
+
+  void write_adios2(json& config)
+  {
+    auto data = interface->get_data();
+    if (this->require_diagnostic(data.curstep, config) == false) {
+      return;
+    }
+
+    const std::string                       prefix   = this->get_prefix(config, "particle");
+    const float64                           fraction = config.value("fraction", 0.01);
+    const int                               Ns       = interface->get_num_species();
+    const size_t                            width    = ParticleType::Nc - 1;
+    auto&                                   state    = adios2_state[prefix];
+    std::vector<std::vector<float64>>       values(static_cast<size_t>(Ns));
+    std::vector<std::vector<std::uint64_t>> ids(static_cast<size_t>(Ns));
+
+    for (int is = 0; is < Ns; is++) {
+      ParticlePacker packer(is, data.thisrank, fraction);
+      for (int i = 0; i < data.chunkvec.size(); i++) {
+        auto chunk = static_cast<chunk_type*>(data.chunkvec[i].get());
+        auto cdata = chunk->get_internal_data();
+        auto index = packer.generate_random_index(
+            cdata.up[is]->get_Np_active(),
+            std::min(static_cast<int>(cdata.up[is]->get_Np_active() * fraction),
+                     cdata.up[is]->get_Np_active()),
+            data.thisrank);
+
+        values[is].reserve(values[is].size() + index.size() * width);
+        ids[is].reserve(ids[is].size() + index.size());
+        for (const auto particle_index : index) {
+          for (size_t ic = 0; ic < width; ic++) {
+            values[is].push_back(cdata.up[is]->xu(particle_index, ic));
+          }
+          std::uint64_t id = 0;
+          std::memcpy(&id, &cdata.up[is]->xu(particle_index, ParticleType::Nc - 1), sizeof(id));
+          ids[is].push_back(id);
+        }
+      }
+    }
+
+    if (state.writer == nullptr) {
+      state.writer = std::make_unique<nix::Adios2Writer>(this->info);
+      state.writer->initialize("particle", prefix, interface->get_configuration());
+      for (int is = 0; is < Ns; is++) {
+        const std::string name = fmt::format("up{:02d}", is);
+        state.writer->define_joined_double(name, width, ids[is].size());
+        state.writer->define_joined_uint64(name + "_id", ids[is].size());
+      }
+      state.writer->open();
+      state.variables_defined = true;
+    }
+
+    if (state.variables_defined == false) {
+      throw std::logic_error("ADIOS2 particle variables were not initialized");
+    }
+
+    state.writer->begin_step(static_cast<std::int64_t>(data.curstep), data.curtime);
+    for (int is = 0; is < Ns; is++) {
+      const std::string name = fmt::format("up{:02d}", is);
+      state.writer->put_joined_double(name, ids[is].size(), values[is].data());
+      state.writer->put_joined_uint64(name + "_id", ids[is].size(), ids[is].data());
+    }
+    state.writer->end_step();
+  }
+#endif
+
 public:
   // constructor
   ParticleDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 
+  void shutdown() override
+  {
+#if PICNIX_ENABLE_ADIOS2
+    for (auto& [prefix, state] : adios2_state) {
+      if (state.writer != nullptr) {
+        state.writer->close();
+      }
+    }
+#endif
+  }
+
   // data packing functor
   void operator()(json& config) override
   {
+#if PICNIX_ENABLE_ADIOS2
+    if (this->info->iomode == "adios2") {
+      write_adios2(config);
+      return;
+    }
+#endif
+
     auto data = interface->get_data();
     auto Ns   = interface->get_num_species();
 

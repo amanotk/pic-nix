@@ -15,9 +15,9 @@ TEST_CASE("get_root returns an isolated copy from a const parser")
 {
   CfgParser parser;
   json      configuration = {
-           {"application", {{"option", json::object()}}},
-           {"diagnostic", json::array()},
-           {"parameter",
+      {"application", {{"option", json::object()}}},
+      {"diagnostic", json::array()},
+      {"parameter",
             {{"Nx", 16},
              {"Ny", 16},
              {"Nz", 16},
@@ -290,6 +290,42 @@ TEST_CASE("check_checkpoint_configuration")
     REQUIRE_FALSE(parser.check_checkpoint_configuration(empty_prefix));
     REQUIRE_FALSE(parser.check_checkpoint_configuration(numeric_prefix));
   }
+}
+
+TEST_CASE("check_adios2_configuration")
+{
+  CfgParser parser;
+
+  SECTION("default engine and scalar parameters")
+  {
+    json adios2 = {
+        {"engine", "BP5"},
+        {"parameters", {{"AsyncWrite", false}, {"NumSubFiles", 4}, {"MaxShmSize", "1GB"}}},
+    };
+    REQUIRE(parser.check_adios2_configuration(adios2));
+  }
+
+  SECTION("configuration tables and engine are validated")
+  {
+    json invalid_engine     = {{"engine", 5}};
+    json invalid_parameters = {{"parameters", {{"Shape", json::array({1, 2})}}}};
+    REQUIRE_FALSE(parser.check_adios2_configuration(invalid_engine));
+    REQUIRE_FALSE(parser.check_adios2_configuration(invalid_parameters));
+  }
+}
+
+TEST_CASE("check_io_mode")
+{
+  CfgParser parser;
+
+  json mpiio  = "mpiio";
+  json posix  = "posix";
+  json adios2 = "adios2";
+  json other  = "unknown";
+  REQUIRE(parser.check_io_mode(mpiio));
+  REQUIRE(parser.check_io_mode(posix));
+  REQUIRE(parser.check_io_mode(adios2));
+  REQUIRE_FALSE(parser.check_io_mode(other));
 }
 
 TEST_CASE("parse_file")

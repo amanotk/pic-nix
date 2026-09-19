@@ -69,6 +69,29 @@ target_link_libraries(pic_obj_parallel_mpi_only PRIVATE Catch2::Catch2)
 target_link_libraries(pic_obj_parallel_mpi_only PRIVATE pic nix)
 target_compile_definitions(pic_obj_parallel_mpi_only PRIVATE PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
+if(PICNIX_ENABLE_ADIOS2)
+  add_executable(test_pic_adios2_writer test_pic_adios2_writer.cpp)
+  target_include_directories(test_pic_adios2_writer PRIVATE ${INCLUDE_DIRS})
+  target_link_libraries(test_pic_adios2_writer PRIVATE
+    Catch2::Catch2
+    pic_obj_parallel
+    pic
+    nix
+    adios2::cxx_mpi
+  )
+
+  set(PIC_ADIOS2_WRITER_TMPDIR ${CMAKE_CURRENT_BINARY_DIR}/tmp_adios2_writer)
+  add_mpi_test(
+    test_pic_adios2_writer_np1
+    test_pic_adios2_writer
+    1
+    ${PIC_ADIOS2_WRITER_TMPDIR}
+  )
+  set_tests_properties(test_pic_adios2_writer_np1_prepare test_pic_adios2_writer_np1
+    PROPERTIES LABELS "MPI;ADIOS2"
+  )
+endif()
+
 # serial tests
 set(SERIAL_EXECS
   test_pic_chunk

@@ -23,7 +23,12 @@ if(NOT DEFINED PICNIX_ENABLE_ASCENT)
   option(PICNIX_ENABLE_ASCENT "Enable Ascent in-situ diagnostics" OFF)
 endif()
 
+if(NOT DEFINED PICNIX_ENABLE_ADIOS2)
+  option(PICNIX_ENABLE_ADIOS2 "Enable ADIOS2 diagnostic output" OFF)
+endif()
+
 set(PICNIX_ASCENT_ROOT "" CACHE PATH "Ascent superbuild installation prefix")
+set(PICNIX_ADIOS2_ROOT "" CACHE PATH "ADIOS2 installation prefix")
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(NIX_BUILD_TESTING OFF CACHE BOOL "Build nix tests" FORCE)
@@ -91,6 +96,20 @@ if(PICNIX_ENABLE_ASCENT)
   )
 endif()
 
+if(PICNIX_ENABLE_ADIOS2)
+  set(_picnix_adios2_hints)
+  if(PICNIX_ADIOS2_ROOT)
+    list(APPEND _picnix_adios2_hints "${PICNIX_ADIOS2_ROOT}")
+  endif()
+  find_package(ADIOS2 2.11 CONFIG REQUIRED HINTS ${_picnix_adios2_hints})
+
+  if(NOT TARGET adios2::cxx_mpi)
+    message(FATAL_ERROR "ADIOS2 was found but adios2::cxx_mpi is unavailable")
+  endif()
+
+  list(APPEND PIC_SOURCES diag/adios2_writer.cpp)
+endif()
+
 add_library(pic STATIC ${PIC_SOURCES})
 
 # include directory
@@ -98,6 +117,7 @@ target_include_directories(pic PRIVATE ${PICNIX_DIR})
 target_include_directories(pic PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(pic PUBLIC elliptic nix)
 target_link_libraries(pic PRIVATE std::mdspan)
+target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ADIOS2=$<BOOL:${PICNIX_ENABLE_ADIOS2}>)
 target_compile_definitions(pic PUBLIC PICNIX_ENABLE_PETSC=$<BOOL:${PICNIX_ENABLE_PETSC}>)
 
 if(PICNIX_ENABLE_ASCENT)
@@ -105,6 +125,10 @@ if(PICNIX_ENABLE_ASCENT)
   target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=1)
 else()
   target_compile_definitions(pic PUBLIC PICNIX_ENABLE_ASCENT=0)
+endif()
+
+if(PICNIX_ENABLE_ADIOS2)
+  target_link_libraries(pic PUBLIC adios2::cxx_mpi)
 endif()
 
 if(BUILD_TESTING)

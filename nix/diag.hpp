@@ -175,8 +175,9 @@ public:
 
     bool is_check_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
     bool is_check_required_posix = info->iomode == "posix" && info->intra_rank == 0;
+    bool is_check_required_adios = info->iomode == "adios2" && info->world_rank == 0;
 
-    if (is_check_required_mpiio || is_check_required_posix) {
+    if (is_check_required_mpiio || is_check_required_posix || is_check_required_adios) {
       fs::path filepath(path);
       fs::path dirpath = filepath.parent_path();
 
@@ -209,6 +210,9 @@ public:
     } else if (info->iomode == "posix") {
       std::string nodedir = fmt::format("node{:06d}", info->inter_rank);
       fs::path    dirname = fs::path(basedir) / fs::path(nodedir) / fs::path(prefix) / "";
+      return dirname.string();
+    } else if (info->iomode == "adios2") {
+      fs::path dirname = fs::path(basedir) / fs::path("adios2") / fs::path(prefix) / "";
       return dirname.string();
     } else {
       ERROR << fmt::format("Unknown I/O mode: {}", info->iomode);

@@ -8,12 +8,19 @@
 #include "diag/metadata.hpp"
 #include "nixio.hpp"
 
+#if PICNIX_ENABLE_ADIOS2
+#include "../../pic/diag/adios2_writer.hpp"
+#include <map>
+#endif
+
 NIX_NAMESPACE_BEGIN
 
 template <typename BaseDiag, typename Packer>
 class LoadDiag : public ChunkDiagWriter<BaseDiag, Packer>
 {
 protected:
+  using chunk_type = typename BaseDiag::chunk_type;
+
   // data packer for load
   class LoadPacker : public Packer
   {
@@ -67,6 +74,93 @@ protected:
     }
   };
 
+#if PICNIX_ENABLE_ADIOS2
+  struct Adios2State {
+    std::unique_ptr<nix::Adios2Writer> writer;
+    bool                               variables_defined = false;
+  };
+
+  std::map<std::string, Adios2State> adios2_state;
+
+  void write_adios2(json& config)
+  {
+    auto data = this->interface->get_data();
+    if (this->require_diagnostic(data.curstep, config) == false) {
+      return;
+    }
+
+    const std::string prefix      = this->get_prefix(config, "load");
+    auto&             state       = adios2_state[prefix];
+    const int         local_count = data.chunkvec.size();
+
+    int local_min      = local_count > 0 ? std::numeric_limits<int>::max() : 0;
+    int local_max      = local_count > 0 ? std::numeric_limits<int>::min() : -1;
+    int local_load_min = std::numeric_limits<int>::max();
+    int local_load_max = local_count > 0 ? 0 : std::numeric_limits<int>::min();
+    for (int i = 0; i < local_count; i++) {
+      auto chunk     = static_cast<chunk_type*>(data.chunkvec[i].get());
+      auto load      = chunk->get_load();
+      local_min      = std::min(local_min, chunk->get_id());
+      local_max      = std::max(local_max, chunk->get_id());
+      local_load_min = std::min(local_load_min, static_cast<int>(load.size()));
+      local_load_max = std::max(local_load_max, static_cast<int>(load.size()));
+    }
+
+    int valid           = local_count == 0 || local_max - local_min + 1 == local_count ? 1 : 0;
+    int global_min      = 0;
+    int global_max      = 0;
+    int global_count    = 0;
+    int global_load_min = 0;
+    int global_load_max = 0;
+    MPI_Allreduce(MPI_IN_PLACE, &valid, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_min, &global_min, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_max, &global_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_load_min, &global_load_min, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&local_load_max, &global_load_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    if (valid == 0 || global_min != 0 || global_max != data.cdims[3] - 1 ||
+        global_count != data.cdims[3] || global_load_min == std::numeric_limits<int>::max() ||
+        global_load_min != global_load_max) {
+      ERROR << "ADIOS2 load output requires contiguous chunks with uniform non-empty load vectors";
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    }
+
+    const int                 load_size = global_load_min;
+    std::vector<float64>      load_values(static_cast<size_t>(local_count) * load_size);
+    std::vector<std::int32_t> rank_values(static_cast<size_t>(local_count), data.thisrank);
+    for (int i = 0; i < local_count; i++) {
+      auto chunk = static_cast<chunk_type*>(data.chunkvec[i].get());
+      auto load  = chunk->get_load();
+      std::copy(load.begin(), load.end(), load_values.begin() + i * load_size);
+    }
+
+    if (state.writer == nullptr) {
+      state.writer = std::make_unique<nix::Adios2Writer>(this->info);
+      state.writer->initialize("load", prefix, this->interface->get_configuration());
+
+      const size_t chunk_count = static_cast<size_t>(data.cdims[3]);
+      state.writer->define_global_double(
+          "load", {chunk_count, static_cast<size_t>(load_size)},
+          {static_cast<size_t>(local_min), 0},
+          {static_cast<size_t>(local_count), static_cast<size_t>(load_size)});
+      state.writer->define_global_int32("rank", {chunk_count}, {static_cast<size_t>(local_min)},
+                                        {static_cast<size_t>(local_count)});
+      state.writer->open();
+      state.variables_defined = true;
+    }
+
+    state.writer->begin_step(static_cast<std::int64_t>(data.curstep), data.curtime);
+    state.writer->put_global_double(
+        "load", {static_cast<size_t>(local_min), 0},
+        {static_cast<size_t>(local_count), static_cast<size_t>(load_size)}, load_values.data(),
+        load_values.size());
+    state.writer->put_global_int32("rank", {static_cast<size_t>(local_min)},
+                                   {static_cast<size_t>(local_count)}, rank_values.data(),
+                                   rank_values.size());
+    state.writer->end_step();
+  }
+#endif
+
 public:
   /// constructor
   LoadDiag(typename BaseDiag::PtrInterface interface)
@@ -74,9 +168,27 @@ public:
   {
   }
 
+  void shutdown()
+  {
+#if PICNIX_ENABLE_ADIOS2
+    for (auto& [prefix, state] : adios2_state) {
+      if (state.writer != nullptr) {
+        state.writer->close();
+      }
+    }
+#endif
+  }
+
   // data packing functor
   void operator()(json& config) override
   {
+#if PICNIX_ENABLE_ADIOS2
+    if (this->info->iomode == "adios2") {
+      write_adios2(config);
+      return;
+    }
+#endif
+
     auto data = this->interface->get_data();
 
     if (this->require_diagnostic(data.curstep, config) == false)
