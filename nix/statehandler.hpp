@@ -207,7 +207,7 @@ protected:
   std::string normalize_prefix(const std::string& prefix) const
   {
     namespace fs = std::filesystem;
-    return fs::weakly_canonical(fs::path(basedir) / fs::path(prefix)).string();
+    return fs::absolute(fs::path(basedir) / fs::path(prefix)).lexically_normal().string();
   }
 
   std::string get_path_with_basedir(std::string name, bool require_existence = false)

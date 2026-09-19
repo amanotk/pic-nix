@@ -770,17 +770,16 @@ TEST_CASE("pic_application_writes_complete_checkpoint_status", "[np=1][np=8]")
 
   int status_valid = 1;
   if (rank == 0) {
-    std::error_code ec;
-    std::ifstream   status_file(checkpoint.string() + ".status.json");
-    json            status                = json::parse(status_file, nullptr, false);
-    const auto      normalized_checkpoint = std::filesystem::weakly_canonical(checkpoint, ec);
+    std::ifstream status_file(checkpoint.string() + ".status.json");
+    json          status                = json::parse(status_file, nullptr, false);
+    const auto    normalized_checkpoint = std::filesystem::absolute(checkpoint).lexically_normal();
 
-    status_valid =
-        !ec && status_file.is_open() && status.is_object() && status.contains("status") &&
-        status.contains("prefix") && status.contains("nprocess") && status.contains("curstep") &&
-        status.contains("curtime") && status.contains("timestamp") &&
-        status["status"] == "complete" && status["prefix"] == normalized_checkpoint.string() &&
-        status["nprocess"] == nprocess;
+    status_valid = status_file.is_open() && status.is_object() && status.contains("status") &&
+                   status.contains("prefix") && status.contains("nprocess") &&
+                   status.contains("curstep") && status.contains("curtime") &&
+                   status.contains("timestamp") && status["status"] == "complete" &&
+                   status["prefix"] == normalized_checkpoint.string() &&
+                   status["nprocess"] == nprocess;
   }
   MPI_Bcast(&status_valid, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
