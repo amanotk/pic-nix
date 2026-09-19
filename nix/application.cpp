@@ -153,7 +153,7 @@ void Application::finalize()
 
   float64 shutdown_end = nix::wall_clock();
   log                  = {
-                       {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
+      {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
   logger->append(curstep, "shutdown_end", log);
   logger->flush();
 
@@ -664,8 +664,9 @@ std::string Application::get_checkpoint_prefix(int slot) const
 
 std::string Application::normalize_checkpoint_prefix(const std::string& prefix)
 {
-  return std::filesystem::weakly_canonical(std::filesystem::path(get_basedir()) /
-                                           std::filesystem::path(prefix))
+  return std::filesystem::absolute(std::filesystem::path(get_basedir()) /
+                                   std::filesystem::path(prefix))
+      .lexically_normal()
       .string();
 }
 
