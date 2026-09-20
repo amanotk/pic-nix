@@ -428,11 +428,14 @@ class AdiosDiagStorage(DiagStorage):
             return {}
         data = {}
         for name in self._matching_variables(pattern):
-            values = self._read_step(name, index)
+            if self.name in {"particle", "tracer"}:
+                values = self._read_joined_range(name, index, None, None)
+            else:
+                values = self._read_step(name, index)
             if self.name == "tracer" and f"{name}_id" in self.variables:
                 ids = np.ascontiguousarray(
-                    self._read_step(f"{name}_id", index)
-                ).reshape(-1)
+                    self._read_joined_id_range(f"{name}_id", index, None, None)
+                )
                 ids = ids.view(np.float64)
                 values = np.concatenate((values, ids[:, None]), axis=1)
             data[name] = values
@@ -490,6 +493,20 @@ class AdiosDiagStorage(DiagStorage):
             )
         ).reshape((-1, width))
 
+    def _read_joined_id_range(self, name, index, start, stop):
+        total = self._joined_size(name, index)
+        range_start, range_stop = self._normalize_range(start, stop, total)
+        if range_start >= range_stop:
+            return np.empty((0,), dtype=np.uint64)
+        return np.asarray(
+            self.reader.read(
+                name,
+                start=[range_start],
+                count=[range_stop - range_start],
+                step_selection=[index, 1],
+            )
+        ).reshape(-1)
+
     def read_particle_at(self, step, pattern, start=None, stop=None):
         if self.name != "particle":
             return {}
@@ -515,19 +532,7 @@ class AdiosDiagStorage(DiagStorage):
             base = name[: -len("_id")]
             if not re.match(pattern, base):
                 continue
-            total = self._joined_size(name, index)
-            range_start, range_stop = self._normalize_range(start, stop, total)
-            if range_start >= range_stop:
-                data[base] = np.empty((0,), dtype=np.uint64)
-                continue
-            data[base] = np.asarray(
-                self.reader.read(
-                    name,
-                    start=[range_start],
-                    count=[range_stop - range_start],
-                    step_selection=[index, 1],
-                )
-            ).reshape(-1)
+            data[base] = self._read_joined_id_range(name, index, start, stop)
         return data
 
 
