@@ -655,10 +655,10 @@ def reinterpret_particle_id(raw_id):
 
 def create_diag_storage(name, prefix, basedir, iomode):
     vds_path = Path(basedir) / "hdf5" / f"{prefix}.vds.h5"
-    if vds_path.exists():
-        storage = Hdf5VdsDiagStorage(name, prefix, vds_path)
-    elif iomode == "adios":
+    if iomode == "adios":
         storage = AdiosDiagStorage(name, prefix, basedir, iomode)
+    elif vds_path.exists():
+        storage = Hdf5VdsDiagStorage(name, prefix, vds_path)
     else:
         storage = JsonDiagStorage(name, prefix, basedir, iomode)
     storage.setup()

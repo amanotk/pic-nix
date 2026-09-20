@@ -296,16 +296,15 @@ TEST_CASE("check_adios_configuration")
 {
   CfgParser parser;
 
-  SECTION("default engine and scalar parameters")
+  SECTION("scalar parameters")
   {
     json adios = {
-        {"engine", "BP5"},
         {"parameters", {{"AsyncWrite", false}, {"NumSubFiles", 4}, {"MaxShmSize", "1GB"}}},
     };
     REQUIRE(parser.check_adios_configuration(adios));
   }
 
-  SECTION("configuration tables and engine are validated")
+  SECTION("configuration tables and fixed engine are validated")
   {
     json invalid_engine     = {{"engine", 5}};
     json invalid_parameters = {{"parameters", {{"Shape", json::array({1, 2})}}}};

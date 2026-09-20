@@ -218,6 +218,25 @@ bool AdiosWriter::available()
   return true;
 }
 
+void AdiosWriter::prepare_fresh_run(const std::string& basedir, const std::string& prefix)
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  std::string error;
+  if (rank == 0) {
+    try {
+      const std::filesystem::path base =
+          std::filesystem::path(basedir) / "adios" / (prefix + ".bp");
+      std::filesystem::create_directories(base.parent_path());
+      remove_segments(base);
+    } catch (const std::exception& exception) {
+      error = exception.what();
+    }
+  }
+  broadcast_rank0_error(error);
+}
+
 AdiosWriter::AdiosWriter(std::shared_ptr<Diag::info_type> info)
     : impl(std::make_unique<Impl>(std::move(info)))
 {
@@ -246,15 +265,17 @@ void AdiosWriter::initialize(const std::string& diagnostic, const std::string& p
     throw std::invalid_argument("application.adios must be a table");
   }
 
-  const std::string engine_name = adios_config.value("engine", "BP5");
-  const json        parameters  = adios_config.value("parameters", json::object());
+  if (adios_config.contains("engine")) {
+    throw std::invalid_argument("ADIOS2 engine is fixed to BP5; remove application.adios.engine");
+  }
+  const json parameters = adios_config.value("parameters", json::object());
   if (parameters.is_object() == false) {
     throw std::invalid_argument("application.adios.parameters must be a table");
   }
 
   impl->adios = std::make_unique<adios2::ADIOS>(MPI_COMM_WORLD);
   impl->io    = std::make_unique<adios2::IO>(impl->adios->DeclareIO("PICNIX"));
-  impl->io->SetEngine(engine_name);
+  impl->io->SetEngine("BP5");
   impl->filename = std::filesystem::path(impl->info->basedir) / "adios" / (prefix + ".bp");
 
   adios2::Params adios_parameters{{"AsyncWrite", "false"}};

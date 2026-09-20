@@ -22,6 +22,7 @@ public:
   ~AdiosWriter();
 
   static bool available();
+  static void prepare_fresh_run(const std::string& basedir, const std::string& prefix);
 
   void initialize(const std::string& diagnostic, const std::string& prefix, const json& config);
 

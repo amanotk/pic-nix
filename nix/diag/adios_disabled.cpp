@@ -22,6 +22,11 @@ bool AdiosWriter::available()
   return false;
 }
 
+void AdiosWriter::prepare_fresh_run(const std::string&, const std::string&)
+{
+  unavailable();
+}
+
 AdiosWriter::AdiosWriter(std::shared_ptr<Diag::info_type>)
 {
   unavailable();

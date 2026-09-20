@@ -293,9 +293,8 @@ public:
       return false;
     }
 
-    if (adios.contains("engine") &&
-        (adios["engine"].is_string() == false || adios["engine"].get<std::string>().empty())) {
-      std::cerr << "`application.adios.engine` must be a non-empty string\n";
+    if (adios.contains("engine")) {
+      std::cerr << "`application.adios.engine` is not configurable; ADIOS2 always uses BP5\n";
       return false;
     }
 

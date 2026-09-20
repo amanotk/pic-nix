@@ -16,8 +16,11 @@
 #include "diag/ascent.hpp"
 #endif
 
+#include "nix/diag/adios.hpp"
 #include "nix/diag/load.hpp"
 #include "nix/diag/resource.hpp"
+
+#include <set>
 
 PicApplication::PtrPoissonInterface PicApplication::create_poisson_interface()
 {
@@ -116,6 +119,19 @@ void PicApplication::initialize_diagnostic()
 #endif
 
   base_type::initialize_diagnostic();
+
+  if (get_iomode() == "adios" && is_initial_run()) {
+    std::set<std::string> prefixes;
+    for (const auto& diagnostic : diagnostics) {
+      const std::string name = diagnostic.value("name", std::string{});
+      if (name == "load" || name == "field" || name == "particle" || name == "tracer") {
+        prefixes.insert(diagnostic.value("prefix", name));
+      }
+    }
+    for (const auto& prefix : prefixes) {
+      nix::AdiosWriter::prepare_fresh_run(get_basedir(), prefix);
+    }
+  }
 
   auto interface = std::static_pointer_cast<PicApplicationInterface>(get_interface());
   diagvec.push_back(std::make_unique<HistoryDiag>(interface));

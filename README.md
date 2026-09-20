@@ -101,8 +101,6 @@ Enable the backend with one persistent BP5 dataset per diagnostic prefix:
   iomode = 'adios'
 
   [application.adios]
-    engine = 'BP5'
-
     [application.adios.parameters]
       AsyncWrite = false
 
@@ -126,6 +124,8 @@ A run loaded from a checkpoint keeps the existing BP5 data and writes the next n
 such as `field.part0001.bp`.  A segment is published only after the writer closes successfully,  
 and the Python reader discovers all published segments automatically.  Data at and after the  
 checkpoint step is read from the new run rather than from older segments.  
+The ADIOS2 backend always uses the BP5 engine; BP5 parameters are configured under  
+`application.adios.parameters`.  
 
 ### Periodic Checkpointing
 

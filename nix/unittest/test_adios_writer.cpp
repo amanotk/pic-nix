@@ -39,7 +39,7 @@ void write_segment(const std::filesystem::path& basedir, bool is_restart, std::i
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", {{"engine", "BP5"}}}}},
+        {"application", {{"adios", nix::json::object()}}},
     };
 
     writer.initialize("field", "segments", config);
@@ -98,7 +98,7 @@ TEST_CASE("ADIOS writer round trip")
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", {{"engine", "BP5"}}}}},
+        {"application", {{"adios", nix::json::object()}}},
     };
 
     writer.initialize("field", "roundtrip", config);
@@ -198,7 +198,7 @@ TEST_CASE("ADIOS writer completes asynchronous BP5 output on close")
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", {{"engine", "BP5"}, {"parameters", {{"AsyncWrite", true}}}}}}},
+        {"application", {{"adios", {{"parameters", {{"AsyncWrite", true}}}}}}},
     };
 
     writer.initialize("field", "async", config);
@@ -277,10 +277,25 @@ TEST_CASE("ADIOS writer rejects invalid restart segment state")
   MPI_Barrier(MPI_COMM_WORLD);
 
   const nix::json config = {
-      {"application", {{"adios", {{"engine", "BP5"}}}}},
+      {"application", {{"adios", nix::json::object()}}},
   };
   const auto base = basedir / "adios" / "segments.bp";
   const auto temp = basedir / "adios" / "segments.bp.tmp";
+
+  SECTION("engine is fixed to BP5")
+  {
+    nix::Diag::initialize(basedir.string(), "adios", "");
+    {
+      TestDiag         diag;
+      nix::AdiosWriter writer(diag.get_info());
+      const nix::json  config = {
+          {"application", {{"adios", {{"engine", "SST"}}}}},
+      };
+      REQUIRE(thrown_message([&] { writer.initialize("field", "segments", config); }) ==
+              "ADIOS2 engine is fixed to BP5; remove application.adios.engine");
+    }
+    nix::Diag::finalize();
+  }
 
   SECTION("restart step must be initialized")
   {
@@ -321,5 +336,35 @@ TEST_CASE("ADIOS writer rejects invalid restart segment state")
     REQUIRE_FALSE(std::filesystem::exists(temp));
   }
 
+  std::filesystem::remove_all(basedir);
+}
+
+TEST_CASE("ADIOS fresh run cleanup is eager")
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  REQUIRE(rank == 0);
+
+  const auto basedir = std::filesystem::temp_directory_path() / "picnix-adios-eager-cleanup-test";
+  std::filesystem::remove_all(basedir);
+  std::filesystem::create_directories(basedir);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  const auto base  = basedir / "adios" / "segments.bp";
+  const auto part1 = basedir / "adios" / "segments.part0001.bp";
+  const auto temp2 = basedir / "adios" / "segments.part0002.bp.tmp";
+  write_segment(basedir, false, 0, 10.0);
+  write_segment(basedir, true, 1, 20.0);
+  std::filesystem::create_directories(temp2);
+
+  REQUIRE(std::filesystem::exists(base));
+  REQUIRE(std::filesystem::exists(part1));
+  REQUIRE(std::filesystem::exists(temp2));
+
+  nix::AdiosWriter::prepare_fresh_run(basedir.string(), "segments");
+
+  REQUIRE_FALSE(std::filesystem::exists(base));
+  REQUIRE_FALSE(std::filesystem::exists(part1));
+  REQUIRE_FALSE(std::filesystem::exists(temp2));
   std::filesystem::remove_all(basedir);
 }

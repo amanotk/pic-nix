@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import h5py
 import msgpack
 import numpy as np
 import pytest
@@ -115,6 +116,18 @@ def test_run_reads_adios_field_and_particle_data(tmp_path):
     np.testing.assert_array_equal(
         np.frombuffer(tracer[:, -1].tobytes(), dtype=np.uint64), [100, 101]
     )
+
+
+def test_run_prefers_adios_over_stale_hdf5_vds(tmp_path):
+    profile = make_profile(tmp_path)
+    hdf5_dir = profile.parent / "hdf5"
+    hdf5_dir.mkdir()
+    with h5py.File(hdf5_dir / "field.vds.h5", "w") as h5fp:
+        h5fp.attrs["picnix_hdf5_layout"] = "stale"
+
+    run = Run(str(profile))
+
+    assert run.get_diag_handler("field").storage.kind == "adios"
 
 
 def test_run_merges_adios_restart_segments(tmp_path):
