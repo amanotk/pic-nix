@@ -159,7 +159,7 @@ fi
 PYTHON_VERSION="$(
   "$PYTHON_EXECUTABLE" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
 )"
-PYTHON_SITE_PACKAGES="$PREFIX/lib/python${PYTHON_VERSION}/site-packages"
+PYTHON_SITE_PACKAGES="$ADIOS2_LIB_DIR/python${PYTHON_VERSION}/site-packages"
 if [[ ! -d "$PYTHON_SITE_PACKAGES/adios2" ]]; then
   echo "ADIOS2 Python module was not installed under $PYTHON_SITE_PACKAGES" >&2
   exit 1
