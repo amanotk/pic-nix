@@ -137,36 +137,14 @@ foreach(target IN ITEMS ${PARALLEL_EXECS})
 endforeach()
 
 set(NIX_NIXIO_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_nixio_parallel_np8)
-# Run each MPI Catch2 case in its own process to avoid retaining MPI state
-# between cases.
-set(NIX_NIXIO_TEST_CASES
- 	ReadSingle
- 	WriteSingle
- 	ReadContiguous
- 	WriteContiguous
- 	ReadContiguousAt
- 	WriteContiguousAt
- 	ReadSubarray
- 	WriteSubarray
+add_mpi_test(test_nixio_parallel test_nixio_parallel 8 ${NIX_NIXIO_TMPDIR_NP8}
+	-X 2 -Y 2 -Z 2 "[np=8]"
 )
-foreach(test_case IN LISTS NIX_NIXIO_TEST_CASES)
- 	set(test_tmpdir ${NIX_NIXIO_TMPDIR_NP8}/${test_case})
- 	add_mpi_test(test_nixio_parallel_${test_case} test_nixio_parallel 8 ${test_tmpdir}
-		-X 2 -Y 2 -Z 2 "${test_case}"
-	)
-endforeach()
 
 set(NIX_BALANCER_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_balancer_parallel_np8)
-set(NIX_BALANCER_TEST_CASES
- 	test_uppdate_global_load
- 	test_sendrecv_chunk
+add_mpi_test(test_balancer_parallel test_balancer_parallel 8 ${NIX_BALANCER_TMPDIR_NP8}
+	"[np=8]"
 )
-foreach(test_case IN LISTS NIX_BALANCER_TEST_CASES)
- 	set(test_tmpdir ${NIX_BALANCER_TMPDIR_NP8}/${test_case})
- 	add_mpi_test(test_balancer_parallel_${test_case} test_balancer_parallel 8 ${test_tmpdir}
-		"${test_case}"
-	)
-endforeach()
 
 set(NIX_MPISTREAM_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_mpistream_parallel_np8)
 add_mpi_test(test_mpistream_parallel test_mpistream_parallel 8 ${NIX_MPISTREAM_TMPDIR_NP8}
@@ -174,17 +152,6 @@ add_mpi_test(test_mpistream_parallel test_mpistream_parallel 8 ${NIX_MPISTREAM_T
 )
 
 set(NIX_STATEHANDLER_TMPDIR_NP8 ${CMAKE_CURRENT_BINARY_DIR}/tmp_statehandler_parallel_np8)
-set(NIX_STATEHANDLER_TEST_CASES
- 	test_save_load_application
- 	test_save_load_checkpoint_status
- 	test_load_rejects_incomplete_status
- 	test_save_load_chunkvec
- 	test_load_accepts_legacy_missing_status
- 	test_load_rejects_malformed_status
+add_mpi_test(test_statehandler_parallel test_statehandler_parallel 8 ${NIX_STATEHANDLER_TMPDIR_NP8}
+	"[np=8]"
 )
-foreach(test_case IN LISTS NIX_STATEHANDLER_TEST_CASES)
- 	set(test_tmpdir ${NIX_STATEHANDLER_TMPDIR_NP8}/${test_case})
- 	add_mpi_test(test_statehandler_parallel_${test_case} test_statehandler_parallel 8 ${test_tmpdir}
-		"${test_case}"
-	)
-endforeach()
