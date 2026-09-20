@@ -121,6 +121,12 @@ datasets from the profile's `basedir` and `prefix`; the Python reader is optiona
 uv pip install --python .venv -e './python[adios]'
 ```
 
+A fresh run replaces existing datasets for the configured prefixes, including restart segments.  
+A run loaded from a checkpoint keeps the existing BP5 data and writes the next numbered segment,  
+such as `field.part0001.bp`.  A segment is published only after the writer closes successfully,  
+and the Python reader discovers all published segments automatically.  Data at and after the  
+checkpoint step is read from the new run rather than from older segments.  
+
 ### Periodic Checkpointing
 
 Periodic checkpointing is disabled by default.  Add a positive elapsed-time  

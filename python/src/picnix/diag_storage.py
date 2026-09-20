@@ -351,9 +351,12 @@ class AdiosDiagStorage(DiagStorage):
         self.basedir = Path(basedir)
         self.iomode = iomode
         self.path = self.basedir / "adios" / f"{prefix}.bp"
+        self.paths = []
         self.reader = None
+        self.readers = []
         self.variables = {}
         self.block_info = {}
+        self.step_locations = []
 
     def setup(self):
         try:
@@ -363,30 +366,128 @@ class AdiosDiagStorage(DiagStorage):
                 "ADIOS2 Python support is required to read an iomode='adios' dataset"
             ) from exc
 
-        if not self.path.exists():
+        segments = self._segment_paths()
+        if not segments:
             raise FileNotFoundError(f"ADIOS2 dataset not found: {self.path}")
+        self.paths = [path for _, path in segments]
 
-        self.reader = adios2.FileReader(str(self.path))
-        self.variables = self.reader.available_variables()
-        self._validate_schema()
+        steps = []
+        times = []
+        for segment_index, path in segments:
+            reader = adios2.FileReader(str(path))
+            variables = reader.available_variables()
+            self._validate_schema(reader)
+            self._validate_segment(reader, segment_index, path)
+            if not self.variables:
+                self.variables = variables
+            elif variables.keys() != self.variables.keys():
+                raise ValueError(f"ADIOS2 variable mismatch in segment: {path}")
 
-        nsteps = self._variable_steps("step")
-        if nsteps <= 0:
-            raise ValueError(f"ADIOS2 dataset has no steps: {self.path}")
+            nsteps = self._variable_steps(variables, "step")
+            if nsteps <= 0:
+                raise ValueError(f"ADIOS2 dataset has no steps: {path}")
 
-        self.step = np.asarray(
-            self.reader.read("step", step_selection=[0, nsteps])
-        ).reshape(-1)
-        self.time = np.asarray(
-            self.reader.read("time", step_selection=[0, nsteps])
-        ).reshape(-1)
-        if self.step.size != self.time.size:
-            raise ValueError("ADIOS2 step/time metadata lengths do not match")
+            segment_steps = np.asarray(
+                reader.read("step", step_selection=[0, nsteps])
+            ).reshape(-1)
+            segment_times = np.asarray(
+                reader.read("time", step_selection=[0, nsteps])
+            ).reshape(-1)
+            if segment_steps.size != segment_times.size:
+                raise ValueError(
+                    f"ADIOS2 step/time metadata lengths do not match: {path}"
+                )
+            if np.any(np.diff(segment_steps) <= 0):
+                raise ValueError(f"ADIOS2 steps are not strictly increasing: {path}")
 
-    def _validate_schema(self):
-        schema = self.reader.read_attribute_string("picnix_schema")
-        diagnostic = self.reader.read_attribute_string("diagnostic")
-        prefix = self.reader.read_attribute_string("prefix")
+            restart_step = self._read_integer_attribute(
+                reader, "restart_step", default=-1 if segment_index == 0 else None
+            )
+            if segment_index > 0:
+                if restart_step < 0:
+                    raise ValueError(f"invalid ADIOS2 restart step in segment: {path}")
+                if segment_steps[0] < restart_step:
+                    raise ValueError(
+                        f"ADIOS2 segment starts before its restart step: {path}"
+                    )
+
+            reader_index = len(self.readers)
+            self.readers.append(reader)
+            while segment_index > 0 and steps and steps[-1] >= restart_step:
+                steps.pop()
+                times.pop()
+                self.step_locations.pop()
+            if steps and steps[-1] >= segment_steps[0]:
+                raise ValueError(f"ADIOS2 segment steps overlap unexpectedly: {path}")
+            steps.extend(segment_steps)
+            times.extend(segment_times)
+            self.step_locations.extend(
+                (reader_index, local_index) for local_index in range(nsteps)
+            )
+
+        self.reader = self.readers[0]
+        self.step = np.asarray(steps, dtype=np.int64)
+        self.time = np.asarray(times, dtype=np.float64)
+
+    def _segment_paths(self):
+        paths = []
+        if self.path.exists():
+            paths.append((0, self.path))
+        if not self.path.parent.exists():
+            return []
+
+        pattern = re.compile(
+            rf"{re.escape(self.path.stem)}\.part(\d{{4,}}){re.escape(self.path.suffix)}"
+        )
+        broad_pattern = re.compile(
+            rf"{re.escape(self.path.stem)}\.part(\d+){re.escape(self.path.suffix)}"
+        )
+        for candidate in self.path.parent.iterdir():
+            match = pattern.fullmatch(candidate.name)
+            if match:
+                index = int(match.group(1))
+                expected = f"{self.path.stem}.part{index:04d}{self.path.suffix}"
+                if index == 0 or candidate.name != expected:
+                    raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
+                paths.append((index, candidate))
+            elif broad_pattern.fullmatch(candidate.name):
+                raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
+
+        paths.sort()
+        for expected, (index, path) in enumerate(paths):
+            if index != expected:
+                raise ValueError(f"missing ADIOS2 segment before: {path}")
+        return paths
+
+    def _validate_segment(self, reader, expected_index, path):
+        actual_index = self._read_integer_attribute(
+            reader, "segment_index", default=0 if expected_index == 0 else None
+        )
+        if actual_index != expected_index:
+            raise ValueError(
+                f"ADIOS2 segment index mismatch in {path}: "
+                f"{actual_index} != {expected_index}"
+            )
+
+    @staticmethod
+    def _read_integer_attribute(reader, name, default=None):
+        try:
+            values = np.asarray(reader.read_attribute(name)).reshape(-1)
+        except KeyError as exc:
+            if default is not None:
+                return default
+            raise ValueError(f"missing ADIOS2 attribute: {name!r}") from exc
+        if values.size != 1:
+            raise ValueError(f"ADIOS2 attribute {name!r} must be scalar")
+        try:
+            return int(values[0])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"ADIOS2 attribute {name!r} must be an integer") from exc
+
+    def _validate_schema(self, reader):
+        schema = reader.read_attribute_string("picnix_schema")
+        diagnostic = reader.read_attribute_string("diagnostic")
+        prefix = reader.read_attribute_string("prefix")
         if schema != "diagnostic-bp-v1":
             raise ValueError(f"unsupported PIC-NIX ADIOS2 schema: {schema!r}")
         if diagnostic != self.name:
@@ -396,9 +497,10 @@ class AdiosDiagStorage(DiagStorage):
         if prefix != self.prefix:
             raise ValueError(f"ADIOS2 prefix mismatch: {prefix!r} != {self.prefix!r}")
 
-    def _variable_steps(self, name):
+    @staticmethod
+    def _variable_steps(variables, name):
         try:
-            return int(self.variables[name]["AvailableStepsCount"])
+            return int(variables[name]["AvailableStepsCount"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"missing ADIOS2 step metadata for {name!r}") from exc
 
@@ -409,7 +511,14 @@ class AdiosDiagStorage(DiagStorage):
         return int(index)
 
     def _read_step(self, name, index):
-        return np.asarray(self.reader.read(name, step_selection=[index, 1]))
+        reader, local_index, _ = self._reader_step(index)
+        return np.asarray(reader.read(name, step_selection=[local_index, 1]))
+
+    def _reader_step(self, index):
+        if self.readers:
+            reader_index, local_index = self.step_locations[index]
+            return self.readers[reader_index], local_index, reader_index
+        return self.reader, index, 0
 
     def _matching_variables(self, pattern, include_ids=False):
         names = []
@@ -466,10 +575,12 @@ class AdiosDiagStorage(DiagStorage):
         return sum(count[0] for count in counts)
 
     def _blocks_at_step(self, name, index):
-        if name not in self.block_info:
-            self.block_info[name] = self.reader.all_blocks_info(name)
+        reader, local_index, reader_index = self._reader_step(index)
+        key = (reader_index, name)
+        if key not in self.block_info:
+            self.block_info[key] = reader.all_blocks_info(name)
         try:
-            return self.block_info[name][index]
+            return self.block_info[key][local_index]
         except IndexError as exc:
             raise ValueError(
                 f"missing ADIOS2 blocks for {name!r} at step {index}"
@@ -484,12 +595,13 @@ class AdiosDiagStorage(DiagStorage):
         range_start, range_stop = self._normalize_range(start, stop, total)
         if range_start >= range_stop:
             return np.empty((0, width), dtype=np.float64)
+        reader, local_index, _ = self._reader_step(index)
         return np.asarray(
-            self.reader.read(
+            reader.read(
                 name,
                 start=[range_start, 0],
                 count=[range_stop - range_start, width],
-                step_selection=[index, 1],
+                step_selection=[local_index, 1],
             )
         ).reshape((-1, width))
 
@@ -498,12 +610,13 @@ class AdiosDiagStorage(DiagStorage):
         range_start, range_stop = self._normalize_range(start, stop, total)
         if range_start >= range_stop:
             return np.empty((0,), dtype=np.uint64)
+        reader, local_index, _ = self._reader_step(index)
         return np.asarray(
-            self.reader.read(
+            reader.read(
                 name,
                 start=[range_start],
                 count=[range_stop - range_start],
-                step_selection=[index, 1],
+                step_selection=[local_index, 1],
             )
         ).reshape(-1)
 

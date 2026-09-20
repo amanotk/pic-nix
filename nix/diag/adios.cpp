@@ -4,7 +4,10 @@
 
 #include <adios2.h>
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -26,6 +29,163 @@ std::string parameter_value(const nix::json& value)
 
   throw std::invalid_argument("ADIOS2 parameters must be scalar values");
 }
+
+std::filesystem::path segment_path(const std::filesystem::path& base, int index)
+{
+  if (index == 0) {
+    return base;
+  }
+  const std::string name =
+      fmt::format("{}.part{:04d}{}", base.stem().string(), index, base.extension().string());
+  return base.parent_path() / name;
+}
+
+std::filesystem::path temporary_path(const std::filesystem::path& path)
+{
+  return path.string() + ".tmp";
+}
+
+std::optional<int> segment_index(const std::filesystem::path& base,
+                                 const std::filesystem::path& candidate)
+{
+  if (candidate.extension() != base.extension()) {
+    return std::nullopt;
+  }
+
+  const std::string prefix = base.stem().string() + ".part";
+  const std::string stem   = candidate.stem().string();
+  if (stem.size() <= prefix.size() || stem.compare(0, prefix.size(), prefix) != 0) {
+    return std::nullopt;
+  }
+
+  const std::string digits = stem.substr(prefix.size());
+  if (std::all_of(digits.begin(), digits.end(),
+                  [](unsigned char ch) { return std::isdigit(ch); }) == false) {
+    return std::nullopt;
+  }
+
+  int index = 0;
+  for (const char digit : digits) {
+    const int value = digit - '0';
+    if (index > (std::numeric_limits<int>::max() - value) / 10) {
+      return std::nullopt;
+    }
+    index = index * 10 + value;
+  }
+  if (candidate.filename() != segment_path(base, index).filename()) {
+    return std::nullopt;
+  }
+  return index;
+}
+
+std::optional<int> dataset_index(const std::filesystem::path& base,
+                                 const std::filesystem::path& candidate)
+{
+  if (candidate == base) {
+    return 0;
+  }
+  return segment_index(base, candidate);
+}
+
+std::optional<int> temporary_dataset_index(const std::filesystem::path& base,
+                                           const std::filesystem::path& candidate)
+{
+  const std::string suffix = ".tmp";
+  const std::string name   = candidate.string();
+  if (name.size() <= suffix.size() ||
+      name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0) {
+    return std::nullopt;
+  }
+  return dataset_index(base, name.substr(0, name.size() - suffix.size()));
+}
+
+int next_segment_index(const std::filesystem::path& base)
+{
+  std::vector<int> indices;
+  if (std::filesystem::exists(base)) {
+    indices.push_back(0);
+  }
+  if (std::filesystem::exists(base.parent_path())) {
+    for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
+      const auto index = segment_index(base, entry.path());
+      if (index.has_value()) {
+        indices.push_back(*index);
+      }
+    }
+  }
+  if (indices.empty()) {
+    return 0;
+  }
+
+  std::sort(indices.begin(), indices.end());
+  for (int expected = 0; expected < static_cast<int>(indices.size()); expected++) {
+    if (indices[expected] != expected) {
+      throw std::runtime_error("ADIOS2 diagnostic segments are not contiguous");
+    }
+  }
+  if (indices.back() == std::numeric_limits<int>::max()) {
+    throw std::overflow_error("ADIOS2 diagnostic segment index overflow");
+  }
+  return indices.back() + 1;
+}
+
+void remove_segments(const std::filesystem::path& base)
+{
+  std::filesystem::remove_all(base);
+  if (std::filesystem::exists(base.parent_path()) == false) {
+    return;
+  }
+
+  std::vector<std::filesystem::path> segments;
+  for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
+    if (dataset_index(base, entry.path()).has_value() ||
+        temporary_dataset_index(base, entry.path()).has_value()) {
+      segments.push_back(entry.path());
+    }
+  }
+  for (const auto& segment : segments) {
+    std::filesystem::remove_all(segment);
+  }
+}
+
+void remove_temporary_segments(const std::filesystem::path& base)
+{
+  if (std::filesystem::exists(base.parent_path()) == false) {
+    return;
+  }
+
+  std::vector<std::filesystem::path> segments;
+  for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
+    if (temporary_dataset_index(base, entry.path()).has_value()) {
+      segments.push_back(entry.path());
+    }
+  }
+  for (const auto& segment : segments) {
+    std::filesystem::remove_all(segment);
+  }
+}
+
+void broadcast_rank0_error(std::string& error)
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  int size = 0;
+  if (rank == 0) {
+    if (error.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+      error = "rank 0 filesystem error message is too long";
+    }
+    size = static_cast<int>(error.size());
+  }
+  MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  if (rank != 0) {
+    error.resize(size);
+  }
+  if (size > 0) {
+    MPI_Bcast(error.data(), size, MPI_CHAR, 0, MPI_COMM_WORLD);
+    throw std::runtime_error(error);
+  }
+}
 } // namespace
 
 namespace nix
@@ -38,6 +198,7 @@ struct AdiosWriter::Impl {
   std::unique_ptr<adios2::IO>      io;
   std::unique_ptr<adios2::Engine>  engine;
   std::filesystem::path            filename;
+  std::filesystem::path            temporary_filename;
 
   std::optional<adios2::Variable<std::int64_t>>          step_variable;
   std::optional<adios2::Variable<double>>                time_variable;
@@ -177,13 +338,34 @@ void AdiosWriter::open()
   }
 
   const std::filesystem::path directory = impl->filename.parent_path();
+  int                         segment   = 0;
+  std::string                 error;
   if (impl->info->world_rank == 0) {
-    std::filesystem::create_directories(directory);
+    try {
+      std::filesystem::create_directories(directory);
+      if (impl->info->is_restart) {
+        if (impl->info->restart_step < 0) {
+          throw std::logic_error("ADIOS2 restart step was not initialized");
+        }
+        remove_temporary_segments(impl->filename);
+        segment = next_segment_index(impl->filename);
+      } else {
+        remove_segments(impl->filename);
+      }
+    } catch (const std::exception& exception) {
+      error = exception.what();
+    }
   }
-  MPI_Barrier(MPI_COMM_WORLD);
+  broadcast_rank0_error(error);
+  MPI_Bcast(&segment, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  impl->filename           = segment_path(impl->filename, segment);
+  impl->temporary_filename = temporary_path(impl->filename);
+  impl->io->DefineAttribute<std::int32_t>("segment_index", segment);
+  impl->io->DefineAttribute<std::int64_t>("restart_step", impl->info->restart_step);
 
   impl->engine = std::make_unique<adios2::Engine>(
-      impl->io->Open(impl->filename.string(), adios2::Mode::Write));
+      impl->io->Open(impl->temporary_filename.string(), adios2::Mode::Write));
 }
 
 void AdiosWriter::begin_step(std::int64_t step, double time)
@@ -269,10 +451,37 @@ void AdiosWriter::close()
   if (impl->engine == nullptr) {
     return;
   }
-  if (impl->step_open) {
-    end_step();
+
+  std::string error;
+  try {
+    if (impl->step_open) {
+      end_step();
+    }
+    impl->engine->Close();
+  } catch (const std::exception& exception) {
+    error = exception.what();
   }
-  impl->engine->Close();
   impl->engine.reset();
+
+  int local_status  = error.empty() ? 1 : 0;
+  int global_status = 0;
+  MPI_Allreduce(&local_status, &global_status, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+
+  if (global_status == 0) {
+    if (impl->info->world_rank == 0 && error.empty()) {
+      error = "ADIOS2 diagnostic close failed on another rank";
+    }
+    broadcast_rank0_error(error);
+  }
+
+  if (impl->info->world_rank == 0) {
+    try {
+      std::filesystem::rename(impl->temporary_filename, impl->filename);
+      nix::sync_directory(impl->filename.parent_path().string());
+    } catch (const std::exception& exception) {
+      error = exception.what();
+    }
+  }
+  broadcast_rank0_error(error);
 }
 } // namespace nix
