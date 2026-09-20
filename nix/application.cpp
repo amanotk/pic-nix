@@ -4,6 +4,7 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "diag/adios.hpp"
 #include "memory.hpp"
 #include "mpistream.hpp"
 
@@ -322,7 +323,12 @@ void Application::initialize_workload()
 
 void Application::initialize_diagnostic()
 {
-  Diag::initialize(get_basedir(), get_iomode(), cfgparser->get_config_dir());
+  if (get_iomode() == "adios" && AdiosWriter::available() == false) {
+    ERROR << "application.iomode = adios requires an ADIOS2-enabled build";
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+  Diag::initialize(get_basedir(), get_iomode(), cfgparser->get_config_dir(),
+                   is_initial_run() == false);
 }
 
 void Application::setup_chunks_init()
@@ -397,6 +403,7 @@ void Application::setup_chunks()
     std::string prefix = resolve_checkpoint_load_prefix(argparser->get_load());
     bool        status = prefix != "" && statehandler->load(get_interface(), prefix);
     assert_mpi(status == true, "invalid checkpoint status");
+    Diag::set_restart_step(curstep);
 
     for (int slot = 0; slot < checkpoint_slot_count; slot++) {
       if (prefix == get_checkpoint_prefix(slot)) {

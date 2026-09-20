@@ -28,25 +28,17 @@ public:
 
   virtual void close_file() = 0;
 
-  virtual bool is_completed() = 0;
-
-  virtual void wait(int index) = 0;
-
-  virtual void wait_all() = 0;
-
-  virtual bool test_all() = 0;
-
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) = 0;
 
-  virtual size_t write(int index, Buffer& buffer, size_t& disp) = 0;
+  /// Write the complete buffer before returning.
+  virtual size_t write(Buffer& buffer, size_t& disp) = 0;
 };
 
 class MpiioDiagIoHandler : public DiagIoHandler
 {
 protected:
-  MPI_File                 filehandle;
-  bool                     is_opened;
-  std::vector<MPI_Request> request;
+  MPI_File filehandle;
+  bool     is_opened;
 
 public:
   MpiioDiagIoHandler(std::shared_ptr<info_type> info) : DiagIoHandler(info), is_opened(false)
@@ -63,39 +55,10 @@ public:
 
   virtual void close_file() override
   {
-    assert(is_completed() == true);
-
     if (is_opened == true) {
       nixio::close_file(&filehandle);
       is_opened = false;
     }
-  }
-
-  virtual bool is_completed() override
-  {
-    bool status = std::all_of(request.begin(), request.end(),
-                              [](auto& req) { return req == MPI_REQUEST_NULL; });
-    return status;
-  }
-
-  virtual void wait(int index) override
-  {
-    MPI_Wait(&request[index], MPI_STATUS_IGNORE);
-  }
-
-  virtual void wait_all() override
-  {
-    MPI_Waitall(request.size(), request.data(), MPI_STATUSES_IGNORE);
-    std::fill(request.begin(), request.end(), MPI_REQUEST_NULL);
-    close_file();
-  }
-
-  virtual bool test_all() override
-  {
-    int flag = 0;
-    MPI_Testall(request.size(), request.data(), &flag, MPI_STATUSES_IGNORE);
-
-    return flag;
   }
 
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) override
@@ -109,13 +72,12 @@ public:
     return std::vector<int>({global_id_min, global_id_max});
   }
 
-  virtual size_t write(int index, Buffer& buffer, size_t& disp) override
+  virtual size_t write(Buffer& buffer, size_t& disp) override
   {
-    if (request.size() <= index) {
-      request.resize(index + 1, MPI_REQUEST_NULL);
-    }
-    auto count = nixio::write_contiguous(&filehandle, &disp, buffer.get(), buffer.size, 1, 1,
-                                         &request[index]);
+    MPI_Request request = MPI_REQUEST_NULL;
+    auto        count =
+        nixio::write_contiguous(&filehandle, &disp, buffer.get(), buffer.size, 1, 1, &request);
+    MPI_Wait(&request, MPI_STATUS_IGNORE);
 
     return count;
   }
@@ -151,30 +113,10 @@ public:
 
   virtual void close_file() override
   {
-    assert(is_completed() == true);
-
     if (file.is_open() == true) {
       file.flush();
       file.close();
     }
-  }
-
-  virtual bool is_completed() override
-  {
-    return true;
-  }
-
-  virtual void wait(int index) override
-  {
-  }
-
-  virtual void wait_all() override
-  {
-  }
-
-  virtual bool test_all() override
-  {
-    return true;
   }
 
   virtual std::vector<int> get_chunk_id_range(int id_min, int id_max) override
@@ -188,7 +130,7 @@ public:
     return std::vector<int>({node_id_min, node_id_max});
   }
 
-  virtual size_t write(int index, Buffer& buffer, size_t& disp) override
+  virtual size_t write(Buffer& buffer, size_t& disp) override
   {
     Buffer           totbuf;
     int              totcnt  = 0;

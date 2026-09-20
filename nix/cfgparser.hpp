@@ -167,6 +167,16 @@ public:
       status = status & check_checkpoint_configuration(object["application"]["checkpoint"]);
     }
 
+    if (object["application"].contains("iomode") &&
+        object["application"]["iomode"].is_null() == false) {
+      status = status & check_io_mode(object["application"]["iomode"]);
+    }
+
+    if (object["application"].contains("adios") &&
+        object["application"]["adios"].is_null() == false) {
+      status = status & check_adios_configuration(object["application"]["adios"]);
+    }
+
     // check the parameter section
     if (object["parameter"].is_null() == false) {
       status = status & check_mandatory_parameters(object["parameter"]);
@@ -255,6 +265,52 @@ public:
           checkpoint["prefix"].get<std::string>().empty()) {
         std::cerr << "`application.checkpoint.prefix` must be a non-empty string\n";
         return false;
+      }
+    }
+
+    return true;
+  }
+
+  virtual bool check_io_mode(json& iomode)
+  {
+    if (iomode.is_string() == false) {
+      std::cerr << "`application.iomode` must be one of: mpiio, posix, adios\n";
+      return false;
+    }
+
+    const std::string mode = iomode.get<std::string>();
+    if (mode != "mpiio" && mode != "posix" && mode != "adios") {
+      std::cerr << fmt::format("Unknown `application.iomode`: {}\n", mode);
+      return false;
+    }
+    return true;
+  }
+
+  virtual bool check_adios_configuration(json& adios)
+  {
+    if (adios.is_object() == false) {
+      std::cerr << "`application.adios` must be a table\n";
+      return false;
+    }
+
+    if (adios.contains("engine")) {
+      std::cerr << "`application.adios.engine` is not configurable; ADIOS2 always uses BP5\n";
+      return false;
+    }
+
+    if (adios.contains("parameters")) {
+      const auto& parameters = adios["parameters"];
+      if (parameters.is_object() == false) {
+        std::cerr << "`application.adios.parameters` must be a table\n";
+        return false;
+      }
+      for (auto it = parameters.begin(); it != parameters.end(); ++it) {
+        if (it.value().is_string() == false && it.value().is_boolean() == false &&
+            it.value().is_number() == false) {
+          std::cerr << fmt::format("`application.adios.parameters.{}` must be a scalar value\n",
+                                   it.key());
+          return false;
+        }
       }
     }
 

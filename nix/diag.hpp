@@ -15,20 +15,23 @@ protected:
   class Info
   {
   public:
-    MPI_Comm    intra_comm; // intra-node communicator
-    MPI_Comm    inter_comm; // inter-node communicator
-    int         world_rank; // rank
-    int         world_size; // number of processes
-    int         intra_size; // number of processes in the same node
-    int         inter_size; // number of nodes
-    int         intra_rank; // rank in the same node
-    int         inter_rank; // rank of the node
-    std::string basedir;    // base directory
-    std::string iomode;     // I/O mode
-    std::string config_dir; // configuration file directory
+    MPI_Comm    intra_comm;   // intra-node communicator
+    MPI_Comm    inter_comm;   // inter-node communicator
+    int         world_rank;   // rank
+    int         world_size;   // number of processes
+    int         intra_size;   // number of processes in the same node
+    int         inter_size;   // number of nodes
+    int         intra_rank;   // rank in the same node
+    int         inter_rank;   // rank of the node
+    std::string basedir;      // base directory
+    std::string iomode;       // I/O mode
+    std::string config_dir;   // configuration file directory
+    bool        is_restart;   // true when loading a checkpoint
+    int         restart_step; // checkpoint step, or -1 for a fresh run
 
-    Info(std::string basedir, std::string iomode, std::string config_dir)
-        : basedir(basedir), iomode(iomode), config_dir(config_dir)
+    Info(std::string basedir, std::string iomode, std::string config_dir, bool is_restart)
+        : basedir(basedir), iomode(iomode), config_dir(config_dir), is_restart(is_restart),
+          restart_step(-1)
     {
       MPI_Comm_size(MPI_COMM_WORLD, &world_size);
       MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -154,9 +157,17 @@ public:
   }
 
   // initialize static info
-  static void initialize(std::string basedir, std::string iomode, std::string config_dir)
+  static void initialize(std::string basedir, std::string iomode, std::string config_dir,
+                         bool is_restart = false)
   {
-    info = std::make_shared<Info>(basedir, iomode, config_dir);
+    info = std::make_shared<Info>(basedir, iomode, config_dir, is_restart);
+  }
+
+  static void set_restart_step(int step)
+  {
+    if (info != nullptr) {
+      info->restart_step = step;
+    }
   }
 
   // finalize static info
@@ -175,8 +186,9 @@ public:
 
     bool is_check_required_mpiio = info->iomode == "mpiio" && info->world_rank == 0;
     bool is_check_required_posix = info->iomode == "posix" && info->intra_rank == 0;
+    bool is_check_required_adios = info->iomode == "adios" && info->world_rank == 0;
 
-    if (is_check_required_mpiio || is_check_required_posix) {
+    if (is_check_required_mpiio || is_check_required_posix || is_check_required_adios) {
       fs::path filepath(path);
       fs::path dirpath = filepath.parent_path();
 
@@ -209,6 +221,9 @@ public:
     } else if (info->iomode == "posix") {
       std::string nodedir = fmt::format("node{:06d}", info->inter_rank);
       fs::path    dirname = fs::path(basedir) / fs::path(nodedir) / fs::path(prefix) / "";
+      return dirname.string();
+    } else if (info->iomode == "adios") {
+      fs::path dirname = fs::path(basedir) / fs::path("adios") / fs::path(prefix) / "";
       return dirname.string();
     } else {
       ERROR << fmt::format("Unknown I/O mode: {}", info->iomode);

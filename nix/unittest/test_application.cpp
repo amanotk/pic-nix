@@ -5,6 +5,7 @@
 #include "chunk.hpp"
 #include "chunkmap.hpp"
 #include "diag.hpp"
+#include "diag/io_handler.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -183,6 +184,19 @@ public:
   }
 };
 
+class HandlerTestDiag : public Diag
+{
+public:
+  HandlerTestDiag() : Diag("handler-test")
+  {
+  }
+
+  std::shared_ptr<info_type> get_info()
+  {
+    return info;
+  }
+};
+
 class ShutdownTestApplication : public TestApplication
 {
 public:
@@ -195,6 +209,51 @@ protected:
     diagvec.push_back(std::make_unique<ShutdownDiag>());
   }
 };
+
+TEST_CASE("diagnostic handlers complete writes before returning")
+{
+  int size = 0;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  if (size != 1) {
+    SUCCEED("Skipping test because it requires one MPI rank");
+    return;
+  }
+
+  const std::filesystem::path basedir = "diag_io_handler_sync";
+  std::filesystem::remove_all(basedir);
+
+  for (const std::string mode : {"mpiio", "posix"}) {
+    Diag::initialize(basedir.string(), mode, "");
+    {
+      HandlerTestDiag                diag;
+      std::unique_ptr<DiagIoHandler> handler;
+      if (mode == "mpiio") {
+        handler = std::make_unique<MpiioDiagIoHandler>(diag.get_info());
+      } else {
+        handler = std::make_unique<PosixDiagIoHandler>(diag.get_info());
+      }
+
+      const std::vector<uint8_t> expected = {1, 2, 3, 4};
+      Buffer                     buffer(expected.size());
+      std::copy(expected.begin(), expected.end(), buffer.get());
+
+      const auto filename = basedir / (mode + ".data");
+      size_t     disp     = 0;
+      handler->open_file(filename.string(), &disp, "w");
+      REQUIRE(handler->write(buffer, disp) == expected.size());
+      std::fill(buffer.get(), buffer.get() + buffer.size, 0);
+      handler->close_file();
+
+      std::vector<uint8_t> actual(expected.size());
+      std::ifstream        input(filename, std::ios::binary);
+      input.read(reinterpret_cast<char*>(actual.data()), actual.size());
+      REQUIRE(actual == expected);
+    }
+    Diag::finalize();
+  }
+
+  std::filesystem::remove_all(basedir);
+}
 
 TEST_CASE("test_main")
 {

@@ -16,6 +16,8 @@ option(PICNIX_BUILD_PIC "Build pic module" ON)
 option(PICNIX_BUILD_ELLIPTIC "Build elliptic module" OFF)
 option(PICNIX_ENABLE_PETSC "Enable PETSc-based solvers" OFF)
 option(PICNIX_ENABLE_ASCENT "Enable Ascent in-situ diagnostics" OFF)
+option(PICNIX_ENABLE_ADIOS2 "Enable ADIOS2 diagnostic output" OFF)
+set(PICNIX_ADIOS2_ROOT "" CACHE PATH "ADIOS2 installation prefix")
 
 if(NOT DEFINED PICNIX_DIR)
   set(PICNIX_DIR ${CMAKE_CURRENT_SOURCE_DIR})

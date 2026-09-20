@@ -82,6 +82,51 @@ mpiexec -n 8 ../main.out -e 86400 -t 200 -c config.toml
 In this example, you use 8 MPI processes, each launching 2 threads.  
 The simulation parameters will be read from the configuration file `config.toml`.
 
+### ADIOS2 Diagnostics
+
+ADIOS2 diagnostics are optional and require an external ADIOS2 installation (version 2.11 or  
+newer).  Configure the build with an MPI-enabled ADIOS2 package:
+
+```sh
+cmake -S . -B build-adios -DCMAKE_CXX_COMPILER=mpicxx \
+    -DPICNIX_ENABLE_ADIOS2=ON -DPICNIX_ADIOS2_ROOT=/path/to/adios2
+cmake --build build-adios
+```
+
+Enable the backend with one persistent BP5 dataset per diagnostic prefix:
+
+```toml
+[application]
+  basedir = 'data'
+  iomode = 'adios'
+
+  [application.adios]
+    [application.adios.parameters]
+      AsyncWrite = false
+
+  [[diagnostic]]
+    name = 'field'
+    interval = 10
+```
+
+The default output path is `data/adios/field.bp`.  Each ADIOS2 step stores the PIC-NIX simulation  
+`step` and physical `time` explicitly.  Field data uses typed arrays `uf[Nchunk,nz,ny,nx,6]` and  
+`um[Nchunk,nz,ny,nx,Ns,14]`.  Particle data uses Joined Arrays named `up00`, `up01`, and so on,  
+with matching `uint64` ID arrays named `up00_id`, `up01_id`, and so on.  `Run` discovers these  
+datasets from the profile's `basedir` and `prefix`; the Python reader is optional:
+
+```sh
+uv pip install --python .venv -e './python[adios]'
+```
+
+A fresh run replaces existing datasets for the configured prefixes, including restart segments.  
+A run loaded from a checkpoint keeps the existing BP5 data and writes the next numbered segment,  
+such as `field.part0001.bp`.  A segment is published only after the writer closes successfully,  
+and the Python reader discovers all published segments automatically.  Data at and after the  
+checkpoint step is read from the new run rather than from older segments.  
+The ADIOS2 backend always uses the BP5 engine; BP5 parameters are configured under  
+`application.adios.parameters`.  
+
 ### Periodic Checkpointing
 
 Periodic checkpointing is disabled by default.  Add a positive elapsed-time  
