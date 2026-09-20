@@ -407,6 +407,7 @@ def test_top_level_wildcard_exports_legacy_names():
         "DEFAULT_FIELD_PREFIX",
         "DEFAULT_PARTICLE_PREFIX",
         "DEFAULT_TRACER_PREFIX",
+        "DEFAULT_TRACKER_PREFIX",
     }
     for module_name in ("utils", "field", "ohm", "particle", "run"):
         module = __import__(f"picnix.{module_name}", fromlist=[module_name])

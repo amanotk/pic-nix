@@ -490,7 +490,10 @@ class AdiosDiagStorage(DiagStorage):
         prefix = reader.read_attribute_string("prefix")
         if schema != "diagnostic-bp-v1":
             raise ValueError(f"unsupported PIC-NIX ADIOS2 schema: {schema!r}")
-        if diagnostic != self.name:
+        valid_diagnostics = {self.name}
+        if self.name == "tracker":
+            valid_diagnostics.add("tracer")
+        if diagnostic not in valid_diagnostics:
             raise ValueError(
                 f"ADIOS2 diagnostic mismatch: {diagnostic!r} != {self.name!r}"
             )
@@ -537,11 +540,11 @@ class AdiosDiagStorage(DiagStorage):
             return {}
         data = {}
         for name in self._matching_variables(pattern):
-            if self.name in {"particle", "tracer"}:
+            if self.name in {"particle", "tracker"}:
                 values = self._read_joined_range(name, index, None, None)
             else:
                 values = self._read_step(name, index)
-            if self.name == "tracer" and f"{name}_id" in self.variables:
+            if self.name == "tracker" and f"{name}_id" in self.variables:
                 ids = np.ascontiguousarray(
                     self._read_joined_id_range(f"{name}_id", index, None, None)
                 )

@@ -104,9 +104,9 @@ install_dependency() {
 }
 
 # ── fmt (compiled) ──────────────────────────────────────────────────────
-echo "--- Installing fmt (11.1.4) ---"
+echo "--- Installing fmt (12.2.0) ---"
 FMT_DIR="$BUILDDIR/fmt"
-git clone https://github.com/fmtlib/fmt.git "$FMT_DIR" --branch 11.1.4 --depth 1
+git clone https://github.com/fmtlib/fmt.git "$FMT_DIR" --branch 12.2.0 --depth 1
 cmake -S "$FMT_DIR" -B "$FMT_DIR/build" \
   "${CMAKE_CONFIGURE_ARGS[@]}" \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
@@ -120,7 +120,7 @@ rm -rf "$FMT_DIR"
 
 # ── nlohmann/json ───────────────────────────────────────────────────────
 install_dependency nlohmann_json \
-  https://github.com/nlohmann/json.git v3.10.5 \
+  https://github.com/nlohmann/json.git v3.12.0 \
   -DJSON_BuildTests=OFF
 
 # ── xtl ─────────────────────────────────────────────────────────────────
@@ -130,14 +130,14 @@ install_dependency xtl \
 
 # ── xsimd ───────────────────────────────────────────────────────────────
 install_dependency xsimd \
-  https://github.com/xtensor-stack/xsimd.git 12.1.1 \
+  https://github.com/xtensor-stack/xsimd.git 14.3.0 \
   -DBUILD_TESTS=OFF -DBUILD_BENCHMARK=OFF -DBUILD_EXAMPLES=OFF
 
 # ── xtensor (with LLVM 19 patch) ────────────────────────────────────────
-echo "--- Installing xtensor (0.24.7 + LLVM 19 patch) ---"
+echo "--- Installing xtensor (0.25.0 + LLVM 19 patch) ---"
 XTENSOR_DIR="$BUILDDIR/xtensor"
-git clone https://github.com/xtensor-stack/xtensor.git "$XTENSOR_DIR" --branch 0.24.7 --depth 1
-git -C "$XTENSOR_DIR" apply "$REPO_ROOT/nix/cmake/patches/xtensor-0.24.7-llvm19.patch"
+git clone https://github.com/xtensor-stack/xtensor.git "$XTENSOR_DIR" --branch 0.25.0 --depth 1
+git -C "$XTENSOR_DIR" apply "$REPO_ROOT/nix/cmake/patches/xtensor-0.25.0-llvm19.patch"
 echo "  LLVM 19 patch applied"
 cmake -S "$XTENSOR_DIR" -B "$XTENSOR_DIR/build" \
   "${CMAKE_CONFIGURE_ARGS[@]}" \
@@ -152,12 +152,12 @@ rm -rf "$XTENSOR_DIR"
 
 # ── toml11 ──────────────────────────────────────────────────────────────
 install_dependency toml11 \
-  https://github.com/ToruNiina/toml11.git v4.0.1 \
+  https://github.com/ToruNiina/toml11.git v4.4.0 \
   -DTOML11_BUILD_TESTS=OFF -DTOML11_BUILD_EXAMPLES=OFF
 
 # ── plog ────────────────────────────────────────────────────────────────
 install_dependency plog \
-  https://github.com/SergiusTheBest/plog.git 1.1.10 \
+  https://github.com/SergiusTheBest/plog.git 1.1.11 \
   -DPLOG_BUILD_SAMPLES=OFF -DPLOG_BUILD_TESTS=OFF
 
 # ── mdspan ──────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ install_dependency mdspan \
 
 # ── Catch2 ───────────────────────────────────────────────────────────────
 install_dependency Catch2 \
-  https://github.com/catchorg/Catch2.git v3.5.4 \
+  https://github.com/catchorg/Catch2.git v3.16.0 \
   -DBUILD_TESTING=OFF -DCATCH_BUILD_TESTING=OFF -DCATCH_INSTALL_DOCS=OFF
 
 # ── done ────────────────────────────────────────────────────────────────

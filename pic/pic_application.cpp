@@ -9,8 +9,8 @@
 #include "diag/field.hpp"
 #include "diag/history.hpp"
 #include "diag/particle.hpp"
-#include "diag/tracer.hpp"
-#include "diag/tracer_pickup.hpp"
+#include "diag/pickup_tracker.hpp"
+#include "diag/tracker.hpp"
 
 #if PICNIX_ENABLE_ASCENT
 #include "diag/ascent.hpp"
@@ -124,7 +124,9 @@ void PicApplication::initialize_diagnostic()
     std::set<std::string> prefixes;
     for (const auto& diagnostic : diagnostics) {
       const std::string name = diagnostic.value("name", std::string{});
-      if (name == "load" || name == "field" || name == "particle" || name == "tracer") {
+      const bool        is_tracker =
+          name == TrackerDiag::diag_name || name == TrackerDiag::legacy_diag_name;
+      if (name == "load" || name == "field" || name == "particle" || is_tracker) {
         prefixes.insert(diagnostic.value("prefix", name));
       }
     }
@@ -139,8 +141,8 @@ void PicApplication::initialize_diagnostic()
   diagvec.push_back(std::make_unique<nix::LoadDiag<PicDiag, PicPacker>>(interface));
   diagvec.push_back(std::make_unique<FieldDiag>(interface));
   diagvec.push_back(std::make_unique<ParticleDiag>(interface));
-  diagvec.push_back(std::make_unique<TracerPickupDiag>(interface));
-  diagvec.push_back(std::make_unique<TracerDiag>(interface));
+  diagvec.push_back(std::make_unique<PickupTrackerDiag>(interface));
+  diagvec.push_back(std::make_unique<TrackerDiag>(interface));
 #if PICNIX_ENABLE_ASCENT
   diagvec.push_back(std::make_unique<AscentDiag>(interface));
 #endif

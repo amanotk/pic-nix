@@ -43,13 +43,13 @@ def convert_tracer_to_hdf5(run, species, hdffile):
             root.create_group("xp")
             root.create_group("id")
 
-    tracer_time = run.get_time("tracer")
-    tracer_step = run.get_step("tracer")
+    tracker_time = run.get_time("tracker")
+    tracker_step = run.get_step("tracker")
 
-    for i, step in enumerate(tqdm.tqdm(tracer_step)):
+    for i, step in enumerate(tqdm.tqdm(tracker_step)):
         # read data
         try:
-            data = run.read_at("tracer", step)[group]
+            data = run.read_at("tracker", step)[group]
             data_xp, data_id = sort_and_split_particle_id(data)
         except Exception as e:
             print("Error at step: {:08d}".format(step))
@@ -72,8 +72,8 @@ def convert_tracer_to_hdf5(run, species, hdffile):
             # expand size of step and time
             ds_step.resize((len(ds_step) + 1,))
             ds_time.resize((len(ds_time) + 1,))
-            ds_step[-1] = tracer_step[i]
-            ds_time[-1] = tracer_time[i]
+            ds_step[-1] = tracker_step[i]
+            ds_time[-1] = tracker_time[i]
 
             # create dataset
             group_xp.create_dataset(ds_name, data=data_xp)
@@ -87,8 +87,8 @@ def remove_tracer_file_after_confirmation(run, species, hdffile):
         raise ValueError("Invalid file: {}".format(hdffile))
 
     status = True
-    tracer_time = run.get_time("tracer")
-    tracer_step = run.get_step("tracer")
+    tracker_time = run.get_time("tracker")
+    tracker_step = run.get_step("tracker")
 
     with h5py.File(hdffile, "r") as fp:
         root = fp[group]
@@ -97,10 +97,10 @@ def remove_tracer_file_after_confirmation(run, species, hdffile):
         group_xp = root["xp"]
         group_id = root["id"]
 
-        for i, step in enumerate(tqdm.tqdm(tracer_step)):
+        for i, step in enumerate(tqdm.tqdm(tracker_step)):
             # read data
             try:
-                data = run.read_at("tracer", step)[group]
+                data = run.read_at("tracker", step)[group]
                 data_xp, data_id = sort_and_split_particle_id(data)
             except Exception as e:
                 print("Error at step: {}".format(step))
@@ -109,9 +109,9 @@ def remove_tracer_file_after_confirmation(run, species, hdffile):
 
             # check consistency of data
             name = "{:08d}".format(step)
-            index = np.searchsorted(ds_step, tracer_step[i])
-            is_step_valid = ds_step[index] == tracer_step[i]
-            is_time_valid = ds_time[index] == tracer_time[i]
+            index = np.searchsorted(ds_step, tracker_step[i])
+            is_step_valid = ds_step[index] == tracker_step[i]
+            is_time_valid = ds_time[index] == tracker_time[i]
             is_xp_valid = np.all(group_xp[name] == data_xp)
             is_id_valid = np.all(group_id[name] == data_id)
 
@@ -141,9 +141,9 @@ def remove_tracer_file_after_confirmation(run, species, hdffile):
             return
         else:
             print("Removing original files...")
-            handler = run.get_diag_handler("tracer")
+            handler = run.get_diag_handler("tracker")
 
-            for step in tracer_step:
+            for step in tracker_step:
                 json_files = handler.find_json_at_step(step)
                 data_files = [f.replace(".json", ".data") for f in json_files]
                 for fn_json, fn_data in zip(json_files, data_files):

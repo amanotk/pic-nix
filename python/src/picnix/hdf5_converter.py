@@ -410,15 +410,15 @@ def selected_dataset_names(dataset):
 
 
 def detect_kind(prefix, dataset_names):
-    if "tracer" in prefix:
-        return "tracer"
+    if "tracker" in prefix or "tracer" in prefix:
+        return "tracker"
     if "particle" in prefix or all(name.startswith("up") for name in dataset_names):
         return "particle"
     return "field"
 
 
 def direct_dtype_for_kind(args, kind, source_dtype):
-    if kind == "tracer":
+    if kind == "tracker":
         return np.dtype(source_dtype)
     return dtype_choice(args.field_dtype, source_dtype)
 

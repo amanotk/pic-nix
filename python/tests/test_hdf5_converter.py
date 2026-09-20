@@ -321,10 +321,11 @@ def test_overwrite_no_vds_removes_stale_vds(tmp_path, monkeypatch):
     assert not (input_dir / "hdf5" / "field.vds.h5").exists()
 
 
-def test_tracer_keeps_particle_id_column(tmp_path, monkeypatch):
+@pytest.mark.parametrize("prefix", ["tracker", "tracer"])
+def test_tracker_keeps_particle_id_column(tmp_path, monkeypatch, prefix):
     input_dir = make_posix_fixture(tmp_path)
     for node_index in range(2):
-        tracer = np.array(
+        tracker = np.array(
             [
                 [1.0 + node_index, 2.0, 3.0, 4.0, 5.0, 6.0, 0.0],
                 [7.0 + node_index, 8.0, 9.0, 10.0, 11.0, 12.0, 0.0],
@@ -332,20 +333,20 @@ def test_tracer_keeps_particle_id_column(tmp_path, monkeypatch):
             dtype="<f8",
         )
         ids = np.array([200 + node_index * 10, 201 + node_index * 10], dtype="<u8")
-        tracer[:, -1] = ids.view("<f8")
+        tracker[:, -1] = ids.view("<f8")
         write_step(
-            input_dir / f"node{node_index:06d}" / "tracer",
-            "tracer",
+            input_dir / f"node{node_index:06d}" / prefix,
+            prefix,
             "00000000",
             "up00",
-            tracer,
+            tracker,
         )
 
-    run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", "tracer")
+    run_converter(monkeypatch, "--input-dir", input_dir, "--prefix", prefix)
 
-    with h5py.File(input_dir / "hdf5" / "tracer.vds.h5", "r") as h5fp:
-        data = h5fp["tracer/00000000/up00"][...]
-        assert "up00_id" not in h5fp["tracer/00000000"]
+    with h5py.File(input_dir / "hdf5" / f"{prefix}.vds.h5", "r") as h5fp:
+        data = h5fp[f"{prefix}/00000000/up00"][...]
+        assert "up00_id" not in h5fp[f"{prefix}/00000000"]
     assert data.shape == (4, 7)
     assert data.dtype == np.dtype("float64")
     ids = np.frombuffer(data.tobytes(), dtype=np.uint64).reshape(data.shape)[:, -1]
