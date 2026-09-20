@@ -1,10 +1,8 @@
 // -*- C++ -*-
-#ifndef _PIC_ADIOS2_WRITER_HPP_
-#define _PIC_ADIOS2_WRITER_HPP_
+#ifndef _NIX_DIAG_ADIOS_HPP_
+#define _NIX_DIAG_ADIOS_HPP_
 
-#include "nix/diag.hpp"
-
-#if PICNIX_ENABLE_ADIOS2
+#include "diag.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -14,14 +12,16 @@
 
 namespace nix
 {
-/// Common lifecycle and typed variable support for persistent ADIOS2 diagnostic writers.
-class Adios2Writer
+/// Common lifecycle and typed variable support for persistent ADIOS diagnostic writers.
+class AdiosWriter
 {
 public:
   using Dims = std::vector<std::size_t>;
 
-  explicit Adios2Writer(std::shared_ptr<Diag::info_type> info);
-  ~Adios2Writer();
+  explicit AdiosWriter(std::shared_ptr<Diag::info_type> info);
+  ~AdiosWriter();
+
+  static bool available();
 
   void initialize(const std::string& diagnostic, const std::string& prefix, const json& config);
 
@@ -48,7 +48,5 @@ private:
   std::unique_ptr<Impl> impl;
 };
 } // namespace nix
-
-#endif
 
 #endif

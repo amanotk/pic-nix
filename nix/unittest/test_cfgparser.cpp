@@ -292,25 +292,25 @@ TEST_CASE("check_checkpoint_configuration")
   }
 }
 
-TEST_CASE("check_adios2_configuration")
+TEST_CASE("check_adios_configuration")
 {
   CfgParser parser;
 
   SECTION("default engine and scalar parameters")
   {
-    json adios2 = {
+    json adios = {
         {"engine", "BP5"},
         {"parameters", {{"AsyncWrite", false}, {"NumSubFiles", 4}, {"MaxShmSize", "1GB"}}},
     };
-    REQUIRE(parser.check_adios2_configuration(adios2));
+    REQUIRE(parser.check_adios_configuration(adios));
   }
 
   SECTION("configuration tables and engine are validated")
   {
     json invalid_engine     = {{"engine", 5}};
     json invalid_parameters = {{"parameters", {{"Shape", json::array({1, 2})}}}};
-    REQUIRE_FALSE(parser.check_adios2_configuration(invalid_engine));
-    REQUIRE_FALSE(parser.check_adios2_configuration(invalid_parameters));
+    REQUIRE_FALSE(parser.check_adios_configuration(invalid_engine));
+    REQUIRE_FALSE(parser.check_adios_configuration(invalid_parameters));
   }
 }
 
@@ -318,13 +318,13 @@ TEST_CASE("check_io_mode")
 {
   CfgParser parser;
 
-  json mpiio  = "mpiio";
-  json posix  = "posix";
-  json adios2 = "adios2";
-  json other  = "unknown";
+  json mpiio = "mpiio";
+  json posix = "posix";
+  json adios = "adios";
+  json other = "unknown";
   REQUIRE(parser.check_io_mode(mpiio));
   REQUIRE(parser.check_io_mode(posix));
-  REQUIRE(parser.check_io_mode(adios2));
+  REQUIRE(parser.check_io_mode(adios));
   REQUIRE_FALSE(parser.check_io_mode(other));
 }
 

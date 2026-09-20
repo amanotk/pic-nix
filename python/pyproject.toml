@@ -24,7 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 mpi = ["mpi4py"]
-adios2 = ["adios2>=2.11"]
+adios = ["adios2>=2.11"]
 dev = ["ruff"]
 
 [project.scripts]

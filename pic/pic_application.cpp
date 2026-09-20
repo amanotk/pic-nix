@@ -97,13 +97,6 @@ void PicApplication::initialize(int argc, char** argv)
 
 void PicApplication::initialize_diagnostic()
 {
-#if !PICNIX_ENABLE_ADIOS2
-  if (get_iomode() == "adios2") {
-    ERROR << "application.iomode = adios2 requires PICNIX_ENABLE_ADIOS2=ON";
-    MPI_Abort(MPI_COMM_WORLD, -1);
-  }
-#endif
-
   const auto diagnostics = cfgparser->get_diagnostic();
   if (diagnostics.is_array() == false) {
     ERROR << fmt::format("Invalid diagnostic");

@@ -343,14 +343,14 @@ class Hdf5VdsDiagStorage(DiagStorage):
 
 
 class AdiosDiagStorage(DiagStorage):
-    kind = "adios2"
+    kind = "adios"
 
     def __init__(self, name, prefix, basedir, iomode):
         self.name = name
         self.prefix = prefix
         self.basedir = Path(basedir)
         self.iomode = iomode
-        self.path = self.basedir / "adios2" / f"{prefix}.bp"
+        self.path = self.basedir / "adios" / f"{prefix}.bp"
         self.reader = None
         self.variables = {}
         self.block_info = {}
@@ -360,7 +360,7 @@ class AdiosDiagStorage(DiagStorage):
             import adios2
         except ImportError as exc:
             raise ImportError(
-                "ADIOS2 Python support is required to read an iomode='adios2' dataset"
+                "ADIOS2 Python support is required to read an iomode='adios' dataset"
             ) from exc
 
         if not self.path.exists():
@@ -539,7 +539,7 @@ def create_diag_storage(name, prefix, basedir, iomode):
     vds_path = Path(basedir) / "hdf5" / f"{prefix}.vds.h5"
     if vds_path.exists():
         storage = Hdf5VdsDiagStorage(name, prefix, vds_path)
-    elif iomode == "adios2":
+    elif iomode == "adios":
         storage = AdiosDiagStorage(name, prefix, basedir, iomode)
     else:
         storage = JsonDiagStorage(name, prefix, basedir, iomode)

@@ -4,14 +4,12 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "diag/adios.hpp"
 #include "diag/chunk_writer.hpp"
 #include "diag/metadata.hpp"
 #include "nixio.hpp"
 
-#if PICNIX_ENABLE_ADIOS2
-#include "../../pic/diag/adios2_writer.hpp"
 #include <map>
-#endif
 
 NIX_NAMESPACE_BEGIN
 
@@ -74,15 +72,14 @@ protected:
     }
   };
 
-#if PICNIX_ENABLE_ADIOS2
-  struct Adios2State {
-    std::unique_ptr<nix::Adios2Writer> writer;
-    bool                               variables_defined = false;
+  struct AdiosState {
+    std::unique_ptr<nix::AdiosWriter> writer;
+    bool                              variables_defined = false;
   };
 
-  std::map<std::string, Adios2State> adios2_state;
+  std::map<std::string, AdiosState> adios_state;
 
-  void write_adios2(json& config)
+  void write_adios(json& config)
   {
     auto data = this->interface->get_data();
     if (this->require_diagnostic(data.curstep, config) == false) {
@@ -90,7 +87,7 @@ protected:
     }
 
     const std::string prefix      = this->get_prefix(config, "load");
-    auto&             state       = adios2_state[prefix];
+    auto&             state       = adios_state[prefix];
     const int         local_count = data.chunkvec.size();
 
     int local_min      = local_count > 0 ? std::numeric_limits<int>::max() : 0;
@@ -135,7 +132,7 @@ protected:
     }
 
     if (state.writer == nullptr) {
-      state.writer = std::make_unique<nix::Adios2Writer>(this->info);
+      state.writer = std::make_unique<nix::AdiosWriter>(this->info);
       state.writer->initialize("load", prefix, this->interface->get_configuration());
 
       const size_t chunk_count = static_cast<size_t>(data.cdims[3]);
@@ -159,7 +156,6 @@ protected:
                                    rank_values.size());
     state.writer->end_step();
   }
-#endif
 
 public:
   /// constructor
@@ -170,24 +166,20 @@ public:
 
   void shutdown()
   {
-#if PICNIX_ENABLE_ADIOS2
-    for (auto& [prefix, state] : adios2_state) {
+    for (auto& [prefix, state] : adios_state) {
       if (state.writer != nullptr) {
         state.writer->close();
       }
     }
-#endif
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-#if PICNIX_ENABLE_ADIOS2
-    if (this->info->iomode == "adios2") {
-      write_adios2(config);
+    if (this->info->iomode == "adios") {
+      write_adios(config);
       return;
     }
-#endif
 
     auto data = this->interface->get_data();
 

@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-#include "pic/diag/adios2_writer.hpp"
+#include "diag/adios.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,7 +17,7 @@ namespace
 class TestDiag : public nix::Diag
 {
 public:
-  TestDiag() : Diag("adios2-test")
+  TestDiag() : Diag("adios-test")
   {
   }
 
@@ -28,23 +28,23 @@ public:
 };
 } // namespace
 
-TEST_CASE("ADIOS2 writer round trip")
+TEST_CASE("ADIOS writer round trip")
 {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   REQUIRE(rank == 0);
 
-  const auto basedir = std::filesystem::temp_directory_path() / "picnix-adios2-writer-test";
+  const auto basedir = std::filesystem::temp_directory_path() / "picnix-adios-writer-test";
   std::filesystem::remove_all(basedir);
   std::filesystem::create_directories(basedir);
   MPI_Barrier(MPI_COMM_WORLD);
 
-  nix::Diag::initialize(basedir.string(), "adios2", "");
+  nix::Diag::initialize(basedir.string(), "adios", "");
   {
-    TestDiag          diag;
-    nix::Adios2Writer writer(diag.get_info());
-    const nix::json   config = {
-        {"application", {{"adios2", {{"engine", "BP5"}}}}},
+    TestDiag         diag;
+    nix::AdiosWriter writer(diag.get_info());
+    const nix::json  config = {
+        {"application", {{"adios", {{"engine", "BP5"}}}}},
     };
 
     writer.initialize("field", "roundtrip", config);
@@ -72,7 +72,7 @@ TEST_CASE("ADIOS2 writer round trip")
     adios2::ADIOS adios(MPI_COMM_WORLD);
     auto          io = adios.DeclareIO("reader");
     auto          engine =
-        io.Open((basedir / "adios2" / "roundtrip.bp").string(), adios2::Mode::ReadRandomAccess);
+        io.Open((basedir / "adios" / "roundtrip.bp").string(), adios2::Mode::ReadRandomAccess);
     auto field        = io.InquireVariable<double>("field");
     auto particles    = io.InquireVariable<double>("particles");
     auto particle_ids = io.InquireVariable<std::uint64_t>("particles_id");

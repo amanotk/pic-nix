@@ -1,8 +1,6 @@
 // -*- C++ -*-
 
-#include "adios2_writer.hpp"
-
-#if PICNIX_ENABLE_ADIOS2
+#include "adios.hpp"
 
 #include <adios2.h>
 
@@ -32,8 +30,8 @@ std::string parameter_value(const nix::json& value)
 
 namespace nix
 {
-struct Adios2Writer::Impl {
-  using Dims = Adios2Writer::Dims;
+struct AdiosWriter::Impl {
+  using Dims = AdiosWriter::Dims;
 
   std::shared_ptr<Diag::info_type> info;
   std::unique_ptr<adios2::ADIOS>   adios;
@@ -54,12 +52,17 @@ struct Adios2Writer::Impl {
   }
 };
 
-Adios2Writer::Adios2Writer(std::shared_ptr<Diag::info_type> info)
+bool AdiosWriter::available()
+{
+  return true;
+}
+
+AdiosWriter::AdiosWriter(std::shared_ptr<Diag::info_type> info)
     : impl(std::make_unique<Impl>(std::move(info)))
 {
 }
 
-Adios2Writer::~Adios2Writer()
+AdiosWriter::~AdiosWriter()
 {
   if (impl != nullptr && impl->engine != nullptr) {
     try {
@@ -69,29 +72,29 @@ Adios2Writer::~Adios2Writer()
   }
 }
 
-void Adios2Writer::initialize(const std::string& diagnostic, const std::string& prefix,
-                              const json& config)
+void AdiosWriter::initialize(const std::string& diagnostic, const std::string& prefix,
+                             const json& config)
 {
   if (impl->adios != nullptr) {
     throw std::logic_error("ADIOS2 writer initialized more than once");
   }
 
   const json application  = config.value("application", json::object());
-  const json adios_config = application.value("adios2", json::object());
+  const json adios_config = application.value("adios", json::object());
   if (adios_config.is_object() == false) {
-    throw std::invalid_argument("application.adios2 must be a table");
+    throw std::invalid_argument("application.adios must be a table");
   }
 
   const std::string engine_name = adios_config.value("engine", "BP5");
   const json        parameters  = adios_config.value("parameters", json::object());
   if (parameters.is_object() == false) {
-    throw std::invalid_argument("application.adios2.parameters must be a table");
+    throw std::invalid_argument("application.adios.parameters must be a table");
   }
 
   impl->adios = std::make_unique<adios2::ADIOS>(MPI_COMM_WORLD);
   impl->io    = std::make_unique<adios2::IO>(impl->adios->DeclareIO("PICNIX"));
   impl->io->SetEngine(engine_name);
-  impl->filename = std::filesystem::path(impl->info->basedir) / "adios2" / (prefix + ".bp");
+  impl->filename = std::filesystem::path(impl->info->basedir) / "adios" / (prefix + ".bp");
 
   adios2::Params adios_parameters{{"AsyncWrite", "false"}};
   for (auto it = parameters.begin(); it != parameters.end(); ++it) {
@@ -107,8 +110,8 @@ void Adios2Writer::initialize(const std::string& diagnostic, const std::string& 
   impl->time_variable = impl->io->DefineVariable<double>("time");
 }
 
-void Adios2Writer::define_global_double(const std::string& name, const Dims& shape,
-                                        const Dims& start, const Dims& count)
+void AdiosWriter::define_global_double(const std::string& name, const Dims& shape,
+                                       const Dims& start, const Dims& count)
 {
   if (impl->io == nullptr || impl->engine != nullptr) {
     throw std::logic_error("ADIOS2 variables must be defined before opening the engine");
@@ -122,8 +125,8 @@ void Adios2Writer::define_global_double(const std::string& name, const Dims& sha
       name, impl->io->DefineVariable<double>(name, shape, start, count, false));
 }
 
-void Adios2Writer::define_global_int32(const std::string& name, const Dims& shape,
-                                       const Dims& start, const Dims& count)
+void AdiosWriter::define_global_int32(const std::string& name, const Dims& shape, const Dims& start,
+                                      const Dims& count)
 {
   if (impl->io == nullptr || impl->engine != nullptr) {
     throw std::logic_error("ADIOS2 variables must be defined before opening the engine");
@@ -137,8 +140,8 @@ void Adios2Writer::define_global_int32(const std::string& name, const Dims& shap
       name, impl->io->DefineVariable<std::int32_t>(name, shape, start, count, false));
 }
 
-void Adios2Writer::define_joined_double(const std::string& name, std::size_t width,
-                                        std::size_t count)
+void AdiosWriter::define_joined_double(const std::string& name, std::size_t width,
+                                       std::size_t count)
 {
   if (impl->io == nullptr || impl->engine != nullptr) {
     throw std::logic_error("ADIOS2 variables must be defined before opening the engine");
@@ -153,7 +156,7 @@ void Adios2Writer::define_joined_double(const std::string& name, std::size_t wid
                                                                   {}, {count, width}, false));
 }
 
-void Adios2Writer::define_joined_uint64(const std::string& name, std::size_t count)
+void AdiosWriter::define_joined_uint64(const std::string& name, std::size_t count)
 {
   if (impl->io == nullptr || impl->engine != nullptr) {
     throw std::logic_error("ADIOS2 variables must be defined before opening the engine");
@@ -167,7 +170,7 @@ void Adios2Writer::define_joined_uint64(const std::string& name, std::size_t cou
       name, impl->io->DefineVariable<std::uint64_t>(name, {adios2::JoinedDim}, {}, {count}, false));
 }
 
-void Adios2Writer::open()
+void AdiosWriter::open()
 {
   if (impl->io == nullptr || impl->engine != nullptr) {
     throw std::logic_error("invalid ADIOS2 engine open state");
@@ -183,7 +186,7 @@ void Adios2Writer::open()
       impl->io->Open(impl->filename.string(), adios2::Mode::Write));
 }
 
-void Adios2Writer::begin_step(std::int64_t step, double time)
+void AdiosWriter::begin_step(std::int64_t step, double time)
 {
   if (impl->engine == nullptr || impl->step_open) {
     throw std::logic_error("invalid ADIOS2 BeginStep state");
@@ -197,8 +200,8 @@ void Adios2Writer::begin_step(std::int64_t step, double time)
   impl->step_open = true;
 }
 
-void Adios2Writer::put_global_double(const std::string& name, const Dims& start, const Dims& count,
-                                     const double* data, std::size_t size)
+void AdiosWriter::put_global_double(const std::string& name, const Dims& start, const Dims& count,
+                                    const double* data, std::size_t size)
 {
   auto it = impl->double_variables.find(name);
   if (it == impl->double_variables.end() || impl->step_open == false) {
@@ -210,8 +213,8 @@ void Adios2Writer::put_global_double(const std::string& name, const Dims& start,
   impl->engine->Put(it->second, size == 0 ? &empty : data, adios2::Mode::Sync);
 }
 
-void Adios2Writer::put_global_int32(const std::string& name, const Dims& start, const Dims& count,
-                                    const std::int32_t* data, std::size_t size)
+void AdiosWriter::put_global_int32(const std::string& name, const Dims& start, const Dims& count,
+                                   const std::int32_t* data, std::size_t size)
 {
   auto it = impl->int32_variables.find(name);
   if (it == impl->int32_variables.end() || impl->step_open == false) {
@@ -223,7 +226,7 @@ void Adios2Writer::put_global_int32(const std::string& name, const Dims& start, 
   impl->engine->Put(it->second, size == 0 ? &empty : data, adios2::Mode::Sync);
 }
 
-void Adios2Writer::put_joined_double(const std::string& name, std::size_t count, const double* data)
+void AdiosWriter::put_joined_double(const std::string& name, std::size_t count, const double* data)
 {
   auto it = impl->double_variables.find(name);
   if (it == impl->double_variables.end() || impl->step_open == false) {
@@ -239,8 +242,8 @@ void Adios2Writer::put_joined_double(const std::string& name, std::size_t count,
   impl->engine->Put(it->second, count == 0 ? &empty : data, adios2::Mode::Sync);
 }
 
-void Adios2Writer::put_joined_uint64(const std::string& name, std::size_t count,
-                                     const std::uint64_t* data)
+void AdiosWriter::put_joined_uint64(const std::string& name, std::size_t count,
+                                    const std::uint64_t* data)
 {
   auto it = impl->uint64_variables.find(name);
   if (it == impl->uint64_variables.end() || impl->step_open == false) {
@@ -252,7 +255,7 @@ void Adios2Writer::put_joined_uint64(const std::string& name, std::size_t count,
   impl->engine->Put(it->second, count == 0 ? &empty : data, adios2::Mode::Sync);
 }
 
-void Adios2Writer::end_step()
+void AdiosWriter::end_step()
 {
   if (impl->engine == nullptr || impl->step_open == false) {
     throw std::logic_error("invalid ADIOS2 EndStep state");
@@ -261,7 +264,7 @@ void Adios2Writer::end_step()
   impl->step_open = false;
 }
 
-void Adios2Writer::close()
+void AdiosWriter::close()
 {
   if (impl->engine == nullptr) {
     return;
@@ -273,5 +276,3 @@ void Adios2Writer::close()
   impl->engine.reset();
 }
 } // namespace nix
-
-#endif

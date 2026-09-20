@@ -3,11 +3,9 @@
 #define _FIELD_DIAG_HPP_
 
 #include "chunk_writer.hpp"
+#include "nix/diag/adios.hpp"
 
-#if PICNIX_ENABLE_ADIOS2
-#include "adios2_writer.hpp"
 #include <map>
-#endif
 
 ///
 /// @brief Diagnostic for field
@@ -60,16 +58,15 @@ protected:
     }
   };
 
-#if PICNIX_ENABLE_ADIOS2
-  struct Adios2State {
-    std::unique_ptr<nix::Adios2Writer> writer;
-    bool                               variables_defined = false;
+  struct AdiosState {
+    std::unique_ptr<nix::AdiosWriter> writer;
+    bool                              variables_defined = false;
   };
 
-  std::map<std::string, Adios2State> adios2_state;
+  std::map<std::string, AdiosState> adios_state;
 
   template <typename Packer>
-  std::vector<float64> pack_adios2_chunks(Packer& packer, data_type& data)
+  std::vector<float64> pack_adios_chunks(Packer& packer, data_type& data)
   {
     size_t nbyte = 0;
     for (int i = 0; i < data.chunkvec.size(); i++) {
@@ -86,7 +83,7 @@ protected:
     return values;
   }
 
-  void write_adios2(json& config)
+  void write_adios(json& config)
   {
     auto data = interface->get_data();
     if (this->require_diagnostic(data.curstep, config) == false) {
@@ -96,7 +93,7 @@ protected:
     const int         decimate = config.value("decimate", 1);
     const std::string prefix   = this->get_prefix(config, "field");
     const int         Ns       = interface->get_num_species();
-    auto&             state    = adios2_state[prefix];
+    auto&             state    = adios_state[prefix];
 
     const int local_count = data.chunkvec.size();
     int       local_min   = local_count > 0 ? std::numeric_limits<int>::max() : 0;
@@ -127,14 +124,14 @@ protected:
     const int nx = this->calc_decimated_size(data.ndims[2] / data.cdims[2], decimate);
 
     FieldPacker field_packer(decimate);
-    auto        uf = pack_adios2_chunks(field_packer, data);
+    auto        uf = pack_adios_chunks(field_packer, data);
 
     interface->calculate_moment();
     MomentPacker moment_packer(decimate);
-    auto         um = pack_adios2_chunks(moment_packer, data);
+    auto         um = pack_adios_chunks(moment_packer, data);
 
     if (state.writer == nullptr) {
-      state.writer = std::make_unique<nix::Adios2Writer>(this->info);
+      state.writer = std::make_unique<nix::AdiosWriter>(this->info);
       state.writer->initialize("field", prefix, interface->get_configuration());
 
       const size_t chunk_count = static_cast<size_t>(data.cdims[3]);
@@ -171,7 +168,6 @@ protected:
                                     um.data(), um.size());
     state.writer->end_step();
   }
-#endif
 
 public:
   // constructor
@@ -181,24 +177,20 @@ public:
 
   void shutdown() override
   {
-#if PICNIX_ENABLE_ADIOS2
-    for (auto& [prefix, state] : adios2_state) {
+    for (auto& [prefix, state] : adios_state) {
       if (state.writer != nullptr) {
         state.writer->close();
       }
     }
-#endif
   }
 
   // data packing functor
   void operator()(json& config) override
   {
-#if PICNIX_ENABLE_ADIOS2
-    if (this->info->iomode == "adios2") {
-      write_adios2(config);
+    if (this->info->iomode == "adios") {
+      write_adios(config);
       return;
     }
-#endif
 
     auto data = interface->get_data();
 

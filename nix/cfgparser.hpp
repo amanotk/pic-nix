@@ -172,9 +172,9 @@ public:
       status = status & check_io_mode(object["application"]["iomode"]);
     }
 
-    if (object["application"].contains("adios2") &&
-        object["application"]["adios2"].is_null() == false) {
-      status = status & check_adios2_configuration(object["application"]["adios2"]);
+    if (object["application"].contains("adios") &&
+        object["application"]["adios"].is_null() == false) {
+      status = status & check_adios_configuration(object["application"]["adios"]);
     }
 
     // check the parameter section
@@ -274,41 +274,41 @@ public:
   virtual bool check_io_mode(json& iomode)
   {
     if (iomode.is_string() == false) {
-      std::cerr << "`application.iomode` must be one of: mpiio, posix, adios2\n";
+      std::cerr << "`application.iomode` must be one of: mpiio, posix, adios\n";
       return false;
     }
 
     const std::string mode = iomode.get<std::string>();
-    if (mode != "mpiio" && mode != "posix" && mode != "adios2") {
+    if (mode != "mpiio" && mode != "posix" && mode != "adios") {
       std::cerr << fmt::format("Unknown `application.iomode`: {}\n", mode);
       return false;
     }
     return true;
   }
 
-  virtual bool check_adios2_configuration(json& adios2)
+  virtual bool check_adios_configuration(json& adios)
   {
-    if (adios2.is_object() == false) {
-      std::cerr << "`application.adios2` must be a table\n";
+    if (adios.is_object() == false) {
+      std::cerr << "`application.adios` must be a table\n";
       return false;
     }
 
-    if (adios2.contains("engine") &&
-        (adios2["engine"].is_string() == false || adios2["engine"].get<std::string>().empty())) {
-      std::cerr << "`application.adios2.engine` must be a non-empty string\n";
+    if (adios.contains("engine") &&
+        (adios["engine"].is_string() == false || adios["engine"].get<std::string>().empty())) {
+      std::cerr << "`application.adios.engine` must be a non-empty string\n";
       return false;
     }
 
-    if (adios2.contains("parameters")) {
-      const auto& parameters = adios2["parameters"];
+    if (adios.contains("parameters")) {
+      const auto& parameters = adios["parameters"];
       if (parameters.is_object() == false) {
-        std::cerr << "`application.adios2.parameters` must be a table\n";
+        std::cerr << "`application.adios.parameters` must be a table\n";
         return false;
       }
       for (auto it = parameters.begin(); it != parameters.end(); ++it) {
         if (it.value().is_string() == false && it.value().is_boolean() == false &&
             it.value().is_number() == false) {
-          std::cerr << fmt::format("`application.adios2.parameters.{}` must be a scalar value\n",
+          std::cerr << fmt::format("`application.adios.parameters.{}` must be a scalar value\n",
                                    it.key());
           return false;
         }

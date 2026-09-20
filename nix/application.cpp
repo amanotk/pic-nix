@@ -4,6 +4,7 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "diag/adios.hpp"
 #include "memory.hpp"
 #include "mpistream.hpp"
 
@@ -322,6 +323,10 @@ void Application::initialize_workload()
 
 void Application::initialize_diagnostic()
 {
+  if (get_iomode() == "adios" && AdiosWriter::available() == false) {
+    ERROR << "application.iomode = adios requires an ADIOS2-enabled build";
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
   Diag::initialize(get_basedir(), get_iomode(), cfgparser->get_config_dir());
 }
 

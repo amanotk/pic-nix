@@ -35,13 +35,13 @@ def write_diagnostic(path, diagnostic, prefix):
 
 def make_profile(tmp_path):
     data_dir = tmp_path / "data"
-    write_diagnostic(data_dir / "adios2" / "field.bp", "field", "field")
-    write_diagnostic(data_dir / "adios2" / "load.bp", "load", "load")
-    write_diagnostic(data_dir / "adios2" / "particle.bp", "particle", "particle")
-    write_diagnostic(data_dir / "adios2" / "tracer.bp", "tracer", "tracer")
+    write_diagnostic(data_dir / "adios" / "field.bp", "field", "field")
+    write_diagnostic(data_dir / "adios" / "load.bp", "load", "load")
+    write_diagnostic(data_dir / "adios" / "particle.bp", "particle", "particle")
+    write_diagnostic(data_dir / "adios" / "tracer.bp", "tracer", "tracer")
 
     config = {
-        "application": {"basedir": "data", "iomode": "adios2"},
+        "application": {"basedir": "data", "iomode": "adios"},
         "parameter": {
             "Ns": 1,
             "Nx": 2,
@@ -75,10 +75,10 @@ def make_profile(tmp_path):
     return profile
 
 
-def test_run_reads_adios2_field_and_particle_data(tmp_path):
+def test_run_reads_adios_field_and_particle_data(tmp_path):
     run = Run(str(make_profile(tmp_path)))
 
-    assert run.get_diag_handler("field").storage.kind == "adios2"
+    assert run.get_diag_handler("field").storage.kind == "adios"
     assert run.get_step("field").tolist() == [0, 1]
     assert run.get_time_at("field", 1) == 0.5
 

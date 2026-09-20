@@ -34,7 +34,7 @@ protected:
   virtual bool require_diagnostic(int curstep, json& config) override
   {
     bool status = BaseDiag::require_diagnostic(curstep, config);
-    if (BaseDiag::info->iomode == "adios2") {
+    if (BaseDiag::info->iomode == "adios") {
       return status;
     }
 
