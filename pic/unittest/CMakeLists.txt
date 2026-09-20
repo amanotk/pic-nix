@@ -29,7 +29,8 @@ function(add_mpi_test name target nproc tmpdir)
   )
   add_test(NAME ${name}
     COMMAND ${CMAKE_COMMAND} -E env PICNIX_TMPDIR=${tmpdir}
-      ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> ${ARGN}
+      # MPI ranks must execute Catch2 test cases in the same order.
+      ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> --order decl ${ARGN}
   )
   set_tests_properties(${name}
     PROPERTIES

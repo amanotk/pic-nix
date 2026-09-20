@@ -24,7 +24,8 @@ function(add_mpi_test name target nproc tmpdir)
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir}
 	)
 	add_test(NAME ${name}
-		COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> ${ARGN}
+		# MPI ranks must execute Catch2 test cases in the same order.
+		COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> --order decl ${ARGN}
 	)
 	set_tests_properties(${name}
 		PROPERTIES
