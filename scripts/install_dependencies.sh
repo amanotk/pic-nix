@@ -168,7 +168,7 @@ install_dependency mdspan \
 
 # ── Catch2 ───────────────────────────────────────────────────────────────
 install_dependency Catch2 \
-  https://github.com/catchorg/Catch2.git v3.16.0 \
+  https://github.com/catchorg/Catch2.git v3.5.4 \
   -DBUILD_TESTING=OFF -DCATCH_BUILD_TESTING=OFF -DCATCH_INSTALL_DOCS=OFF
 
 # ── done ────────────────────────────────────────────────────────────────
