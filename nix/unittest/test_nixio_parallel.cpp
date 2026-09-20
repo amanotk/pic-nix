@@ -15,12 +15,11 @@
 using nixio::float32;
 using nixio::float64;
 
-static const char          filename[] = "test_nixio_parallel_data.dat";
-static const size_t        Nx         = 4;
-static const size_t        Ny         = 4;
-static const size_t        Nz         = 4;
-static const size_t        N          = Nx * Ny * Nz;
-static std::vector<size_t> gshape     = {Nz, Ny, Nx};
+static const size_t        Nx     = 4;
+static const size_t        Ny     = 4;
+static const size_t        Nz     = 4;
+static const size_t        N      = Nx * Ny * Nz;
+static std::vector<size_t> gshape = {Nz, Ny, Nx};
 
 static int32_t i32a[N];
 static int64_t i64a[N];
@@ -115,6 +114,8 @@ bool is_array_equal(const int N, T x[], T y[])
 //
 TEST_CASE("ReadSingle", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_read_single.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -175,6 +176,8 @@ TEST_CASE("ReadSingle", "[np=8]")
 //
 TEST_CASE("WriteSingle", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_write_single.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -234,6 +237,8 @@ TEST_CASE("WriteSingle", "[np=8]")
 //
 TEST_CASE("ReadContiguous", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_read_contiguous.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -307,6 +312,8 @@ TEST_CASE("ReadContiguous", "[np=8]")
 //
 TEST_CASE("WriteContiguous", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_write_contiguous.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -380,6 +387,8 @@ TEST_CASE("WriteContiguous", "[np=8]")
 //
 TEST_CASE("ReadContiguousAt", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_read_contiguous_at.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -460,6 +469,8 @@ TEST_CASE("ReadContiguousAt", "[np=8]")
 //
 TEST_CASE("WriteContiguousAt", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_write_contiguous_at.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -540,6 +551,8 @@ TEST_CASE("WriteContiguousAt", "[np=8]")
 //
 TEST_CASE("ReadSubarray", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_read_subarray.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }
@@ -633,6 +646,8 @@ TEST_CASE("ReadSubarray", "[np=8]")
 //
 TEST_CASE("WriteSubarray", "[np=8]")
 {
+  static constexpr char filename[] = "test_nixio_parallel_write_subarray.dat";
+
   if (!require_mpi_size(8)) {
     return;
   }

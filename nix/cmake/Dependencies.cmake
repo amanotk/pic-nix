@@ -69,7 +69,7 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
   FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        4f8fba14066156b73f1189a2b8bd568bde5284c5  # v3.10.5
+    GIT_TAG        55f93686c01528224f448c19128836e7df245f72  # v3.12.0
   )
   list(APPEND _picnix_fetch_dependencies nlohmann_json)
 endif()
@@ -89,7 +89,7 @@ if(NOT TARGET xsimd)
   FetchContent_Declare(
     xsimd
     GIT_REPOSITORY https://github.com/xtensor-stack/xsimd.git
-    GIT_TAG        c1247bffa8fc36de7380a5cd42673a3b32f74c97  # 12.1.1
+    GIT_TAG        e88a72831858123924f7118f345dfe5d70d95991  # 14.3.0
   )
   list(APPEND _picnix_fetch_dependencies xsimd)
 endif()
@@ -99,7 +99,7 @@ if(NOT TARGET xtensor)
   FetchContent_Declare(
     xtensor
     GIT_REPOSITORY https://github.com/xtensor-stack/xtensor.git
-    GIT_TAG        44b56bbae2185ebf19e6f617ac5690344b9e35a4  # 0.24.7
+    GIT_TAG        3634f2ded19e0cf38208c8b86cea9e1d7c8e397d  # 0.25.0
     PATCH_COMMAND  ${CMAKE_COMMAND} -DSOURCE_DIR=<SOURCE_DIR> -P
       "${CMAKE_CURRENT_LIST_DIR}/patches/apply_patch.cmake"
   )
@@ -111,7 +111,7 @@ if(NOT TARGET toml11::toml11)
   FetchContent_Declare(
     toml11
     GIT_REPOSITORY https://github.com/ToruNiina/toml11.git
-    GIT_TAG        7c336a52a0100b24a57be811873db9b5fce9f45a  # v4.0.1
+    GIT_TAG        be08ba2be2a964edcdb3d3e3ea8d100abc26f286  # v4.4.0
   )
   list(APPEND _picnix_fetch_dependencies toml11)
 endif()
@@ -121,7 +121,7 @@ if(NOT TARGET plog::plog)
   FetchContent_Declare(
     plog
     GIT_REPOSITORY https://github.com/SergiusTheBest/plog.git
-    GIT_TAG        e21baecd4753f14da64ede979c5a19302618b752  # 1.1.10
+    GIT_TAG        e5c033e317a01b2703d13aab42288d09b2efdafc  # 1.1.11
   )
   list(APPEND _picnix_fetch_dependencies plog)
 endif()
@@ -141,7 +141,7 @@ if(NOT TARGET fmt::fmt)
   FetchContent_Declare(
     fmt
     GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-    GIT_TAG        123913715afeb8a437e6388b4473fcc4753e1c9a  # 11.1.4
+    GIT_TAG        1be298e1bd68957e4cd352e1f676f00e07dcfb57  # 12.2.0
   )
   list(APPEND _picnix_fetch_dependencies fmt)
 endif()

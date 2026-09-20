@@ -4,7 +4,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-set(PATCH_FILE "${CMAKE_CURRENT_LIST_DIR}/xtensor-0.24.7-llvm19.patch")
+set(PATCH_FILE "${CMAKE_CURRENT_LIST_DIR}/xtensor-0.25.0-llvm19.patch")
 
 if(NOT EXISTS "${PATCH_FILE}")
   message(FATAL_ERROR "Patch file not found: ${PATCH_FILE}")

@@ -227,8 +227,8 @@ Two modes are supported:
 
 Pinned dependency versions are listed in `nix/DEPENDENCIES.md`.
 
-xtensor 0.24.7 is patched for LLVM 19 compatibility
-(`nix/cmake/patches/xtensor-0.24.7-llvm19.patch`).  The patch uses
+xtensor 0.25.0 is patched for LLVM 19 compatibility
+(`nix/cmake/patches/xtensor-0.25.0-llvm19.patch`).  The patch uses
 the portable `__cpp_template_template_args` feature-test macro instead
 of GCC-specific version guards.  It is applied automatically in both
 FetchContent mode and the install script.
