@@ -35,6 +35,12 @@ On a scheduler-managed machine, use the launcher recommended for that system.
 For example, some Slurm environments prefer `srun`, while others work better
 with the MPI launcher installed with `mpi4py`.
 
+## Diagnostic Kinds
+
+The converter infers diagnostic kinds from the prefix and dataset names. The standard `tracker` and `tracer` prefixes are preserved as tracker records, including their ID column. Particle prefixes are converted into value and ID datasets.
+
+Custom tracker prefixes that do not contain `tracker` or `tracer` cannot be distinguished reliably from particle data because both use `up*` datasets with an ID column. Use the standard tracker prefix for conversion until diagnostic kind is included in the raw JSON metadata. This is a known limitation for custom tracker prefixes.
+
 ## Commands
 
 `convert` is the default command:
