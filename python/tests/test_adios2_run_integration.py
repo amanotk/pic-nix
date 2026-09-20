@@ -52,7 +52,7 @@ def make_profile(tmp_path):
     write_diagnostic(data_dir / "adios" / "field.bp", "field", "field")
     write_diagnostic(data_dir / "adios" / "load.bp", "load", "load")
     write_diagnostic(data_dir / "adios" / "particle.bp", "particle", "particle")
-    write_diagnostic(data_dir / "adios" / "tracer.bp", "tracer", "tracer")
+    write_diagnostic(data_dir / "adios" / "tracker.bp", "tracker", "tracker")
 
     config = {
         "application": {"basedir": "data", "iomode": "adios"},
@@ -71,7 +71,7 @@ def make_profile(tmp_path):
             {"name": "field"},
             {"name": "load"},
             {"name": "particle"},
-            {"name": "tracer"},
+            {"name": "tracker"},
         ],
     }
     profile = data_dir / "profile.msgpack"
@@ -111,10 +111,10 @@ def test_run_reads_adios_field_and_particle_data(tmp_path):
     )
     assert particle_ids["up00"].tolist() == [101]
 
-    tracer = run.read_at("tracer", 1)["up00"]
-    assert tracer.shape == (2, 7)
+    tracker = run.read_at("tracker", 1)["up00"]
+    assert tracker.shape == (2, 7)
     np.testing.assert_array_equal(
-        np.frombuffer(tracer[:, -1].tobytes(), dtype=np.uint64), [100, 101]
+        np.frombuffer(tracker[:, -1].tobytes(), dtype=np.uint64), [100, 101]
     )
 
 

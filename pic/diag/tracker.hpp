@@ -1,6 +1,6 @@
 // -*- C++ -*-
-#ifndef _TRACER_DIAG_HPP_
-#define _TRACER_DIAG_HPP_
+#ifndef _TRACKER_DIAG_HPP_
+#define _TRACKER_DIAG_HPP_
 
 #include "chunk_writer.hpp"
 #include "nix/diag/adios.hpp"
@@ -8,23 +8,29 @@
 #include <map>
 
 ///
-/// @brief Diagnostic for tracer
+/// @brief Diagnostic for tracker particles
 ///
-class TracerDiag : public PicChunkDiagWriter
+class TrackerDiag : public PicChunkDiagWriter
 {
 public:
-  static constexpr const char* diag_name = "tracer";
+  static constexpr const char* diag_name        = "tracker";
+  static constexpr const char* legacy_diag_name = "tracer";
+
+  bool match(std::string key) override
+  {
+    return key == diag_name || key == legacy_diag_name;
+  }
 
 protected:
   // data packer for particle
-  class TracerPacker : public PicPacker
+  class TrackerPacker : public PicPacker
   {
   private:
     int species;
     int seed;
 
   public:
-    TracerPacker(int species, int seed = 0) : species(species), seed(seed)
+    TrackerPacker(int species, int seed = 0) : species(species), seed(seed)
     {
     }
 
@@ -41,6 +47,13 @@ protected:
 
   std::map<std::string, AdiosState> adios_state;
 
+  std::string get_tracker_prefix(json& config)
+  {
+    const std::string default_prefix =
+        config.value("name", std::string{}) == legacy_diag_name ? legacy_diag_name : diag_name;
+    return this->get_prefix(config, default_prefix);
+  }
+
   void write_adios(json& config)
   {
     auto data = interface->get_data();
@@ -49,7 +62,7 @@ protected:
     }
 
     const int                  species = config.value("species", 0);
-    const std::string          prefix  = this->get_prefix(config, "tracer");
+    const std::string          prefix  = get_tracker_prefix(config);
     const std::string          name    = fmt::format("up{:02d}", species);
     const size_t               width   = ParticleType::Nc - 1;
     auto&                      state   = adios_state[prefix];
@@ -81,7 +94,7 @@ protected:
 
     if (state.writer == nullptr) {
       state.writer = std::make_unique<nix::AdiosWriter>(this->info);
-      state.writer->initialize("tracer", prefix, interface->get_configuration());
+      state.writer->initialize("tracker", prefix, interface->get_configuration());
       state.writer->define_joined_double(name, width, ids.size());
       state.writer->define_joined_uint64(name + "_id", ids.size());
       state.writer->open();
@@ -96,7 +109,7 @@ protected:
 
 public:
   // constructor
-  TracerDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
+  TrackerDiag(PtrInterface interface) : PicChunkDiagWriter(diag_name, interface)
   {
   }
 
@@ -119,7 +132,7 @@ protected:
 
     size_t      disp    = 0;
     json        dataset = {};
-    std::string prefix  = this->get_prefix(config, "tracer");
+    std::string prefix  = get_tracker_prefix(config);
     std::string dirname = this->format_dirname(prefix);
     std::string fn_data = this->format_filename("", ".data", data.curstep);
     std::string fn_json = this->format_filename("", ".json", data.curstep);
@@ -131,14 +144,14 @@ protected:
       // write particles
       int    species = config.value("species", 0);
       int    seed    = data.thisrank;
-      auto   packer  = TracerPacker(species, seed);
+      auto   packer  = TrackerPacker(species, seed);
       size_t disp0   = disp;
       size_t nbyte   = this->write_packed_chunks(packer, data, disp);
 
       // meta data
       {
         std::string name = fmt::format("up{:02d}", species);
-        std::string desc = fmt::format("tracer particle species {:02d}", species);
+        std::string desc = fmt::format("tracker particle species {:02d}", species);
 
         const int   size    = ParticleType::get_particle_size();
         const int64 Np      = nbyte / size;

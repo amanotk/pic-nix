@@ -1,22 +1,28 @@
 // -*- C++ -*-
-#ifndef _TRACER_PICKUP_DIAG_HPP_
-#define _TRACER_PICKUP_DIAG_HPP_
+#ifndef _PICKUP_TRACKER_DIAG_HPP_
+#define _PICKUP_TRACKER_DIAG_HPP_
 
 #include "nix/random.hpp"
 
 #include "chunk_writer.hpp"
 
 ///
-/// @brief Diagnostic for picking up tracer particles
+/// @brief Diagnostic for picking up tracker particles
 ///
-class TracerPickupDiag : public PicDiag
+class PickupTrackerDiag : public PicDiag
 {
 public:
-  static constexpr const char* diag_name = "tracer_pickup";
+  static constexpr const char* diag_name        = "pickup_tracker";
+  static constexpr const char* legacy_diag_name = "tracer_pickup";
+
+  bool match(std::string key) override
+  {
+    return key == diag_name || key == legacy_diag_name;
+  }
 
 protected:
-  // dummy data packer for tracer pickup
-  class TracerPickupPacker : public PicPacker
+  // dummy data packer for tracker pickup
+  class PickupTrackerPacker : public PicPacker
   {
   private:
     int     species;
@@ -29,7 +35,7 @@ protected:
     float64 fraction;
 
   public:
-    TracerPickupPacker(json& config)
+    PickupTrackerPacker(json& config)
     {
       const float64 minval = -std::numeric_limits<float64>::max();
       const float64 maxval = +std::numeric_limits<float64>::max();
@@ -73,7 +79,7 @@ protected:
 
 public:
   // constructor
-  TracerPickupDiag(PtrInterface interface) : PicDiag(diag_name, interface)
+  PickupTrackerDiag(PtrInterface interface) : PicDiag(diag_name, interface)
   {
   }
 
@@ -85,7 +91,7 @@ public:
     if (this->require_diagnostic(data.curstep, config) == false)
       return;
 
-    auto packer = TracerPickupPacker(config);
+    auto packer = PickupTrackerPacker(config);
 
     for (int i = 0; i < data.chunkvec.size(); i++) {
       auto chunk = static_cast<PicChunk*>(data.chunkvec[i].get());

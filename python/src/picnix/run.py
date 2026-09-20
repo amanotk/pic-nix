@@ -148,16 +148,20 @@ class Run(object):
         return data[0]
 
     def get_diag_handler(self, prefix):
+        if prefix not in self.diag_handlers:
+            legacy_prefix = {"tracker": "tracer", "tracer": "tracker"}.get(prefix)
+            if legacy_prefix in self.diag_handlers:
+                prefix = legacy_prefix
         return self.diag_handlers[prefix]
 
     def get_step(self, prefix):
-        return self.diag_handlers[prefix].get_step()
+        return self.get_diag_handler(prefix).get_step()
 
     def get_time(self, prefix):
-        return self.diag_handlers[prefix].get_time()
+        return self.get_diag_handler(prefix).get_time()
 
     def get_time_at(self, prefix, step):
-        return self.diag_handlers[prefix].get_time_at_step(step)
+        return self.get_diag_handler(prefix).get_time_at_step(step)
 
     def read_at(self, prefix, step, pattern=None):
         # return cache if exists
@@ -178,7 +182,7 @@ class Run(object):
             pattern = ".*"
 
         # otherwise, read data
-        handler = self.diag_handlers[prefix]
+        handler = self.get_diag_handler(prefix)
         data = handler.read_at(step, pattern)
 
         # convert array format
@@ -196,17 +200,17 @@ class Run(object):
     def read_particle_at(self, prefix, step, pattern=None, start=None, stop=None):
         if pattern is None:
             pattern = ".*"
-        handler = self.diag_handlers[prefix]
+        handler = self.get_diag_handler(prefix)
         return handler.read_particle_at(step, pattern, start, stop)
 
     def read_particle_id_at(self, prefix, step, pattern=None, start=None, stop=None):
         if pattern is None:
             pattern = ".*"
-        handler = self.diag_handlers[prefix]
+        handler = self.get_diag_handler(prefix)
         return handler.read_particle_id_at(step, pattern, start, stop)
 
     def remove_file_at(self, prefix, step, are_you_sure=False):
-        handler = self.diag_handlers[prefix]
+        handler = self.get_diag_handler(prefix)
         if not are_you_sure:
             print(
                 "*** WARNING ***\n"
@@ -231,7 +235,7 @@ class Run(object):
             try:
                 os.remove(jsonfile)
                 os.remove(datafile)
-                self.diag_handlers[prefix].remove_json_at_step(step)
+                handler.remove_json_at_step(step)
             except OSError as e:
                 print(f"Error removing file {jsonfile} or {datafile}: {e}")
 

@@ -10,6 +10,7 @@ DEFAULT_LOAD_PREFIX = "load"
 DEFAULT_FIELD_PREFIX = "field"
 DEFAULT_PARTICLE_PREFIX = "particle"
 DEFAULT_TRACER_PREFIX = "tracer"
+DEFAULT_TRACKER_PREFIX = "tracker"
 
 _LAZY_MODULES = {
     "utils": ".utils",
@@ -25,6 +26,7 @@ __all__ = [
     "DEFAULT_FIELD_PREFIX",
     "DEFAULT_PARTICLE_PREFIX",
     "DEFAULT_TRACER_PREFIX",
+    "DEFAULT_TRACKER_PREFIX",
     "Run",
     "Tracer",
     "Histogram2D",

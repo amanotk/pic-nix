@@ -15,6 +15,7 @@ from picnix import (
     DEFAULT_LOAD_PREFIX,
     DEFAULT_PARTICLE_PREFIX,
     DEFAULT_TRACER_PREFIX,
+    DEFAULT_TRACKER_PREFIX,
 )
 
 from .diag_storage import create_diag_storage
@@ -160,9 +161,14 @@ class DiagHandler(object):
         elif config["name"] == "particle":
             prefix = config.get("prefix", DEFAULT_PARTICLE_PREFIX)
             handler = ParticleDiagHandler(prefix, basedir, iomode)
-        elif config["name"] == "tracer":
-            prefix = config.get("prefix", DEFAULT_TRACER_PREFIX)
-            handler = TracerDiagHandler(prefix, basedir, iomode)
+        elif config["name"] in {"tracker", "tracer"}:
+            default_prefix = (
+                DEFAULT_TRACER_PREFIX
+                if config["name"] == "tracer"
+                else DEFAULT_TRACKER_PREFIX
+            )
+            prefix = config.get("prefix", default_prefix)
+            handler = TrackerDiagHandler(prefix, basedir, iomode)
         else:
             return None
 
@@ -239,6 +245,6 @@ class ParticleDiagHandler(DiagHandler):
         super().__init__("particle", prefix, basedir, iomode)
 
 
-class TracerDiagHandler(DiagHandler):
+class TrackerDiagHandler(DiagHandler):
     def __init__(self, prefix, basedir, iomode):
-        super().__init__("tracer", prefix, basedir, iomode)
+        super().__init__("tracker", prefix, basedir, iomode)
