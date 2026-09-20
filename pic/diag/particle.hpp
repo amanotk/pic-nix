@@ -142,14 +142,9 @@ public:
     }
   }
 
-  // data packing functor
-  void operator()(json& config) override
+protected:
+  void write_file(json& config)
   {
-    if (this->info->iomode == "adios") {
-      write_adios(config);
-      return;
-    }
-
     auto data = interface->get_data();
     auto Ns   = interface->get_num_species();
 
@@ -191,9 +186,7 @@ public:
       }
     }
 
-    if (this->is_completed() == true) {
-      this->close_file();
-    }
+    this->close_file();
 
     //
     // output json file
@@ -217,6 +210,17 @@ public:
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
+  }
+
+public:
+  // data packing functor
+  void operator()(json& config) override
+  {
+    if (this->info->iomode == "adios") {
+      write_adios(config);
+    } else {
+      write_file(config);
+    }
   }
 };
 

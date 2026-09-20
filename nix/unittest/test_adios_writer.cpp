@@ -127,3 +127,49 @@ TEST_CASE("ADIOS writer round trip")
   nix::Diag::finalize();
   std::filesystem::remove_all(basedir);
 }
+
+TEST_CASE("ADIOS writer completes asynchronous BP5 output on close")
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  REQUIRE(rank == 0);
+
+  const auto basedir = std::filesystem::temp_directory_path() / "picnix-adios-async-test";
+  std::filesystem::remove_all(basedir);
+  std::filesystem::create_directories(basedir);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  nix::Diag::initialize(basedir.string(), "adios", "");
+  {
+    TestDiag         diag;
+    nix::AdiosWriter writer(diag.get_info());
+    const nix::json  config = {
+        {"application", {{"adios", {{"engine", "BP5"}, {"parameters", {{"AsyncWrite", true}}}}}}},
+    };
+
+    writer.initialize("field", "async", config);
+    writer.define_global_double("field", {1}, {0}, {1});
+    writer.open();
+    writer.begin_step(7, 1.5);
+    const double value = 42.0;
+    writer.put_global_double("field", {0}, {1}, &value, 1);
+    writer.end_step();
+    writer.close();
+
+    adios2::ADIOS adios(MPI_COMM_WORLD);
+    auto          io = adios.DeclareIO("async-reader");
+    auto          engine =
+        io.Open((basedir / "adios" / "async.bp").string(), adios2::Mode::ReadRandomAccess);
+    auto field = io.InquireVariable<double>("field");
+    REQUIRE(field);
+
+    std::vector<double> actual(1);
+    field.SetStepSelection({0, 1});
+    field.SetSelection({{0}, {1}});
+    engine.Get(field, actual, adios2::Mode::Sync);
+    REQUIRE(actual[0] == value);
+    engine.Close();
+  }
+  nix::Diag::finalize();
+  std::filesystem::remove_all(basedir);
+}

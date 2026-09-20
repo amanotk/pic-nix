@@ -23,35 +23,11 @@ class ChunkDiagWriter : public BaseDiag
 {
 protected:
   std::unique_ptr<DiagIoHandler> handler;
-  std::vector<Buffer>            buffer;
 
   using data_type  = typename BaseDiag::data_type;
   using chunk_type = typename BaseDiag::chunk_type;
   using info_type  = typename BaseDiag::info_type;
   using info_ptr   = std::shared_ptr<info_type>;
-
-  // check if the diagnostic is required
-  virtual bool require_diagnostic(int curstep, json& config) override
-  {
-    bool status = BaseDiag::require_diagnostic(curstep, config);
-    if (BaseDiag::info->iomode == "adios") {
-      return status;
-    }
-
-    bool completed = handler->is_completed();
-
-    if (status == true) {
-      handler->wait_all();
-    }
-
-    if (status == false && completed == false) {
-      if (handler->test_all()) {
-        handler->wait_all();
-      }
-    }
-
-    return status;
-  }
 
 public:
   // constructor
@@ -75,31 +51,6 @@ public:
   void close_file()
   {
     handler->close_file();
-  }
-
-  // check if all the requests are completed
-  bool is_completed()
-  {
-    return handler->is_completed();
-  }
-
-  // wait for the completion of the job
-  void wait(int index)
-  {
-    handler->wait(index);
-    buffer.erase(buffer.begin() + index);
-  }
-
-  // wait for the completion of all the jobs and close the file
-  void wait_all()
-  {
-    handler->wait_all();
-    buffer.clear();
-  }
-
-  bool test_all()
-  {
-    return handler->test_all();
   }
 
   std::vector<int> get_chunk_id_range(data_type& data)
@@ -129,9 +80,8 @@ public:
     }
 
     // pack chunks into buffer
-    buffer.emplace_back(bufsize);
-    int  index  = buffer.size() - 1;
-    auto bufptr = buffer[index].get();
+    Buffer packed_buffer(bufsize);
+    auto   bufptr = packed_buffer.get();
 
     for (int i = 0, address = 0; i < data.chunkvec.size(); i++) {
       auto chunk = static_cast<chunk_type*>(data.chunkvec[i].get());
@@ -139,12 +89,7 @@ public:
     }
 
     // write packed buffer to disk
-    auto count = handler->write(index, buffer[index], disp);
-
-    // synchronous write: wait for completion immediately
-    wait(index);
-
-    return count;
+    return handler->write(packed_buffer, disp);
   }
 };
 
