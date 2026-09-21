@@ -48,6 +48,26 @@ To build with PETSc explicitly enabled, add
 Configuration for Intel oneAPI compilers is also available via
 `cmake/linux-intel.cmake`.
 
+To build the Hybrid module without PIC or elliptic, configure with:
+
+```sh
+cmake -S . -B build-hybrid \
+  -DBUILD_TESTING=ON \
+  -DPICNIX_BUILD_PIC=OFF \
+  -DPICNIX_BUILD_HYBRID=ON \
+  -DPICNIX_BUILD_ELLIPTIC=OFF \
+  -DPICNIX_ENABLE_PETSC=OFF \
+  -DCMAKE_CXX_COMPILER=mpicxx
+```
+
+The Hybrid module also supports a standalone build:
+
+```sh
+cmake -S hybrid -B build-hybrid-standalone \
+  -DBUILD_TESTING=ON \
+  -DCMAKE_CXX_COMPILER=mpicxx
+```
+
 ### Build
 
 After configuration, build with:

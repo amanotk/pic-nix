@@ -34,3 +34,4 @@ run-integration-pic/
 
 # Vendored code
 nix/thirdparty/
+thirdparty/
