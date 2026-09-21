@@ -59,7 +59,7 @@ superbuild installation:
 ```
 
 Runnable rendering and Python-extract examples are available under
-[`pic/example/diagnostics/ascent/`](../../pic/example/diagnostics/ascent/README.md).  
+[`pic/example/diagnostics/ascent/`](https://github.com/amanotk/pic-nix/tree/main/pic/example/diagnostics/ascent).  
 
 ## Runtime environment
 

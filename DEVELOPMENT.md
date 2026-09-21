@@ -101,8 +101,9 @@ ctest --test-dir build -R test_pic_application --output-on-failure
 
 The `python/` directory contains the `picnix` Python package for
 analyzing PIC-NIX simulation output (field data, particle data, load
-balance diagnostics, etc.).  User-facing package documentation lives in
-[`docs/picnix/`](docs/picnix/README.md).
+balance diagnostics, etc.).  User-facing installation and command documentation
+lives in [`docs/cli.md`](docs/cli.md); output formats and diagnostics are
+documented in [`docs/diagnostics.md`](docs/diagnostics.md).
 
 ### Install (editable, for development)
 
@@ -123,8 +124,8 @@ uv pip install --python .venv -e "./python[mpi]"
 ```
 
 The package installs console commands such as `picnix-hdf5-convert`,
-`picnix-memory-estimator`, and `picnix-syncdir`.
-See [Command Line Tools](docs/picnix/cli.md) for the current list.
+`picnix-memory-estimator`, and `picnix-log-analyze`.
+See [Command-Line Tools](docs/cli.md) for the user-facing list.
 
 The HDF5 diagnostic conversion workflow is documented in
 [HDF5 Converter](docs/picnix/hdf5-converter.md).
@@ -148,6 +149,29 @@ uv pip install --python .venv -e /path/to/pic-nix/python
 ```sh
 uv pip install --python .venv "git+https://github.com/amanotk/pic-nix.git#subdirectory=python"
 ```
+
+## Documentation
+
+The user documentation is built with MkDocs. Install the pinned documentation
+dependencies into the project virtual environment and start the preview server
+from the repository root:  
+
+```sh
+uv venv .venv
+uv pip install --python .venv -r requirements-docs.txt
+.venv/bin/mkdocs serve
+```
+
+Open <http://127.0.0.1:8000/pic-nix/>. The server watches `docs/` and
+`mkdocs.yml` and reloads after edits.  
+
+Before submitting documentation changes, build the static site strictly:  
+
+```sh
+.venv/bin/mkdocs build --strict
+```
+
+The generated files are written to the ignored `site/` directory.  
 
 ## Language Server
 

@@ -175,9 +175,9 @@ E_ohm = picnix.calc_e_ohm_1d(run, step, c=1.0)  # or calc_e_ohm_2d
 
 The return value has shape ``(Nx, 3)`` (1D) or ``(Ny, Nx, 3)`` (2D).  
 
-If the profile does not carry per-species ``qm`` and cannot be inferred
-from the config, ``Run`` leaves ``qm=None``; use the ``picnix-ohm-compare``
-CLI with ``--qm`` to provide it explicitly when needed.
+If the profile does not carry per-species ``qm`` and cannot infer it from the
+configuration, ``Run`` leaves ``qm=None``. Supply the charge-to-mass ratios
+explicitly when using the low-level API.  
 
 ## Limitations  
 

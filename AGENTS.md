@@ -100,6 +100,24 @@ link PETSc unless explicitly requested with `-DPICNIX_ENABLE_PETSC=ON`.
 For full build/test instructions, language server setup, and the
 PIC integration workflow, see DEVELOPMENT.md.
 
+## Documentation
+User documentation is built with MkDocs from `docs/`; the main navigation is
+defined in `mkdocs.yml`.  When changing user-visible behavior, update the
+corresponding documentation in the same change:
+
+| Change | Documentation |
+|---|---|
+| Basic build or run workflow | `docs/index.md` |
+| CMake options, dependencies, or host cache files | `docs/build.md` |
+| Configuration keys and defaults | `docs/configuration.md` |
+| Diagnostics, I/O, or output files | `docs/diagnostics.md` |
+| Equations, units, or normalization | `docs/units.md` |
+| Simulation CLI or Python command entry points | `docs/cli.md` |
+
+Run `mkdocs build --strict` after documentation changes.  If a user-visible
+code change does not require a documentation update, explicitly state why in
+the final response.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

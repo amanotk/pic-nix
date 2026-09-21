@@ -15,7 +15,7 @@ Install `picnix` with MPI support if you plan to run conversion in parallel:
 uv pip install --python .venv -e "./python[mpi]"
 ```
 
-See [Install](install.md) for other install modes.
+See [Command-Line Tools](../cli.md) for the base package installation.
 
 ## Basic Usage
 
