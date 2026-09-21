@@ -1,0 +1,112 @@
+name: docs
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number || 'pages' }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install documentation dependencies
+        run: python -m pip install -r requirements-docs.txt
+
+      - name: Build documentation
+        run: mkdocs build --strict
+
+  build-pages:
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: branches/main
+
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          path: branches/develop
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            branches/main/requirements-docs.txt
+            branches/develop/requirements-docs.txt
+
+      - name: Build main documentation
+        env:
+          MKDOCS_SITE_URL: https://amanotk.github.io/pic-nix/
+          MKDOCS_EDIT_URI: edit/main/docs/
+        run: |
+          if [ -f branches/main/mkdocs.yml ]; then
+            python -m pip install -r branches/main/requirements-docs.txt
+            mkdocs build --strict \
+              --config-file branches/main/mkdocs.yml \
+              --site-dir "${GITHUB_WORKSPACE}/site"
+          else
+            mkdir -p "${GITHUB_WORKSPACE}/site"
+          fi
+
+      - name: Build develop documentation
+        env:
+          MKDOCS_SITE_URL: https://amanotk.github.io/pic-nix/develop/
+          MKDOCS_EDIT_URI: edit/develop/docs/
+        run: |
+          python -m pip install -r branches/develop/requirements-docs.txt
+          mkdocs build --strict \
+            --config-file branches/develop/mkdocs.yml \
+            --site-dir "${GITHUB_WORKSPACE}/site/develop"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    needs: build-pages
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
