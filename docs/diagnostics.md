@@ -183,14 +183,14 @@ relocated with `application.log.path` and `application.log.prefix`.
 ## ADIOS2 output
 
 ADIOS2 requires a build with `PICNIX_ENABLE_ADIOS2=ON`. Select it at runtime and
-optionally pass scalar BP5 parameters:  
+optionally pass scalar BP5 parameters directly under `application.adios`:  
 
 ```toml
 [application]
   basedir = "data"
   iomode = "adios"
 
-  [application.adios.parameters]
+  [application.adios]
     AsyncWrite = false
 ```
 

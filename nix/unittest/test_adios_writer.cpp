@@ -198,7 +198,7 @@ TEST_CASE("ADIOS writer completes asynchronous BP5 output on close")
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", {{"parameters", {{"AsyncWrite", true}}}}}}},
+        {"application", {{"adios", {{"AsyncWrite", true}}}}},
     };
 
     writer.initialize("field", "async", config);

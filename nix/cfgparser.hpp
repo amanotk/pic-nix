@@ -298,19 +298,11 @@ public:
       return false;
     }
 
-    if (adios.contains("parameters")) {
-      const auto& parameters = adios["parameters"];
-      if (parameters.is_object() == false) {
-        std::cerr << "`application.adios.parameters` must be a table\n";
+    for (auto it = adios.begin(); it != adios.end(); ++it) {
+      if (it.value().is_string() == false && it.value().is_boolean() == false &&
+          it.value().is_number() == false) {
+        std::cerr << fmt::format("`application.adios.{}` must be a scalar value\n", it.key());
         return false;
-      }
-      for (auto it = parameters.begin(); it != parameters.end(); ++it) {
-        if (it.value().is_string() == false && it.value().is_boolean() == false &&
-            it.value().is_number() == false) {
-          std::cerr << fmt::format("`application.adios.parameters.{}` must be a scalar value\n",
-                                   it.key());
-          return false;
-        }
       }
     }
 
