@@ -1,0 +1,60 @@
+site_name: PIC-NIX
+site_description: User documentation for the PIC-NIX plasma simulation code
+site_url: !ENV [MKDOCS_SITE_URL, "https://amanotk.github.io/pic-nix/"]
+repo_url: https://github.com/amanotk/pic-nix
+repo_name: amanotk/pic-nix
+edit_uri: !ENV [MKDOCS_EDIT_URI, "edit/main/docs/"]
+
+docs_dir: docs
+site_dir: site
+strict: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Building: build.md
+  - Configuration: configuration.md
+  - Diagnostics and I/O: diagnostics.md
+  - Equations and Units: units.md
+  - Command-Line Tools: cli.md
+
+exclude_docs: |
+  graphify/
+  picnix/README.md
+  picnix/install.md
+  picnix/cli.md
+  picnix/syncdir.md
+  picnix/ohms-law.html
+  picnix/ohms-law_files/
+
+theme:
+  name: material
+  features:
+    - content.action.edit
+    - content.code.copy
+    - navigation.footer
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: math
+          class: arithmatex
+          format: !!python/object/apply:pymdownx.arithmatex.arithmatex_fenced_format
+            kwds:
+              mode: generic
+
+extra_javascript:
+  - assets/javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
