@@ -299,7 +299,9 @@ TEST_CASE("check_adios_configuration")
   SECTION("scalar parameters")
   {
     json adios = {
-        {"parameters", {{"AsyncWrite", false}, {"NumSubFiles", 4}, {"MaxShmSize", "1GB"}}},
+        {"AsyncWrite", false},
+        {"NumSubFiles", 4},
+        {"MaxShmSize", "1GB"},
     };
     REQUIRE(parser.check_adios_configuration(adios));
   }
@@ -307,9 +309,11 @@ TEST_CASE("check_adios_configuration")
   SECTION("configuration tables and fixed engine are validated")
   {
     json invalid_engine     = {{"engine", 5}};
-    json invalid_parameters = {{"parameters", {{"Shape", json::array({1, 2})}}}};
+    json invalid_parameters = {{"Shape", json::array({1, 2})}};
+    json nested_parameters  = {{"parameters", {{"AsyncWrite", false}}}};
     REQUIRE_FALSE(parser.check_adios_configuration(invalid_engine));
     REQUIRE_FALSE(parser.check_adios_configuration(invalid_parameters));
+    REQUIRE_FALSE(parser.check_adios_configuration(nested_parameters));
   }
 }
 

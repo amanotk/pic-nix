@@ -268,18 +268,13 @@ void AdiosWriter::initialize(const std::string& diagnostic, const std::string& p
   if (adios_config.contains("engine")) {
     throw std::invalid_argument("ADIOS2 engine is fixed to BP5; remove application.adios.engine");
   }
-  const json parameters = adios_config.value("parameters", json::object());
-  if (parameters.is_object() == false) {
-    throw std::invalid_argument("application.adios.parameters must be a table");
-  }
-
   impl->adios = std::make_unique<adios2::ADIOS>(MPI_COMM_WORLD);
   impl->io    = std::make_unique<adios2::IO>(impl->adios->DeclareIO("PICNIX"));
   impl->io->SetEngine("BP5");
   impl->filename = std::filesystem::path(impl->info->basedir) / "adios" / (prefix + ".bp");
 
   adios2::Params adios_parameters{{"AsyncWrite", "false"}};
-  for (auto it = parameters.begin(); it != parameters.end(); ++it) {
+  for (auto it = adios_config.begin(); it != adios_config.end(); ++it) {
     adios_parameters[it.key()] = parameter_value(it.value());
   }
   impl->io->SetParameters(adios_parameters);
