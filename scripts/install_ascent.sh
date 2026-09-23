@@ -21,11 +21,12 @@ environment: <install_prefix>/python-venv is linked to that environment so
 Conduit and Ascent Python modules install there (no second venv is created).
 
 Profiles:
-  --slim   (default when invoked via prepare_build_stack.sh)
+  --slim   Default when invoked via prepare_build_stack.sh
            Build only what PIC-NIX needs: zlib, Conduit, VTK-m, Ascent.
-           Skips HDF5, Silo, ZFP, MFEM, RAJA, Camp, Umpire; disables Ascent
-           docs/examples (no Sphinx) and omits unused *_DIR entries.
-  --full   Upstream build_ascent.sh defaults (all TPLs above enabled).
+           Skips HDF5, Silo, ZFP, MFEM, RAJA, Camp, Umpire.
+  --full   Upstream build_ascent.sh TPL defaults (all packages above).
+           Docs/examples are still disabled (no Sphinx); Cython is required
+           in the target environment for ZFP Python bindings.
 
 Examples:
 
@@ -197,6 +198,25 @@ ASCENT_BUILD_SH="$ASCENT_DIR/scripts/build_ascent/build_ascent.sh"
   exit 1
 }
 
+# PIC-NIX never needs Ascent HTML docs or example apps. Stack venvs do not
+# ship sphinx-build; with --python-is-venv the superbuild also skips its
+# nested-venv pip bootstrap that would have installed Sphinx. Disable docs
+# and examples for every profile (full only changes the TPL set).
+echo "--- Disabling Ascent docs/examples (all profiles) ---"
+sed -i \
+  -e "s/echo 'set(ENABLE_DOCS ON CACHE BOOL \"\")'/echo 'set(ENABLE_DOCS OFF CACHE BOOL \"\")'/" \
+  -e "/echo 'set(SPHINX_EXECUTABLE /d" \
+  -e "/-DSPHINX_EXECUTABLE=/d" \
+  "$ASCENT_BUILD_SH"
+if ! grep -q "set(ENABLE_EXAMPLES OFF" "$ASCENT_BUILD_SH"; then
+  sed -i \
+    "s/echo 'set(ENABLE_TESTS /echo 'set(ENABLE_EXAMPLES OFF CACHE BOOL \"\")'\necho 'set(ENABLE_UTILS OFF CACHE BOOL \"\")'\necho 'set(ENABLE_TESTS /" \
+    "$ASCENT_BUILD_SH"
+fi
+sed -i \
+  -e 's|cmake -S ${ascent_src_dir} -B ${ascent_build_dir} -C ${root_dir}/ascent-config.cmake|cmake -S ${ascent_src_dir} -B ${ascent_build_dir} -C ${root_dir}/ascent-config.cmake -DENABLE_EXAMPLES=OFF -DENABLE_UTILS=OFF -DENABLE_TESTS=OFF -DENABLE_DOCS=OFF|' \
+  "$ASCENT_BUILD_SH"
+
 if [[ "$ASCENT_PROFILE" == "slim" ]]; then
   echo "--- Applying slim profile patches to build_ascent.sh ---"
   # Unconditional host-config DIR entries for TPLs we do not build.
@@ -236,27 +256,10 @@ if [[ "$ASCENT_PROFILE" == "slim" ]]; then
     { print }
     END { if (grab) print buf }
   ' "$ASCENT_BUILD_SH" >"$ASCENT_BUILD_SH.tmp" && cat "$ASCENT_BUILD_SH.tmp" >"$ASCENT_BUILD_SH" && rm -f "$ASCENT_BUILD_SH.tmp"
-  # Never enable Sphinx/docs: stack venvs have no sphinx-build.
-  sed -i \
-    -e "s/echo 'set(ENABLE_DOCS ON CACHE BOOL \"\")'/echo 'set(ENABLE_DOCS OFF CACHE BOOL \"\")'/" \
-    -e "/echo 'set(SPHINX_EXECUTABLE /d" \
-    -e "/-DSPHINX_EXECUTABLE=/d" \
-    "$ASCENT_BUILD_SH"
   # Devil Ray requires RAJA (which slim does not build). VTK-h still
   # provides scene rendering; keep APComp for compositing.
   sed -i \
     -e "s/echo 'set(ENABLE_DRAY ON CACHE BOOL \"\")'/echo 'set(ENABLE_DRAY OFF CACHE BOOL \"\")'/" \
-    "$ASCENT_BUILD_SH"
-  # Skip examples/utilities in the Ascent package itself.
-  # Belt-and-suspenders: host-config entries plus explicit -D on the
-  # configure line (examples still linked -lopenmp under icpx otherwise).
-  if ! grep -q "set(ENABLE_EXAMPLES OFF" "$ASCENT_BUILD_SH"; then
-    sed -i \
-      "s/echo 'set(ENABLE_TESTS /echo 'set(ENABLE_EXAMPLES OFF CACHE BOOL \"\")'\necho 'set(ENABLE_UTILS OFF CACHE BOOL \"\")'\necho 'set(ENABLE_TESTS /" \
-      "$ASCENT_BUILD_SH"
-  fi
-  sed -i \
-    -e 's|cmake -S ${ascent_src_dir} -B ${ascent_build_dir} -C ${root_dir}/ascent-config.cmake|cmake -S ${ascent_src_dir} -B ${ascent_build_dir} -C ${root_dir}/ascent-config.cmake -DENABLE_EXAMPLES=OFF -DENABLE_UTILS=OFF -DENABLE_TESTS=OFF|' \
     "$ASCENT_BUILD_SH"
   # Conduit is always configured with -DHDF5_DIR even when build_hdf5=false;
   # that path will not exist and FindHDF5 hard-fails. Drop it and keep the
@@ -271,11 +274,12 @@ if [[ "$ASCENT_PROFILE" == "slim" ]]; then
     -e "/-DSILO_ENABLE_HDF5=ON/d" \
     -e "/-DSILO_HDF5_DIR=/d" \
     "$ASCENT_BUILD_SH"
-  bash -n "$ASCENT_BUILD_SH" || {
-    echo "slim patch produced invalid build_ascent.sh" >&2
-    exit 1
-  }
 fi
+
+bash -n "$ASCENT_BUILD_SH" || {
+  echo "patch produced invalid build_ascent.sh" >&2
+  exit 1
+}
 
 # Keep build_pyvenv=true so build_ascent.sh still wires PYTHON_EXECUTABLE and
 # Python module install paths. When --python-is-venv is set, pre-create

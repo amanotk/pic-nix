@@ -58,7 +58,7 @@ scripts/prepare_build_stack.sh "$HOME/picnix-stack" \
 | `--with-adios2` | Build ADIOS2 (C++/MPI only; Python bindings off) into `<stack>/adios2` |
 | `--with-adios2-python` | Also build ADIOS2 Python bindings into the stack venv |
 | `--with-ascent` | Build Ascent **slim** (zlib, Conduit, VTK-m, Ascent only — no HDF5/Silo/ZFP/MFEM/RAJA, no Sphinx/docs/examples) into the stack venv |
-| `--ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP) |
+| `--ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP). Docs/examples stay off (no Sphinx). |
 | `--no-deps` | Skip the ordinary C++ dependencies |
 | `--no-picnix` | Skip the editable `picnix` install (generic stack) |
 | `--check` | Validate an existing stack without building |

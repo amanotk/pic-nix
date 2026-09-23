@@ -19,7 +19,8 @@ By default this installs:
 
 When --with-ascent is used, the Ascent superbuild runs in **slim** profile
 (zlib + Conduit + VTK-m + Ascent only; no HDF5/Silo/ZFP/MFEM/RAJA/Sphinx).
-Use --ascent-full for upstream's full third-party set.
+Use --ascent-full for upstream's full third-party set (still no Sphinx/docs;
+Cython only). 
 
 Optional long builds (off by default):
   --with-adios2         ADIOS2 C++/MPI library (Python bindings off)
@@ -36,7 +37,8 @@ Options:
   --with-adios2            Build ADIOS2 (C++ only)
   --with-adios2-python     Build ADIOS2 with Python bindings
   --with-ascent            Build Ascent into the stack Python environment
-  --ascent-full            With --with-ascent: upstream full TPL set (slow)
+  --ascent-full            With --with-ascent: upstream full TPL set (slow;
+                           no Sphinx/docs; needs Cython for ZFP)
   --no-deps                Skip the ordinary C++ dependencies
   --no-picnix              Skip the editable picnix install
   --check                  Validate an existing stack; do not build
@@ -627,24 +629,91 @@ prepare_python() {
   fi
 
   local expected
-  expected="$(compute_stamp python \
-    "with_picnix=$WITH_PICNIX" \
-    "with_adios2=$WITH_ADIOS2" \
-    "with_adios2_python=$WITH_ADIOS2_PYTHON" \
-    "with_ascent=$WITH_ASCENT" \
-    "ascent_full=$ASCENT_FULL" \
-    "desired_python=$desired" \
-    "packages=$py_packages")"
+  local stamp_inputs=(
+    "with_picnix=$WITH_PICNIX"
+    "with_adios2=$WITH_ADIOS2"
+    "with_adios2_python=$WITH_ADIOS2_PYTHON"
+    "with_ascent=$WITH_ASCENT"
+    "ascent_full=$ASCENT_FULL"
+    "desired_python=$desired"
+    "packages=$py_packages"
+  )
+  if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
+    # Editable installs do not pick up new declared deps/entry points.
+    stamp_inputs+=("pyproject_hash=$(hash_file "$REPO_ROOT/python/pyproject.toml")")
+  fi
+  expected="$(compute_stamp python "${stamp_inputs[@]}")"
 
   if [[ "$FORCE" == true ]]; then
     clear_stamp python
   fi
 
-  if [[ -x "$STACK_VENV_BIN" ]] && stamp_matches python "$expected"; then
+  # Soft-refresh: reinstall packages into an existing venv when only stamp
+  # inputs changed (pyproject, extras). Full recreate only when the
+  # interpreter is missing or FORCE — wiping the venv would delete Conduit/
+  # Ascent extensions that Ascent installed into it.
+  local need_recreate=true
+  if [[ -x "$STACK_VENV_BIN" && "$FORCE" != true ]]; then
+    local cur_desired
+    cur_desired="$("$STACK_VENV_BIN" -c 'import sys; print(sys.executable)' 2>/dev/null || true)"
+    # Same venv still points at a working interpreter: soft path.
+    if [[ -n "$cur_desired" ]]; then
+      need_recreate=false
+    fi
+  fi
+
+  if [[ "$need_recreate" == false ]] && stamp_matches python "$expected"; then
     log "Python environment up to date: $STACK_VENV_BIN"
+    write_stamp_meta python \
+      "with_picnix=$WITH_PICNIX" \
+      "with_adios2=$WITH_ADIOS2" \
+      "with_adios2_python=$WITH_ADIOS2_PYTHON" \
+      "with_ascent=$WITH_ASCENT" \
+      "ascent_full=$ASCENT_FULL" \
+      "desired_python=$desired" \
+      "packages=$py_packages"
+    if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
+      printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
+    fi
+  elif [[ "$need_recreate" == false ]]; then
+    log "--- Refreshing Python packages in existing venv ---"
+    local base_pkgs=(mpi4py numpy setuptools wheel)
+    if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
+      base_pkgs+=(cython)
+    fi
+    if [[ -n "$MPICC_EXECUTABLE" ]]; then
+      MPICC="$MPICC_EXECUTABLE" uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
+    else
+      uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
+    fi
+    if [[ "$WITH_PICNIX" == true ]]; then
+      local extras="mpi,test"
+      if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
+        extras="mpi,test,adios"
+      fi
+      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
+    fi
+    write_stamp python "$expected"
+    write_stamp_meta python \
+      "with_picnix=$WITH_PICNIX" \
+      "with_adios2=$WITH_ADIOS2" \
+      "with_adios2_python=$WITH_ADIOS2_PYTHON" \
+      "with_ascent=$WITH_ASCENT" \
+      "ascent_full=$ASCENT_FULL" \
+      "desired_python=$desired" \
+      "packages=$py_packages"
+    if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
+      printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
+    fi
   else
     log "--- Creating virtual environment at $STACK_PYTHON ---"
     rm -rf "$STACK_PYTHON"
+    # Wiping the venv deletes Conduit/Ascent Python modules Ascent installed
+    # into it; force those components to rebuild against the new interpreter.
+    clear_stamp ascent
+    if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+      clear_stamp adios2
+    fi
     # --seed adds pip; Conduit's superbuild runs
     # `python -m pip install . --no-build-isolation`, which also needs
     # setuptools and wheel already present in the environment.
@@ -675,16 +744,18 @@ prepare_python() {
     fi
 
     write_stamp python "$expected"
+    write_stamp_meta python \
+      "with_picnix=$WITH_PICNIX" \
+      "with_adios2=$WITH_ADIOS2" \
+      "with_adios2_python=$WITH_ADIOS2_PYTHON" \
+      "with_ascent=$WITH_ASCENT" \
+      "ascent_full=$ASCENT_FULL" \
+      "desired_python=$desired" \
+      "packages=$py_packages"
+    if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
+      printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
+    fi
   fi
-
-  # Always refresh meta so --check can see flags without re-reading the hash.
-  write_stamp_meta python \
-    "with_picnix=$WITH_PICNIX" \
-    "with_adios2=$WITH_ADIOS2" \
-    "with_adios2_python=$WITH_ADIOS2_PYTHON" \
-    "with_ascent=$WITH_ASCENT" \
-    "ascent_full=$ASCENT_FULL" \
-    "desired_python=$desired"
 
   SITE_PACKAGES="$("$STACK_VENV_BIN" -c 'import site; print(site.getsitepackages()[0])')"
 }
@@ -706,6 +777,7 @@ install_deps_component() {
   fi
   if [[ -d "$STACK_DEPS" ]] && stamp_matches deps "$expected"; then
     log "C++ dependencies up to date: $STACK_DEPS"
+    write_stamp_meta deps "${stamp_items[@]}"
     return 0
   fi
   log "--- Installing C++ dependencies into $STACK_DEPS ---"
@@ -715,6 +787,7 @@ install_deps_component() {
   fi
   "$REPO_ROOT/scripts/install_dependencies.sh" "${args[@]}"
   write_stamp deps "$expected"
+  write_stamp_meta deps "${stamp_items[@]}"
 }
 
 install_adios2_component() {
@@ -948,12 +1021,21 @@ write_env_sh() {
 
 export PICNIX_STACK="$STACK_DIR"
 
-# Drop a different venv's PATH prefix if one is already active.
+# Drop a different venv: restore saved PATH if we have it, otherwise strip
+# the foreign venv's bin dir so it cannot linger behind the stack prefix.
 if [ -n "\${VIRTUAL_ENV:-}" ] && [ "\$VIRTUAL_ENV" != "$STACK_PYTHON" ]; then
   if [ -n "\${_PICNIX_OLD_PATH:-}" ]; then
     PATH="\$_PICNIX_OLD_PATH"
     export PATH
     unset _PICNIX_OLD_PATH
+  else
+    _foreign_bin="\$VIRTUAL_ENV/bin"
+    PATH=":\$PATH:"
+    PATH="\${PATH//:\$_foreign_bin:/:}"
+    PATH="\${PATH#:}"
+    PATH="\${PATH%:}"
+    export PATH
+    unset _foreign_bin
   fi
   unset VIRTUAL_ENV
 fi
@@ -1100,19 +1182,94 @@ check_stack() {
     path="$(stamp_path "$name")"
     if [[ -f "$path" ]]; then
       log "stamp $name: present"
+    else
+      log "stamp $name: absent (component not built or skipped)"
     fi
   done
 
-  if [[ -f "$(stamp_path deps)" && -n "$CACHE_FILE" ]]; then
-    local expected
-    local dep_items=(
-      "script:$REPO_ROOT/scripts/install_dependencies.sh"
-      "cache:$CACHE_FILE"
-    )
-    expected="$(compute_stamp deps "${dep_items[@]}")"
-    if [[ "$(cat "$(stamp_path deps)")" != "$expected" ]]; then
-      err "deps stamp does not match current compiler/cache fingerprint (rerun with --force if intended)"
-      failed=1
+  # Recompute stamps that embed the compiler fingerprint / script hashes so
+  # a changed cache or installer invalidates optional components too.
+  if [[ -f "$(stamp_path deps)" ]]; then
+    local dep_items=()
+    if [[ -f "$STAMP_DIR/deps.meta" ]]; then
+      mapfile -t dep_items <"$STAMP_DIR/deps.meta"
+    else
+      dep_items=("script:$REPO_ROOT/scripts/install_dependencies.sh")
+      if [[ -n "$CACHE_FILE" ]]; then
+        dep_items+=("cache:$CACHE_FILE")
+      fi
+    fi
+    if (( ${#dep_items[@]} > 0 )); then
+      local expected
+      expected="$(compute_stamp deps "${dep_items[@]}")"
+      if [[ "$(cat "$(stamp_path deps)")" != "$expected" ]]; then
+        err "deps stamp does not match current compiler/cache fingerprint (rerun with --force if intended)"
+        failed=1
+      fi
+    fi
+  fi
+
+  if [[ -f "$(stamp_path adios2)" && -f "$STAMP_DIR/adios2.meta" ]]; then
+    local adios_mode
+    adios_mode="$(awk -F= '/^python_mode=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
+    if [[ -n "$adios_mode" ]]; then
+      local expected
+      expected="$(compute_stamp adios2 \
+        "script:$REPO_ROOT/scripts/install_adios2.sh" \
+        "python_mode=$adios_mode")"
+      if [[ "$(cat "$(stamp_path adios2)")" != "$expected" ]]; then
+        err "adios2 stamp does not match current fingerprint/script (rerun with --force if intended)"
+        failed=1
+      fi
+    fi
+  fi
+
+  if [[ -f "$(stamp_path ascent)" && -f "$STAMP_DIR/ascent.meta" ]]; then
+    local ascent_profile
+    ascent_profile="$(awk -F= '/^profile=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    if [[ -n "$ascent_profile" ]]; then
+      local expected
+      expected="$(compute_stamp ascent \
+        "script:$REPO_ROOT/scripts/install_ascent.sh" \
+        "python_is_venv=true" \
+        "profile=$ascent_profile")"
+      if [[ "$(cat "$(stamp_path ascent)")" != "$expected" ]]; then
+        err "ascent stamp does not match current fingerprint/script (rerun with --force if intended)"
+        failed=1
+      fi
+    fi
+  fi
+
+  if [[ -f "$(stamp_path python)" && -f "$STAMP_DIR/python.meta" ]]; then
+    local want_picnix want_adios want_adios_py want_ascent want_full desired_py packages
+    want_picnix="$(awk -F= '/^with_picnix=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    want_adios="$(awk -F= '/^with_adios2=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    want_adios_py="$(awk -F= '/^with_adios2_python=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    want_ascent="$(awk -F= '/^with_ascent=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    want_full="$(awk -F= '/^ascent_full=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    desired_py="$(awk -F= '/^desired_python=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    packages="$(awk -F= '/^packages=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    if [[ -n "$desired_py" && -n "$packages" ]]; then
+      local py_items=(
+        "with_picnix=$want_picnix"
+        "with_adios2=$want_adios"
+        "with_adios2_python=$want_adios_py"
+        "with_ascent=$want_ascent"
+        "ascent_full=$want_full"
+        "desired_python=$desired_py"
+        "packages=$packages"
+      )
+      local pyproject_hash
+      pyproject_hash="$(awk -F= '/^pyproject_hash=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+      if [[ -n "$pyproject_hash" ]]; then
+        py_items+=("pyproject_hash=$pyproject_hash")
+      fi
+      local expected
+      expected="$(compute_stamp python "${py_items[@]}")"
+      if [[ "$(cat "$(stamp_path python)")" != "$expected" ]]; then
+        err "python stamp does not match current fingerprint/meta (rerun with --force if intended)"
+        failed=1
+      fi
     fi
   fi
 
@@ -1149,6 +1306,16 @@ check_stack() {
 main() {
   if [[ "$CHECK_ONLY" == true ]]; then
     [[ -d "$STACK_DIR" ]] || die "stack directory not found: $STACK_DIR"
+    # Recover the cache used at install time so the fingerprint (and stamp
+    # recompute) match when the user omits --cache.
+    if [[ -z "$CACHE_FILE" && -f "$STAMP_DIR/deps.meta" ]]; then
+      local meta_cache
+      meta_cache="$(sed -n 's/^cache://p' "$STAMP_DIR/deps.meta" | head -n 1)"
+      if [[ -n "$meta_cache" && -f "$meta_cache" ]]; then
+        CACHE_FILE="$meta_cache"
+        log "Using cache from deps.meta: $CACHE_FILE"
+      fi
+    fi
     if [[ -n "$CACHE_FILE" || -n "$MPICC_EXPLICIT" || -n "$MPICXX_EXPLICIT" ]]; then
       resolve_compiler
       build_fingerprint

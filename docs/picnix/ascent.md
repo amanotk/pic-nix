@@ -38,11 +38,10 @@ Conduit and Ascent Python modules then install into that environment.
 Activate the environment with `source <stack>/env.sh` before running Python
 extract tests.  
 
-`prepare_build_stack.sh --with-ascent` defaults to the installer’s **slim**
-profile: zlib, Conduit, VTK-m, and Ascent only (no HDF5, Silo, ZFP, MFEM,
-RAJA, Camp, or Umpire; Ascent docs/examples off — no Sphinx). Use
-`--ascent-full` or `install_ascent.sh --full` for the upstream full TPL set
-(ZFP then needs `cython` and `setuptools` in the target environment).  
+Both slim and full profiles disable Ascent HTML docs and example apps (no
+Sphinx required). Full only restores the upstream third-party library set
+(HDF5, Silo, ZFP, MFEM, RAJA, …) and still needs `cython` in the target
+environment for ZFP Python bindings.  
 
 Advanced users may still pass `-DAscent_DIR=/path/to/lib/cmake/ascent`
 directly.  
