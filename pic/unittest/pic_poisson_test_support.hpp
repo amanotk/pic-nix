@@ -43,7 +43,6 @@ inline nix::json make_default_config()
   config["option"]["seed_type"]     = "fixed";
   config["option"]["friedman"]      = 0.0;
   config["option"]["cell_load"]     = 1.0;
-  config["option"]["buffer_ratio"]  = 0.2;
   return config;
 }
 

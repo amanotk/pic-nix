@@ -11,6 +11,32 @@ TEST_CASE("Basic")
   CfgParser parser;
 }
 
+TEST_CASE("get_root returns an isolated copy from a const parser")
+{
+  CfgParser parser;
+  json      configuration = {
+      {"application", {{"option", json::object()}}},
+      {"diagnostic", json::array()},
+      {"parameter",
+            {{"Nx", 16},
+             {"Ny", 16},
+             {"Nz", 16},
+             {"Cx", 4},
+             {"Cy", 4},
+             {"Cz", 4},
+             {"delt", 1.0},
+             {"delh", 1.0}}},
+  };
+  parser.overwrite(configuration);
+
+  const CfgParser& const_parser = parser;
+  json             root_copy    = const_parser.get_root();
+  root_copy["parameter"]["Nx"]  = 32;
+
+  REQUIRE(const_parser.get_root() == configuration);
+  REQUIRE(const_parser.get_root()["parameter"]["Nx"] == 16);
+}
+
 TEST_CASE("check_mandatory_sections")
 {
   CfgParser parser;
@@ -156,9 +182,158 @@ TEST_CASE("check_dimensions")
   }
 }
 
-TEST_CASE("parse_file")
+TEST_CASE("check_application_options")
 {
   CfgParser parser;
+
+  SECTION("Gilbert is the default")
+  {
+    json option = json::object();
+    REQUIRE(parser.check_application_options(option));
+  }
+
+  SECTION("valid first axes")
+  {
+    for (const char* axis : {"x", "y", "z"}) {
+      json option = {{"sfc_first_axis", axis}};
+      REQUIRE(parser.check_application_options(option));
+    }
+  }
+
+  SECTION("invalid first axis")
+  {
+    json option = {{"sfc_first_axis", "time"}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("valid MPI thread modes")
+  {
+    for (const char* mode : {"auto", "multiple", "funneled"}) {
+      json option = {{"mpi_thread_mode", mode}};
+      REQUIRE(parser.check_application_options(option));
+    }
+  }
+
+  SECTION("invalid MPI thread mode")
+  {
+    json option = {{"mpi_thread_mode", "serialized"}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("MPI thread mode must be a string")
+  {
+    json option = {{"mpi_thread_mode", 0}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("first axis must be a string")
+  {
+    json option = {{"sfc_first_axis", 0}};
+    REQUIRE_FALSE(parser.check_application_options(option));
+  }
+
+  SECTION("option section must be a table")
+  {
+    json scalar = 0;
+    json array  = json::array();
+    REQUIRE_FALSE(parser.check_application_options(scalar));
+    REQUIRE_FALSE(parser.check_application_options(array));
+  }
+
+  SECTION("full configuration rejects an invalid axis")
+  {
+    json configuration = {
+        {"application", {{"option", {{"sfc_first_axis", "time"}}}}},
+        {"diagnostic", json::array()},
+        {"parameter",
+         {{"Nx", 16},
+          {"Ny", 16},
+          {"Nz", 16},
+          {"Cx", 4},
+          {"Cy", 4},
+          {"Cz", 4},
+          {"delt", 1.0},
+          {"delh", 1.0}}},
+    };
+    REQUIRE_FALSE(parser.validate(configuration));
+  }
+}
+
+TEST_CASE("check_checkpoint_configuration")
+{
+  CfgParser parser;
+
+  SECTION("disabled by zero interval")
+  {
+    json checkpoint = {{"interval", 0.0}};
+    REQUIRE(parser.check_checkpoint_configuration(checkpoint));
+  }
+
+  SECTION("positive interval and prefix")
+  {
+    json checkpoint = {{"interval", 3600.0}, {"prefix", "checkpoint"}};
+    REQUIRE(parser.check_checkpoint_configuration(checkpoint));
+  }
+
+  SECTION("interval must be a finite non-negative number")
+  {
+    json negative_interval = {{"interval", -1.0}};
+    json string_interval   = {{"interval", "3600"}};
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(negative_interval));
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(string_interval));
+  }
+
+  SECTION("prefix must be a non-empty string")
+  {
+    json empty_prefix   = {{"prefix", ""}};
+    json numeric_prefix = {{"prefix", 0}};
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(empty_prefix));
+    REQUIRE_FALSE(parser.check_checkpoint_configuration(numeric_prefix));
+  }
+}
+
+TEST_CASE("check_adios_configuration")
+{
+  CfgParser parser;
+
+  SECTION("scalar parameters")
+  {
+    json adios = {
+        {"AsyncWrite", false},
+        {"NumSubFiles", 4},
+        {"MaxShmSize", "1GB"},
+    };
+    REQUIRE(parser.check_adios_configuration(adios));
+  }
+
+  SECTION("configuration tables and fixed engine are validated")
+  {
+    json invalid_engine     = {{"engine", 5}};
+    json invalid_parameters = {{"Shape", json::array({1, 2})}};
+    json nested_parameters  = {{"parameters", {{"AsyncWrite", false}}}};
+    REQUIRE_FALSE(parser.check_adios_configuration(invalid_engine));
+    REQUIRE_FALSE(parser.check_adios_configuration(invalid_parameters));
+    REQUIRE_FALSE(parser.check_adios_configuration(nested_parameters));
+  }
+}
+
+TEST_CASE("check_io_mode")
+{
+  CfgParser parser;
+
+  json mpiio = "mpiio";
+  json posix = "posix";
+  json adios = "adios";
+  json other = "unknown";
+  REQUIRE(parser.check_io_mode(mpiio));
+  REQUIRE(parser.check_io_mode(posix));
+  REQUIRE(parser.check_io_mode(adios));
+  REQUIRE_FALSE(parser.check_io_mode(other));
+}
+
+TEST_CASE("parse_file")
+{
+  CfgParser   parser;
   std::string filename;
   std::string content;
 
@@ -224,4 +399,3 @@ TEST_CASE("parse_file")
   // cleanup
   std::filesystem::remove(filename);
 }
-

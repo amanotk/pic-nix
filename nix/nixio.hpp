@@ -200,7 +200,7 @@ size_t write_subarray(MPI_File* fh, size_t* disp, void* data, const T1 ndim, con
 /// @param dims
 ///
 void put_metadata(json& obj, string name, string dtype, string desc, const size_t disp,
-                  const size_t size, const int32_t ndim, const int32_t dims[]);
+                  const size_t size, const int32_t ndim, const int64_t dims[]);
 
 ///
 /// @brief put metadata of scalar to json object
@@ -226,7 +226,7 @@ void put_metadata(json& obj, string name, string dtype, string desc, const size_
 /// @param dims
 ///
 void get_metadata(json& obj, string name, string& dtype, string& desc, size_t& disp, size_t& size,
-                  int32_t& ndim, int32_t dims[]);
+                  int32_t& ndim, int64_t dims[]);
 
 ///
 /// @brief get metadata of scalar from json object

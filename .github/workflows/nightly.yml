@@ -1,0 +1,312 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  pic-integration:
+    runs-on: ubuntu-24.04
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            openmpi-bin \
+            libopenmpi-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install msgpack numpy toml
+
+      - name: Build
+        run: |
+          mkdir -p run-integration-pic/build-gcc
+          cmake -S . -B run-integration-pic/build-gcc \
+            -C cmake/linux-gcc.cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF
+          cmake --build run-integration-pic/build-gcc --target beam --parallel
+          cmake --build run-integration-pic/build-gcc --target shock --parallel
+
+      - name: Run and compare all cases
+        run: |
+          export OMP_NUM_THREADS=1
+          CASES="twostream weibel-order1 weibel-order2 weibel-order3 weibel-order4 shock"
+          FAILED=""
+          for case in $CASES; do
+            echo "=== Case: $case ==="
+            python3 scripts/integration/pic/main.py run "$case" || { FAILED="$FAILED $case"; continue; }
+            python3 scripts/integration/pic/main.py compare "$case" || FAILED="$FAILED $case"
+          done
+          if [ -n "$FAILED" ]; then
+            echo "FAILED:$FAILED"
+            exit 1
+          fi
+
+      - name: Upload run output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-output
+          path: run-integration-pic/
+          retention-days: 7
+
+  ascent-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      ASCENT_PREFIX: ${{ github.workspace }}/.cache/ascent-0.9.5
+      DEPS: ${{ github.workspace }}/.cache/picnix-deps
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            gfortran \
+            pkg-config \
+            openmpi-bin \
+            libopenmpi-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev
+
+      - name: Cache Ascent installation
+        id: cache-ascent
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ASCENT_PREFIX }}
+          key: ascent-${{ runner.os }}-${{ runner.arch }}-python-3.12-${{ hashFiles('scripts/install_ascent.sh') }}
+
+      - name: Install Ascent
+        if: steps.cache-ascent.outputs.cache-hit != 'true'
+        run: |
+          scripts/install_ascent.sh "$ASCENT_PREFIX" --python "$(command -v python)"
+
+      - name: Validate Ascent installation
+        run: |
+          test -f "$ASCENT_PREFIX/ascent-checkout/lib/cmake/ascent/AscentConfig.cmake"
+          test -x "$ASCENT_PREFIX/python-venv/bin/python"
+          "$ASCENT_PREFIX/python-venv/bin/python" - <<'PY'
+          import ascent
+          import conduit
+
+          print("ascent:", ascent.__file__)
+          print("conduit:", conduit.__file__)
+          PY
+
+      - name: Install C++ dependencies
+        run: |
+          scripts/install_dependencies.sh "$DEPS"
+
+      - name: Install Python test dependencies
+        run: |
+          "$ASCENT_PREFIX/python-venv/bin/python" -m pip install --upgrade pip
+          "$ASCENT_PREFIX/python-venv/bin/python" -m pip install -e "./python[test,mpi]"
+          "$ASCENT_PREFIX/python-venv/bin/python" - <<'PY'
+          import conduit
+          import mpi4py
+          import picnix.ascent
+
+          print("conduit:", conduit.__file__)
+          print("mpi4py:", mpi4py.__file__)
+          print("picnix.ascent:", picnix.ascent.__file__)
+          PY
+
+      - name: Configure Python runtime environment
+        run: |
+          "$ASCENT_PREFIX/python-venv/bin/python" -c \
+            'import sys; print("PYTHONHOME=" + sys.base_prefix + ":" + sys.base_exec_prefix)' >> "$GITHUB_ENV"
+          "$ASCENT_PREFIX/python-venv/bin/python" -c \
+            'import os, site; print("PYTHONPATH=" + os.environ["GITHUB_WORKSPACE"] + "/python/src:" + site.getsitepackages()[0])' >> "$GITHUB_ENV"
+
+      - name: Report tool versions
+        run: |
+          cmake --version
+          mpicxx --version
+          "$ASCENT_PREFIX/python-venv/bin/python" --version
+
+      - name: Build and test with Ascent
+        run: |
+          cmake -S . -B build-ascent -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER=mpicxx \
+            -DCMAKE_PREFIX_PATH="$DEPS" \
+            -DPICNIX_ASCENT_ROOT="$ASCENT_PREFIX" \
+            -DPICNIX_USE_SYSTEM_LIBS=ON \
+            -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+            -DPICNIX_ENABLE_ASCENT=ON \
+            -DPICNIX_ENABLE_PETSC=OFF \
+            -DPICNIX_CATCH2_CONFIG="$DEPS/lib/cmake/Catch2/Catch2Config.cmake"
+          cmake --build build-ascent --parallel
+          ctest --test-dir build-ascent -N > ctest-list.txt
+          python - <<'PY'
+          from pathlib import Path
+
+          listed = Path("ctest-list.txt").read_text()
+          required = [
+              "test_pic_ascent_runtime_np1",
+              "test_pic_ascent_extract_np2",
+              "test_pic_ascent_render_np1",
+              "test_pic_application_ascent_np1",
+          ]
+          missing = [name for name in required if name not in listed]
+          if missing:
+              raise SystemExit(f"Missing Ascent tests: {missing}")
+          PY
+          ctest --test-dir build-ascent --output-on-failure
+          "$ASCENT_PREFIX/python-venv/bin/python" -m pytest python/tests
+
+      - name: Upload Ascent failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ascent-test-artifacts
+          path: |
+            build-ascent/Testing/Temporary/LastTest.log
+            build-ascent/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+  adios2-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      ADIOS2_PREFIX: ${{ github.workspace }}/.cache/adios2-2.12.1
+      DEPS: ${{ github.workspace }}/.cache/picnix-deps
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            g++ \
+            openmpi-bin \
+            libopenmpi-dev \
+            python3-dev
+
+      - name: Install MPI Python dependency
+        run: |
+          MPICC=mpicc python -m pip install --no-binary=mpi4py mpi4py numpy
+
+      - name: Cache ADIOS2 installation
+        id: cache-adios2
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ADIOS2_PREFIX }}
+          key: adios2-2.12.1-${{ runner.os }}-${{ runner.arch }}-python-3.12-${{ hashFiles('scripts/install_adios2.sh') }}
+
+      - name: Install ADIOS2
+        if: steps.cache-adios2.outputs.cache-hit != 'true'
+        run: |
+          scripts/install_adios2.sh "$ADIOS2_PREFIX" --python "$(command -v python)"
+
+      - name: Configure ADIOS2 runtime environment
+        run: |
+          PYTHON_VERSION="$(python -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+          ADIOS2_SITE_PACKAGES="$ADIOS2_PREFIX/lib/python${PYTHON_VERSION}/site-packages"
+          test -d "$ADIOS2_SITE_PACKAGES/adios2"
+          {
+            echo "ADIOS2_SITE_PACKAGES=$ADIOS2_SITE_PACKAGES"
+            echo "PYTHONPATH=$ADIOS2_SITE_PACKAGES:${GITHUB_WORKSPACE}/python/src"
+            echo "LD_LIBRARY_PATH=$ADIOS2_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate ADIOS2 installation
+        run: |
+          test -d "$ADIOS2_PREFIX/lib/cmake/adios2"
+          python - <<'PY'
+          import adios2
+          import mpi4py
+
+          print("adios2:", adios2.__file__)
+          print("mpi4py:", mpi4py.__file__)
+          PY
+
+      - name: Install C++ dependencies
+        run: |
+          scripts/install_dependencies.sh "$DEPS"
+
+      - name: Install Python test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "./python[test,mpi]"
+
+      - name: Build and test with ADIOS2
+        run: |
+          cmake -S . -B build-adios2 \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_CXX_COMPILER=mpicxx \
+            -DCMAKE_PREFIX_PATH="$DEPS" \
+            -DADIOS2_DIR="$ADIOS2_PREFIX/lib/cmake/adios2" \
+            -DPICNIX_ADIOS2_ROOT="$ADIOS2_PREFIX" \
+            -DPICNIX_USE_SYSTEM_LIBS=ON \
+            -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+            -DPICNIX_ENABLE_ADIOS2=ON \
+            -DPICNIX_ENABLE_PETSC=OFF \
+            -DPICNIX_CATCH2_CONFIG="$DEPS/lib/cmake/Catch2/Catch2Config.cmake"
+          python - <<'PY'
+          from pathlib import Path
+
+          cache = Path("build-adios2/CMakeCache.txt").read_text()
+          if "PICNIX_ENABLE_ADIOS2:BOOL=ON" not in cache:
+              raise SystemExit("PICNIX_ENABLE_ADIOS2 was not enabled")
+          PY
+          cmake --build build-adios2 --parallel
+          ctest --test-dir build-adios2 -N > ctest-adios2-list.txt
+          python - <<'PY'
+          from pathlib import Path
+
+          listed = Path("ctest-adios2-list.txt").read_text()
+          if "test_adios_writer" not in listed:
+              raise SystemExit("ADIOS2 writer test was not registered")
+          PY
+          ctest --test-dir build-adios2 --output-on-failure
+
+      - name: Run ADIOS2 Python tests
+        run: |
+          python -c 'import adios2; print("adios2:", adios2.__file__)'
+          python -m pytest -q \
+            python/tests/test_adios_diag_storage.py \
+            python/tests/test_adios2_run_integration.py
+          python -m pytest python/tests
+
+      - name: Upload ADIOS2 failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adios2-test-artifacts
+          path: |
+            build-adios2/Testing/Temporary/LastTest.log
+            build-adios2/**/*.bp
+            build-adios2/**/*.log
+            ctest-adios2-list.txt
+          if-no-files-found: ignore
+          retention-days: 7

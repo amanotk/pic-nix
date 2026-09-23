@@ -24,7 +24,8 @@ function(add_mpi_test name target nproc tmpdir)
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${tmpdir}
 	)
 	add_test(NAME ${name}
-		COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> ${ARGN}
+		# MPI ranks must execute Catch2 test cases in the same order.
+		COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> --order decl ${ARGN}
 	)
 	set_tests_properties(${name}
 		PROPERTIES
@@ -72,6 +73,17 @@ target_include_directories(obj_parallel PRIVATE ${INCLUDE_DIRS})
 target_link_directories(obj_parallel PRIVATE ${LIBRARY_DIRS})
 target_link_libraries(obj_parallel PRIVATE Catch2::Catch2)
 target_link_libraries(obj_parallel PRIVATE nix)
+
+if(PICNIX_ENABLE_ADIOS2)
+  add_executable(test_adios_writer test_adios_writer.cpp)
+  target_include_directories(test_adios_writer PRIVATE ${INCLUDE_DIRS})
+  target_link_directories(test_adios_writer PRIVATE ${LIBRARY_DIRS})
+  target_link_libraries(test_adios_writer PRIVATE Catch2::Catch2 obj_parallel nix)
+
+  set(NIX_ADIOS_WRITER_TMPDIR ${CMAKE_CURRENT_BINARY_DIR}/tmp_adios_writer_np1)
+  add_mpi_test(test_adios_writer test_adios_writer 1 ${NIX_ADIOS_WRITER_TMPDIR})
+  set_tests_properties(test_adios_writer_prepare test_adios_writer PROPERTIES LABELS "MPI;ADIOS2")
+endif()
 
 foreach(target IN ITEMS ${SERIAL_EXECS})
 	add_executable(${target} ${target}.cpp)

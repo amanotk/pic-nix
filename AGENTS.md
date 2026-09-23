@@ -60,13 +60,26 @@ The human user primarily manages branch switching, but these rules apply when yo
 - `feature/*` -> `develop`: Use **Squash and Merge**. Keep the resulting commit message clean and descriptive.  
 - `develop` -> `main`: Use a regular merge commit (**Create a merge commit**).  
 
+  After a release PR is merged, synchronize `main` back into `develop` with
+  a local merge commit and push it directly to `develop`.  This back-merge
+  does **not** go through a PR — it is the only routine direct push to
+  `develop` and should contain the release merge history only, not new
+  feature or fix work.  
+
 ### 4. Safety & Responsibilities
 - Check the current branch (`git branch --show-current`) before starting work.  
 - If on the wrong branch (especially `main`), stop and notify the user before making changes.  
-- Never push directly to `main` or `develop` unless explicitly instructed.  
+- Never push directly to `main` or `develop` unless explicitly instructed
+  (the back-merge from `main` into `develop` after a release is the only
+  routine exception — see Merging Policy above).  
 - Never force-push to `main` or `develop`. Avoid force-push entirely unless explicitly instructed.  
 - Do not rebase or rewrite published history unless explicitly instructed.  
-- If the local branch is behind its remote, prefer fast-forward updates (`git pull --ff-only`) unless the user asks for another strategy.  
+- If the local branch is behind its remote, prefer fast-forward updates (`git pull --ff-only`) unless the user asks for another strategy.
+
+### 5. Git Hooks
+- The repository ships git hooks in `scripts/git-hooks/`: an `install.sh` and a `pre-commit` hook. Install them in a fresh clone with `bash scripts/git-hooks/install.sh`, which copies the hook to `.git/hooks/pre-commit`.
+- The `pre-commit` hook runs `clang-format -i` on the staged C/C++ files (added/modified/copied, per `git diff --cached`) and re-stages them, so C++ formatting is enforced automatically at commit time once installed. This is a plain git hook, not the `pre-commit` framework — no extra tooling required.
+- When committing for the user, install the hook if it is missing, and rely on it to format; the manual `clang-format` run described under Coding Style is then redundant but still acceptable.
 
 ## Directory Structure
 - `nix/` : Module for dynamic load balancing  
@@ -80,10 +93,30 @@ The vendored single-header `nix/cmdline.hpp` should not be modified unless expli
 
 ## Testing
 Tests are off by default; enable them with `-DBUILD_TESTING=ON`.  
+Run tests locally unless the user explicitly requests scheduler-based testing;  
+if local testing is unavailable, report that limitation instead.  
 PETSc support is opt-in; default configuration should not search for or
 link PETSc unless explicitly requested with `-DPICNIX_ENABLE_PETSC=ON`.  
 For full build/test instructions, language server setup, and the
 PIC integration workflow, see DEVELOPMENT.md.
+
+## Documentation
+User documentation is built with MkDocs from `docs/`; the main navigation is
+defined in `mkdocs.yml`.  When changing user-visible behavior, update the
+corresponding documentation in the same change:
+
+| Change | Documentation |
+|---|---|
+| Basic build or run workflow | `docs/index.md` |
+| CMake options, dependencies, or host cache files | `docs/build.md` |
+| Configuration keys and defaults | `docs/configuration.md` |
+| Diagnostics, I/O, or output files | `docs/diagnostics.md` |
+| Equations, units, or normalization | `docs/units.md` |
+| Simulation CLI or Python command entry points | `docs/cli.md` |
+
+Run `mkdocs build --strict` after documentation changes.  If a user-visible
+code change does not require a documentation update, explicitly state why in
+the final response.
 
 ## graphify
 

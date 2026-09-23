@@ -1,0 +1,35 @@
+- action: "add_pipelines"
+  pipelines:
+    magnetic_magnitude:
+      magnitude:
+        type: "vector_magnitude"
+        params:
+          field: "B"
+          output_name: "B_magnitude"
+
+- action: "add_scenes"
+  scenes:
+    magnetic_magnitude:
+      plots:
+        field:
+          type: "pseudocolor"
+          field: "B_magnitude"
+          pipeline: "magnetic_magnitude"
+      renders:
+        main:
+          image_width: 900
+          image_height: 700
+          color_bar_position: [0.82, 0.94, -0.75, 0.75]
+          image_prefix: "ascent_B_magnitude_%06d"
+
+    species_00_mass_density:
+      plots:
+        field:
+          type: "pseudocolor"
+          field: "um00_M0"
+      renders:
+        main:
+          image_width: 900
+          image_height: 700
+          color_bar_position: [0.82, 0.94, -0.75, 0.75]
+          image_prefix: "ascent_um00_M0_%06d"

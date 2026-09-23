@@ -53,6 +53,12 @@ public:
     return app_pointer->get_internal_data();
   }
 
+  // return parsed configuration
+  virtual json get_configuration() const
+  {
+    return app_pointer->get_configuration();
+  }
+
   // convert to json
   virtual json to_json()
   {
@@ -114,18 +120,40 @@ protected:
   ChunkVec        chunkvec;     ///< local chunks
   DiagVec         diagvec;      ///< diagnostic objects
 
-  int     thisrank; ///< my rank
-  int     nprocess; ///< number of mpi processes
-  int     nthread;  ///< number of threads
-  int     cl_argc;  ///< command-line argc
-  char**  cl_argv;  ///< command-line argv
-  float64 wclock;   ///< wall clock time at initialization
-  int     ndims[4]; ///< global grid dimensions
-  int     cdims[4]; ///< chunk dimensions
-  int     curstep;  ///< current iteration step
-  float64 curtime;  ///< current time
+  int           thisrank;            ///< my rank
+  int           nprocess;            ///< number of mpi processes
+  int           nthread;             ///< number of threads
+  int           mpi_thread_provided; ///< MPI thread support level provided at runtime
+  MpiThreadMode mpi_thread_mode;     ///< effective MPI/OpenMP execution mode
+  int           cl_argc;             ///< command-line argc
+  char**        cl_argv;             ///< command-line argv
+  float64       wclock;              ///< wall clock time at initialization
+  int           ndims[4];            ///< global grid dimensions
+  int           cdims[4];            ///< chunk dimensions
+  int           curstep;             ///< current iteration step
+  float64       curtime;             ///< current time
 
-  bool is_mpi_init_called_by_me;   ///< true if Application initialized MPI
+  bool is_mpi_init_called_by_me; ///< true if Application initialized MPI
+
+  /// per-rank live RSS threshold in GB (0 = disabled)
+  float64 rank_memory_limit_gb = 0.0;
+  /// per-node live RSS threshold in GB (0 = disabled)
+  float64 node_memory_limit_gb = 0.0;
+  /// steps between collective memory-limit checks (0 = disabled)
+  int memory_check_interval = 100;
+  /// true once a memory-limit exit has been triggered
+  bool memory_limit_hit = false;
+
+  /// number of rotating periodic checkpoint slots
+  static constexpr int checkpoint_slot_count = 2;
+  /// periodic checkpoint interval in seconds (0 = disabled)
+  float64 checkpoint_interval = 0.0;
+  /// wall clock time at which periodic checkpoint timing began/reset
+  float64 checkpoint_wclock = 0.0;
+  /// logical prefix for periodic checkpoints
+  std::string checkpoint_prefix = "checkpoint";
+  /// slot to use for the next periodic checkpoint
+  int checkpoint_slot = 0;
 
 public:
   /// @brief default constructor
@@ -139,8 +167,7 @@ public:
   /// @param argv array of arguments
   ///
   Application(int argc, char** argv, PtrInterface interface)
-      : is_mpi_init_called_by_me(false), interface(interface),
-        chunkvec()
+      : is_mpi_init_called_by_me(false), interface(interface), chunkvec()
   {
     cl_argc = argc;
     cl_argv = argv;
@@ -164,6 +191,22 @@ public:
   DataContainer get_internal_data()
   {
     return {ndims, cdims, thisrank, nprocess, nthread, curstep, curtime, chunkmap, chunkvec};
+  }
+
+  /// @brief return parsed configuration
+  virtual json get_configuration() const
+  {
+    return cfgparser->get_root();
+  }
+
+  MpiThreadMode get_mpi_thread_mode() const
+  {
+    return mpi_thread_mode;
+  }
+
+  int get_mpi_thread_provided() const
+  {
+    return mpi_thread_provided;
   }
 
   ///
@@ -225,10 +268,17 @@ public:
   virtual std::unique_ptr<ChunkMap> create_chunkmap()
   {
     auto parameter = cfgparser->get_parameter();
+    auto option    = cfgparser->get_application()["option"];
 
     int Cx = parameter.value("Cx", 1);
     int Cy = parameter.value("Cy", 1);
     int Cz = parameter.value("Cz", 1);
+
+    if (option.contains("sfc_first_axis")) {
+      auto axis = sfc::parse_axis(option["sfc_first_axis"].get<std::string>());
+      return std::make_unique<ChunkMap>(Cz, Cy, Cx, axis);
+    }
+
     return std::make_unique<ChunkMap>(Cz, Cy, Cx);
   }
 
@@ -259,6 +309,16 @@ protected:
   virtual void initialize(int argc, char** argv);
 
   ///
+  /// @brief read periodic checkpoint configuration
+  ///
+  void initialize_checkpoint_configuration();
+
+  ///
+  /// @brief initialize periodic checkpoint timing and slot selection
+  ///
+  void initialize_checkpointing();
+
+  ///
   /// @brief finalize application
   ///
   virtual void finalize();
@@ -270,10 +330,19 @@ protected:
   ///
   void initialize_mpi(int* argc, char*** argv);
 
+  int get_mpi_thread_requested() const;
+
+  void initialize_mpi_thread_mode();
+
   ///
   /// @brief finalize MPI
   ///
   void finalize_mpi();
+
+  ///
+  /// @brief shut down and destroy diagnostics before MPI cleanup
+  ///
+  void finalize_diagnostic();
 
   ///
   /// @brief assert
@@ -361,6 +430,56 @@ protected:
   /// @return true if the maximum physical time is not yet reached and false otherwise
   ///
   virtual bool is_push_needed();
+
+  ///
+  /// @brief check the live RSS against the configured memory limits
+  /// @return true if a rank or node limit is exceeded (the main loop should
+  /// stop and finalize so the checkpoint is saved)
+  /// @note collective (MPI allreduce/reduce over the ranks and nodes);
+  /// called every memory_check_interval steps by main()
+  ///
+  bool check_memory_limit();
+
+  ///
+  /// @brief save a periodic checkpoint when its elapsed-time interval is due
+  /// @return true if a checkpoint was attempted and completed
+  ///
+  bool checkpoint_if_due();
+
+  ///
+  /// @brief save a checkpoint and write checkpoint timing logs
+  /// @param prefix checkpoint prefix
+  /// @param reason checkpoint reason, such as periodic or final
+  /// @return true if the state handler reports success
+  ///
+  virtual bool save_checkpoint(const std::string& prefix, const std::string& reason);
+
+  ///
+  /// @brief find the latest complete periodic checkpoint slot
+  /// @return slot index, or -1 when no compatible slot exists
+  ///
+  int find_latest_checkpoint_slot();
+
+  ///
+  /// @brief get the concrete prefix for a periodic checkpoint slot
+  /// @param slot slot index
+  /// @return concrete checkpoint prefix
+  ///
+  std::string get_checkpoint_prefix(int slot) const;
+
+  ///
+  /// @brief resolve the logical periodic checkpoint prefix for loading
+  /// @param prefix requested checkpoint prefix
+  /// @return concrete prefix, or the requested prefix when no periodic slot exists
+  ///
+  std::string resolve_checkpoint_load_prefix(const std::string& prefix);
+
+  ///
+  /// @brief normalize a checkpoint prefix using the application base directory
+  /// @param prefix checkpoint prefix
+  /// @return normalized checkpoint prefix
+  ///
+  std::string normalize_checkpoint_prefix(const std::string& prefix);
 
   ///
   /// @brief get basedir from configuration file

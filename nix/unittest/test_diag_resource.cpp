@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <type_traits>
+#include <utility>
 
 using namespace nix;
 
@@ -84,6 +85,39 @@ public:
     return address;
   }
 };
+
+template <typename T, typename = void>
+struct has_is_completed : std::false_type {
+};
+
+template <typename T>
+struct has_is_completed<T, std::void_t<decltype(std::declval<T&>().is_completed())>>
+    : std::true_type {
+};
+
+template <typename T, typename = void>
+struct has_wait : std::false_type {
+};
+
+template <typename T>
+struct has_wait<T, std::void_t<decltype(std::declval<T&>().wait(0))>> : std::true_type {
+};
+
+template <typename T, typename = void>
+struct has_wait_all : std::false_type {
+};
+
+template <typename T>
+struct has_wait_all<T, std::void_t<decltype(std::declval<T&>().wait_all())>> : std::true_type {
+};
+
+template <typename T, typename = void>
+struct has_test_all : std::false_type {
+};
+
+template <typename T>
+struct has_test_all<T, std::void_t<decltype(std::declval<T&>().test_all())>> : std::true_type {
+};
 } // namespace
 
 TEST_CASE("diagnostic trigger helpers are available from nix::Diag")
@@ -122,7 +156,14 @@ TEST_CASE("moved diagnostics have module-facing template shapes")
 
 TEST_CASE("diagnostic handlers expose concrete backends")
 {
+  using WriteSignature = size_t (DiagIoHandler::*)(Buffer&, size_t&);
+
   REQUIRE(std::is_abstract_v<DiagIoHandler>);
   REQUIRE(std::is_base_of_v<DiagIoHandler, MpiioDiagIoHandler>);
   REQUIRE(std::is_base_of_v<DiagIoHandler, PosixDiagIoHandler>);
+  REQUIRE(std::is_same_v<decltype(&DiagIoHandler::write), WriteSignature>);
+  REQUIRE_FALSE(has_is_completed<DiagIoHandler>::value);
+  REQUIRE_FALSE(has_wait<DiagIoHandler>::value);
+  REQUIRE_FALSE(has_wait_all<DiagIoHandler>::value);
+  REQUIRE_FALSE(has_test_all<DiagIoHandler>::value);
 }

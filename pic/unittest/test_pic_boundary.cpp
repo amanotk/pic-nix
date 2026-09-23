@@ -47,7 +47,6 @@ json make_boundary_config(int order)
   config["option"]["seed_type"]     = "fixed";
   config["option"]["friedman"]      = 0.0;
   config["option"]["cell_load"]     = 1.0;
-  config["option"]["buffer_ratio"]  = 0.2;
   return config;
 }
 
@@ -296,6 +295,8 @@ void exchange_boundary(PicChunk& chunk, int mode)
   chunk.set_boundary_begin(mode);
   if (mode == BoundaryParticle) {
     chunk.set_boundary_probe(mode, true);
+  }
+  while (chunk.set_boundary_query(mode) == 0) {
   }
   chunk.set_boundary_end(mode);
   chunk.set_boundary_unpack(mode);

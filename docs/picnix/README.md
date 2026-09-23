@@ -14,6 +14,8 @@ line tools are available from the environment's `bin/` directory.
 - [HDF5 Converter](hdf5-converter.md): converting `.json`/`.data` diagnostics to HDF5.
 - [syncdir](syncdir.md): experimental directory synchronizer for node-local output.
 - [Ohm's Law Solver](ohms-law.md): technical note for the generalized Ohm's law solver.
+- [Ascent In-Situ Diagnostics](ascent.md): optional MPI-enabled publication,
+  Python extracts, and visualization.
 
 ## Documentation Scope
 

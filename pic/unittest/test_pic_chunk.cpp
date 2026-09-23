@@ -106,7 +106,6 @@ json make_config(const SmokeOptions& options, float64 friedman)
   config["option"]["seed_type"]     = "fixed";
   config["option"]["friedman"]      = friedman;
   config["option"]["cell_load"]     = 1.0;
-  config["option"]["buffer_ratio"]  = 0.2;
   return config;
 }
 

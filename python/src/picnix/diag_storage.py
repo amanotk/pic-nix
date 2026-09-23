@@ -342,13 +342,327 @@ class Hdf5VdsDiagStorage(DiagStorage):
         return data
 
 
+class AdiosDiagStorage(DiagStorage):
+    kind = "adios"
+
+    def __init__(self, name, prefix, basedir, iomode):
+        self.name = name
+        self.prefix = prefix
+        self.basedir = Path(basedir)
+        self.iomode = iomode
+        self.path = self.basedir / f"{prefix}.0000.bp"
+        self.paths = []
+        self.reader = None
+        self.readers = []
+        self.variables = {}
+        self.block_info = {}
+        self.step_locations = []
+
+    def setup(self):
+        try:
+            import adios2
+        except ImportError as exc:
+            raise ImportError(
+                "ADIOS2 Python support is required to read an iomode='adios' dataset"
+            ) from exc
+
+        segments = self._segment_paths()
+        if not segments:
+            raise FileNotFoundError(f"ADIOS2 dataset not found: {self.path}")
+        self.paths = [path for _, path in segments]
+
+        steps = []
+        times = []
+        for segment_index, path in segments:
+            reader = adios2.FileReader(str(path))
+            variables = reader.available_variables()
+            self._validate_schema(reader)
+            self._validate_segment(reader, segment_index, path)
+            if not self.variables:
+                self.variables = variables
+            elif variables.keys() != self.variables.keys():
+                raise ValueError(f"ADIOS2 variable mismatch in segment: {path}")
+
+            nsteps = self._variable_steps(variables, "step")
+            if nsteps <= 0:
+                raise ValueError(f"ADIOS2 dataset has no steps: {path}")
+
+            segment_steps = np.asarray(
+                reader.read("step", step_selection=[0, nsteps])
+            ).reshape(-1)
+            segment_times = np.asarray(
+                reader.read("time", step_selection=[0, nsteps])
+            ).reshape(-1)
+            if segment_steps.size != segment_times.size:
+                raise ValueError(
+                    f"ADIOS2 step/time metadata lengths do not match: {path}"
+                )
+            if np.any(np.diff(segment_steps) <= 0):
+                raise ValueError(f"ADIOS2 steps are not strictly increasing: {path}")
+
+            restart_step = self._read_integer_attribute(
+                reader, "restart_step", default=-1 if segment_index == 0 else None
+            )
+            if segment_index > 0:
+                if restart_step < 0:
+                    raise ValueError(f"invalid ADIOS2 restart step in segment: {path}")
+                if segment_steps[0] < restart_step:
+                    raise ValueError(
+                        f"ADIOS2 segment starts before its restart step: {path}"
+                    )
+
+            reader_index = len(self.readers)
+            self.readers.append(reader)
+            while segment_index > 0 and steps and steps[-1] >= restart_step:
+                steps.pop()
+                times.pop()
+                self.step_locations.pop()
+            if steps and steps[-1] >= segment_steps[0]:
+                raise ValueError(f"ADIOS2 segment steps overlap unexpectedly: {path}")
+            steps.extend(segment_steps)
+            times.extend(segment_times)
+            self.step_locations.extend(
+                (reader_index, local_index) for local_index in range(nsteps)
+            )
+
+        self.reader = self.readers[0]
+        self.step = np.asarray(steps, dtype=np.int64)
+        self.time = np.asarray(times, dtype=np.float64)
+
+    def _segment_paths(self):
+        paths = []
+        if self.path.exists():
+            paths.append((0, self.path))
+        if not self.path.parent.exists():
+            return []
+
+        pattern = re.compile(
+            rf"{re.escape(self.prefix)}\.(\d{{4,}}){re.escape(self.path.suffix)}"
+        )
+        broad_pattern = re.compile(
+            rf"{re.escape(self.prefix)}\.(\d+){re.escape(self.path.suffix)}"
+        )
+        for candidate in self.path.parent.iterdir():
+            if candidate == self.path:
+                continue
+            match = pattern.fullmatch(candidate.name)
+            if match:
+                index = int(match.group(1))
+                expected = f"{self.prefix}.{index:04d}{self.path.suffix}"
+                if index == 0 or candidate.name != expected:
+                    raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
+                paths.append((index, candidate))
+            elif broad_pattern.fullmatch(candidate.name):
+                raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
+
+        paths.sort()
+        for expected, (index, path) in enumerate(paths):
+            if index != expected:
+                raise ValueError(f"missing ADIOS2 segment before: {path}")
+        return paths
+
+    def _validate_segment(self, reader, expected_index, path):
+        actual_index = self._read_integer_attribute(
+            reader, "segment_index", default=0 if expected_index == 0 else None
+        )
+        if actual_index != expected_index:
+            raise ValueError(
+                f"ADIOS2 segment index mismatch in {path}: "
+                f"{actual_index} != {expected_index}"
+            )
+
+    @staticmethod
+    def _read_integer_attribute(reader, name, default=None):
+        try:
+            values = np.asarray(reader.read_attribute(name)).reshape(-1)
+        except KeyError as exc:
+            if default is not None:
+                return default
+            raise ValueError(f"missing ADIOS2 attribute: {name!r}") from exc
+        if values.size != 1:
+            raise ValueError(f"ADIOS2 attribute {name!r} must be scalar")
+        try:
+            return int(values[0])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"ADIOS2 attribute {name!r} must be an integer") from exc
+
+    def _validate_schema(self, reader):
+        schema = reader.read_attribute_string("picnix_schema")
+        diagnostic = reader.read_attribute_string("diagnostic")
+        prefix = reader.read_attribute_string("prefix")
+        if schema != "diagnostic-bp-v1":
+            raise ValueError(f"unsupported PIC-NIX ADIOS2 schema: {schema!r}")
+        valid_diagnostics = {self.name}
+        if self.name == "tracker":
+            valid_diagnostics.add("tracer")
+        if diagnostic not in valid_diagnostics:
+            raise ValueError(
+                f"ADIOS2 diagnostic mismatch: {diagnostic!r} != {self.name!r}"
+            )
+        if prefix != self.prefix:
+            raise ValueError(f"ADIOS2 prefix mismatch: {prefix!r} != {self.prefix!r}")
+
+    @staticmethod
+    def _variable_steps(variables, name):
+        try:
+            return int(variables[name]["AvailableStepsCount"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"missing ADIOS2 step metadata for {name!r}") from exc
+
+    def _step_index(self, step):
+        index = self.find_index_at_step(step)
+        if index is None:
+            return None
+        return int(index)
+
+    def _read_step(self, name, index):
+        reader, local_index, _ = self._reader_step(index)
+        return np.asarray(reader.read(name, step_selection=[local_index, 1]))
+
+    def _reader_step(self, index):
+        if self.readers:
+            reader_index, local_index = self.step_locations[index]
+            return self.readers[reader_index], local_index, reader_index
+        return self.reader, index, 0
+
+    def _matching_variables(self, pattern, include_ids=False):
+        names = []
+        for name in self.variables:
+            if name in {"step", "time"}:
+                continue
+            if not include_ids and name.endswith("_id"):
+                continue
+            if re.match(pattern, name):
+                names.append(name)
+        return names
+
+    def read_at(self, step, pattern):
+        index = self._step_index(step)
+        if index is None:
+            return {}
+        data = {}
+        for name in self._matching_variables(pattern):
+            if self.name in {"particle", "tracker"}:
+                values = self._read_joined_range(name, index, None, None)
+            else:
+                values = self._read_step(name, index)
+            if self.name == "tracker" and f"{name}_id" in self.variables:
+                ids = np.ascontiguousarray(
+                    self._read_joined_id_range(f"{name}_id", index, None, None)
+                )
+                ids = ids.view(np.float64)
+                values = np.concatenate((values, ids[:, None]), axis=1)
+            data[name] = values
+        return data
+
+    @staticmethod
+    def _normalize_range(start, stop, size):
+        return slice(start, stop).indices(size)[:2]
+
+    def _joined_shape(self, name, index):
+        blocks = self._blocks_at_step(name, index)
+        counts = [self._block_count(block) for block in blocks]
+        if not counts or any(len(count) != 2 for count in counts):
+            raise ValueError(f"ADIOS2 particle variable {name!r} must be 2-D")
+        width = counts[0][1]
+        if any(count[1] != width for count in counts):
+            raise ValueError(
+                f"ADIOS2 particle variable {name!r} has inconsistent widths"
+            )
+        return sum(count[0] for count in counts), width
+
+    def _joined_size(self, name, index):
+        counts = [
+            self._block_count(block) for block in self._blocks_at_step(name, index)
+        ]
+        if not counts or any(len(count) != 1 for count in counts):
+            raise ValueError(f"ADIOS2 particle ID variable {name!r} must be 1-D")
+        return sum(count[0] for count in counts)
+
+    def _blocks_at_step(self, name, index):
+        reader, local_index, reader_index = self._reader_step(index)
+        key = (reader_index, name)
+        if key not in self.block_info:
+            self.block_info[key] = reader.all_blocks_info(name)
+        try:
+            return self.block_info[key][local_index]
+        except IndexError as exc:
+            raise ValueError(
+                f"missing ADIOS2 blocks for {name!r} at step {index}"
+            ) from exc
+
+    @staticmethod
+    def _block_count(block):
+        return tuple(int(value) for value in block["Count"].split(",") if value)
+
+    def _read_joined_range(self, name, index, start, stop):
+        total, width = self._joined_shape(name, index)
+        range_start, range_stop = self._normalize_range(start, stop, total)
+        if range_start >= range_stop:
+            return np.empty((0, width), dtype=np.float64)
+        reader, local_index, _ = self._reader_step(index)
+        return np.asarray(
+            reader.read(
+                name,
+                start=[range_start, 0],
+                count=[range_stop - range_start, width],
+                step_selection=[local_index, 1],
+            )
+        ).reshape((-1, width))
+
+    def _read_joined_id_range(self, name, index, start, stop):
+        total = self._joined_size(name, index)
+        range_start, range_stop = self._normalize_range(start, stop, total)
+        if range_start >= range_stop:
+            return np.empty((0,), dtype=np.uint64)
+        reader, local_index, _ = self._reader_step(index)
+        return np.asarray(
+            reader.read(
+                name,
+                start=[range_start],
+                count=[range_stop - range_start],
+                step_selection=[local_index, 1],
+            )
+        ).reshape(-1)
+
+    def read_particle_at(self, step, pattern, start=None, stop=None):
+        if self.name != "particle":
+            return {}
+        index = self._step_index(step)
+        if index is None:
+            return {}
+        return {
+            name: self._read_joined_range(name, index, start, stop)
+            for name in self._matching_variables(pattern)
+        }
+
+    def read_particle_id_at(self, step, pattern, start=None, stop=None):
+        if self.name != "particle":
+            return {}
+        index = self._step_index(step)
+        if index is None:
+            return {}
+
+        data = {}
+        for name in self.variables:
+            if not name.endswith("_id"):
+                continue
+            base = name[: -len("_id")]
+            if not re.match(pattern, base):
+                continue
+            data[base] = self._read_joined_id_range(name, index, start, stop)
+        return data
+
+
 def reinterpret_particle_id(raw_id):
     return np.ascontiguousarray(raw_id).view(np.uint64)
 
 
 def create_diag_storage(name, prefix, basedir, iomode):
     vds_path = Path(basedir) / "hdf5" / f"{prefix}.vds.h5"
-    if vds_path.exists():
+    if iomode == "adios":
+        storage = AdiosDiagStorage(name, prefix, basedir, iomode)
+    elif vds_path.exists():
         storage = Hdf5VdsDiagStorage(name, prefix, vds_path)
     else:
         storage = JsonDiagStorage(name, prefix, basedir, iomode)

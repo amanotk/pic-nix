@@ -138,7 +138,6 @@ public:
     // initialize particles
     //
     {
-      float64 target = 1 + this->get_buffer_ratio();
 
       // setup random number generator
       mt.seed(option["random_seed"].get<int>());
@@ -162,13 +161,13 @@ public:
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp * target, *this);
+        up[0]     = std::make_shared<ParticleType>(mp, *this);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp * target, *this);
+        up[1]     = std::make_shared<ParticleType>(mp, *this);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;
@@ -453,7 +452,6 @@ public:
     // upper boundary in x
     //
     if (get_nb_rank(0, 0, +1) == MPI_PROC_NULL) {
-      const float64 target = 1 + this->get_buffer_ratio();
 
       float64 rc     = 1.0 / cc;
       int64   lastid = option["boundary"]["lastid"].get<int64>();
@@ -490,7 +488,7 @@ public:
       for (int is = 0; is < Ns; is++) {
         int np_next = particle[is]->Np + np_inj_total;
         if (np_next > particle[is]->Np_total) {
-          particle[is]->resize(target * np_next);
+          particle[is]->resize(np_next);
         }
       }
 

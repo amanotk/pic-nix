@@ -25,7 +25,8 @@ if(PICNIX_ENABLE_PETSC)
     set(workdir ${CMAKE_CURRENT_BINARY_DIR}/tmp_${name})
     file(MAKE_DIRECTORY ${workdir})
     add_test(NAME ${name}
-      COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> ${ARGN}
+      # MPI ranks must execute Catch2 test cases in the same order.
+      COMMAND ${MPIEXEC} -n ${nproc} $<TARGET_FILE:${target}> --order decl ${ARGN}
     )
     set_tests_properties(${name}
       PROPERTIES

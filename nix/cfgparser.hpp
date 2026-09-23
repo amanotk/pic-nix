@@ -4,13 +4,15 @@
 
 #include "debug.hpp"
 #include "nix.hpp"
+#include "sfc.hpp"
 
 NIX_NAMESPACE_BEGIN
 
 class CfgParser
 {
 protected:
-  json root;
+  json        root;
+  std::string config_dir;
 
   json toml_to_json(const toml::value& toml_data)
   {
@@ -38,7 +40,7 @@ protected:
   }
 
 public:
-  json get_root()
+  json get_root() const
   {
     return root;
   }
@@ -56,6 +58,11 @@ public:
   json get_diagnostic()
   {
     return root["diagnostic"];
+  }
+
+  std::string get_config_dir() const
+  {
+    return config_dir;
   }
 
   virtual int get_Nx()
@@ -114,6 +121,7 @@ public:
 
     fs::path    path(filename);
     std::string ext = path.extension().string();
+    config_dir      = fs::absolute(path).parent_path().string();
 
     if (ext == ".json") {
       std::ifstream ifs(filename.c_str());
@@ -148,9 +156,25 @@ public:
 
     status = status & check_mandatory_sections(object);
 
-    // make sure that the option section exists in the application section
-    if (root["application"]["option"].is_null() == true) {
-      root["application"]["option"] = {};
+    // check the optional application options without changing the configuration
+    if (object["application"].contains("option") &&
+        object["application"]["option"].is_null() == false) {
+      status = status & check_application_options(object["application"]["option"]);
+    }
+
+    if (object["application"].contains("checkpoint") &&
+        object["application"]["checkpoint"].is_null() == false) {
+      status = status & check_checkpoint_configuration(object["application"]["checkpoint"]);
+    }
+
+    if (object["application"].contains("iomode") &&
+        object["application"]["iomode"].is_null() == false) {
+      status = status & check_io_mode(object["application"]["iomode"]);
+    }
+
+    if (object["application"].contains("adios") &&
+        object["application"]["adios"].is_null() == false) {
+      status = status & check_adios_configuration(object["application"]["adios"]);
     }
 
     // check the parameter section
@@ -178,6 +202,111 @@ public:
     }
 
     return status;
+  }
+
+  virtual bool check_application_options(json& option)
+  {
+    if (option.is_object() == false) {
+      std::cerr << "`application.option` must be a table\n";
+      return false;
+    }
+
+    if (option.contains("sfc_first_axis")) {
+      if (option["sfc_first_axis"].is_string() == false) {
+        std::cerr << "`sfc_first_axis` must be one of: x, y, z\n";
+        return false;
+      }
+
+      std::string axis = option["sfc_first_axis"].get<std::string>();
+      if (sfc::parse_axis(axis) == sfc::SfcAxis::None) {
+        std::cerr << fmt::format("Unknown `sfc_first_axis`: {}\n", axis);
+        return false;
+      }
+    }
+
+    if (option.contains("mpi_thread_mode")) {
+      if (option["mpi_thread_mode"].is_string() == false) {
+        std::cerr << "`mpi_thread_mode` must be one of: auto, multiple, funneled\n";
+        return false;
+      }
+
+      std::string mode = option["mpi_thread_mode"].get<std::string>();
+      if (mode != "auto" && mode != "multiple" && mode != "funneled") {
+        std::cerr << fmt::format("Unknown `mpi_thread_mode`: {}\n", mode);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  virtual bool check_checkpoint_configuration(json& checkpoint)
+  {
+    if (checkpoint.is_object() == false) {
+      std::cerr << "`application.checkpoint` must be a table\n";
+      return false;
+    }
+
+    if (checkpoint.contains("interval")) {
+      if (checkpoint["interval"].is_number() == false) {
+        std::cerr << "`application.checkpoint.interval` must be a number\n";
+        return false;
+      }
+
+      const float64 interval = checkpoint["interval"].get<float64>();
+      if (std::isfinite(interval) == false || interval < 0.0) {
+        std::cerr << "`application.checkpoint.interval` must be finite and non-negative\n";
+        return false;
+      }
+    }
+
+    if (checkpoint.contains("prefix")) {
+      if (checkpoint["prefix"].is_string() == false ||
+          checkpoint["prefix"].get<std::string>().empty()) {
+        std::cerr << "`application.checkpoint.prefix` must be a non-empty string\n";
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  virtual bool check_io_mode(json& iomode)
+  {
+    if (iomode.is_string() == false) {
+      std::cerr << "`application.iomode` must be one of: mpiio, posix, adios\n";
+      return false;
+    }
+
+    const std::string mode = iomode.get<std::string>();
+    if (mode != "mpiio" && mode != "posix" && mode != "adios") {
+      std::cerr << fmt::format("Unknown `application.iomode`: {}\n", mode);
+      return false;
+    }
+    return true;
+  }
+
+  virtual bool check_adios_configuration(json& adios)
+  {
+    if (adios.is_object() == false) {
+      std::cerr << "`application.adios` must be a table\n";
+      return false;
+    }
+
+    if (adios.contains("engine")) {
+      std::cerr << "`application.adios.engine` is not configurable; ADIOS2 always uses BP5\n";
+      return false;
+    }
+
+    for (auto it = adios.begin(); it != adios.end(); ++it) {
+      if (it.value().is_string() == false && it.value().is_boolean() == false &&
+          it.value().is_number() == false) {
+        std::cerr << fmt::format("`application.adios.{}` must be a scalar value\n", it.key());
+        return false;
+      }
+    }
+
+    return true;
   }
 
   virtual bool check_mandatory_parameters(json& parameter)

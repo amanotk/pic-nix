@@ -116,7 +116,6 @@ public:
     // initialize particles
     //
     {
-      float64           target      = 1 + this->get_buffer_ratio();
       int               random_seed = option["random_seed"].get<int>();
       std::mt19937_64   mtp(random_seed);
       std::mt19937_64   mtv(random_seed);
@@ -138,13 +137,13 @@ public:
         up.resize(Ns);
 
         // electron
-        up[0]     = std::make_shared<ParticleType>(mp * target, *this);
+        up[0]     = std::make_shared<ParticleType>(mp, *this);
         up[0]->m  = me;
         up[0]->q  = qe;
         up[0]->Np = mp;
 
         // ion
-        up[1]     = std::make_shared<ParticleType>(mp * target, *this);
+        up[1]     = std::make_shared<ParticleType>(mp, *this);
         up[1]->m  = mi;
         up[1]->q  = qi;
         up[1]->Np = mp;

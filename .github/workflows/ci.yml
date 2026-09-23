@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ubuntu: ["22.04", "24.04"]
+        ubuntu: ["24.04"]
         petsc: ["OFF", "ON"]
     env:
       OMPI_MCA_rmaps_base_oversubscribe: "1"
@@ -62,6 +62,11 @@ jobs:
       - name: Install C++ dependencies
         run: |
           scripts/install_dependencies.sh "$HOME/usr"
+
+      - name: Report tool versions
+        run: |
+          cmake --version
+          mpicxx --version
 
       - name: Build and test
         run: |

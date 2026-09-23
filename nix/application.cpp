@@ -4,6 +4,8 @@
 
 #include "chunk.hpp"
 #include "diag.hpp"
+#include "diag/adios.hpp"
+#include "memory.hpp"
 #include "mpistream.hpp"
 
 NIX_NAMESPACE_BEGIN
@@ -36,6 +38,10 @@ bool Application::from_json(json& state)
   consistency &= current_state["nprocess"] == state["nprocess"];
   consistency &= current_state["configuration"]["parameter"] == state["configuration"]["parameter"];
 
+  json current_sfc = current_state["chunkmap"].value("sfc_first_axis", json(nullptr));
+  json saved_sfc   = state["chunkmap"].value("sfc_first_axis", json(nullptr));
+  consistency &= current_sfc == saved_sfc;
+
   if (consistency == false) {
     ERROR << fmt::format("Trying to load inconsistent state");
   } else {
@@ -57,6 +63,7 @@ int Application::main()
   DEBUG1 << fmt::format("setup_chunks");
 
   save_profile();
+  initialize_checkpointing();
 
   while (is_push_needed()) {
 
@@ -74,6 +81,13 @@ int Application::main()
 
     increment_time();
 
+    checkpoint_if_due();
+
+    if (check_memory_limit()) {
+      DEBUG1 << fmt::format("step[{}] memory limit exceeded", format_step(curstep));
+      break;
+    }
+
     if (get_available_etime() < 0) {
       DEBUG1 << fmt::format("step[{}] run out of time", format_step(curstep));
       break;
@@ -83,7 +97,7 @@ int Application::main()
   DEBUG1 << fmt::format("finalize");
   finalize();
 
-  return 0;
+  return memory_limit_hit ? 2 : 0;
 }
 
 void Application::initialize(int argc, char** argv)
@@ -91,13 +105,28 @@ void Application::initialize(int argc, char** argv)
   curstep = 0;
   curtime = 0.0;
 
+  // process-wide malloc arena policy; must run before any large allocation
+  nix::configure_allocator();
+
   argparser = create_argparser();
   argparser->parse_check(argc, argv);
 
   cfgparser = create_cfgparser();
   cfgparser->parse_file(argparser->get_config());
+  initialize_checkpoint_configuration();
+
+  // memory limit monitoring options
+  {
+    auto option = cfgparser->get_application()["option"];
+    if (option.is_object()) {
+      rank_memory_limit_gb  = option.value("rank_memory_limit_gb", 0.0);
+      node_memory_limit_gb  = option.value("node_memory_limit_gb", 0.0);
+      memory_check_interval = option.value("memory_check_interval", 100);
+    }
+  }
 
   initialize_mpi(&argc, &argv);
+  initialize_mpi_thread_mode();
 
   statehandler = create_statehandler();
   balancer     = create_balancer();
@@ -119,30 +148,27 @@ void Application::finalize()
   logger->flush();
 
   if (argparser->get_save() != "") {
-    std::string prefix                = argparser->get_save();
-    float64     checkpoint_save_begin = nix::wall_clock();
-    log = {{"prefix", prefix}, {"unixtime", checkpoint_save_begin}, {"curtime", curtime}};
-    logger->append(curstep, "checkpoint_save_begin", log);
-    logger->flush();
-
-    statehandler->save(get_interface(), argparser->get_save());
-
-    float64 checkpoint_save_end = nix::wall_clock();
-    log                         = {{"prefix", prefix},
-                                   {"elapsed", checkpoint_save_end - checkpoint_save_begin},
-                                   {"unixtime", checkpoint_save_end},
-                                   {"curtime", curtime}};
-    logger->append(curstep, "checkpoint_save_end", log);
-    logger->flush();
+    std::string prefix = argparser->get_save();
+    save_checkpoint(prefix, "final");
   }
 
   float64 shutdown_end = nix::wall_clock();
   log                  = {
-                       {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
+      {"elapsed", shutdown_end - shutdown_begin}, {"unixtime", shutdown_end}, {"curtime", curtime}};
   logger->append(curstep, "shutdown_end", log);
   logger->flush();
 
+  finalize_diagnostic();
   finalize_mpi();
+}
+
+void Application::finalize_diagnostic()
+{
+  for (auto& diagnostic : diagvec) {
+    diagnostic->shutdown();
+  }
+
+  diagvec.clear();
 }
 
 void Application::initialize_mpi(int* argc, char*** argv)
@@ -150,25 +176,17 @@ void Application::initialize_mpi(int* argc, char*** argv)
   nthread = nix::get_max_threads();
 
   {
-    int thread_required = NIX_MPI_THREAD_LEVEL;
-    int thread_provided = -1;
-    int mpi_initialized = 0;
+    int thread_requested = get_mpi_thread_requested();
+    mpi_thread_provided  = -1;
+    int mpi_initialized  = 0;
 
     MPI_Initialized(&mpi_initialized);
 
     if (mpi_initialized == 0) {
-      MPI_Init_thread(argc, argv, thread_required, &thread_provided);
+      MPI_Init_thread(argc, argv, thread_requested, &mpi_thread_provided);
       is_mpi_init_called_by_me = true;
     } else {
-      MPI_Query_thread(&thread_provided);
-    }
-
-    if (thread_provided < thread_required) {
-      ERROR << fmt::format("Your MPI does not support required thread level!");
-      if (is_mpi_init_called_by_me) {
-        MPI_Finalize();
-      }
-      exit(-1);
+      MPI_Query_thread(&mpi_thread_provided);
     }
   }
 
@@ -202,6 +220,43 @@ void Application::initialize_mpi(int* argc, char*** argv)
       ERROR << fmt::format("Ignore invalid configuration for mpistream\n");
     }
   }
+}
+
+int Application::get_mpi_thread_requested() const
+{
+  auto        option     = cfgparser->get_application()["option"];
+  std::string configured = option.is_object() ? option.value("mpi_thread_mode", "auto") : "auto";
+
+  switch (parse_mpi_thread_mode(configured)) {
+  case MpiThreadMode::Multiple:
+    return MPI_THREAD_MULTIPLE;
+  case MpiThreadMode::Funneled:
+    return MPI_THREAD_FUNNELED;
+  case MpiThreadMode::Auto:
+    return MPI_THREAD_FUNNELED;
+  }
+  return MPI_THREAD_FUNNELED;
+}
+
+void Application::initialize_mpi_thread_mode()
+{
+  auto        option     = cfgparser->get_application()["option"];
+  std::string configured = option.is_object() ? option.value("mpi_thread_mode", "auto") : "auto";
+
+  mpi_thread_mode = parse_mpi_thread_mode(configured);
+  if (mpi_thread_mode == MpiThreadMode::Auto) {
+    // FUNNELED is the safe default: MULTIPLE is slower on common
+    // thread-safe MPI runtimes (e.g. Intel MPI serialization) and is
+    // only used when explicitly requested and provided.
+    mpi_thread_mode = MpiThreadMode::Funneled;
+  }
+
+  assert_mpi(mpi_thread_mode != MpiThreadMode::Multiple ||
+                 mpi_thread_provided >= MPI_THREAD_MULTIPLE,
+             "`mpi_thread_mode = multiple` requires MPI_THREAD_MULTIPLE");
+  assert_mpi(mpi_thread_mode != MpiThreadMode::Funneled ||
+                 mpi_thread_provided >= MPI_THREAD_FUNNELED,
+             "`mpi_thread_mode = funneled` requires MPI_THREAD_FUNNELED or higher");
 }
 
 void Application::finalize_mpi()
@@ -269,7 +324,12 @@ void Application::initialize_workload()
 
 void Application::initialize_diagnostic()
 {
-  Diag::initialize(get_basedir(), get_iomode());
+  if (get_iomode() == "adios" && AdiosWriter::available() == false) {
+    ERROR << "application.iomode = adios requires an ADIOS2-enabled build";
+    MPI_Abort(MPI_COMM_WORLD, -1);
+  }
+  Diag::initialize(get_basedir(), get_iomode(), cfgparser->get_config_dir(),
+                   is_initial_run() == false);
 }
 
 void Application::setup_chunks_init()
@@ -341,8 +401,23 @@ void Application::setup_chunks_init()
 void Application::setup_chunks()
 {
   if (argparser->get_load() != "") {
-    bool status = statehandler->load(get_interface(), argparser->get_load());
+    std::string prefix = resolve_checkpoint_load_prefix(argparser->get_load());
+    bool        status = prefix != "" && statehandler->load(get_interface(), prefix);
     assert_mpi(status == true, "invalid checkpoint status");
+    Diag::set_restart_step(curstep);
+
+    for (int slot = 0; slot < checkpoint_slot_count; slot++) {
+      if (prefix == get_checkpoint_prefix(slot)) {
+        checkpoint_slot = (slot + 1) % checkpoint_slot_count;
+        statehandler->write_status(get_interface(), get_checkpoint_prefix(checkpoint_slot),
+                                   "in_progress", false);
+        break;
+      }
+    }
+
+    // the load path does not construct the neighbor pointers; rebuild them so
+    // that rank-local exchanges work from the first step after a restart
+    chunkvec.set_neighbors(chunkmap);
   } else {
     setup_chunks_init();
   }
@@ -444,6 +519,184 @@ void Application::save_profile()
   }
 }
 
+void Application::initialize_checkpoint_configuration()
+{
+  checkpoint_interval = 0.0;
+  checkpoint_prefix   = "checkpoint";
+
+  auto application = cfgparser->get_application();
+  if (application.contains("checkpoint") && application["checkpoint"].is_object()) {
+    auto checkpoint     = application["checkpoint"];
+    checkpoint_interval = checkpoint.value("interval", checkpoint_interval);
+    checkpoint_prefix   = checkpoint.value("prefix", checkpoint_prefix);
+  }
+
+  if (checkpoint_interval > 0.0 && argparser->get_save() != "") {
+    const std::string save_prefix = normalize_checkpoint_prefix(argparser->get_save());
+    for (int slot = -1; slot < checkpoint_slot_count; slot++) {
+      const std::string periodic_prefix =
+          normalize_checkpoint_prefix(slot < 0 ? checkpoint_prefix : get_checkpoint_prefix(slot));
+      if (save_prefix == periodic_prefix) {
+        std::cerr << "Final checkpoint prefix must differ from the periodic checkpoint prefix and "
+                     "its slots when periodic checkpointing is enabled\n";
+        exit(1);
+      }
+    }
+  }
+}
+
+void Application::initialize_checkpointing()
+{
+  if (checkpoint_interval <= 0.0) {
+    return;
+  }
+
+  const int latest_slot = find_latest_checkpoint_slot();
+  checkpoint_slot       = (latest_slot + 1) % checkpoint_slot_count;
+
+  if (thisrank == 0) {
+    checkpoint_wclock = nix::wall_clock();
+  }
+  MPI_Bcast(&checkpoint_wclock, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+}
+
+bool Application::checkpoint_if_due()
+{
+  if (checkpoint_interval <= 0.0) {
+    return false;
+  }
+
+  bool due = false;
+  if (thisrank == 0) {
+    due = nix::wall_clock() - checkpoint_wclock >= checkpoint_interval;
+  }
+  MPI_Bcast(&due, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
+
+  if (due == false) {
+    return false;
+  }
+
+  const std::string prefix  = get_checkpoint_prefix(checkpoint_slot);
+  bool              status  = save_checkpoint(prefix, "periodic");
+  int               success = status ? 1 : 0;
+  MPI_Allreduce(MPI_IN_PLACE, &success, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+
+  if (success == 1) {
+    checkpoint_slot = (checkpoint_slot + 1) % checkpoint_slot_count;
+  }
+
+  if (thisrank == 0) {
+    checkpoint_wclock = nix::wall_clock();
+  }
+  MPI_Bcast(&checkpoint_wclock, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  return success == 1;
+}
+
+bool Application::save_checkpoint(const std::string& prefix, const std::string& reason)
+{
+  const float64 checkpoint_save_begin = nix::wall_clock();
+  json          log                   = {{"prefix", prefix},
+                                         {"reason", reason},
+                                         {"unixtime", checkpoint_save_begin},
+                                         {"curtime", curtime}};
+  logger->append(curstep, "checkpoint_save_begin", log);
+  logger->flush();
+
+  const bool status = statehandler->save(get_interface(), prefix);
+
+  const float64 checkpoint_save_end = nix::wall_clock();
+  log                               = {{"prefix", prefix},
+                                       {"reason", reason},
+                                       {"elapsed", checkpoint_save_end - checkpoint_save_begin},
+                                       {"unixtime", checkpoint_save_end},
+                                       {"curtime", curtime},
+                                       {"status", status}};
+  logger->append(curstep, "checkpoint_save_end", log);
+  logger->flush();
+
+  return status;
+}
+
+int Application::find_latest_checkpoint_slot()
+{
+  int latest_slot = -1;
+
+  if (thisrank == 0) {
+    float64 latest_timestamp = -std::numeric_limits<float64>::infinity();
+    int     latest_step      = -1;
+
+    for (int slot = 0; slot < checkpoint_slot_count; slot++) {
+      const std::string status_filename =
+          statehandler->get_status_filename(get_checkpoint_prefix(slot));
+      std::ifstream ifs(status_filename);
+      if (ifs.is_open() == false) {
+        continue;
+      }
+
+      json              status          = json::parse(ifs, nullptr, false);
+      const std::string expected_prefix = normalize_checkpoint_prefix(get_checkpoint_prefix(slot));
+      if (status.is_discarded() || status.is_object() == false ||
+          status.contains("status") == false || status["status"].is_string() == false ||
+          status["status"] != "complete" || status.contains("prefix") == false ||
+          status["prefix"].is_string() == false || status["prefix"] != expected_prefix ||
+          status.contains("curstep") == false || status["curstep"].is_number_integer() == false ||
+          status.contains("timestamp") == false || status["timestamp"].is_number() == false ||
+          status.contains("nprocess") == false || status["nprocess"].is_number_integer() == false ||
+          status["nprocess"].get<int>() != nprocess) {
+        continue;
+      }
+
+      const int     step      = status["curstep"].get<int>();
+      const float64 timestamp = status["timestamp"].get<float64>();
+      if (std::isfinite(timestamp) == false) {
+        continue;
+      }
+
+      if (timestamp > latest_timestamp || (timestamp == latest_timestamp && step > latest_step)) {
+        latest_timestamp = timestamp;
+        latest_step      = step;
+        latest_slot      = slot;
+      }
+    }
+  }
+
+  MPI_Bcast(&latest_slot, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  return latest_slot;
+}
+
+std::string Application::get_checkpoint_prefix(int slot) const
+{
+  return checkpoint_prefix + "." + std::to_string(slot);
+}
+
+std::string Application::normalize_checkpoint_prefix(const std::string& prefix)
+{
+  return std::filesystem::absolute(std::filesystem::path(get_basedir()) /
+                                   std::filesystem::path(prefix))
+      .lexically_normal()
+      .string();
+}
+
+std::string Application::resolve_checkpoint_load_prefix(const std::string& prefix)
+{
+  if (prefix != checkpoint_prefix) {
+    return prefix;
+  }
+
+  const int latest_slot = find_latest_checkpoint_slot();
+  if (latest_slot < 0) {
+    if (thisrank == 0) {
+      DEBUG0 << fmt::format(
+          "No complete periodic checkpoint found for prefix {}; trying exact prefix", prefix);
+    }
+    return prefix;
+  }
+
+  checkpoint_slot = (latest_slot + 1) % checkpoint_slot_count;
+  return get_checkpoint_prefix(latest_slot);
+}
+
 bool Application::is_initial_run()
 {
   return argparser->get_load() == "";
@@ -455,6 +708,68 @@ bool Application::is_push_needed()
     return true;
   }
   return false;
+}
+
+bool Application::check_memory_limit()
+{
+  if (memory_check_interval <= 0 || (rank_memory_limit_gb <= 0 && node_memory_limit_gb <= 0)) {
+    return false;
+  }
+  if (curstep % memory_check_interval != 0) {
+    return false;
+  }
+
+  bool         exceeded = false;
+  const double rank_rss = static_cast<double>(nix::get_process_rss());
+
+  int available = rank_rss > 0 ? 1 : 0;
+  MPI_Allreduce(MPI_IN_PLACE, &available, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+  if (available == 0) {
+    return false;
+  }
+
+  if (rank_memory_limit_gb > 0) {
+    // the worst rank decides
+    double max_rss = 0;
+    MPI_Allreduce(&rank_rss, &max_rss, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    exceeded = max_rss / 1.0e9 > rank_memory_limit_gb;
+  }
+
+  if (node_memory_limit_gb > 0) {
+    // the worst node decides; node sum via the intra-node reduce and the
+    // inter-node max. The node communicators are created on the fly (the
+    // same split pattern as Diag::Info) since the check runs only every
+    // memory_check_interval steps.
+    MPI_Comm intra_comm = MPI_COMM_NULL;
+    MPI_Comm inter_comm = MPI_COMM_NULL;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, thisrank, MPI_INFO_NULL, &intra_comm);
+    int intra_rank = 0;
+    MPI_Comm_rank(intra_comm, &intra_rank);
+    MPI_Comm_split(MPI_COMM_WORLD, intra_rank != 0, thisrank, &inter_comm);
+
+    double node_sum = 0;
+    double node_max = 0;
+    MPI_Reduce(&rank_rss, &node_sum, 1, MPI_DOUBLE, MPI_SUM, 0, intra_comm);
+    if (intra_rank == 0) {
+      MPI_Allreduce(&node_sum, &node_max, 1, MPI_DOUBLE, MPI_MAX, inter_comm);
+    }
+    MPI_Bcast(&node_max, 1, MPI_DOUBLE, 0, intra_comm);
+    exceeded = exceeded || (node_max / 1.0e9 > node_memory_limit_gb);
+
+    MPI_Comm_free(&intra_comm);
+    MPI_Comm_free(&inter_comm);
+  }
+
+  if (exceeded) {
+    memory_limit_hit = true;
+    json log         = {{"rank_rss_gb", rank_rss / 1.0e9},
+                        {"rank_memory_limit_gb", rank_memory_limit_gb},
+                        {"node_memory_limit_gb", node_memory_limit_gb}};
+    logger->append(curstep, "memory_limit", log);
+    logger->flush();
+  }
+
+  return exceeded;
 }
 
 std::string Application::get_basedir()

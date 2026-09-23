@@ -1,0 +1,6 @@
+- action: "add_extracts"
+  extracts:
+    picnix_check:
+      type: "python"
+      params:
+        file: "@CMAKE_CURRENT_BINARY_DIR@/ascent_two_rank_extract.py"

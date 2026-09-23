@@ -349,7 +349,7 @@ size_t write_subarray(MPI_File* fh, size_t* disp, void* data, const T1 ndim, con
 }
 
 void put_metadata(json& obj, string name, string dtype, string desc, const size_t disp,
-                  const size_t size, const int32_t ndim, const int32_t dims[])
+                  const size_t size, const int32_t ndim, const int64_t dims[])
 {
   obj[name]["datatype"]    = dtype;
   obj[name]["description"] = desc;
@@ -366,13 +366,13 @@ void put_metadata(json& obj, string name, string dtype, string desc, const size_
 void put_metadata(json& obj, string name, string dtype, string desc, const size_t disp,
                   const size_t size)
 {
-  const int ndim    = 1;
-  const int dims[1] = {1};
+  const int     ndim    = 1;
+  const int64_t dims[1] = {1};
   put_metadata(obj, name, dtype, desc, disp, size, ndim, dims);
 }
 
 void get_metadata(json& obj, string name, string& dtype, string& desc, size_t& disp, size_t& size,
-                  int32_t& ndim, int32_t dims[])
+                  int32_t& ndim, int64_t dims[])
 {
   dtype = obj[name]["datatype"].get<string>();
   desc  = obj[name]["description"].get<string>();
@@ -382,14 +382,14 @@ void get_metadata(json& obj, string name, string& dtype, string& desc, size_t& d
 
   auto v = obj[name]["shape"];
   for (int i = 0; i < ndim; i++) {
-    dims[i] = v[i].get<int>();
+    dims[i] = v[i].get<int64_t>();
   }
 }
 
 void get_metadata(json& obj, string name, string& dtype, string& desc, size_t& disp, size_t& size)
 {
   int32_t ndim;
-  int32_t dims[1];
+  int64_t dims[1];
   get_metadata(obj, name, dtype, desc, disp, size, ndim, dims);
 }
 
@@ -444,7 +444,7 @@ void put_attribute(json& obj, string name, const size_t disp, const float64 data
 void put_attribute(json& obj, string name, const size_t disp, const int32_t length,
                    const int32_t* data)
 {
-  int32_t dims[1] = {length};
+  int64_t dims[1] = {length};
   put_metadata(obj, name, "i4", "", disp, sizeof(int32_t) * length, 1, dims);
   obj[name]["data"] = std::vector<int32_t>(&data[0], &data[length]);
 }
@@ -452,7 +452,7 @@ void put_attribute(json& obj, string name, const size_t disp, const int32_t leng
 void put_attribute(json& obj, string name, const size_t disp, const int32_t length,
                    const int64_t* data)
 {
-  int32_t dims[1] = {length};
+  int64_t dims[1] = {length};
   put_metadata(obj, name, "i8", "", disp, sizeof(size_t) * length, 1, dims);
   obj[name]["data"] = std::vector<size_t>(&data[0], &data[length]);
 }
@@ -460,7 +460,7 @@ void put_attribute(json& obj, string name, const size_t disp, const int32_t leng
 void put_attribute(json& obj, string name, const size_t disp, const int32_t length,
                    const float32* data)
 {
-  int32_t dims[1] = {length};
+  int64_t dims[1] = {length};
   put_metadata(obj, name, "f4", "", disp, sizeof(float32) * length, 1, dims);
   obj[name]["data"] = std::vector<float32>(&data[0], &data[length]);
 }
@@ -468,7 +468,7 @@ void put_attribute(json& obj, string name, const size_t disp, const int32_t leng
 void put_attribute(json& obj, string name, const size_t disp, const int32_t length,
                    const float64* data)
 {
-  int32_t dims[1] = {length};
+  int64_t dims[1] = {length};
   put_metadata(obj, name, "f8", "", disp, sizeof(float64) * length, 1, dims);
   obj[name]["data"] = std::vector<float64>(&data[0], &data[length]);
 }
