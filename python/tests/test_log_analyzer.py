@@ -393,6 +393,31 @@ def test_resolve_resource_filename_from_profile(tmp_path):
     assert resolved == base / "resource.msgpack"
 
 
+def test_resolve_resource_filename_from_adios_profile(tmp_path):
+    base = tmp_path / "data"
+    log_dir = base / "logs"
+    log_dir.mkdir(parents=True)
+    (base / "resource.msgpack").write_bytes(b"resource")
+    (base / "profile.msgpack").write_bytes(
+        msgpack.packb(
+            {
+                "configuration": {
+                    "application": {
+                        "basedir": "data",
+                        "iomode": "adios",
+                        "log": {"path": "logs", "prefix": "log"},
+                    }
+                }
+            },
+            use_bin_type=True,
+        )
+    )
+    log = log_dir / "log.msgpack"
+
+    resolved = log_analyzer.resolve_resource_filename(str(log), log)
+    assert resolved == base / "resource.msgpack"
+
+
 def test_resolve_resource_filename_posix_node_dirs(tmp_path):
     base = tmp_path / "data"
     node_dir = base / "node000000"

@@ -85,10 +85,20 @@ are:
 | `seed_type` | `"random"`, `"fixed"` | `"random"` |
 | `friedman` | Friedman-filter coefficient | `0.0` |
 | `cell_load` | Relative cell cost for load balancing | `1.0` |
+| `mpi_thread_mode` | `"auto"`, `"funneled"`, `"multiple"` | `"auto"` |
+| `rank_memory_limit_gb` | Positive per-rank RSS limit in decimal GB | `0.0` (disabled) |
+| `node_memory_limit_gb` | Positive per-node RSS limit in decimal GB | `0.0` (disabled) |
+| `memory_check_interval` | Steps between memory checks | `100` |
 
 `application.rebalance.interval` controls how often dynamic load balancing is
 considered. Its implementation default is 100 steps; examples commonly use a
 shorter interval.  
+
+`mpi_thread_mode = "auto"` requests MPI thread-funneled support and selects the
+funneled execution path. Use `"multiple"` only when the application and MPI
+runtime require MPI thread-multiple support. Memory limits are checked every
+`memory_check_interval` steps; exceeding either configured limit stops the run
+after finalization and returns exit status `2`.  
 
 ## Checkpoints and restart
 

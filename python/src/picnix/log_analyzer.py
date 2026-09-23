@@ -103,7 +103,7 @@ def resolve_resource_filename(filename, log_filename):
     """Locate the resource diagnostic file from the profile's base directory.
 
     ResourceDiag writes resource.msgpack under the diagnostic base directory:
-    ``basedir/resource.msgpack`` in mpiio mode and
+    ``basedir/resource.msgpack`` in mpiio and adios modes and
     ``basedir/nodeNNNNNN/resource.msgpack`` in posix mode. The profile
     (profile.msgpack) lives at the base directory root, so it anchors the
     lookup. Falls back to the timing log's directory when no profile is
