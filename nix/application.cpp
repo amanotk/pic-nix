@@ -232,9 +232,10 @@ int Application::get_mpi_thread_requested() const
     return MPI_THREAD_MULTIPLE;
   case MpiThreadMode::Funneled:
     return MPI_THREAD_FUNNELED;
-  default:
-    return NIX_MPI_THREAD_LEVEL;
+  case MpiThreadMode::Auto:
+    return MPI_THREAD_FUNNELED;
   }
+  return MPI_THREAD_FUNNELED;
 }
 
 void Application::initialize_mpi_thread_mode()

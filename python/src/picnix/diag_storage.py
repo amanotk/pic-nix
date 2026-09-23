@@ -350,7 +350,7 @@ class AdiosDiagStorage(DiagStorage):
         self.prefix = prefix
         self.basedir = Path(basedir)
         self.iomode = iomode
-        self.path = self.basedir / "adios" / f"{prefix}.bp"
+        self.path = self.basedir / f"{prefix}.0000.bp"
         self.paths = []
         self.reader = None
         self.readers = []
@@ -437,16 +437,18 @@ class AdiosDiagStorage(DiagStorage):
             return []
 
         pattern = re.compile(
-            rf"{re.escape(self.path.stem)}\.part(\d{{4,}}){re.escape(self.path.suffix)}"
+            rf"{re.escape(self.prefix)}\.(\d{{4,}}){re.escape(self.path.suffix)}"
         )
         broad_pattern = re.compile(
-            rf"{re.escape(self.path.stem)}\.part(\d+){re.escape(self.path.suffix)}"
+            rf"{re.escape(self.prefix)}\.(\d+){re.escape(self.path.suffix)}"
         )
         for candidate in self.path.parent.iterdir():
+            if candidate == self.path:
+                continue
             match = pattern.fullmatch(candidate.name)
             if match:
                 index = int(match.group(1))
-                expected = f"{self.path.stem}.part{index:04d}{self.path.suffix}"
+                expected = f"{self.prefix}.{index:04d}{self.path.suffix}"
                 if index == 0 or candidate.name != expected:
                     raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
                 paths.append((index, candidate))

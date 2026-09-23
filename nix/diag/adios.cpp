@@ -32,11 +32,8 @@ std::string parameter_value(const nix::json& value)
 
 std::filesystem::path segment_path(const std::filesystem::path& base, int index)
 {
-  if (index == 0) {
-    return base;
-  }
   const std::string name =
-      fmt::format("{}.part{:04d}{}", base.stem().string(), index, base.extension().string());
+      fmt::format("{}.{:04d}{}", base.stem().string(), index, base.extension().string());
   return base.parent_path() / name;
 }
 
@@ -52,7 +49,7 @@ std::optional<int> segment_index(const std::filesystem::path& base,
     return std::nullopt;
   }
 
-  const std::string prefix = base.stem().string() + ".part";
+  const std::string prefix = base.stem().string() + ".";
   const std::string stem   = candidate.stem().string();
   if (stem.size() <= prefix.size() || stem.compare(0, prefix.size(), prefix) != 0) {
     return std::nullopt;
@@ -81,9 +78,6 @@ std::optional<int> segment_index(const std::filesystem::path& base,
 std::optional<int> dataset_index(const std::filesystem::path& base,
                                  const std::filesystem::path& candidate)
 {
-  if (candidate == base) {
-    return 0;
-  }
   return segment_index(base, candidate);
 }
 
@@ -102,9 +96,6 @@ std::optional<int> temporary_dataset_index(const std::filesystem::path& base,
 int next_segment_index(const std::filesystem::path& base)
 {
   std::vector<int> indices;
-  if (std::filesystem::exists(base)) {
-    indices.push_back(0);
-  }
   if (std::filesystem::exists(base.parent_path())) {
     for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
       const auto index = segment_index(base, entry.path());
@@ -226,8 +217,7 @@ void AdiosWriter::prepare_fresh_run(const std::string& basedir, const std::strin
   std::string error;
   if (rank == 0) {
     try {
-      const std::filesystem::path base =
-          std::filesystem::path(basedir) / "adios" / (prefix + ".bp");
+      const std::filesystem::path base = std::filesystem::path(basedir) / (prefix + ".bp");
       std::filesystem::create_directories(base.parent_path());
       remove_segments(base);
     } catch (const std::exception& exception) {
@@ -271,7 +261,7 @@ void AdiosWriter::initialize(const std::string& diagnostic, const std::string& p
   impl->adios = std::make_unique<adios2::ADIOS>(MPI_COMM_WORLD);
   impl->io    = std::make_unique<adios2::IO>(impl->adios->DeclareIO("PICNIX"));
   impl->io->SetEngine("BP5");
-  impl->filename = std::filesystem::path(impl->info->basedir) / "adios" / (prefix + ".bp");
+  impl->filename = std::filesystem::path(impl->info->basedir) / (prefix + ".bp");
 
   adios2::Params adios_parameters{{"AsyncWrite", "false"}};
   for (auto it = adios_config.begin(); it != adios_config.end(); ++it) {

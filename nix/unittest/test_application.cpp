@@ -585,9 +585,9 @@ TEST_CASE("MPI thread mode requests the configured support level")
   TestApplication app(0, nullptr, interface);
   json            configuration = json::parse(config_content);
 
-  SECTION("auto preserves the build default")
+  SECTION("auto requests only funneled support")
   {
-    REQUIRE(app.get_test_mpi_thread_requested(configuration) == NIX_MPI_THREAD_LEVEL);
+    REQUIRE(app.get_test_mpi_thread_requested(configuration) == MPI_THREAD_FUNNELED);
   }
 
   SECTION("funneled requests only funneled support")

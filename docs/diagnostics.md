@@ -173,7 +173,11 @@ tracker data is stored:
 | --- | --- |
 | `mpiio` | Shared files below `<basedir>/<prefix>/`. This is the default. |
 | `posix` | Per-node files below `<basedir>/nodeXXXXXX/<prefix>/`. |
-| `adios` | A persistent BP5 dataset at `<basedir>/adios/<prefix>.bp`. |
+| `adios` | Numbered BP5 datasets at `<basedir>/<prefix>.0000.bp`; restarts add `.0001.bp`, `.0002.bp`, and so on. |
+
+Each `.bp` path is a BP5 dataset directory managed by ADIOS2. On restart, the
+PIC-NIX reader combines numbered datasets into one logical time series, with a
+later segment replacing earlier output from its restart step onward.  
 
 Every new run writes `<basedir>/profile.msgpack`. It contains the configuration,
 process count, chunk mapping, and metadata used by `picnix.Run` to discover the

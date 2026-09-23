@@ -223,7 +223,7 @@ public:
       fs::path    dirname = fs::path(basedir) / fs::path(nodedir) / fs::path(prefix) / "";
       return dirname.string();
     } else if (info->iomode == "adios") {
-      fs::path dirname = fs::path(basedir) / fs::path("adios") / fs::path(prefix) / "";
+      fs::path dirname = fs::path(basedir) / fs::path(prefix) / "";
       return dirname.string();
     } else {
       ERROR << fmt::format("Unknown I/O mode: {}", info->iomode);
