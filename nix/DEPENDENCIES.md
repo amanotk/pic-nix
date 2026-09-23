@@ -105,6 +105,20 @@ python3 -m pip install mpi4py numpy
 scripts/install_adios2.sh "$HOME/adios2" --python "$(command -v python3)"
 ```
 
+Forward the same initial-cache file used for PIC-NIX so compiler flags match
+(required for `cmake/linux-intel.cmake`, which selects `icpx` via
+`-cxx=icpx` in `CMAKE_CXX_FLAGS`):
+
+```sh
+scripts/install_adios2.sh "$HOME/adios2" --python "$(command -v python3)" \
+  -C cmake/linux-intel.cmake
+```
+
+For a C++-only ADIOS2 build (analysis uses a separate Python package), pass
+`--no-python` instead of `--python`.  `scripts/prepare_build_stack.sh
+--with-adios2` uses that mode by default and prepares a uv Python environment
+alongside the stack; see the PIC-NIX building documentation.
+
 ## Optional Ascent
 
 Ascent is an external optional dependency and is not built by
@@ -117,6 +131,14 @@ build the same installation with:
 ```sh
 scripts/install_ascent.sh "$HOME/ascent" --python "$(command -v python3)"
 ```
+
+When the interpreter is already a virtual environment (for example the stack
+created by `scripts/prepare_build_stack.sh`), pass `--python-is-venv` so
+`<prefix>/python-venv` is linked to that environment instead of creating a
+second one.  Prefer `--slim` (zlib/Conduit/VTK-m/Ascent only; no HDF5, Silo,
+ZFP, MFEM, RAJA, or Sphinx) unless the full upstream TPL set is required;
+`--full` builds ZFP Python bindings and needs `cython`/`setuptools` in the
+target environment.
 
 Enable Ascent in the PIC build with `PICNIX_ENABLE_ASCENT=ON` and point
 `PICNIX_ASCENT_ROOT` at the installation prefix.  The Ascent CMake package is

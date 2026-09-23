@@ -31,6 +31,18 @@ cmake -S . -B build-ascent \
   -DCMAKE_CXX_COMPILER=mpicxx
 ```
 
+When `scripts/install_ascent.sh` is run with `--python-is-venv` (as done by
+`scripts/prepare_build_stack.sh --with-ascent`), `<prefix>/python-venv` is
+linked to the given virtual environment instead of creating a nested one.
+Conduit and Ascent Python modules then install into that environment.
+Activate the environment with `source <stack>/env.sh` before running Python
+extract tests.  
+
+Both slim and full profiles disable Ascent HTML docs and example apps (no
+Sphinx required). Full only restores the upstream third-party library set
+(HDF5, Silo, ZFP, MFEM, RAJA, …) and still needs `cython` in the target
+environment for ZFP Python bindings.  
+
 Advanced users may still pass `-DAscent_DIR=/path/to/lib/cmake/ascent`
 directly.  
 

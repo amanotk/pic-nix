@@ -25,6 +25,104 @@ enable only the integrations needed by a simulation:
 source-build helpers. `scripts/install_dependencies.sh` installs the ordinary
 C++ dependencies and Catch2 into a reusable prefix.  
 
+## Prepare a build stack
+
+`scripts/prepare_build_stack.sh` prepares a reusable stack in one directory
+(typically outside the repository). Give an explicit path; do not move the
+directory afterwards because stamps and `env.sh` store absolute paths.  
+
+```sh
+scripts/prepare_build_stack.sh "$HOME/picnix-stack" --cache cmake/linux-gcc.cmake
+```
+
+By default this creates:
+
+| Path | Contents |
+| --- | --- |
+| `<stack>/python` | uv virtual environment (system Python preferred) with `mpi4py`, `numpy`, and editable `picnix` |
+| `<stack>/deps` | Ordinary C++ dependencies |
+| `<stack>/env.sh` | Environment activation script |
+| `<stack>/stamp` | Idempotency markers keyed by compiler fingerprint |
+
+Optional components are off by default:
+
+```sh
+scripts/prepare_build_stack.sh "$HOME/picnix-stack" \
+  --cache cmake/linux-gcc.cmake \
+  --with-adios2 \
+  --with-ascent
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--with-adios2` | Build ADIOS2 (C++/MPI only; Python bindings off) into `<stack>/adios2` |
+| `--with-adios2-python` | Also build ADIOS2 Python bindings into the stack venv |
+| `--with-ascent` | Build Ascent **slim** (zlib, Conduit, VTK-m, Ascent only — no HDF5/Silo/ZFP/MFEM/RAJA, no Sphinx/docs/examples) into the stack venv |
+| `--ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP). Docs/examples stay off (no Sphinx). |
+| `--no-deps` | Skip the ordinary C++ dependencies |
+| `--no-picnix` | Skip the editable `picnix` install (generic stack) |
+| `--check` | Validate an existing stack without building |
+| `--force` | Ignore stamps and rebuild |
+| `--jobs N` | Parallel build jobs (default **4**; `CMAKE_BUILD_PARALLEL_LEVEL` also works) |
+
+Activate the stack and configure PIC-NIX with the same compiler cache:
+
+```sh
+source "$HOME/picnix-stack/env.sh"
+cmake -S . -B build -C cmake/linux-gcc.cmake \
+  -DCMAKE_PREFIX_PATH="$HOME/picnix-stack/deps" \
+  -DPICNIX_USE_SYSTEM_LIBS=ON
+```
+
+`env.sh` puts the stack Python on `PATH` and exports `LD_LIBRARY_PATH` /
+`CMAKE_PREFIX_PATH` without sourcing venv `activate`, so **your shell prompt
+does not change**. Source the same file in **job scripts** as well: the C++
+binaries linked to Ascent or ADIOS2 need `LD_LIBRARY_PATH`, and Python
+analysis or Ascent extracts need the stack interpreter on `PATH`. If the MPI
+launcher does not forward the environment, pass those variables explicitly
+(for example `mpiexec -x LD_LIBRARY_PATH ...`).  
+
+The same `--cache` file is forwarded to ADIOS2 (via `-C`) and exported as
+`CC`/`CXX`/`CFLAGS`/`CXXFLAGS` for Ascent. This matters for
+`cmake/linux-intel.cmake`, where `mpiicpc` only selects `icpx` through
+`-cxx=icpx` in `CMAKE_CXX_FLAGS`; without those flags the Intel MPI wrapper
+falls back to classic `icpc`.  
+
+By default the stack builds with **4 parallel jobs** (override with
+`--jobs N` or `CMAKE_BUILD_PARALLEL_LEVEL`). Full `nproc` on large hosts
+often overruns memory during VTK-m / ADIOS2 compiles.  
+
+When `--with-adios2` or `--with-ascent` was used, add
+`-DPICNIX_ENABLE_ADIOS2=ON -DPICNIX_ADIOS2_ROOT=...` and/or
+`-DPICNIX_ENABLE_ASCENT=ON -DPICNIX_ASCENT_ROOT=...` (the generated `env.sh`
+prints a ready-to-use configure line).  
+
+The script resolves `mpicc`/`mpicxx` from `--cache` (or `--mpicc`/`--mpicxx`)
+and records a compiler fingerprint. Re-running with the same inputs skips
+finished steps; a changed compiler or cache invalidates them. Use
+`--check` after environment or module changes.  
+
+Build parallelism defaults to **4** jobs (`--jobs` / `CMAKE_BUILD_PARALLEL_LEVEL`
+override). Full `nproc` often overruns memory on Intel `icpx` and VTK-m.  
+
+Cross-compilation caches may build the default deps-only stack.
+`--with-adios2` and `--with-ascent` require a native build because the
+selected Python interpreter runs during those builds.  
+
+### ADIOS2 Python reader
+
+By default `--with-adios2` builds only the C++ library. Analysis reads BP
+datasets with a separate Python package (see [Diagnostics](diagnostics.md)):
+
+```sh
+uv pip install --python .venv -e "./python[adios]"
+```
+
+Use `--with-adios2-python` only when the reader must match the built ADIOS2
+exactly (same version and MPI). Do not install the PyPI `adios2` package into
+the stack venv in that mode; bindings are exposed through a path file the
+script writes.  
+
 ## Standard build
 
 The supplied Linux/GCC initial-cache file selects `mpicxx`, OpenMP, native CPU

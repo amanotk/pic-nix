@@ -209,6 +209,11 @@ custom prefix:
 scripts/install_dependencies.sh "$HOME/usr"
 ```
 
+For a full stack (uv Python environment, dependencies, and optional
+ADIOS2/Ascent) in one directory, use
+`scripts/prepare_build_stack.sh` — see
+[Building](docs/build.md#prepare-a-build-stack).
+
 Then configure with the explicit prefix:
 
 ```sh

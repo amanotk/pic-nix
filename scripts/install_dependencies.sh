@@ -22,7 +22,8 @@ to configure PIC-NIX, for example:
 Relative initial-cache and toolchain paths are resolved from the directory
 where this script is invoked.
 
-Set CMAKE_BUILD_PARALLEL_LEVEL to control parallel build jobs (default: nproc).
+Set CMAKE_BUILD_PARALLEL_LEVEL to control parallel build jobs (default: 4;
+raise it if you have memory headroom).
 EOF
 }
 
@@ -98,7 +99,7 @@ install_dependency() {
     -DBUILD_SHARED_LIBS=OFF \
     "${extra_args[@]}"
   cmake --build "$dir/build" \
-    --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}"
+    --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
   cmake --install "$dir/build"
   rm -rf "$dir"
 }
@@ -114,7 +115,7 @@ cmake -S "$FMT_DIR" -B "$FMT_DIR/build" \
   -DBUILD_SHARED_LIBS=OFF \
   -DFMT_TEST=OFF -DFMT_DOC=OFF
 cmake --build "$FMT_DIR/build" \
-  --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}"
+  --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
 cmake --install "$FMT_DIR/build"
 rm -rf "$FMT_DIR"
 
@@ -146,7 +147,7 @@ cmake -S "$XTENSOR_DIR" -B "$XTENSOR_DIR/build" \
   -DBUILD_SHARED_LIBS=OFF \
   -DBUILD_TESTS=OFF -DBUILD_BENCHMARK=OFF -DDOWNLOAD_GTEST=OFF
 cmake --build "$XTENSOR_DIR/build" \
-  --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}"
+  --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
 cmake --install "$XTENSOR_DIR/build"
 rm -rf "$XTENSOR_DIR"
 
