@@ -37,6 +37,8 @@ Options:
   --with-adios2            Build ADIOS2 (C++ only)
   --with-adios2-python     Build ADIOS2 with Python bindings
   --with-ascent            Build Ascent into the stack Python environment
+  --ascent-extracts-only   With --with-ascent and a Fugaku aarch64 cache:
+                            cross-build MPI + Python extracts without rendering
   --ascent-full            With --with-ascent: upstream full TPL set (slow;
                            no Sphinx/docs; needs Cython for ZFP)
   --no-deps                Skip the ordinary C++ dependencies
@@ -59,8 +61,9 @@ Example (default stack):
     -DPICNIX_USE_SYSTEM_LIBS=ON
 
 Cross-compilation caches may build the default stack. Fugaku aarch64 caches
-also support --with-adios2 (C++/MPI only). --with-adios2-python and
---with-ascent require a native build.
+also support --with-adios2 (C++/MPI only) and --ascent-extracts-only (MPI and
+Python extracts, without rendering). --with-adios2-python and Ascent's
+rendering/full profiles require a native build.
 
 Parallelism defaults to 4 jobs to avoid OOM on large hosts. Raise it with
 --jobs N or CMAKE_BUILD_PARALLEL_LEVEL if you have memory headroom.
@@ -76,6 +79,7 @@ WITH_ADIOS2=false
 WITH_ADIOS2_PYTHON=false
 WITH_ASCENT=false
 ASCENT_FULL=false
+ASCENT_EXTRACTS_ONLY=false
 WITH_DEPS=true
 WITH_PICNIX=true
 CHECK_ONLY=false
@@ -150,6 +154,11 @@ while (( $# > 0 )); do
       ;;
     --with-ascent)
       WITH_ASCENT=true
+      shift
+      ;;
+    --ascent-extracts-only)
+      WITH_ASCENT=true
+      ASCENT_EXTRACTS_ONLY=true
       shift
       ;;
     --ascent-full)
@@ -901,7 +910,7 @@ wire_python_paths() {
       die "ADIOS2 Python site-packages not found under $STACK_ADIOS2"
     fi
   fi
-  if [[ "$WITH_ASCENT" == true ]]; then
+  if [[ "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ]]; then
     if ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
       local candidate
       for candidate in \
@@ -927,20 +936,62 @@ wire_python_paths() {
   fi
 }
 
+spack_public_prefix() {
+  local setup="/vol0004/apps/oss/spack/share/spack/setup-env.sh"
+  [[ -f "$setup" ]] || die "Fugaku public Spack setup not found: $setup"
+  bash -c '. "$1" && spack location -i "/$2"' _ "$setup" "$1"
+}
+
+write_ascent_compute_env() {
+  local target_python="$1" target_numpy="$2" target_mpi4py="$3"
+  local adios_lib=""
+  if [[ -d "$STACK_ADIOS2/lib" ]]; then
+    adios_lib=":$STACK_ADIOS2/lib"
+  fi
+  cat >"$STACK_ASCENT/compute-env.sh" <<EOF
+# Source on a Fugaku compute node after loading the matching LLVM module.
+# This environment uses aarch64 Python; do not source the login-node env.sh.
+export PYTHONHOME="$target_python:$target_python"
+export PATH="$target_python/bin:\$PATH"
+export PYTHONPATH="$STACK_ASCENT/python-modules:$target_numpy/lib/python3.11/site-packages:$target_mpi4py/lib/python3.11/site-packages:$REPO_ROOT/python/src\${PYTHONPATH:+:\$PYTHONPATH}"
+export LD_LIBRARY_PATH="$STACK_ASCENT/ascent-checkout/lib:$STACK_ASCENT/conduit-v0.9.5/lib:$target_python/lib$adios_lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+EOF
+}
+
 install_ascent_component() {
   if [[ "$WITH_ASCENT" != true ]]; then
     return 0
   fi
-  if [[ "$IS_CROSS" == true ]]; then
+  if [[ "$IS_CROSS" == true && "$ASCENT_EXTRACTS_ONLY" != true ]]; then
     die "--with-ascent requires a native build (cross-compilation cache detected); rerun without --with-ascent"
   fi
   local py_tag
-  py_tag="$(venv_python_tag)"
+  local profile="slim" target_python="" target_numpy="" target_mpi4py="" host_python=""
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    profile="extracts"
+    # Site-provided Python/NumPy/mpi4py share the same aarch64 Python 3.11.
+    # Environment overrides allow using another compatible public installation.
+    target_python="${PICNIX_ASCENT_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
+    target_numpy="${PICNIX_ASCENT_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+    target_mpi4py="${PICNIX_ASCENT_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
+    host_python="${PICNIX_ASCENT_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
+    py_tag="${target_python}:${target_numpy}:${target_mpi4py}:${host_python}"
+  else
+    py_tag="$(venv_python_tag)"
+    if [[ "$ASCENT_FULL" == true ]]; then
+      profile="full"
+    fi
+  fi
+  local stamp_items=(
+    "script:$REPO_ROOT/scripts/install_ascent.sh"
+    "python_is_venv=true"
+    "profile=$profile"
+  )
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    stamp_items+=("target_python=$py_tag")
+  fi
   local expected
-  expected="$(compute_stamp ascent \
-    "script:$REPO_ROOT/scripts/install_ascent.sh" \
-    "python_is_venv=true" \
-    "profile=$([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)")"
+  expected="$(compute_stamp ascent "${stamp_items[@]}")"
   if [[ "$FORCE" == true ]]; then
     clear_stamp ascent
   fi
@@ -955,25 +1006,39 @@ install_ascent_component() {
   fi
   if [[ -d "$STACK_ASCENT" ]] && stamp_matches ascent "$expected"; then
     log "Ascent up to date: $STACK_ASCENT"
-    write_stamp_meta ascent \
-      "venv_python=$py_tag" \
-      "profile=$([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)"
+    write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
+    if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+      printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
+      write_ascent_compute_env "$target_python" "$target_numpy" "$target_mpi4py"
+    fi
     return 0
   fi
-  log "--- Installing Ascent into $STACK_ASCENT ($([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)) ---"
+  log "--- Installing Ascent into $STACK_ASCENT ($profile) ---"
   apply_cache_compiler_env
-  local ascent_args=("$STACK_ASCENT" --python "$STACK_VENV_BIN" --python-is-venv)
-  if [[ "$ASCENT_FULL" == true ]]; then
+  local ascent_args=("$STACK_ASCENT")
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    local host_venv="$STACK_ASCENT/build-python-venv"
+    mkdir -p "$STACK_ASCENT"
+    uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed
+    uv pip install --python "$host_venv/bin/python" pip 'numpy==1.26.4'
+    ascent_args+=(--python "$host_venv/bin/python" --python-is-venv --slim
+      --cross-python-extracts --cache "$CACHE_FILE"
+      --target-python "$target_python" --target-numpy "$target_numpy")
+  elif [[ "$ASCENT_FULL" == true ]]; then
+    ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--full)
   else
+    ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--slim)
   fi
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
     "$REPO_ROOT/scripts/install_ascent.sh" "${ascent_args[@]}"
   write_stamp ascent "$expected"
-  write_stamp_meta ascent \
-    "venv_python=$py_tag" \
-    "profile=$([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)"
+  write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
+    write_ascent_compute_env "$target_python" "$target_numpy" "$target_mpi4py"
+  fi
 }
 
 ld_path_parts() {
@@ -1038,8 +1103,9 @@ write_env_sh() {
 #   source $ENV_SH
 #
 # Sets PATH/VIRTUAL_ENV without sourcing venv activate, so your shell prompt
-# does not change. Source this in job scripts too: it exports LD_LIBRARY_PATH
-# (Ascent/Conduit/ADIOS2) and puts the stack Python on PATH.
+# does not change. For native builds, source this in job scripts too.
+# For Fugaku cross-built Ascent Python extracts, use ascent/compute-env.sh
+# in the job instead: this login-node venv cannot run on compute nodes.
 #
 # Compiler fingerprint: $COMPILER_FINGERPRINT
 # MPI C wrapper:   $MPICC_EXECUTABLE
@@ -1258,11 +1324,18 @@ check_stack() {
     local ascent_profile
     ascent_profile="$(awk -F= '/^profile=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
     if [[ -n "$ascent_profile" ]]; then
+      local ascent_items=(
+        "script:$REPO_ROOT/scripts/install_ascent.sh"
+        "python_is_venv=true"
+        "profile=$ascent_profile"
+      )
+      if [[ "$ascent_profile" == "extracts" ]]; then
+        local target_tag
+        target_tag="$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+        ascent_items+=("target_python=$target_tag")
+      fi
       local expected
-      expected="$(compute_stamp ascent \
-        "script:$REPO_ROOT/scripts/install_ascent.sh" \
-        "python_is_venv=true" \
-        "profile=$ascent_profile")"
+      expected="$(compute_stamp ascent "${ascent_items[@]}")"
       if [[ "$(cat "$(stamp_path ascent)")" != "$expected" ]]; then
         err "ascent stamp does not match current fingerprint/script (rerun with --force if intended)"
         failed=1
@@ -1320,7 +1393,16 @@ check_stack() {
       err "AscentConfig.cmake missing under $STACK_ASCENT"
       failed=1
     fi
-    if [[ -x "$STACK_VENV_BIN" ]] && ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
+    if [[ -f "$STAMP_DIR/ascent.meta" ]] && grep -q '^profile=extracts$' "$STAMP_DIR/ascent.meta"; then
+      for path in "$STACK_ASCENT/python-modules/conduit/conduit_python.so" \
+                  "$STACK_ASCENT/python-modules/ascent/mpi/ascent_mpi_python.so" \
+                  "$STACK_ASCENT/compute-env.sh"; do
+        if [[ ! -f "$path" ]]; then
+          err "missing Ascent cross-build artifact: $path"
+          failed=1
+        fi
+      done
+    elif [[ -x "$STACK_VENV_BIN" ]] && ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
       err "conduit not importable from stack venv"
       failed=1
     fi
@@ -1374,9 +1456,17 @@ main() {
   resolve_compiler
   build_fingerprint
 
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    if [[ "$IS_CROSS" != true || -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ]]; then
+      die "--ascent-extracts-only requires a Fugaku aarch64 cross-compilation cache"
+    fi
+    if [[ "$ASCENT_FULL" == true ]]; then
+      die "--ascent-full cannot be combined with --ascent-extracts-only"
+    fi
+  fi
   if [[ "$IS_CROSS" == true ]]; then
-    if [[ "$WITH_ASCENT" == true || "$WITH_ADIOS2_PYTHON" == true ]]; then
-      die "cross-compilation cache detected; --with-ascent and --with-adios2-python require a native build"
+    if [[ ( "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ) || "$WITH_ADIOS2_PYTHON" == true ]]; then
+      die "cross-compilation cache detected; --with-ascent needs --ascent-extracts-only, and --with-adios2-python requires a native build"
     fi
     if [[ "$WITH_ADIOS2" == true && ( -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ) ]]; then
       die "cross-built ADIOS2 requires an aarch64 CMake cache (FFS float format is target-specific)"

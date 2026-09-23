@@ -117,13 +117,46 @@ explicitly; for example, OpenMPI accepts:
 mpiexec -x PYTHONHOME -x PYTHONPATH -x LD_LIBRARY_PATH -n 16 ./main.out -c config.toml
 ```
 
-Python-enabled Ascent builds are native-build oriented because the selected
-Python executable is used during the Ascent/Conduit build. Cross-build systems
-where login and compute nodes use different architectures, such as an x86_64
-login node targeting aarch64 compute nodes, may not be able to build usable
-Python extension modules with a normal host Python. In that case, build the
-C++/MPI Ascent path first and enable Python extracts only with a site-provided
-target Python/sysroot/toolchain recipe.  
+The ordinary Ascent installer uses the selected Python for both build-time
+commands and the installed modules. On an x86_64 login node targeting aarch64
+compute nodes, those roles must use separate interpreters and matching target
+Python headers and libraries, as in the Fugaku workflow below.  
+
+### Fugaku cross-build for Python extracts
+
+On a Fugaku login node, the extract-only stack separates build-time x86_64
+Python from aarch64 Python 3.11. It uses preinstalled, matching public Spack
+packages for target Python, NumPy, and mpi4py; it does not compile Python
+itself. With LLVM 23 and a separate stack prefix:  
+
+```sh
+module load LLVM/llvmorg-23.1.0
+scripts/prepare_build_stack.sh "$HOME/picnix-llvm23" \
+  --cache cmake/fugaku-llvm23-cross.cmake \
+  --with-adios2 --ascent-extracts-only --jobs 2
+```
+
+`--ascent-extracts-only` implies `--with-ascent`; omit `--with-adios2` if it is
+not needed. The stack contains MPI-enabled Conduit and Ascent 0.9.5 with
+Python extracts, but no VTK-m/VTK-h rendering. The login-node environment
+remains `<stack>/env.sh` for compilation. In compute-node jobs, load the same
+LLVM module and source `<stack>/ascent/compute-env.sh` instead. That script
+selects the aarch64 Python interpreter, adds the matching NumPy and mpi4py
+modules, and points at the installed Conduit and Ascent libraries. Follow the
+[official Fugaku Spack guide](https://riken-rccs.github.io/fugaku-doc/docs/user-guide/sys-use/fugakuspackguide/build/en/intro.html)
+for making `/vol0004` available to jobs (`PJM_LLIO_GFSCACHE`).  
+
+To use another compatible set of public Spack installations, set
+`PICNIX_ASCENT_TARGET_PYTHON_PREFIX`, `PICNIX_ASCENT_TARGET_NUMPY_PREFIX`,
+`PICNIX_ASCENT_TARGET_MPI4PY_PREFIX`, and
+`PICNIX_ASCENT_HOST_PYTHON_PREFIX` before preparing the stack. Host and target
+Python must both be 3.11; this recipe uses NumPy 1.26.4.  
+
+The LLVM 23 login-node build produced aarch64 Conduit/Ascent Python modules,
+passed the stack check, and linked a PIC-NIX example. Python extract execution
+on a compute node is not yet validated; the link also warned about Fujitsu
+runtime libraries needed by the site Python. Verify the module and library
+environment before relying on extracts in a simulation.  
 
 ## Configuration
 
