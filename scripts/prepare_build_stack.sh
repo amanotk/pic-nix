@@ -14,7 +14,7 @@ stamps, env.sh, and CMake caches store absolute paths.
 
 By default this installs:
   - a uv-managed virtual environment (system Python preferred) with
-    mpi4py, numpy, and an editable picnix install
+    mpi4py, numpy, and an editable picnix install (cross-builds omit mpi4py)
   - the ordinary C++ dependencies into <stack_dir>/deps
 
 When --with-ascent is used, the Ascent superbuild runs in **slim** profile
@@ -58,8 +58,9 @@ Example (default stack):
     -DCMAKE_PREFIX_PATH=<stack_dir>/deps \
     -DPICNIX_USE_SYSTEM_LIBS=ON
 
-Cross-compilation caches may build the default (deps-only) stack.
---with-adios2 and --with-ascent require a native build.
+Cross-compilation caches may build the default stack. Fugaku aarch64 caches
+also support --with-adios2 (C++/MPI only). --with-adios2-python and
+--with-ascent require a native build.
 
 Parallelism defaults to 4 jobs to avoid OOM on large hosts. Raise it with
 --jobs N or CMAKE_BUILD_PARALLEL_LEVEL if you have memory headroom.
@@ -619,6 +620,11 @@ prepare_python() {
   fi
 
   local py_packages="mpi4py,numpy,pip,setuptools,wheel"
+  if [[ "$IS_CROSS" == true ]]; then
+    # The stack Python runs on the login node; cross-built mpi4py cannot be
+    # imported there. Keep the target MPI wrappers for C++ dependencies only.
+    py_packages="numpy,pip,setuptools,wheel"
+  fi
   if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
     # Full Ascent profile builds ZFP Python bindings and needs Cython.
     # Slim profile (default) skips ZFP entirely.
@@ -677,19 +683,25 @@ prepare_python() {
     fi
   elif [[ "$need_recreate" == false ]]; then
     log "--- Refreshing Python packages in existing venv ---"
-    local base_pkgs=(mpi4py numpy setuptools wheel)
+    local base_pkgs=(numpy setuptools wheel)
+    if [[ "$IS_CROSS" != true ]]; then
+      base_pkgs=(mpi4py "${base_pkgs[@]}")
+    fi
     if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
       base_pkgs+=(cython)
     fi
-    if [[ -n "$MPICC_EXECUTABLE" ]]; then
+    if [[ "$IS_CROSS" != true && -n "$MPICC_EXECUTABLE" ]]; then
       MPICC="$MPICC_EXECUTABLE" uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     else
       uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     fi
     if [[ "$WITH_PICNIX" == true ]]; then
       local extras="mpi,test"
+      if [[ "$IS_CROSS" == true ]]; then
+        extras="test"
+      fi
       if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
-        extras="mpi,test,adios"
+        extras="${extras},adios"
       fi
       uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
     fi
@@ -720,12 +732,15 @@ prepare_python() {
     uv venv "$STACK_PYTHON" --python "$desired" --seed
     [[ -x "$STACK_VENV_BIN" ]] || die "failed to create virtual environment at $STACK_PYTHON"
 
-    local base_pkgs=(mpi4py numpy setuptools wheel)
+    local base_pkgs=(numpy setuptools wheel)
+    if [[ "$IS_CROSS" != true ]]; then
+      base_pkgs=(mpi4py "${base_pkgs[@]}")
+    fi
     if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
       base_pkgs+=(cython)
     fi
     log "--- Installing Python packages (${base_pkgs[*]}) ---"
-    if [[ -n "$MPICC_EXECUTABLE" ]]; then
+    if [[ "$IS_CROSS" != true && -n "$MPICC_EXECUTABLE" ]]; then
       MPICC="$MPICC_EXECUTABLE" uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     else
       uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
@@ -733,8 +748,11 @@ prepare_python() {
 
     if [[ "$WITH_PICNIX" == true ]]; then
       local extras="mpi,test"
+      if [[ "$IS_CROSS" == true ]]; then
+        extras="test"
+      fi
       if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
-        extras="mpi,test,adios"
+        extras="${extras},adios"
       fi
       log "--- Installing editable picnix [$extras] ---"
       uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
@@ -794,9 +812,6 @@ install_adios2_component() {
   if [[ "$WITH_ADIOS2" != true ]]; then
     return 0
   fi
-  if [[ "$IS_CROSS" == true ]]; then
-    die "--with-adios2 requires a native build (cross-compilation cache detected); rerun without --with-adios2"
-  fi
   local py_tag=""
   if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
     py_tag="$(venv_python_tag)"
@@ -834,6 +849,17 @@ install_adios2_component() {
   fi
   if [[ -n "$CACHE_FILE" ]]; then
     args+=(-C "$CACHE_FILE")
+  fi
+  if [[ "$IS_CROSS" == true ]]; then
+    args+=(
+      --cross-build
+      -DFFS_FLOAT_FORMAT_TEST:STRING=0
+      -DFFS_FLOAT_FORMAT_TEST__TRYRUN_OUTPUT:STRING=Format_IEEE_754_littleendian
+      -DADIOS2_USE_MHS=OFF -DADIOS2_USE_PNG=OFF
+      -DADIOS2_USE_Sodium=OFF -DADIOS2_USE_OpenSSL=OFF
+      -DADIOS2_USE_CURL=OFF -DADIOS2_USE_Campaign=OFF
+      -DADIOS2_USE_Profiling=OFF
+    )
   fi
   apply_cache_compiler_env
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
@@ -1153,7 +1179,11 @@ check_stack() {
     failed=1
   else
     local mod
-    for mod in mpi4py numpy; do
+    local python_modules=(numpy)
+    if [[ "$IS_CROSS" != true ]]; then
+      python_modules+=(mpi4py)
+    fi
+    for mod in "${python_modules[@]}"; do
       if ! "$STACK_VENV_BIN" -c "import $mod" >/dev/null 2>&1; then
         err "python module not importable: $mod"
         failed=1
@@ -1345,10 +1375,13 @@ main() {
   build_fingerprint
 
   if [[ "$IS_CROSS" == true ]]; then
-    if [[ "$WITH_ADIOS2" == true || "$WITH_ASCENT" == true ]]; then
-      die "cross-compilation cache detected; --with-adios2/--with-ascent require a native build (default deps-only stack is OK)"
+    if [[ "$WITH_ASCENT" == true || "$WITH_ADIOS2_PYTHON" == true ]]; then
+      die "cross-compilation cache detected; --with-ascent and --with-adios2-python require a native build"
     fi
-    log "--- Cross-compilation stack (deps only) ---"
+    if [[ "$WITH_ADIOS2" == true && ( -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ) ]]; then
+      die "cross-built ADIOS2 requires an aarch64 CMake cache (FFS float format is target-specific)"
+    fi
+    log "--- Cross-compilation stack (host Python, target C++ libraries) ---"
   fi
 
   log "--- Build stack: $STACK_DIR ---"

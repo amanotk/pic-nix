@@ -55,7 +55,7 @@ scripts/prepare_build_stack.sh "$HOME/picnix-stack" \
 
 | Flag | Effect |
 | --- | --- |
-| `--with-adios2` | Build ADIOS2 (C++/MPI only; Python bindings off) into `<stack>/adios2` |
+| `--with-adios2` | Build ADIOS2 (C++/MPI only; Python bindings off) into `<stack>/adios2`; supports Fugaku aarch64 cross-builds |
 | `--with-adios2-python` | Also build ADIOS2 Python bindings into the stack venv |
 | `--with-ascent` | Build Ascent **slim** (zlib, Conduit, VTK-m, Ascent only — no HDF5/Silo/ZFP/MFEM/RAJA, no Sphinx/docs/examples) into the stack venv |
 | `--ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP). Docs/examples stay off (no Sphinx). |
@@ -80,7 +80,9 @@ does not change**. Source the same file in **job scripts** as well: the C++
 binaries linked to Ascent or ADIOS2 need `LD_LIBRARY_PATH`, and Python
 analysis or Ascent extracts need the stack interpreter on `PATH`. If the MPI
 launcher does not forward the environment, pass those variables explicitly
-(for example `mpiexec -x LD_LIBRARY_PATH ...`).  
+(for example `mpiexec -x LD_LIBRARY_PATH ...`). For cross-compiled Fugaku
+stacks, the venv contains login-node Python, so use it only on the login node;
+set target library paths explicitly in compute-node jobs instead.  
 
 The same `--cache` file is forwarded to ADIOS2 (via `-C`) and exported as
 `CC`/`CXX`/`CFLAGS`/`CXXFLAGS` for Ascent. This matters for
@@ -105,9 +107,82 @@ finished steps; a changed compiler or cache invalidates them. Use
 Build parallelism defaults to **4** jobs (`--jobs` / `CMAKE_BUILD_PARALLEL_LEVEL`
 override). Full `nproc` often overruns memory on Intel `icpx` and VTK-m.  
 
-Cross-compilation caches may build the default deps-only stack.
-`--with-adios2` and `--with-ascent` require a native build because the
-selected Python interpreter runs during those builds.  
+Cross-compilation caches may build the default stack. Fugaku aarch64 caches
+also support `--with-adios2`: the stack forwards the cache to ADIOS2, supplies
+its target-specific FFS float-format result, and limits optional ADIOS2
+libraries to those available for the target. The login-node Python environment
+does not build target `mpi4py`; it installs a native ADIOS2 Python reader when
+the editable `picnix` package is enabled. `--with-adios2-python` and
+`--with-ascent` still require a native build.  
+
+### Fugaku login-node build with LLVM 23
+
+Fugaku login nodes are `x86_64`; the LLVM 23 module supplies `aarch64` MPI
+cross-compilers. Load the module before building and use the same cache for
+the dependency stack and PIC-NIX:  
+
+```sh
+module load LLVM/llvmorg-23.1.0
+scripts/prepare_build_stack.sh "$HOME/picnix-llvm23" \
+  --cache cmake/fugaku-llvm23-cross.cmake --with-adios2 --jobs 2
+source "$HOME/picnix-llvm23/env.sh"
+cmake -S . -B build-fugaku-llvm23 -C cmake/fugaku-llvm23-cross.cmake \
+  -DCMAKE_PREFIX_PATH="$HOME/picnix-llvm23/deps" \
+  -DPICNIX_USE_SYSTEM_LIBS=ON \
+  -DPICNIX_ENABLE_ADIOS2=ON \
+  -DPICNIX_ADIOS2_ROOT="$HOME/picnix-llvm23/adios2"
+cmake --build build-fugaku-llvm23 --parallel 2
+```
+
+Use a separate stack and build directory from LLVM 22. Load the matching
+module in the job script and follow the site instructions for staging LLVM
+shared libraries on compute nodes. The stack's Python venv is built for the
+login node and must not be used as a compute-node interpreter.  
+
+The cache also acts as a CMake toolchain file so CMake knows it is
+cross-compiling before it configures a project. Passing only target compiler
+flags with `-C` does not accomplish this: CMake may otherwise try to run
+`aarch64` probes on the login node. Use a **fresh build directory** if one
+was previously configured with the older cache.  
+
+For LLVM 22, replace `23` with `22` in the module, cache, stack path, and
+build directory above. Keep a separate stack per compiler. The same stack
+command builds ADIOS2 on the login node with either LLVM version. The
+standalone installer remains available when only ADIOS2 is needed:  
+
+```sh
+module load LLVM/llvmorg-23.1.0
+MPICC=mpiclang MPICXX=mpiclang++ CMAKE_BUILD_PARALLEL_LEVEL=2 \
+  scripts/install_adios2.sh "$HOME/adios2-llvm23" --no-python --cross-build \
+  -C cmake/fugaku-llvm23-cross.cmake \
+  -DADIOS2_USE_MHS=OFF -DADIOS2_USE_PNG=OFF \
+  -DADIOS2_USE_Sodium=OFF -DADIOS2_USE_OpenSSL=OFF \
+  -DADIOS2_USE_CURL=OFF -DADIOS2_USE_Campaign=OFF \
+  -DADIOS2_USE_Profiling=OFF \
+  -DFFS_FLOAT_FORMAT_TEST:STRING=0 \
+  -DFFS_FLOAT_FORMAT_TEST__TRYRUN_OUTPUT:STRING=Format_IEEE_754_littleendian
+```
+
+Run this from the repository root on the login node. The script clones ADIOS2
+2.12.1 into a temporary directory and deletes the source/build tree after
+completion; use a manual source build if you need to debug a failure. This
+command and the stack-based builds were tested: the installed
+`libadios2_cxx_mpi.so` is an `aarch64` library, and its CMake package was
+successfully used to link a cross-compiled MPI application. The default
+utilities also needed the target GCC 8 `stdc++fs` library (set by the cache)
+and the build-tree linker search path supplied by `--cross-build`. Check any
+additional libraries detected by CMake to ensure they are compiled for
+`aarch64`.  
+The ADIOS2 library has **not yet been run on a compute node**. To link PIC-NIX
+against it, set `-DPICNIX_ENABLE_ADIOS2=ON` and
+`-DPICNIX_ADIOS2_ROOT="$HOME/adios2-llvm23"` during configuration, and make
+the installed ADIOS2 `lib` directory available at runtime.  
+
+Ascent's current installer drives an upstream superbuild and wires Conduit
+and Ascent Python extensions into the stack's login-node venv. Those target
+extensions cannot be loaded by the login-node interpreter; the superbuild
+also needs host-side build tools separate from target libraries. The existing
+script therefore cannot prepare a cross-compiled Ascent stack.  
 
 ### ADIOS2 Python reader
 
@@ -187,7 +262,7 @@ modules, runtime libraries, and scheduler launch commands for each site.
 | Linux, Intel oneAPI and Intel MPI | `cmake/linux-intel.cmake` | Uses `mpiicpc` with the `icpx` backend. |
 | Fugaku | `cmake/fugaku-*-cross.cmake` | Cross-compilation from a login node. |
 
-The current Fugaku LLVM example is `cmake/fugaku-llvm22-cross.cmake`. It
+The current Fugaku LLVM example is `cmake/fugaku-llvm23-cross.cmake`. It
 disables `MPI_THREAD_MULTIPLE` and documents the required compiler module and
 compute-node library staging. Site details may change independently of PIC-NIX.  
 

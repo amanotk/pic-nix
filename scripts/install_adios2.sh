@@ -6,7 +6,7 @@ ADIOS2_REPOSITORY="https://github.com/ornladios/ADIOS2.git"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install_adios2.sh [install_prefix] (--python <python_executable> | --no-python) [cmake_options...]
+Usage: scripts/install_adios2.sh [install_prefix] (--python <python_executable> | --no-python) [--cross-build] [cmake_options...]
 
 Build ADIOS2 with MPI support. The default installation prefix is "$HOME/usr".
 
@@ -28,6 +28,11 @@ script is invoked.
 Set MPICC and MPICXX to select MPI compiler wrappers. Set
 CMAKE_BUILD_PARALLEL_LEVEL to control parallel build jobs (default: 4;
 raise it if you have memory headroom).
+
+For a Linux cross-build, --cross-build adds the build-tree shared-library
+linker path needed by ADIOS2 utilities. Pass a real CMake toolchain file and
+any target-specific try_run results separately. Python bindings are not
+supported by this option.
 EOF
 }
 
@@ -42,6 +47,7 @@ absolute_path() {
 PREFIX="$HOME/usr"
 PYTHON_EXECUTABLE=""
 PYTHON_MODE=""
+CROSS_BUILD=false
 CMAKE_CONFIGURE_ARGS=()
 
 if (( $# > 0 )) && [[ "$1" != -* ]]; then
@@ -63,6 +69,10 @@ while (( $# > 0 )); do
     --no-python)
       PYTHON_EXECUTABLE=""
       PYTHON_MODE="off"
+      shift
+      ;;
+    --cross-build)
+      CROSS_BUILD=true
       shift
       ;;
     -C)
@@ -106,6 +116,11 @@ if [[ -z "$PYTHON_MODE" ]]; then
   exit 2
 fi
 
+if [[ "$CROSS_BUILD" == true && "$PYTHON_MODE" != "off" ]]; then
+  echo "--cross-build requires --no-python" >&2
+  exit 2
+fi
+
 if [[ "$PREFIX" != /* ]]; then
   PREFIX="$PWD/$PREFIX"
 fi
@@ -138,6 +153,8 @@ for compiler in "$MPICC_EXECUTABLE" "$MPICXX_EXECUTABLE"; do
     exit 2
   fi
 done
+MPICC_EXECUTABLE="$(command -v "$MPICC_EXECUTABLE")"
+MPICXX_EXECUTABLE="$(command -v "$MPICXX_EXECUTABLE")"
 
 if [[ "$PYTHON_MODE" == "on" ]]; then
   if ! "$PYTHON_EXECUTABLE" -c 'import mpi4py, numpy' >/dev/null 2>&1; then
@@ -169,6 +186,14 @@ ADIOS2_DIR="$BUILDDIR/adios2"
 git clone "$ADIOS2_REPOSITORY" "$ADIOS2_DIR" \
   --branch "v$ADIOS2_VERSION" --depth 1
 
+ADIOS2_CROSS_ARGS=()
+if [[ "$CROSS_BUILD" == true ]]; then
+  ADIOS2_CROSS_ARGS+=(
+    -DCMAKE_INSTALL_LIBDIR=lib
+    "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath-link,$ADIOS2_DIR/build/lib"
+  )
+fi
+
 ADIOS2_PYTHON_ARGS=()
 if [[ "$PYTHON_MODE" == "on" ]]; then
   ADIOS2_PYTHON_ARGS+=(
@@ -181,6 +206,7 @@ fi
 
 cmake -S "$ADIOS2_DIR" -B "$ADIOS2_DIR/build" \
   "${CMAKE_CONFIGURE_ARGS[@]+"${CMAKE_CONFIGURE_ARGS[@]}"}" \
+  "${ADIOS2_CROSS_ARGS[@]+"${ADIOS2_CROSS_ARGS[@]}"}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_C_COMPILER="$MPICC_EXECUTABLE" \
