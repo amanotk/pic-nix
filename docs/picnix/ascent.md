@@ -31,6 +31,19 @@ cmake -S . -B build-ascent \
   -DCMAKE_CXX_COMPILER=mpicxx
 ```
 
+When `scripts/install_ascent.sh` is run with `--python-is-venv` (as done by
+`scripts/prepare_build_stack.sh --with-ascent`), `<prefix>/python-venv` is
+linked to the given virtual environment instead of creating a nested one.
+Conduit and Ascent Python modules then install into that environment.
+Activate the environment with `source <stack>/env.sh` before running Python
+extract tests.  
+
+`prepare_build_stack.sh --with-ascent` defaults to the installer’s **slim**
+profile: zlib, Conduit, VTK-m, and Ascent only (no HDF5, Silo, ZFP, MFEM,
+RAJA, Camp, or Umpire; Ascent docs/examples off — no Sphinx). Use
+`--ascent-full` or `install_ascent.sh --full` for the upstream full TPL set
+(ZFP then needs `cython` and `setuptools` in the target environment).  
+
 Advanced users may still pass `-DAscent_DIR=/path/to/lib/cmake/ascent`
 directly.  
 
