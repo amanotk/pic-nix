@@ -59,6 +59,7 @@ scripts/prepare_build_stack.sh "$HOME/picnix-stack" \
 | `--with-adios2-python` | Also build ADIOS2 Python bindings into the stack venv |
 | `--with-ascent` | Build Ascent **slim** (zlib, Conduit, VTK-m, Ascent only — no HDF5/Silo/ZFP/MFEM/RAJA, no Sphinx/docs/examples) into the stack venv |
 | `--ascent-extracts-only` | With a Fugaku aarch64 cross cache, build MPI-enabled Conduit and Ascent with target Python 3.11 extracts, without VTK-m/rendering (implies `--with-ascent`) |
+| `--ascent-rendering` | Same as `--ascent-extracts-only` but also builds VTK-m 2.3.0 and VTK-h for scene rendering and volume rendering |
 | `--ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP). Docs/examples stay off (no Sphinx). |
 | `--no-deps` | Skip the ordinary C++ dependencies |
 | `--no-picnix` | Skip the editable `picnix` install (generic stack) |
@@ -121,6 +122,9 @@ libraries against Fugaku's aarch64 Python 3.11 and NumPy, while a separate
 x86_64 Python 3.11 venv runs build-time scripts. The helper locates compatible
 packages in Fugaku's public Spack installation. It installs the target Python
 modules in `<stack>/ascent/python-modules`, not in the login-node venv.  
+`--ascent-rendering` adds VTK-m 2.3.0 and VTK-h for scene rendering and volume
+rendering. This increases build time significantly but enables Ascent's
+`render`, `volume_render`, and `rover` filters.  
 
 ### Fugaku login-node build with LLVM 23
 

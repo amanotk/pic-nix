@@ -10,7 +10,7 @@ usage() {
 Usage: scripts/install_ascent.sh [install_prefix] --python <python_executable> \
          [--python-is-venv] [--slim|--full]
        scripts/install_ascent.sh [install_prefix] --python <host_python_venv> \
-         --cross-python-extracts --cache <fugaku_cache> \
+         --cross-python-extracts [--rendering] --cache <fugaku_cache> \
          --target-python <aarch64_python_prefix> --target-numpy <aarch64_numpy_prefix>
 
 Build Ascent, Conduit, and Ascent's visualization dependencies with MPI and
@@ -31,9 +31,10 @@ Profiles:
             Docs/examples are still disabled (no Sphinx); Cython is required
             in the target environment for ZFP Python bindings.
   --cross-python-extracts
-            Build Conduit and Ascent with MPI and Python extracts for aarch64
-            without VTK-m or rendering. The host venv runs configure-time
-            Python; the target prefixes provide Python 3.11 and NumPy headers.
+            Build Conduit and Ascent with MPI and Python extracts for aarch64.
+            The host venv runs configure-time Python; the target prefixes
+            provide Python 3.11 and NumPy headers. Add --rendering to
+            also build VTK-m and VTK-h for scene rendering and volume rendering.
 
 Examples:
 
@@ -53,6 +54,7 @@ PYTHON_EXECUTABLE=""
 PYTHON_IS_VENV=false
 ASCENT_PROFILE="full"
 CROSS_PYTHON_EXTRACTS=false
+RENDERING=false
 CROSS_CACHE=""
 TARGET_PYTHON=""
 TARGET_NUMPY=""
@@ -78,6 +80,10 @@ while (( $# > 0 )); do
       ;;
     --cross-python-extracts)
       CROSS_PYTHON_EXTRACTS=true
+      shift
+      ;;
+    --rendering)
+      RENDERING=true
       shift
       ;;
     --cache|--target-python|--target-numpy)
@@ -120,6 +126,11 @@ fi
 
 if [[ "$PREFIX" != /* ]]; then
   PREFIX="$PWD/$PREFIX"
+fi
+
+if [[ "$RENDERING" == true && "$CROSS_PYTHON_EXTRACTS" != true ]]; then
+  echo "--rendering requires --cross-python-extracts" >&2
+  exit 2
 fi
 
 if [[ "$CROSS_PYTHON_EXTRACTS" == true ]]; then
@@ -291,13 +302,39 @@ PY
   cmake --build "$conduit_dir/build" --parallel "$BUILD_JOBS"
   cmake --install "$conduit_dir/build"
 
-  echo "--- Cross-building Ascent with Python extracts (no VTK-m) ---"
+  local ascent_vtkh=OFF ascent_apcomp=OFF ascent_vtkm_args=()
+  if [[ "$RENDERING" == true ]]; then
+    local vtkm_dir="$BUILDDIR/vtkm" vtkm_prefix="$PREFIX/vtkm-v2.3.0"
+    echo "--- Cross-building VTK-m 2.3.0 with rendering ---"
+    git clone https://gitlab.kitware.com/vtk/vtk-m.git "$vtkm_dir" \
+      --branch v2.3.0 --depth 1
+    git -C "$vtkm_dir" apply \
+      "$ascent_dir/scripts/build_ascent/2025_06_18_vtkm_z_extents_ray_culling_bugfix_viskores_mr109.patch"
+    cmake -S "$vtkm_dir" -B "$vtkm_dir/build" -C "$CROSS_CACHE" \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$vtkm_prefix" \
+      -DBUILD_SHARED_LIBS=ON -DVTKm_USE_64BIT_IDS=OFF \
+      -DVTKm_USE_DOUBLE_PRECISION=ON \
+      -DVTKm_USE_DEFAULT_TYPES_FOR_ASCENT=ON \
+      -DVTKm_ENABLE_MPI=ON -DVTKm_ENABLE_OPENMP=ON \
+      -DVTKm_ENABLE_RENDERING=ON -DVTKm_ENABLE_TESTING=OFF \
+      -DBUILD_TESTING=OFF -DVTKm_ENABLE_BENCHMARKS=OFF
+    cmake --build "$vtkm_dir/build" --parallel "$BUILD_JOBS"
+    cmake --install "$vtkm_dir/build"
+    ascent_vtkh=ON
+    ascent_apcomp=ON
+    ascent_vtkm_args=(-DVTKM_DIR="$vtkm_prefix")
+  fi
+
+  echo "--- Cross-building Ascent with Python extracts ---"
   cmake -S "$ascent_dir/src" -B "$ascent_dir/build" -C "$CROSS_CACHE" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$ascent_prefix" \
     -DENABLE_MPI=ON -DENABLE_SERIAL=OFF -DENABLE_PYTHON=ON \
     -DENABLE_FORTRAN=OFF -DENABLE_TESTS=OFF -DENABLE_EXAMPLES=OFF \
-    -DENABLE_UTILS=OFF -DENABLE_DOCS=OFF -DENABLE_VTKH=OFF \
-    -DENABLE_APCOMP=OFF -DENABLE_DRAY=OFF \
+    -DENABLE_UTILS=OFF -DENABLE_DOCS=OFF \
+    "-DENABLE_VTKH=$ascent_vtkh" \
+    "-DENABLE_APCOMP=$ascent_apcomp" \
+    -DENABLE_DRAY=OFF \
+    "${ascent_vtkm_args[@]+"${ascent_vtkm_args[@]}"}" \
     -DCONDUIT_DIR="$conduit_prefix" \
     -DCONDUIT_PYTHON_MODULE_DIR="$python_modules" \
     -DPYTHON_EXECUTABLE="$PYTHON_EXECUTABLE" \
@@ -313,9 +350,11 @@ PY
     echo "Ascent aarch64 Python module not installed under $python_modules" >&2
     exit 1
   }
+  local rendering_desc="without rendering"
+  [[ "$RENDERING" == true ]] && rendering_desc="with VTK-h rendering"
   cat <<EOF
 
-Ascent $ASCENT_VERSION (MPI + Python extracts, without rendering) installed to $PREFIX.
+Ascent $ASCENT_VERSION (MPI + Python extracts, $rendering_desc) installed to $PREFIX.
 Target Python modules: $python_modules
 EOF
 }

@@ -138,7 +138,9 @@ scripts/prepare_build_stack.sh "$HOME/picnix-llvm23" \
 
 `--ascent-extracts-only` implies `--with-ascent`; omit `--with-adios2` if it is
 not needed. The stack contains MPI-enabled Conduit and Ascent 0.9.5 with
-Python extracts, but no VTK-m/VTK-h rendering. The login-node environment
+Python extracts, but no VTK-m/VTK-h rendering. Use `--ascent-rendering`
+instead to also build VTK-m 2.3.0 and VTK-h for scene rendering and volume
+rendering. The login-node environment
 remains `<stack>/env.sh` for compilation. In compute-node jobs, load the same
 LLVM module and source `<stack>/ascent/compute-env.sh` instead. That script
 selects the aarch64 Python interpreter, adds the matching NumPy and mpi4py
@@ -153,7 +155,8 @@ To use another compatible set of public Spack installations, set
 Python must both be 3.11; this recipe uses NumPy 1.26.4.  
 
 The LLVM 23 login-node build produced aarch64 Conduit/Ascent Python modules,
-passed the stack check, and linked a PIC-NIX example. Python extract execution
+passed the stack check, and linked a PIC-NIX example. The rendering variant
+also produced aarch64 VTK-m and VTK-h libraries. Python extract execution
 on a compute node is not yet validated; the link also warned about Fujitsu
 runtime libraries needed by the site Python. Verify the module and library
 environment before relying on extracts in a simulation.  

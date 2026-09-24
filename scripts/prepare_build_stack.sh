@@ -39,6 +39,8 @@ Options:
   --with-ascent            Build Ascent into the stack Python environment
   --ascent-extracts-only   With --with-ascent and a Fugaku aarch64 cache:
                             cross-build MPI + Python extracts without rendering
+  --ascent-rendering       With --with-ascent and a Fugaku aarch64 cache:
+                            cross-build MPI + Python extracts with VTK-h rendering
   --ascent-full            With --with-ascent: upstream full TPL set (slow;
                            no Sphinx/docs; needs Cython for ZFP)
   --no-deps                Skip the ordinary C++ dependencies
@@ -80,6 +82,7 @@ WITH_ADIOS2_PYTHON=false
 WITH_ASCENT=false
 ASCENT_FULL=false
 ASCENT_EXTRACTS_ONLY=false
+ASCENT_RENDERING=false
 WITH_DEPS=true
 WITH_PICNIX=true
 CHECK_ONLY=false
@@ -159,6 +162,12 @@ while (( $# > 0 )); do
     --ascent-extracts-only)
       WITH_ASCENT=true
       ASCENT_EXTRACTS_ONLY=true
+      shift
+      ;;
+    --ascent-rendering)
+      WITH_ASCENT=true
+      ASCENT_EXTRACTS_ONLY=true
+      ASCENT_RENDERING=true
       shift
       ;;
     --ascent-full)
@@ -944,17 +953,20 @@ spack_public_prefix() {
 
 write_ascent_compute_env() {
   local target_python="$1" target_numpy="$2" target_mpi4py="$3"
-  local adios_lib=""
+  local adios_lib="" vtkm_lib=""
   if [[ -d "$STACK_ADIOS2/lib" ]]; then
     adios_lib=":$STACK_ADIOS2/lib"
   fi
+  for d in "$STACK_ASCENT"/vtkm-*/lib; do
+    [[ -d "$d" ]] && vtkm_lib=":$d"
+  done
   cat >"$STACK_ASCENT/compute-env.sh" <<EOF
 # Source on a Fugaku compute node after loading the matching LLVM module.
 # This environment uses aarch64 Python; do not source the login-node env.sh.
 export PYTHONHOME="$target_python:$target_python"
 export PATH="$target_python/bin:\$PATH"
 export PYTHONPATH="$STACK_ASCENT/python-modules:$target_numpy/lib/python3.11/site-packages:$target_mpi4py/lib/python3.11/site-packages:$REPO_ROOT/python/src\${PYTHONPATH:+:\$PYTHONPATH}"
-export LD_LIBRARY_PATH="$STACK_ASCENT/ascent-checkout/lib:$STACK_ASCENT/conduit-v0.9.5/lib:$target_python/lib$adios_lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$STACK_ASCENT/ascent-checkout/lib:$STACK_ASCENT/conduit-v0.9.5/lib:$target_python/lib$adios_lib$vtkm_lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 EOF
 }
 
@@ -988,7 +1000,7 @@ install_ascent_component() {
     "profile=$profile"
   )
   if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
-    stamp_items+=("target_python=$py_tag")
+    stamp_items+=("target_python=$py_tag" "rendering=$ASCENT_RENDERING")
   fi
   local expected
   expected="$(compute_stamp ascent "${stamp_items[@]}")"
@@ -1009,6 +1021,7 @@ install_ascent_component() {
     write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
     if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
       printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
+      printf 'rendering=%s\n' "$ASCENT_RENDERING" >>"$STAMP_DIR/ascent.meta"
       write_ascent_compute_env "$target_python" "$target_numpy" "$target_mpi4py"
     fi
     return 0
@@ -1024,6 +1037,9 @@ install_ascent_component() {
     ascent_args+=(--python "$host_venv/bin/python" --python-is-venv --slim
       --cross-python-extracts --cache "$CACHE_FILE"
       --target-python "$target_python" --target-numpy "$target_numpy")
+    if [[ "$ASCENT_RENDERING" == true ]]; then
+      ascent_args+=(--rendering)
+    fi
   elif [[ "$ASCENT_FULL" == true ]]; then
     ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--full)
@@ -1037,6 +1053,7 @@ install_ascent_component() {
   write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
   if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
     printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
+    printf 'rendering=%s\n' "$ASCENT_RENDERING" >>"$STAMP_DIR/ascent.meta"
     write_ascent_compute_env "$target_python" "$target_numpy" "$target_mpi4py"
   fi
 }
@@ -1049,7 +1066,8 @@ ld_path_parts() {
     local d
     for d in \
       "$STACK_ASCENT/ascent-checkout/lib" \
-      "$STACK_ASCENT"/conduit-*/lib
+      "$STACK_ASCENT"/conduit-*/lib \
+      "$STACK_ASCENT"/vtkm-*/lib
     do
       [[ -d "$d" ]] && parts+=("$d")
     done
@@ -1330,9 +1348,10 @@ check_stack() {
         "profile=$ascent_profile"
       )
       if [[ "$ascent_profile" == "extracts" ]]; then
-        local target_tag
+        local target_tag render_tag
         target_tag="$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
-        ascent_items+=("target_python=$target_tag")
+        render_tag="$(awk -F= '/^rendering=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+        ascent_items+=("target_python=$target_tag" "rendering=$render_tag")
       fi
       local expected
       expected="$(compute_stamp ascent "${ascent_items[@]}")"
@@ -1458,10 +1477,10 @@ main() {
 
   if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
     if [[ "$IS_CROSS" != true || -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ]]; then
-      die "--ascent-extracts-only requires a Fugaku aarch64 cross-compilation cache"
+      die "--ascent-extracts-only/--ascent-rendering requires a Fugaku aarch64 cross-compilation cache"
     fi
     if [[ "$ASCENT_FULL" == true ]]; then
-      die "--ascent-full cannot be combined with --ascent-extracts-only"
+      die "--ascent-full cannot be combined with --ascent-extracts-only/--ascent-rendering"
     fi
   fi
   if [[ "$IS_CROSS" == true ]]; then
