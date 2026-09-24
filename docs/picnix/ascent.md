@@ -133,14 +133,12 @@ itself. With LLVM 23 and a separate stack prefix:
 module load LLVM/llvmorg-23.1.0
 scripts/prepare_build_stack.sh "$HOME/picnix-llvm23" \
   --cache cmake/fugaku-llvm23-cross.cmake \
-  --with-adios2 --ascent-extracts-only --jobs 2
+  --with-adios2 --with-ascent-rendering --jobs 2
 ```
 
-`--ascent-extracts-only` implies `--with-ascent`; omit `--with-adios2` if it is
+`--with-ascent-rendering` implies `--with-ascent`; omit `--with-adios2` if it is
 not needed. The stack contains MPI-enabled Conduit and Ascent 0.9.5 with
-Python extracts, but no VTK-m/VTK-h rendering. Use `--ascent-rendering`
-instead to also build VTK-m 2.3.0 and VTK-h for scene rendering and volume
-rendering. The login-node environment
+Python extracts and VTK-h rendering. The login-node environment
 remains `<stack>/env.sh` for compilation. In compute-node jobs, load the same
 LLVM module and source `<stack>/ascent/compute-env.sh` instead. That script
 selects the aarch64 Python interpreter, adds the matching NumPy and mpi4py

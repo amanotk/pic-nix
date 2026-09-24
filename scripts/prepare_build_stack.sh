@@ -17,16 +17,6 @@ By default this installs:
     mpi4py, numpy, and an editable picnix install (cross-builds omit mpi4py)
   - the ordinary C++ dependencies into <stack_dir>/deps
 
-When --with-ascent is used, the Ascent superbuild runs in **slim** profile
-(zlib + Conduit + VTK-m + Ascent only; no HDF5/Silo/ZFP/MFEM/RAJA/Sphinx).
-Use --ascent-full for upstream's full third-party set (still no Sphinx/docs;
-Cython only). 
-
-Optional long builds (off by default):
-  --with-adios2         ADIOS2 C++/MPI library (Python bindings off)
-  --with-adios2-python  ADIOS2 Python bindings as well (implies --with-adios2)
-  --with-ascent         Ascent + Conduit (slim); Python modules go into the stack venv
-
 Options:
   --cache <file.cmake>     CMake initial-cache that selects the compiler
                            (required unless both --mpicc and --mpicxx are given)
@@ -36,12 +26,10 @@ Options:
                            exists (default: 3.12)
   --with-adios2            Build ADIOS2 (C++ only)
   --with-adios2-python     Build ADIOS2 with Python bindings
-  --with-ascent            Build Ascent into the stack Python environment
-  --ascent-extracts-only   With --with-ascent and a Fugaku aarch64 cache:
-                            cross-build MPI + Python extracts without rendering
-  --ascent-rendering       With --with-ascent and a Fugaku aarch64 cache:
-                            cross-build MPI + Python extracts with VTK-h rendering
-  --ascent-full            With --with-ascent: upstream full TPL set (slow;
+  --with-ascent            Build Ascent + Conduit (slim profile)
+  --with-ascent-rendering  With --with-ascent and a cross-compilation cache:
+                            build MPI + Python extracts with VTK-h rendering
+  --with-ascent-full       With --with-ascent: upstream full TPL set (slow;
                            no Sphinx/docs; needs Cython for ZFP)
   --no-deps                Skip the ordinary C++ dependencies
   --no-picnix              Skip the editable picnix install
@@ -62,10 +50,11 @@ Example (default stack):
     -DCMAKE_PREFIX_PATH=<stack_dir>/deps \
     -DPICNIX_USE_SYSTEM_LIBS=ON
 
-Cross-compilation caches may build the default stack. Fugaku aarch64 caches
-also support --with-adios2 (C++/MPI only) and --ascent-extracts-only (MPI and
-Python extracts, without rendering). --with-adios2-python and Ascent's
-rendering/full profiles require a native build.
+Cross-compilation caches may build the default stack. Cross-compilation
+caches with Python target support also allow --with-adios2, --with-adios2-python
+(C++/MPI and Python bindings for the target), and --with-ascent-rendering
+(MPI and Python extracts with VTK-h rendering).
+--with-ascent-full requires a native build.
 
 Parallelism defaults to 4 jobs to avoid OOM on large hosts. Raise it with
 --jobs N or CMAKE_BUILD_PARALLEL_LEVEL if you have memory headroom.
@@ -159,18 +148,13 @@ while (( $# > 0 )); do
       WITH_ASCENT=true
       shift
       ;;
-    --ascent-extracts-only)
-      WITH_ASCENT=true
-      ASCENT_EXTRACTS_ONLY=true
-      shift
-      ;;
-    --ascent-rendering)
+    --with-ascent-rendering)
       WITH_ASCENT=true
       ASCENT_EXTRACTS_ONLY=true
       ASCENT_RENDERING=true
       shift
       ;;
-    --ascent-full)
+    --with-ascent-full)
       WITH_ASCENT=true
       ASCENT_FULL=true
       shift
@@ -878,6 +862,21 @@ install_adios2_component() {
       -DADIOS2_USE_CURL=OFF -DADIOS2_USE_Campaign=OFF
       -DADIOS2_USE_Profiling=OFF
     )
+    if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+      local target_python="${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
+      local target_numpy="${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+      local host_python="${PICNIX_ADIOS2_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
+      local host_venv="$STACK_ADIOS2/build-python-venv"
+      mkdir -p "$STACK_ADIOS2"
+      uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed
+      uv pip install --python "$host_venv/bin/python" pip 'numpy==1.26.4'
+      args+=(
+        --python "$host_venv/bin/python"
+        --cross-python
+        --target-python "$target_python"
+        --target-numpy "$target_numpy"
+      )
+    fi
   fi
   apply_cache_compiler_env
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
@@ -953,9 +952,14 @@ spack_public_prefix() {
 
 write_ascent_compute_env() {
   local target_python="$1" target_numpy="$2" target_mpi4py="$3"
-  local adios_lib="" vtkm_lib=""
+  local adios_lib="" adios_py="" vtkm_lib=""
   if [[ -d "$STACK_ADIOS2/lib" ]]; then
     adios_lib=":$STACK_ADIOS2/lib"
+  fi
+  if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+    for d in "$STACK_ADIOS2"/lib/python3.11/site-packages "$STACK_ADIOS2"/lib64/python3.11/site-packages; do
+      [[ -d "$d/adios2" ]] && adios_py=":$d"
+    done
   fi
   for d in "$STACK_ASCENT"/vtkm-*/lib; do
     [[ -d "$d" ]] && vtkm_lib=":$d"
@@ -965,7 +969,7 @@ write_ascent_compute_env() {
 # This environment uses aarch64 Python; do not source the login-node env.sh.
 export PYTHONHOME="$target_python:$target_python"
 export PATH="$target_python/bin:\$PATH"
-export PYTHONPATH="$STACK_ASCENT/python-modules:$target_numpy/lib/python3.11/site-packages:$target_mpi4py/lib/python3.11/site-packages:$REPO_ROOT/python/src\${PYTHONPATH:+:\$PYTHONPATH}"
+export PYTHONPATH="$STACK_ASCENT/python-modules$adios_py:$target_numpy/lib/python3.11/site-packages:$target_mpi4py/lib/python3.11/site-packages:$REPO_ROOT/python/src\${PYTHONPATH:+:\$PYTHONPATH}"
 export LD_LIBRARY_PATH="$STACK_ASCENT/ascent-checkout/lib:$STACK_ASCENT/conduit-v0.9.5/lib:$target_python/lib$adios_lib$vtkm_lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
 EOF
 }
@@ -1400,7 +1404,18 @@ check_stack() {
       err "ADIOS2 CMake package missing under $STACK_ADIOS2"
       failed=1
     fi
-    if [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
+    if [[ "$IS_CROSS" == true && "$WITH_ADIOS2_PYTHON" == true ]]; then
+      local adios_py_mod=""
+      for d in "$STACK_ADIOS2"/lib/python3.11/site-packages/adios2 "$STACK_ADIOS2"/lib64/python3.11/site-packages/adios2; do
+        [[ -d "$d" ]] && adios_py_mod="$d"
+      done
+      if [[ -z "$adios_py_mod" ]]; then
+        err "ADIOS2 target Python module missing under $STACK_ADIOS2"
+        failed=1
+      else
+        log "ADIOS2 target Python module: $adios_py_mod"
+      fi
+    elif [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
       log "python import adios2: ok"
     else
       log "python import adios2: not in stack venv (expected for C++-only ADIOS2; use python[adios] to read)"
@@ -1477,15 +1492,15 @@ main() {
 
   if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
     if [[ "$IS_CROSS" != true || -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ]]; then
-      die "--ascent-extracts-only/--ascent-rendering requires a Fugaku aarch64 cross-compilation cache"
+      die "--with-ascent-rendering requires a Fugaku aarch64 cross-compilation cache"
     fi
     if [[ "$ASCENT_FULL" == true ]]; then
-      die "--ascent-full cannot be combined with --ascent-extracts-only/--ascent-rendering"
+      die "--with-ascent-full cannot be combined with --with-ascent-rendering"
     fi
   fi
   if [[ "$IS_CROSS" == true ]]; then
-    if [[ ( "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ) || "$WITH_ADIOS2_PYTHON" == true ]]; then
-      die "cross-compilation cache detected; --with-ascent needs --ascent-extracts-only, and --with-adios2-python requires a native build"
+    if [[ ( "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ) ]]; then
+      die "cross-compilation cache detected; --with-ascent needs --with-ascent-rendering"
     fi
     if [[ "$WITH_ADIOS2" == true && ( -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ) ]]; then
       die "cross-built ADIOS2 requires an aarch64 CMake cache (FFS float format is target-specific)"
@@ -1506,6 +1521,12 @@ main() {
   install_ascent_component
   wire_python_paths
   write_env_sh
+  if [[ "$IS_CROSS" == true && "$WITH_ASCENT" != true && "$WITH_ADIOS2_PYTHON" == true ]]; then
+    local target_python="${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
+    local target_numpy="${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+    local target_mpi4py="${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
+    write_ascent_compute_env "$target_python" "$target_numpy" "$target_mpi4py"
+  fi
   print_summary
 }
 

@@ -6,7 +6,7 @@ ADIOS2_REPOSITORY="https://github.com/ornladios/ADIOS2.git"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install_adios2.sh [install_prefix] (--python <python_executable> | --no-python) [--cross-build] [cmake_options...]
+Usage: scripts/install_adios2.sh [install_prefix] (--python <python_executable> | --no-python) [--cross-build] [--cross-python --target-python <aarch64_python_prefix> --target-numpy <aarch64_numpy_prefix>] [cmake_options...]
 
 Build ADIOS2 with MPI support. The default installation prefix is "$HOME/usr".
 
@@ -31,8 +31,13 @@ raise it if you have memory headroom).
 
 For a Linux cross-build, --cross-build adds the build-tree shared-library
 linker path needed by ADIOS2 utilities. Pass a real CMake toolchain file and
-any target-specific try_run results separately. Python bindings are not
-supported by this option.
+any target-specific try_run results separately.
+
+For cross-compiled Python bindings, use --cross-python with --python
+(host x86_64 venv for pip/build steps) and --target-python/--target-numpy
+(aarch64 Python 3.11 and NumPy prefixes for headers and libs). The host
+Python runs pip and CMake configure-time scripts; extensions compile against
+the target Python ABI.
 EOF
 }
 
@@ -48,6 +53,9 @@ PREFIX="$HOME/usr"
 PYTHON_EXECUTABLE=""
 PYTHON_MODE=""
 CROSS_BUILD=false
+CROSS_PYTHON=false
+TARGET_PYTHON=""
+TARGET_NUMPY=""
 CMAKE_CONFIGURE_ARGS=()
 
 if (( $# > 0 )) && [[ "$1" != -* ]]; then
@@ -74,6 +82,21 @@ while (( $# > 0 )); do
     --cross-build)
       CROSS_BUILD=true
       shift
+      ;;
+    --cross-python)
+      CROSS_PYTHON=true
+      shift
+      ;;
+    --target-python|--target-numpy)
+      if (( $# < 2 )); then
+        echo "Missing path after $1" >&2
+        exit 2
+      fi
+      case "$1" in
+        --target-python) TARGET_PYTHON="$2" ;;
+        --target-numpy) TARGET_NUMPY="$2" ;;
+      esac
+      shift 2
       ;;
     -C)
       if (( $# < 2 )); then
@@ -116,13 +139,43 @@ if [[ -z "$PYTHON_MODE" ]]; then
   exit 2
 fi
 
-if [[ "$CROSS_BUILD" == true && "$PYTHON_MODE" != "off" ]]; then
-  echo "--cross-build requires --no-python" >&2
+if [[ "$CROSS_PYTHON" == true && "$PYTHON_MODE" == "off" ]]; then
+  echo "--cross-python cannot be combined with --no-python" >&2
+  exit 2
+fi
+
+if [[ "$CROSS_PYTHON" == true && -z "$TARGET_PYTHON" ]]; then
+  echo "--cross-python requires --target-python and --target-numpy" >&2
+  exit 2
+fi
+
+if [[ "$CROSS_BUILD" == true && "$PYTHON_MODE" != "off" && "$CROSS_PYTHON" != true ]]; then
+  echo "--cross-build with Python requires --cross-python" >&2
   exit 2
 fi
 
 if [[ "$PREFIX" != /* ]]; then
   PREFIX="$PWD/$PREFIX"
+fi
+
+if [[ "$CROSS_PYTHON" == true ]]; then
+  for variable in TARGET_PYTHON TARGET_NUMPY; do
+    if [[ "${!variable}" != /* ]]; then
+      printf -v "$variable" '%s/%s' "$PWD" "${!variable}"
+    fi
+  done
+  if [[ ! -f "$TARGET_PYTHON/include/python3.11/Python.h" ]]; then
+    echo "Target Python 3.11 headers not found under $TARGET_PYTHON" >&2
+    exit 2
+  fi
+  if [[ ! -f "$TARGET_PYTHON/lib/libpython3.11.so" ]]; then
+    echo "Target Python library not found under $TARGET_PYTHON" >&2
+    exit 2
+  fi
+  if [[ ! -f "$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include/numpy/arrayobject.h" ]]; then
+    echo "Target NumPy headers not found under $TARGET_NUMPY" >&2
+    exit 2
+  fi
 fi
 
 if [[ "$PYTHON_MODE" == "on" ]]; then
@@ -156,9 +209,16 @@ done
 MPICC_EXECUTABLE="$(command -v "$MPICC_EXECUTABLE")"
 MPICXX_EXECUTABLE="$(command -v "$MPICXX_EXECUTABLE")"
 
-if [[ "$PYTHON_MODE" == "on" ]]; then
+if [[ "$PYTHON_MODE" == "on" && "$CROSS_PYTHON" != true ]]; then
   if ! "$PYTHON_EXECUTABLE" -c 'import mpi4py, numpy' >/dev/null 2>&1; then
     echo "mpi4py and numpy are required in the selected Python environment: $PYTHON_EXECUTABLE" >&2
+    exit 2
+  fi
+fi
+
+if [[ "$CROSS_PYTHON" == true ]]; then
+  if ! "$PYTHON_EXECUTABLE" -c 'import pip, numpy; assert numpy.__version__ == "1.26.4"; import sys; assert sys.version_info[:2] == (3, 11)' >/dev/null 2>&1; then
+    echo "Cross-build host Python must be 3.11 with pip and NumPy 1.26.4: $PYTHON_EXECUTABLE" >&2
     exit 2
   fi
 fi
@@ -195,7 +255,21 @@ if [[ "$CROSS_BUILD" == true ]]; then
 fi
 
 ADIOS2_PYTHON_ARGS=()
-if [[ "$PYTHON_MODE" == "on" ]]; then
+if [[ "$CROSS_PYTHON" == true ]]; then
+  ADIOS2_PYTHON_ARGS+=(
+    -DADIOS2_USE_Python=ON
+    "-DPython_EXECUTABLE=$PYTHON_EXECUTABLE"
+    "-DPython_INCLUDE_DIR=$TARGET_PYTHON/include/python3.11"
+    "-DPython_LIBRARY=$TARGET_PYTHON/lib/libpython3.11.so"
+    "-DPython3_INCLUDE_DIR=$TARGET_PYTHON/include/python3.11"
+    "-DPython3_LIBRARY=$TARGET_PYTHON/lib/libpython3.11.so"
+    "-DPython_INCLUDE_DIRS=$TARGET_PYTHON/include/python3.11"
+    "-DPython_LIBRARIES=$TARGET_PYTHON/lib/libpython3.11.so"
+    "-DPython_NumPy_INCLUDE_DIRS=$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include"
+    "-DPython3_NumPy_INCLUDE_DIRS=$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include"
+    -DADIOS2_USE_PIP=OFF
+  )
+elif [[ "$PYTHON_MODE" == "on" ]]; then
   ADIOS2_PYTHON_ARGS+=(
     -DADIOS2_USE_Python=ON
     "-DPython_EXECUTABLE=$PYTHON_EXECUTABLE"
@@ -251,7 +325,7 @@ if [[ -z "$ADIOS2_CMAKE_DIR" ]]; then
   exit 1
 fi
 
-if [[ "$PYTHON_MODE" == "on" ]]; then
+if [[ "$PYTHON_MODE" == "on" && "$CROSS_PYTHON" != true ]]; then
   PYTHON_VERSION="$(
     "$PYTHON_EXECUTABLE" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
   )"
@@ -270,6 +344,15 @@ import mpi4py
 print("adios2:", adios2.__file__)
 print("mpi4py:", mpi4py.__file__)
 PY
+fi
+
+if [[ "$CROSS_PYTHON" == true ]]; then
+  for candidate in "$PREFIX/lib/python3.11/site-packages/adios2" "$PREFIX/lib64/python3.11/site-packages/adios2"; do
+    if [[ -d "$candidate" ]]; then
+      echo "ADIOS2 target Python module: $candidate"
+      break
+    fi
+  done
 fi
 
 cat <<EOF
