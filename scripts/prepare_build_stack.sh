@@ -636,6 +636,20 @@ prepare_python() {
     py_packages+=",picnix"
   fi
 
+  # Editable picnix extras. Cross builds keep the PyPI ADIOS2 reader on the
+  # login node; the built bindings are target-only and exposed through
+  # compute-env.sh.
+  local picnix_extras=""
+  if [[ "$WITH_PICNIX" == true ]]; then
+    picnix_extras="mpi,test"
+    if [[ "$IS_CROSS" == true ]]; then
+      picnix_extras="test"
+    fi
+    if [[ "$WITH_ADIOS2" == true && ( "$WITH_ADIOS2_PYTHON" != true || "$IS_CROSS" == true ) ]]; then
+      picnix_extras="${picnix_extras},adios"
+    fi
+  fi
+
   local expected
   local stamp_inputs=(
     "with_picnix=$WITH_PICNIX"
@@ -645,6 +659,7 @@ prepare_python() {
     "ascent_full=$ASCENT_FULL"
     "desired_python=$desired"
     "packages=$py_packages"
+    "extras=$picnix_extras"
   )
   if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
     # Editable installs do not pick up new declared deps/entry points.
@@ -679,7 +694,8 @@ prepare_python() {
       "with_ascent=$WITH_ASCENT" \
       "ascent_full=$ASCENT_FULL" \
       "desired_python=$desired" \
-      "packages=$py_packages"
+      "packages=$py_packages" \
+      "extras=$picnix_extras"
     if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
       printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
     fi
@@ -698,14 +714,7 @@ prepare_python() {
       uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     fi
     if [[ "$WITH_PICNIX" == true ]]; then
-      local extras="mpi,test"
-      if [[ "$IS_CROSS" == true ]]; then
-        extras="test"
-      fi
-      if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
-        extras="${extras},adios"
-      fi
-      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
+      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$picnix_extras]"
     fi
     write_stamp python "$expected"
     write_stamp_meta python \
@@ -715,7 +724,8 @@ prepare_python() {
       "with_ascent=$WITH_ASCENT" \
       "ascent_full=$ASCENT_FULL" \
       "desired_python=$desired" \
-      "packages=$py_packages"
+      "packages=$py_packages" \
+      "extras=$picnix_extras"
     if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
       printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
     fi
@@ -749,16 +759,9 @@ prepare_python() {
     fi
 
     if [[ "$WITH_PICNIX" == true ]]; then
-      local extras="mpi,test"
-      if [[ "$IS_CROSS" == true ]]; then
-        extras="test"
-      fi
-      if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
-        extras="${extras},adios"
-      fi
-      log "--- Installing editable picnix [$extras] ---"
-      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
-      if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+      log "--- Installing editable picnix [$picnix_extras] ---"
+      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$picnix_extras]"
+      if [[ "$WITH_ADIOS2_PYTHON" == true && "$IS_CROSS" != true ]]; then
         uv pip uninstall --python "$STACK_VENV_BIN" adios2 >/dev/null 2>&1 || true
       fi
     fi
@@ -771,7 +774,8 @@ prepare_python() {
       "with_ascent=$WITH_ASCENT" \
       "ascent_full=$ASCENT_FULL" \
       "desired_python=$desired" \
-      "packages=$py_packages"
+      "packages=$py_packages" \
+      "extras=$picnix_extras"
     if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
       printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
     fi
@@ -814,18 +818,37 @@ install_adios2_component() {
   if [[ "$WITH_ADIOS2" != true ]]; then
     return 0
   fi
-  local py_tag=""
+  local python_mode
+  python_mode="$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)"
+  local py_tag="" target_python="" target_numpy="" target_mpi4py="" host_python=""
   if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
-    py_tag="$(venv_python_tag)"
+    if [[ "$IS_CROSS" == true ]]; then
+      # Resolve the target ABI before the stamp check so a prefix change
+      # invalidates a previously built extension.
+      target_python="${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
+      target_numpy="${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+      target_mpi4py="${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
+      host_python="${PICNIX_ADIOS2_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
+      py_tag="${target_python}:${target_numpy}:${target_mpi4py}:${host_python}"
+    else
+      py_tag="$(venv_python_tag)"
+    fi
+  fi
+  local stamp_items=(
+    "script:$REPO_ROOT/scripts/install_adios2.sh"
+    "python_mode=$python_mode"
+  )
+  local meta_items=("python_mode=$python_mode" "venv_python=$py_tag")
+  if [[ -n "$target_python" ]]; then
+    stamp_items+=("target_python=$target_python" "target_numpy=$target_numpy" "target_mpi4py=$target_mpi4py" "host_python=$host_python")
+    meta_items+=("target_python=$target_python" "target_numpy=$target_numpy" "target_mpi4py=$target_mpi4py" "host_python=$host_python")
   fi
   local expected
-  expected="$(compute_stamp adios2 \
-    "script:$REPO_ROOT/scripts/install_adios2.sh" \
-    "python_mode=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)")"
+  expected="$(compute_stamp adios2 "${stamp_items[@]}")"
   if [[ "$FORCE" == true ]]; then
     clear_stamp adios2
   fi
-  # ABI check: native bindings must match the current interpreter even if
+  # ABI check: bindings must match the current interpreter/target even if
   # other stamp inputs are unchanged.
   if [[ "$WITH_ADIOS2_PYTHON" == true && -f "$STAMP_DIR/adios2.meta" && -n "$py_tag" ]]; then
     local old_py
@@ -837,9 +860,7 @@ install_adios2_component() {
   fi
   if [[ -d "$STACK_ADIOS2" ]] && stamp_matches adios2 "$expected"; then
     log "ADIOS2 up to date: $STACK_ADIOS2"
-    write_stamp_meta adios2 \
-      "python_mode=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)" \
-      "venv_python=$py_tag"
+    write_stamp_meta adios2 "${meta_items[@]}"
     return 0
   fi
   log "--- Installing ADIOS2 into $STACK_ADIOS2 ---"
@@ -863,10 +884,6 @@ install_adios2_component() {
       -DADIOS2_USE_Profiling=OFF
     )
     if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
-      local target_python="${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
-      local target_numpy="${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
-      local target_mpi4py="${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
-      local host_python="${PICNIX_ADIOS2_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
       local host_venv="$STACK_ADIOS2/build-python-venv"
       mkdir -p "$STACK_ADIOS2"
       uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed --clear
@@ -884,9 +901,7 @@ install_adios2_component() {
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
     "$REPO_ROOT/scripts/install_adios2.sh" "${args[@]}"
   write_stamp adios2 "$expected"
-  write_stamp_meta adios2 \
-    "python_mode=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)" \
-    "venv_python=$py_tag"
+  write_stamp_meta adios2 "${meta_items[@]}"
 }
 
 find_adios2_site_packages() {
@@ -912,7 +927,9 @@ wire_python_paths() {
   [[ -n "$SITE_PACKAGES" && -d "$SITE_PACKAGES" ]] || return 0
   local pth="$SITE_PACKAGES/zz-picnix-stack.pth"
   local lines=()
-  if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" == true ]]; then
+  # Cross builds compile extensions for the target Python; expose them only
+  # through compute-env.sh, never through the login-node venv.
+  if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" == true && "$IS_CROSS" != true ]]; then
     local sp
     if sp="$(find_adios2_site_packages)"; then
       lines+=("$sp")
@@ -941,7 +958,7 @@ wire_python_paths() {
   if [[ "${#lines[@]}" -gt 0 ]]; then
     printf '%s\n' "${lines[@]}" >"$pth"
     log "Wrote $pth"
-  elif [[ -f "$pth" && "$WITH_ADIOS2_PYTHON" != true ]]; then
+  elif [[ -f "$pth" ]]; then
     rm -f "$pth"
   fi
 }
@@ -1382,10 +1399,22 @@ check_stack() {
     local adios_mode
     adios_mode="$(awk -F= '/^python_mode=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
     if [[ -n "$adios_mode" ]]; then
+      local adios_items=(
+        "script:$REPO_ROOT/scripts/install_adios2.sh"
+        "python_mode=$adios_mode"
+      )
+      local meta_target_python
+      meta_target_python="$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
+      if [[ -n "$meta_target_python" ]]; then
+        adios_items+=(
+          "target_python=$meta_target_python"
+          "target_numpy=$(awk -F= '/^target_numpy=/ {print $2}' "$STAMP_DIR/adios2.meta")"
+          "target_mpi4py=$(awk -F= '/^target_mpi4py=/ {print $2}' "$STAMP_DIR/adios2.meta")"
+          "host_python=$(awk -F= '/^host_python=/ {print $2}' "$STAMP_DIR/adios2.meta")"
+        )
+      fi
       local expected
-      expected="$(compute_stamp adios2 \
-        "script:$REPO_ROOT/scripts/install_adios2.sh" \
-        "python_mode=$adios_mode")"
+      expected="$(compute_stamp adios2 "${adios_items[@]}")"
       if [[ "$(cat "$(stamp_path adios2)")" != "$expected" ]]; then
         err "adios2 stamp does not match current fingerprint/script (rerun with --force if intended)"
         failed=1
@@ -1418,7 +1447,7 @@ check_stack() {
   fi
 
   if [[ -f "$(stamp_path python)" && -f "$STAMP_DIR/python.meta" ]]; then
-    local want_picnix want_adios want_adios_py want_ascent want_full desired_py packages
+    local want_picnix want_adios want_adios_py want_ascent want_full desired_py packages want_extras
     want_picnix="$(awk -F= '/^with_picnix=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     want_adios="$(awk -F= '/^with_adios2=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     want_adios_py="$(awk -F= '/^with_adios2_python=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
@@ -1426,6 +1455,7 @@ check_stack() {
     want_full="$(awk -F= '/^ascent_full=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     desired_py="$(awk -F= '/^desired_python=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     packages="$(awk -F= '/^packages=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    want_extras="$(awk -F= '/^extras=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     if [[ -n "$desired_py" && -n "$packages" ]]; then
       local py_items=(
         "with_picnix=$want_picnix"
@@ -1435,6 +1465,7 @@ check_stack() {
         "ascent_full=$want_full"
         "desired_python=$desired_py"
         "packages=$packages"
+        "extras=$want_extras"
       )
       local pyproject_hash
       pyproject_hash="$(awk -F= '/^pyproject_hash=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
@@ -1455,7 +1486,9 @@ check_stack() {
       err "ADIOS2 CMake package missing under $STACK_ADIOS2"
       failed=1
     fi
-    if [[ "$IS_CROSS" == true && "$WITH_ADIOS2_PYTHON" == true ]]; then
+    local adios_python_mode=""
+    adios_python_mode="$(awk -F= '/^python_mode=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
+    if [[ "$IS_CROSS" == true && "$adios_python_mode" == "on" ]]; then
       local adios_py_mod=""
       for d in "$STACK_ADIOS2"/lib/python3.11/site-packages/adios2 "$STACK_ADIOS2"/lib64/python3.11/site-packages/adios2; do
         [[ -d "$d" ]] && adios_py_mod="$d"
@@ -1466,8 +1499,15 @@ check_stack() {
       else
         log "ADIOS2 target Python module: $adios_py_mod"
       fi
+    elif [[ "$adios_python_mode" == "on" ]]; then
+      if [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
+        log "python import adios2: ok"
+      else
+        err "adios2 not importable from stack venv (python_mode=on)"
+        failed=1
+      fi
     elif [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
-      log "python import adios2: ok"
+      log "python import adios2: ok (PyPI reader)"
     else
       log "python import adios2: not in stack venv (expected for C++-only ADIOS2; use python[adios] to read)"
     fi

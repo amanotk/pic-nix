@@ -187,11 +187,13 @@ against it, set `-DPICNIX_ENABLE_ADIOS2=ON` and
 `-DPICNIX_ADIOS2_ROOT="$HOME/adios2-llvm23"` during configuration, and make
 the installed ADIOS2 `lib` directory available at runtime.  
 
-Ascent's current installer drives an upstream superbuild and wires Conduit
-and Ascent Python extensions into the stack's login-node venv. Those target
-extensions cannot be loaded by the login-node interpreter; the superbuild
-also needs host-side build tools separate from target libraries. The existing
-script therefore cannot prepare a cross-compiled Ascent stack.  
+Ascent's installer drives an upstream superbuild. A native `--with-ascent`
+build wires the Conduit and Ascent Python extensions into the stack's
+login-node venv. For Fugaku cross builds, `--with-ascent-rendering` splits
+the build: a host x86_64 Python 3.11 venv runs the build-time scripts while
+the extensions compile against the target aarch64 Python, and the resulting
+modules are exposed through `<stack>/compute-env.sh` rather than the
+login-node venv.  
 
 ### ADIOS2 Python reader
 
@@ -203,9 +205,11 @@ uv pip install --python .venv -e "./python[adios]"
 ```
 
 Use `--with-adios2-python` only when the reader must match the built ADIOS2
-exactly (same version and MPI). Do not install the PyPI `adios2` package into
-the stack venv in that mode; bindings are exposed through a path file the
-script writes.  
+exactly (same version and MPI). In native builds the PyPI `adios2` package is
+removed from the stack venv and the built bindings are exposed through a path
+file the script writes. Cross builds keep the PyPI reader for login-node
+analysis; the target bindings are exposed through `<stack>/compute-env.sh`
+instead.  
 
 ## Standard build
 
