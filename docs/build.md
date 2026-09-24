@@ -77,14 +77,12 @@ cmake -S . -B build -C cmake/linux-gcc.cmake \
 
 `env.sh` puts the stack Python on `PATH` and exports `LD_LIBRARY_PATH` /
 `CMAKE_PREFIX_PATH` without sourcing venv `activate`, so **your shell prompt
-does not change**. Source the same file in **job scripts** as well: the C++
-binaries linked to Ascent or ADIOS2 need `LD_LIBRARY_PATH`, and Python
-analysis or Ascent extracts need the stack interpreter on `PATH`. If the MPI
-launcher does not forward the environment, pass those variables explicitly
-(for example `mpiexec -x LD_LIBRARY_PATH ...`). For cross-compiled Fugaku
-stacks, the venv contains login-node Python, so use it only on the login node;
-for Python-extract-only Ascent builds, use `<stack>/ascent/compute-env.sh` in
-compute-node jobs instead.  
+does not change**. Use it on the login node for builds and analysis. In
+**job scripts**, source `<stack>/compute-env.sh` instead: for native builds it
+delegates to `env.sh`, and for cross builds it selects the aarch64 Python and
+libraries so the C++ binaries and Python extracts run on compute nodes. If the
+MPI launcher does not forward the environment, pass those variables explicitly
+(for example `mpiexec -x LD_LIBRARY_PATH ...`).  
 
 The same `--cache` file is forwarded to ADIOS2 (via `-C`) and exported as
 `CC`/`CXX`/`CFLAGS`/`CXXFLAGS` for Ascent. This matters for

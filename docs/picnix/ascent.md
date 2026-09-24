@@ -140,7 +140,7 @@ scripts/prepare_build_stack.sh "$HOME/picnix-llvm23" \
 not needed. The stack contains MPI-enabled Conduit and Ascent 0.9.5 with
 Python extracts and VTK-h rendering. The login-node environment
 remains `<stack>/env.sh` for compilation. In compute-node jobs, load the same
-LLVM module and source `<stack>/ascent/compute-env.sh` instead. That script
+LLVM module and source `<stack>/compute-env.sh` instead. That script
 selects the aarch64 Python interpreter, adds the matching NumPy and mpi4py
 modules, and points at the installed Conduit and Ascent libraries. Follow the
 [official Fugaku Spack guide](https://riken-rccs.github.io/fugaku-doc/docs/user-guide/sys-use/fugakuspackguide/build/en/intro.html)
