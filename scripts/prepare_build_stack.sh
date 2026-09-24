@@ -731,7 +731,7 @@ prepare_python() {
     # --seed adds pip; Conduit's superbuild runs
     # `python -m pip install . --no-build-isolation`, which also needs
     # setuptools and wheel already present in the environment.
-    uv venv "$STACK_PYTHON" --python "$desired" --seed
+    uv venv "$STACK_PYTHON" --python "$desired" --seed --clear
     [[ -x "$STACK_VENV_BIN" ]] || die "failed to create virtual environment at $STACK_PYTHON"
 
     local base_pkgs=(numpy setuptools wheel)
@@ -865,16 +865,18 @@ install_adios2_component() {
     if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
       local target_python="${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
       local target_numpy="${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+      local target_mpi4py="${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
       local host_python="${PICNIX_ADIOS2_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
       local host_venv="$STACK_ADIOS2/build-python-venv"
       mkdir -p "$STACK_ADIOS2"
-      uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed
+      uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed --clear
       uv pip install --python "$host_venv/bin/python" pip 'numpy==1.26.4'
       args+=(
         --python "$host_venv/bin/python"
         --cross-python
         --target-python "$target_python"
         --target-numpy "$target_numpy"
+        --target-mpi4py "$target_mpi4py"
       )
     fi
   fi
@@ -1036,7 +1038,7 @@ install_ascent_component() {
   if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
     local host_venv="$STACK_ASCENT/build-python-venv"
     mkdir -p "$STACK_ASCENT"
-    uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed
+    uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed --clear
     uv pip install --python "$host_venv/bin/python" pip 'numpy==1.26.4'
     ascent_args+=(--python "$host_venv/bin/python" --python-is-venv --slim
       --cross-python-extracts --cache "$CACHE_FILE"

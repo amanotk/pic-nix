@@ -6,7 +6,7 @@ ADIOS2_REPOSITORY="https://github.com/ornladios/ADIOS2.git"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install_adios2.sh [install_prefix] (--python <python_executable> | --no-python) [--cross-build] [--cross-python --target-python <aarch64_python_prefix> --target-numpy <aarch64_numpy_prefix>] [cmake_options...]
+Usage: scripts/install_adios2.sh [install_prefix] (--python <python_executable> | --no-python) [--cross-build] [--cross-python --target-python <aarch64_python_prefix> --target-numpy <aarch64_numpy_prefix> --target-mpi4py <aarch64_mpi4py_prefix>] [cmake_options...]
 
 Build ADIOS2 with MPI support. The default installation prefix is "$HOME/usr".
 
@@ -34,10 +34,10 @@ linker path needed by ADIOS2 utilities. Pass a real CMake toolchain file and
 any target-specific try_run results separately.
 
 For cross-compiled Python bindings, use --cross-python with --python
-(host x86_64 venv for pip/build steps) and --target-python/--target-numpy
-(aarch64 Python 3.11 and NumPy prefixes for headers and libs). The host
-Python runs pip and CMake configure-time scripts; extensions compile against
-the target Python ABI.
+(host x86_64 venv for pip/build steps) and --target-python/--target-numpy/
+--target-mpi4py (aarch64 Python 3.11, NumPy, and mpi4py prefixes for headers
+and module paths). The host Python runs pip and CMake configure-time scripts;
+extensions compile against the target Python ABI.
 EOF
 }
 
@@ -56,6 +56,7 @@ CROSS_BUILD=false
 CROSS_PYTHON=false
 TARGET_PYTHON=""
 TARGET_NUMPY=""
+TARGET_MPI4PY=""
 CMAKE_CONFIGURE_ARGS=()
 
 if (( $# > 0 )) && [[ "$1" != -* ]]; then
@@ -87,7 +88,7 @@ while (( $# > 0 )); do
       CROSS_PYTHON=true
       shift
       ;;
-    --target-python|--target-numpy)
+    --target-python|--target-numpy|--target-mpi4py)
       if (( $# < 2 )); then
         echo "Missing path after $1" >&2
         exit 2
@@ -95,6 +96,7 @@ while (( $# > 0 )); do
       case "$1" in
         --target-python) TARGET_PYTHON="$2" ;;
         --target-numpy) TARGET_NUMPY="$2" ;;
+        --target-mpi4py) TARGET_MPI4PY="$2" ;;
       esac
       shift 2
       ;;
@@ -144,8 +146,8 @@ if [[ "$CROSS_PYTHON" == true && "$PYTHON_MODE" == "off" ]]; then
   exit 2
 fi
 
-if [[ "$CROSS_PYTHON" == true && -z "$TARGET_PYTHON" ]]; then
-  echo "--cross-python requires --target-python and --target-numpy" >&2
+if [[ "$CROSS_PYTHON" == true && ( -z "$TARGET_PYTHON" || -z "$TARGET_NUMPY" || -z "$TARGET_MPI4PY" ) ]]; then
+  echo "--cross-python requires --target-python, --target-numpy, and --target-mpi4py" >&2
   exit 2
 fi
 
@@ -159,7 +161,7 @@ if [[ "$PREFIX" != /* ]]; then
 fi
 
 if [[ "$CROSS_PYTHON" == true ]]; then
-  for variable in TARGET_PYTHON TARGET_NUMPY; do
+  for variable in TARGET_PYTHON TARGET_NUMPY TARGET_MPI4PY; do
     if [[ "${!variable}" != /* ]]; then
       printf -v "$variable" '%s/%s' "$PWD" "${!variable}"
     fi
@@ -174,6 +176,29 @@ if [[ "$CROSS_PYTHON" == true ]]; then
   fi
   if [[ ! -f "$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include/numpy/arrayobject.h" ]]; then
     echo "Target NumPy headers not found under $TARGET_NUMPY" >&2
+    exit 2
+  fi
+  if [[ ! -f "$TARGET_MPI4PY/lib/python3.11/site-packages/mpi4py/include/mpi4py/mpi4py.h" ]]; then
+    echo "Target mpi4py headers not found under $TARGET_MPI4PY" >&2
+    exit 2
+  fi
+  # ADIOS2 needs mpi4py at configure time and nanobind derives the extension
+  # suffix from Python_SOABI, both of which come from the host interpreter
+  # unless overridden. Read the target values from its sysconfig data.
+  TARGET_SYSCONFIG=""
+  for candidate in "$TARGET_PYTHON"/lib/python3.11/_sysconfigdata__*.py; do
+    if [[ -f "$candidate" ]]; then
+      TARGET_SYSCONFIG="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$TARGET_SYSCONFIG" ]]; then
+    echo "Target Python sysconfig data not found under $TARGET_PYTHON" >&2
+    exit 2
+  fi
+  TARGET_SOABI="$(grep -m1 "^ *'SOABI':" "$TARGET_SYSCONFIG" | cut -d"'" -f4 || true)"
+  if [[ -z "$TARGET_SOABI" ]]; then
+    echo "Could not determine target Python SOABI from $TARGET_SYSCONFIG" >&2
     exit 2
   fi
 fi
@@ -267,6 +292,9 @@ if [[ "$CROSS_PYTHON" == true ]]; then
     "-DPython_LIBRARIES=$TARGET_PYTHON/lib/libpython3.11.so"
     "-DPython_NumPy_INCLUDE_DIRS=$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include"
     "-DPython3_NumPy_INCLUDE_DIRS=$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include"
+    "-DPythonModule_mpi4py_PATH=$TARGET_MPI4PY/lib/python3.11/site-packages/mpi4py"
+    "-DCMAKE_INSTALL_PYTHONDIR:STRING=lib/python3.11/site-packages"
+    "-DSKBUILD_SOABI=$TARGET_SOABI"
     -DADIOS2_USE_PIP=OFF
   )
 elif [[ "$PYTHON_MODE" == "on" ]]; then
@@ -347,12 +375,18 @@ PY
 fi
 
 if [[ "$CROSS_PYTHON" == true ]]; then
-  for candidate in "$PREFIX/lib/python3.11/site-packages/adios2" "$PREFIX/lib64/python3.11/site-packages/adios2"; do
-    if [[ -d "$candidate" ]]; then
-      echo "ADIOS2 target Python module: $candidate"
+  CROSS_PYTHON_SITE_PACKAGES=""
+  for candidate in "$PREFIX/lib/python3.11/site-packages" "$PREFIX/lib64/python3.11/site-packages"; do
+    if [[ -d "$candidate/adios2" ]]; then
+      CROSS_PYTHON_SITE_PACKAGES="$candidate"
       break
     fi
   done
+  if [[ -z "$CROSS_PYTHON_SITE_PACKAGES" ]]; then
+    echo "ADIOS2 Python module was not installed under $PREFIX/lib/python3.11/site-packages" >&2
+    exit 1
+  fi
+  echo "ADIOS2 target Python module: $CROSS_PYTHON_SITE_PACKAGES/adios2"
 fi
 
 cat <<EOF
@@ -364,7 +398,14 @@ CMake package directory:
   $ADIOS2_CMAKE_DIR
 EOF
 
-if [[ "$PYTHON_MODE" == "on" ]]; then
+if [[ "$CROSS_PYTHON" == true ]]; then
+  cat <<EOF
+
+Python bindings: cross-compiled for the target Python 3.11.
+
+  $CROSS_PYTHON_SITE_PACKAGES
+EOF
+elif [[ "$PYTHON_MODE" == "on" ]]; then
   cat <<EOF
 
 Python environment:

@@ -56,7 +56,7 @@ scripts/prepare_build_stack.sh "$HOME/picnix-stack" \
 | Flag | Effect |
 | --- | --- |
 | `--with-adios2` | Build ADIOS2 (C++/MPI only; Python bindings off) into `<stack>/adios2`; supports Fugaku aarch64 cross-builds |
-| `--with-adios2-python` | Also build ADIOS2 Python bindings; in cross mode uses `--cross-python` with target aarch64 Python 3.11 |
+| `--with-adios2-python` | Also build ADIOS2 Python bindings; in cross mode uses `--cross-python` with target aarch64 Python 3.11, NumPy, and mpi4py |
 | `--with-ascent` | Build Ascent **slim** (zlib, Conduit, VTK-m, Ascent only — no HDF5/Silo/ZFP/MFEM/RAJA, no Sphinx/docs/examples) into the stack venv |
 | `--with-ascent-rendering` | With a Fugaku aarch64 cross cache, build MPI-enabled Conduit and Ascent with target Python 3.11 extracts and VTK-h rendering |
 | `--with-ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP). Docs/examples stay off (no Sphinx). |
@@ -114,8 +114,10 @@ also support `--with-adios2`: the stack forwards the cache to ADIOS2, supplies
 its target-specific FFS float-format result, and limits optional ADIOS2
 libraries to those available for the target. The login-node Python environment
 does not build target `mpi4py`; it installs a native ADIOS2 Python reader when
-the editable `picnix` package is enabled. `--with-adios2-python` and
-Ascent's full-profile and native builds still require a native build.  
+the editable `picnix` package is enabled. `--with-adios2-python` cross-builds
+the bindings against the target aarch64 Python 3.11, NumPy, and mpi4py from
+Fugaku's public Spack installation, while a host x86_64 venv runs build-time
+scripts. Ascent's full profile still requires a native build.  
 `--with-ascent-rendering` cross-builds the Python-enabled Conduit and Ascent
 libraries against Fugaku's aarch64 Python 3.11 and NumPy, while a separate
 x86_64 Python 3.11 venv runs build-time scripts. It also builds VTK-m 2.3.0
