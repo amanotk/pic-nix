@@ -31,9 +31,14 @@ actions = "../../diagnostics/ascent/render.yaml"
 See [`docs/picnix/ascent.md`](../../../../docs/picnix/ascent.md) for build and
 runtime requirements and the complete list of publication options.  
 
-## Native Rendering
+## Rendering
 
-[`render.yaml`](render.yaml) uses native Ascent pipelines and scenes to render:  
+`render.yaml` requires an Ascent stack prepared with
+`--with-ascent-rendering`. The rendering profile is supported by both native
+and Fugaku cross builds; a stack prepared with only `--with-ascent` does not
+provide VTK-h rendering.  
+
+[`render.yaml`](render.yaml) uses Ascent pipelines and scenes to render:  
 
 * the magnitude of the cell-centered magnetic field `B`;
 * the species-00 mass density `um00_M0`.

@@ -57,9 +57,9 @@ scripts/prepare_build_stack.sh "$HOME/picnix-stack" \
 | --- | --- |
 | `--with-adios2` | Build ADIOS2 (C++/MPI only; Python bindings off) into `<stack>/adios2`; supports Fugaku aarch64 cross-builds |
 | `--with-adios2-python` | Also build ADIOS2 Python bindings; in cross mode uses `--cross-python` with target aarch64 Python 3.11, NumPy, and mpi4py |
-| `--with-ascent` | Build Ascent **slim** (zlib, Conduit, VTK-m, Ascent only — no HDF5/Silo/ZFP/MFEM/RAJA, no Sphinx/docs/examples) into the stack venv |
-| `--with-ascent-rendering` | With a Fugaku aarch64 cross cache, build MPI-enabled Conduit and Ascent with target Python 3.11 extracts and VTK-h rendering |
-| `--with-ascent-full` | With `--with-ascent`: upstream full third-party set (much slower; needs Cython for ZFP). Docs/examples stay off (no Sphinx). |
+| `--with-ascent` | Build the **slim** MPI/Python Ascent profile without VTK-h rendering (zlib, Conduit, and Ascent; no HDF5/Silo/ZFP/MFEM/RAJA, VTK-m, or Sphinx/docs/examples) |
+| `--with-ascent-rendering` | Add VTK-m and VTK-h scene/volume rendering to the slim profile; implies `--with-ascent` and works with native or Fugaku aarch64 builds |
+| `--with-ascent-full` | Use the upstream full third-party set (native builds only; much slower; needs Cython for ZFP). Rendering remains controlled by `--with-ascent-rendering`. |
 | `--no-deps` | Skip the ordinary C++ dependencies |
 | `--no-picnix` | Skip the editable `picnix` install (generic stack) |
 | `--check` | Validate an existing stack without building |
@@ -94,7 +94,7 @@ By default the stack builds with **4 parallel jobs** (override with
 `--jobs N` or `CMAKE_BUILD_PARALLEL_LEVEL`). Full `nproc` on large hosts
 often overruns memory during VTK-m / ADIOS2 compiles.  
 
-When `--with-adios2` or `--with-ascent` was used, add
+When `--with-adios2`, `--with-ascent`, or `--with-ascent-rendering` was used, add
 `-DPICNIX_ENABLE_ADIOS2=ON -DPICNIX_ADIOS2_ROOT=...` and/or
 `-DPICNIX_ENABLE_ASCENT=ON -DPICNIX_ASCENT_ROOT=...` (the generated `env.sh`
 prints a ready-to-use configure line).  
@@ -116,13 +116,24 @@ the editable `picnix` package is enabled. `--with-adios2-python` cross-builds
 the bindings against the target aarch64 Python 3.11, NumPy, and mpi4py from
 Fugaku's public Spack installation, while a host x86_64 venv runs build-time
 scripts. Ascent's full profile still requires a native build.  
-`--with-ascent-rendering` cross-builds the Python-enabled Conduit and Ascent
-libraries against Fugaku's aarch64 Python 3.11 and NumPy, while a separate
-x86_64 Python 3.11 venv runs build-time scripts. It also builds VTK-m 2.3.0
-and VTK-h for scene rendering and volume rendering. The helper locates
-compatible packages in Fugaku's public Spack installation. It installs the
-target Python modules in `<stack>/ascent/python-modules`, not in the
-login-node venv.  
+Fugaku aarch64 caches support both Ascent profiles. `--with-ascent`
+cross-builds MPI-enabled Conduit and Ascent with target Python 3.11 extracts
+without VTK-h rendering. `--with-ascent-rendering` adds VTK-m 2.3.0 and VTK-h
+for scene and volume rendering. Both modes use a separate x86_64 Python 3.11
+venv for build-time scripts, locate compatible target packages in Fugaku's
+public Spack installation, and install target Python modules in
+`<stack>/ascent/python-modules`, not in the login-node venv.  
+
+### Native rendering profile
+
+Rendering is an explicit capability, independent of the native build
+environment:
+
+```sh
+scripts/prepare_build_stack.sh "$HOME/picnix-ascent-rendering" \
+  --cache cmake/linux-gcc.cmake \
+  --with-ascent-rendering
+```
 
 ### Fugaku login-node build with LLVM 23
 
@@ -187,13 +198,13 @@ against it, set `-DPICNIX_ENABLE_ADIOS2=ON` and
 `-DPICNIX_ADIOS2_ROOT="$HOME/adios2-llvm23"` during configuration, and make
 the installed ADIOS2 `lib` directory available at runtime.  
 
-Ascent's installer drives an upstream superbuild. A native `--with-ascent`
-build wires the Conduit and Ascent Python extensions into the stack's
-login-node venv. For Fugaku cross builds, `--with-ascent-rendering` splits
-the build: a host x86_64 Python 3.11 venv runs the build-time scripts while
-the extensions compile against the target aarch64 Python, and the resulting
-modules are exposed through `<stack>/compute-env.sh` rather than the
-login-node venv.  
+Ascent's installer drives an upstream superbuild. Native `--with-ascent`
+builds install Conduit and Ascent Python extensions into the stack venv
+without rendering; `--with-ascent-rendering` adds VTK-m and VTK-h. For
+Fugaku cross builds, both Ascent profiles use a host x86_64 Python 3.11 venv
+for build-time scripts while extensions compile against target aarch64 Python.
+The target modules are exposed through `<stack>/compute-env.sh` rather than
+the login-node venv.  
 
 ### ADIOS2 Python reader
 

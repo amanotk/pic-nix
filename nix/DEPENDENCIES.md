@@ -123,22 +123,24 @@ alongside the stack; see the PIC-NIX building documentation.
 
 Ascent is an external optional dependency and is not built by
 `scripts/install_dependencies.sh`.  The optional nightly CI job builds Ascent
-0.9.5 with MPI and Python support using `scripts/install_ascent.sh`.  The
-installer also builds Ascent's Conduit and visualization dependencies and
-creates a Python environment under the installation prefix.  Local users can
-build the same installation with:
+0.9.5 with MPI and Python support using `scripts/install_ascent.sh`. The
+installer also builds Ascent's Conduit dependencies and creates a Python
+environment under the installation prefix. Local users can build the slim,
+non-rendering installation with:
 
 ```sh
-scripts/install_ascent.sh "$HOME/ascent" --python "$(command -v python3)"
+scripts/install_ascent.sh "$HOME/ascent" --python "$(command -v python3)" --slim
 ```
 
 When the interpreter is already a virtual environment (for example the stack
 created by `scripts/prepare_build_stack.sh`), pass `--python-is-venv` so
 `<prefix>/python-venv` is linked to that environment instead of creating a
-second one.  Prefer `--slim` (zlib/Conduit/VTK-m/Ascent only; no HDF5, Silo,
-ZFP, MFEM, RAJA, or Sphinx) unless the full upstream TPL set is required;
+second one. Prefer `--slim` (zlib/Conduit/Ascent only; no VTK-m rendering,
+HDF5, Silo, ZFP, MFEM, RAJA, or Sphinx) unless the full upstream TPL set is required;
 `--full` builds ZFP Python bindings and needs `cython`/`setuptools` in the
-target environment.
+native environment. Add `--rendering` to either native profile for VTK-m,
+VTK-h, and APComp scene rendering; the Fugaku cross-Python mode supports the
+same rendering switch.
 
 Enable Ascent in the PIC build with `PICNIX_ENABLE_ASCENT=ON` and point
 `PICNIX_ASCENT_ROOT` at the installation prefix.  The Ascent CMake package is
