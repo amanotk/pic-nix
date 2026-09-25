@@ -8,7 +8,7 @@ CMAKE_BOOTSTRAP_VERSION="3.31.10"
 usage() {
   cat <<'EOF'
 Usage: scripts/install_ascent.sh [install_prefix] --python <python_executable> \
-         [--python-is-venv] [--slim|--full]
+         [--python-is-venv] [--slim|--full] [--rendering]
        scripts/install_ascent.sh [install_prefix] --python <host_python_venv> \
          --cross-python-extracts [--rendering] --cache <fugaku_cache> \
          --target-python <aarch64_python_prefix> --target-numpy <aarch64_numpy_prefix>
@@ -24,24 +24,31 @@ environment: <install_prefix>/python-venv is linked to that environment so
 Conduit and Ascent Python modules install there (no second venv is created).
 
 Profiles:
-  --slim   Default when invoked via prepare_build_stack.sh
-           Build only what PIC-NIX needs: zlib, Conduit, VTK-m, Ascent.
-           Skips HDF5, Silo, ZFP, MFEM, RAJA, Camp, Umpire.
+  --slim   Default profile (also selected by prepare_build_stack.sh)
+           Build only what PIC-NIX needs: zlib, Conduit, and Ascent.
+           Skips HDF5, Silo, ZFP, MFEM, RAJA, Camp, Umpire, and rendering.
   --full   Upstream build_ascent.sh TPL defaults (all packages above).
-            Docs/examples are still disabled (no Sphinx); Cython is required
-            in the target environment for ZFP Python bindings.
+           Docs/examples are still disabled (no Sphinx); Cython is required
+           in the target environment for ZFP Python bindings.
+  --rendering
+           Add VTK-m rendering, VTK-h, and APComp. Supported for native builds
+           and Fugaku aarch64 cross builds. Native builds use the selected
+           Python virtual environment; cross builds use target Python modules
+           and a host build-time environment.
   --cross-python-extracts
-            Build Conduit and Ascent with MPI and Python extracts for aarch64.
-            The host venv runs configure-time Python; the target prefixes
-            provide Python 3.11 and NumPy headers. Add --rendering to
-            also build VTK-m and VTK-h for scene rendering and volume rendering.
+           Build Conduit and Ascent with MPI and Python extracts for aarch64.
+           The host venv runs configure-time Python; the target prefixes
+           provide Python 3.11 and NumPy headers. Add --rendering to also
+           build VTK-m and VTK-h for scene rendering and volume rendering.
 
 Examples:
 
   scripts/install_ascent.sh --python /path/to/python3
   scripts/install_ascent.sh ./thirdparty --python /path/to/python3
   scripts/install_ascent.sh ./thirdparty --python /path/to/venv/bin/python \
-    --python-is-venv --slim
+     --python-is-venv --slim
+  scripts/install_ascent.sh ./thirdparty --python /path/to/python3 \
+     --slim --rendering
 
 Set MPICC and MPICXX to select MPI compiler wrappers. Set
 CMAKE_BUILD_PARALLEL_LEVEL to control parallel build jobs (default: 4;
@@ -52,7 +59,7 @@ EOF
 PREFIX="$HOME/usr"
 PYTHON_EXECUTABLE=""
 PYTHON_IS_VENV=false
-ASCENT_PROFILE="full"
+ASCENT_PROFILE="slim"
 CROSS_PYTHON_EXTRACTS=false
 RENDERING=false
 CROSS_CACHE=""
@@ -126,11 +133,6 @@ fi
 
 if [[ "$PREFIX" != /* ]]; then
   PREFIX="$PWD/$PREFIX"
-fi
-
-if [[ "$RENDERING" == true && "$CROSS_PYTHON_EXTRACTS" != true ]]; then
-  echo "--rendering requires --cross-python-extracts" >&2
-  exit 2
 fi
 
 if [[ "$CROSS_PYTHON_EXTRACTS" == true ]]; then
@@ -454,8 +456,8 @@ if [[ "$ASCENT_PROFILE" == "slim" ]]; then
     { print }
     END { if (grab) print buf }
   ' "$ASCENT_BUILD_SH" >"$ASCENT_BUILD_SH.tmp" && cat "$ASCENT_BUILD_SH.tmp" >"$ASCENT_BUILD_SH" && rm -f "$ASCENT_BUILD_SH.tmp"
-  # Devil Ray requires RAJA (which slim does not build). VTK-h still
-  # provides scene rendering; keep APComp for compositing.
+  # Devil Ray requires RAJA (which slim does not build). Rendering backends
+  # are enabled explicitly below instead of being implied by the profile.
   sed -i \
     -e "s/echo 'set(ENABLE_DRAY ON CACHE BOOL \"\")'/echo 'set(ENABLE_DRAY OFF CACHE BOOL \"\")'/" \
     "$ASCENT_BUILD_SH"
@@ -472,6 +474,45 @@ if [[ "$ASCENT_PROFILE" == "slim" ]]; then
     -e "/-DSILO_ENABLE_HDF5=ON/d" \
     -e "/-DSILO_HDF5_DIR=/d" \
     "$ASCENT_BUILD_SH"
+fi
+
+# Upstream enables VTK-m rendering and VTK-h in every native profile. Keep the
+# capability independent from the slim/full dependency profile and match the
+# cross-build CMake path below. Without rendering, Ascent does not need VTK-m
+# or any of the rendering backends.
+native_vtkm_rendering=OFF
+native_vtkh=OFF
+native_apcomp=OFF
+native_dray=OFF
+if [[ "$RENDERING" == true ]]; then
+  native_vtkm_rendering=ON
+  native_vtkh=ON
+  native_apcomp=ON
+fi
+sed -E -i \
+  -e "s/(VTKm_ENABLE_RENDERING=)[A-Z]+/\\1$native_vtkm_rendering/" \
+  -e "s/(set\\(ENABLE_VTKH )[A-Z]+/\\1$native_vtkh/" \
+  -e "s/(set\\(ENABLE_APCOMP )[A-Z]+/\\1$native_apcomp/" \
+  -e "s/(set\\(ENABLE_DRAY )[A-Z]+/\\1$native_dray/" \
+  "$ASCENT_BUILD_SH"
+if [[ "$RENDERING" != true ]]; then
+  # Do not leave a stale VTK-m prefix in the generated host-config when the
+  # non-rendering profile skips the VTK-m build.
+  sed -i "/echo 'set(VTKM_DIR /d" "$ASCENT_BUILD_SH"
+fi
+
+for feature in \
+  "ENABLE_VTKH=$native_vtkh" \
+  "ENABLE_APCOMP=$native_apcomp" \
+  "ENABLE_DRAY=$native_dray"; do
+  if ! grep -Eq "set\\(${feature%%=*} ${feature#*=} CACHE BOOL" "$ASCENT_BUILD_SH"; then
+    echo "failed to configure native Ascent feature: $feature" >&2
+    exit 1
+  fi
+done
+if ! grep -Eq "VTKm_ENABLE_RENDERING=$native_vtkm_rendering" "$ASCENT_BUILD_SH"; then
+  echo "failed to configure native VTK-m rendering: $native_vtkm_rendering" >&2
+  exit 1
 fi
 
 bash -n "$ASCENT_BUILD_SH" || {
@@ -523,17 +564,24 @@ if [[ "$ASCENT_PROFILE" == "slim" ]]; then
     build_camp=false
     build_caliper=false
     build_catalyst=false
-    build_vtkm=true
+    build_vtkm=false
     build_conduit=true
     build_ascent=true
   )
+fi
+
+if [[ "$RENDERING" == true ]]; then
+  ASCENT_BUILD_ENV+=(build_vtkm=true)
+else
+  ASCENT_BUILD_ENV+=(build_vtkm=false)
 fi
 
 env "${ASCENT_BUILD_ENV[@]}" "$ASCENT_BUILD_SH"
 
 cat <<EOF
 
-Ascent $ASCENT_VERSION and its dependencies installed to $PREFIX.
+Ascent $ASCENT_VERSION (MPI + Python extracts, \
+$([[ "$RENDERING" == true ]] && printf 'with' || printf 'without') VTK-h rendering) installed to $PREFIX.
 
 Ascent CMake package:
 

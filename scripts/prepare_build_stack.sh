@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STACK_SCRIPT_VERSION="1"
+STACK_SCRIPT_VERSION="2"
 
 usage() {
   cat <<'EOF'
@@ -26,11 +26,12 @@ Options:
                            exists (default: 3.12)
   --with-adios2            Build ADIOS2 (C++ only)
   --with-adios2-python     Build ADIOS2 with Python bindings
-  --with-ascent            Build Ascent + Conduit (slim profile)
-  --with-ascent-rendering  With --with-ascent and a cross-compilation cache:
-                            build MPI + Python extracts with VTK-h rendering
-  --with-ascent-full       With --with-ascent: upstream full TPL set (slow;
-                           no Sphinx/docs; needs Cython for ZFP)
+  --with-ascent            Build slim Ascent + Conduit without rendering
+  --with-ascent-rendering  Build slim Ascent + Conduit with VTK-m/VTK-h
+                            rendering; implies --with-ascent (native or Fugaku
+                            aarch64 cross build)
+  --with-ascent-full       Build the upstream full TPL set (native only;
+                            slow; no Sphinx/docs; needs Cython for ZFP)
   --no-deps                Skip the ordinary C++ dependencies
   --no-picnix              Skip the editable picnix install
   --check                  Validate an existing stack; do not build
@@ -50,11 +51,10 @@ Example (default stack):
     -DCMAKE_PREFIX_PATH=<stack_dir>/deps \
     -DPICNIX_USE_SYSTEM_LIBS=ON
 
-Cross-compilation caches may build the default stack. Cross-compilation
-caches with Python target support also allow --with-adios2, --with-adios2-python
-(C++/MPI and Python bindings for the target), and --with-ascent-rendering
-(MPI and Python extracts with VTK-h rendering).
---with-ascent-full requires a native build.
+Cross-compilation caches may build the default stack. Fugaku aarch64
+cross-compilation caches support both --with-ascent (target Python extracts
+without rendering) and --with-ascent-rendering (target Python extracts with
+VTK-h rendering). --with-ascent-full requires a native build.
 
 Parallelism defaults to 4 jobs to avoid OOM on large hosts. Raise it with
 --jobs N or CMAKE_BUILD_PARALLEL_LEVEL if you have memory headroom.
@@ -70,7 +70,6 @@ WITH_ADIOS2=false
 WITH_ADIOS2_PYTHON=false
 WITH_ASCENT=false
 ASCENT_FULL=false
-ASCENT_EXTRACTS_ONLY=false
 ASCENT_RENDERING=false
 WITH_DEPS=true
 WITH_PICNIX=true
@@ -150,7 +149,6 @@ while (( $# > 0 )); do
       ;;
     --with-ascent-rendering)
       WITH_ASCENT=true
-      ASCENT_EXTRACTS_ONLY=true
       ASCENT_RENDERING=true
       shift
       ;;
@@ -937,7 +935,7 @@ wire_python_paths() {
       die "ADIOS2 Python site-packages not found under $STACK_ADIOS2"
     fi
   fi
-  if [[ "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ]]; then
+  if [[ "$WITH_ASCENT" == true && "$IS_CROSS" != true ]]; then
     if ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
       local candidate
       for candidate in \
@@ -1007,7 +1005,8 @@ EOF
   py_parts+=("$REPO_ROOT/python/src")
 
   [[ -d "$STACK_ADIOS2/lib" ]] && ld_parts+=("$STACK_ADIOS2/lib")
-  for d in "$STACK_ASCENT"/ascent-checkout/lib "$STACK_ASCENT"/conduit-*/lib "$STACK_ASCENT"/vtkm-*/lib; do
+  for d in "$STACK_ASCENT"/ascent-checkout/lib "$STACK_ASCENT"/conduit-*/lib \
+           "$STACK_ASCENT"/vtkm-*/lib "$STACK_ASCENT"/vtk-m-*/lib; do
     [[ -d "$d" ]] && ld_parts+=("$d")
   done
 
@@ -1042,13 +1041,14 @@ install_ascent_component() {
   if [[ "$WITH_ASCENT" != true ]]; then
     return 0
   fi
-  if [[ "$IS_CROSS" == true && "$ASCENT_EXTRACTS_ONLY" != true ]]; then
-    die "--with-ascent requires a native build (cross-compilation cache detected); rerun without --with-ascent"
+  local py_tag profile="slim" target_python="" target_numpy="" target_mpi4py="" host_python=""
+  local build_kind="native" python_layout="native-venv"
+  if [[ "$ASCENT_FULL" == true ]]; then
+    profile="full"
   fi
-  local py_tag
-  local profile="slim" target_python="" target_numpy="" target_mpi4py="" host_python=""
-  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
-    profile="extracts"
+  if [[ "$IS_CROSS" == true ]]; then
+    build_kind="cross"
+    python_layout="target-modules"
     # Site-provided Python/NumPy/mpi4py share the same aarch64 Python 3.11.
     # Environment overrides allow using another compatible public installation.
     target_python="${PICNIX_ASCENT_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
@@ -1058,17 +1058,23 @@ install_ascent_component() {
     py_tag="${target_python}:${target_numpy}:${target_mpi4py}:${host_python}"
   else
     py_tag="$(venv_python_tag)"
-    if [[ "$ASCENT_FULL" == true ]]; then
-      profile="full"
-    fi
   fi
   local stamp_items=(
     "script:$REPO_ROOT/scripts/install_ascent.sh"
     "python_is_venv=true"
+    "build_kind=$build_kind"
     "profile=$profile"
+    "rendering=$ASCENT_RENDERING"
+    "python_layout=$python_layout"
+    "python_abi=$py_tag"
   )
-  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
-    stamp_items+=("target_python=$py_tag" "rendering=$ASCENT_RENDERING")
+  if [[ "$IS_CROSS" == true ]]; then
+    stamp_items+=(
+      "target_python=$target_python"
+      "target_numpy=$target_numpy"
+      "target_mpi4py=$target_mpi4py"
+      "host_python=$host_python"
+    )
   fi
   local expected
   expected="$(compute_stamp ascent "${stamp_items[@]}")"
@@ -1078,25 +1084,43 @@ install_ascent_component() {
   # Conduit/Ascent extensions are ABI-tied to the interpreter.
   if [[ -f "$STAMP_DIR/ascent.meta" && -n "$py_tag" ]]; then
     local old_py
-    old_py="$(awk -F= '/^venv_python=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    old_py="$(awk -F= '/^python_abi=/ {print $2; exit} /^venv_python=/ {print $2; exit}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
     if [[ -n "$old_py" && "$old_py" != "$py_tag" ]]; then
       log "Ascent Python ABI changed ($old_py -> $py_tag); invalidating stamp"
       clear_stamp ascent
     fi
   fi
+  local ascent_meta=(
+    "build_kind=$build_kind"
+    "profile=$profile"
+    "rendering=$ASCENT_RENDERING"
+    "python_layout=$python_layout"
+    "python_abi=$py_tag"
+  )
+  if [[ "$IS_CROSS" == true ]]; then
+    ascent_meta+=(
+      "target_python=$target_python"
+      "target_numpy=$target_numpy"
+      "target_mpi4py=$target_mpi4py"
+      "host_python=$host_python"
+    )
+  fi
+  [[ -n "$CACHE_FILE" ]] && ascent_meta+=("cache_path=$CACHE_FILE")
   if [[ -d "$STACK_ASCENT" ]] && stamp_matches ascent "$expected"; then
     log "Ascent up to date: $STACK_ASCENT"
-    write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
-    if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
-      printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
-      printf 'rendering=%s\n' "$ASCENT_RENDERING" >>"$STAMP_DIR/ascent.meta"
-    fi
+    write_stamp_meta ascent "${ascent_meta[@]}"
     return 0
   fi
-  log "--- Installing Ascent into $STACK_ASCENT ($profile) ---"
+  log "--- Installing Ascent into $STACK_ASCENT (profile=$profile, rendering=$ASCENT_RENDERING, build_kind=$build_kind) ---"
+  if [[ -e "$STACK_ASCENT" || -L "$STACK_ASCENT" ]]; then
+    # Ascent's upstream superbuild does not remove TPLs from an existing
+    # prefix. Replace the managed component so a rendering build cannot leave
+    # VTK-h/VTK-m artifacts in a later non-rendering stack (or vice versa).
+    rm -rf "$STACK_ASCENT"
+  fi
   apply_cache_compiler_env
   local ascent_args=("$STACK_ASCENT")
-  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+  if [[ "$IS_CROSS" == true ]]; then
     local host_venv="$STACK_ASCENT/build-python-venv"
     mkdir -p "$STACK_ASCENT"
     uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed --clear
@@ -1110,18 +1134,20 @@ install_ascent_component() {
   elif [[ "$ASCENT_FULL" == true ]]; then
     ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--full)
+    if [[ "$ASCENT_RENDERING" == true ]]; then
+      ascent_args+=(--rendering)
+    fi
   else
     ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--slim)
+    if [[ "$ASCENT_RENDERING" == true ]]; then
+      ascent_args+=(--rendering)
+    fi
   fi
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
     "$REPO_ROOT/scripts/install_ascent.sh" "${ascent_args[@]}"
   write_stamp ascent "$expected"
-  write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
-  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
-    printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
-    printf 'rendering=%s\n' "$ASCENT_RENDERING" >>"$STAMP_DIR/ascent.meta"
-  fi
+  write_stamp_meta ascent "${ascent_meta[@]}"
 }
 
 ld_path_parts() {
@@ -1133,7 +1159,8 @@ ld_path_parts() {
     for d in \
       "$STACK_ASCENT/ascent-checkout/lib" \
       "$STACK_ASCENT"/conduit-*/lib \
-      "$STACK_ASCENT"/vtkm-*/lib
+      "$STACK_ASCENT"/vtkm-*/lib \
+      "$STACK_ASCENT"/vtk-m-*/lib
     do
       [[ -d "$d" ]] && parts+=("$d")
     done
@@ -1268,6 +1295,24 @@ EOF
     printf 'export LD_LIBRARY_PATH="%s${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\n\n' "$ld_path" >>"$ENV_SH"
   fi
 
+  if [[ "$WITH_ASCENT" == true && "$IS_CROSS" != true ]]; then
+    local ascent_python_path="" d
+    if [[ -d "$REPO_ROOT/python/src" ]]; then
+      ascent_python_path="$REPO_ROOT/python/src"
+    fi
+    for d in \
+      "$STACK_ASCENT"/python-venv/lib/python*/site-packages \
+      "$STACK_ASCENT"/ascent-checkout/lib/python*/site-packages
+    do
+      [[ -d "$d" ]] || continue
+      ascent_python_path="${ascent_python_path:+$ascent_python_path:}$d"
+    done
+    if [[ -n "$ascent_python_path" ]]; then
+      printf 'export PYTHONPATH="%s${PYTHONPATH:+:$PYTHONPATH}"\n\n' \
+        "$ascent_python_path" >>"$ENV_SH"
+    fi
+  fi
+
   local suggested commented
   suggested="$(suggest_cmake_line)"
   commented="$(printf '%s\n' "$suggested" | sed 's/^/# /')"
@@ -1295,6 +1340,14 @@ EOF
 print_summary() {
   local suggested
   suggested="$(suggest_cmake_line)"
+  local ascent_summary="(not built; --with-ascent)"
+  if [[ "$WITH_ASCENT" == true ]]; then
+    local ascent_profile="slim"
+    local ascent_kind="native"
+    [[ "$ASCENT_FULL" == true ]] && ascent_profile="full"
+    [[ "$IS_CROSS" == true ]] && ascent_kind="cross"
+    ascent_summary="$STACK_ASCENT (build_kind=$ascent_kind, profile=$ascent_profile, rendering=$ASCENT_RENDERING)"
+  fi
   cat <<EOF
 
 Build stack ready: $STACK_DIR
@@ -1302,7 +1355,7 @@ Build stack ready: $STACK_DIR
   Python:     $STACK_VENV_BIN
   C++ deps:   $([[ "$WITH_DEPS" == true ]] && echo "$STACK_DEPS" || echo "(skipped)")
   ADIOS2:     $([[ "$WITH_ADIOS2" == true ]] && echo "$STACK_ADIOS2 (python=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off))" || echo "(not built; --with-adios2)")
-  Ascent:     $([[ "$WITH_ASCENT" == true ]] && echo "$STACK_ASCENT" || echo "(not built; --with-ascent)")
+  Ascent:     $ascent_summary
   Compiler:   $MPICXX_EXECUTABLE
   Fingerprint:$COMPILER_FINGERPRINT
 
@@ -1423,19 +1476,39 @@ check_stack() {
   fi
 
   if [[ -f "$(stamp_path ascent)" && -f "$STAMP_DIR/ascent.meta" ]]; then
-    local ascent_profile
+    local ascent_profile ascent_build_kind ascent_rendering ascent_layout ascent_abi
     ascent_profile="$(awk -F= '/^profile=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
-    if [[ -n "$ascent_profile" ]]; then
+    ascent_build_kind="$(awk -F= '/^build_kind=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    ascent_rendering="$(awk -F= '/^rendering=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    ascent_layout="$(awk -F= '/^python_layout=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    ascent_abi="$(awk -F= '/^python_abi=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    if [[ -z "$ascent_profile" || -z "$ascent_build_kind" || -z "$ascent_rendering" || -z "$ascent_layout" || -z "$ascent_abi" ]]; then
+      err "ascent metadata is incomplete; rerun the stack without --check"
+      failed=1
+    elif [[ "$ascent_build_kind" != "native" && "$ascent_build_kind" != "cross" ]]; then
+      err "ascent metadata has an unknown build kind: $ascent_build_kind"
+      failed=1
+    elif [[ "$ascent_build_kind" == "cross" && "$IS_CROSS" != true ]] || \
+         [[ "$ascent_build_kind" == "native" && "$IS_CROSS" == true ]]; then
+      err "ascent build kind does not match the current compiler/cache"
+      failed=1
+    else
       local ascent_items=(
         "script:$REPO_ROOT/scripts/install_ascent.sh"
         "python_is_venv=true"
+        "build_kind=$ascent_build_kind"
         "profile=$ascent_profile"
+        "rendering=$ascent_rendering"
+        "python_layout=$ascent_layout"
+        "python_abi=$ascent_abi"
       )
-      if [[ "$ascent_profile" == "extracts" ]]; then
-        local target_tag render_tag
-        target_tag="$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
-        render_tag="$(awk -F= '/^rendering=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
-        ascent_items+=("target_python=$target_tag" "rendering=$render_tag")
+      if [[ "$ascent_build_kind" == "cross" ]]; then
+        ascent_items+=(
+          "target_python=$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/ascent.meta")"
+          "target_numpy=$(awk -F= '/^target_numpy=/ {print $2}' "$STAMP_DIR/ascent.meta")"
+          "target_mpi4py=$(awk -F= '/^target_mpi4py=/ {print $2}' "$STAMP_DIR/ascent.meta")"
+          "host_python=$(awk -F= '/^host_python=/ {print $2}' "$STAMP_DIR/ascent.meta")"
+        )
       fi
       local expected
       expected="$(compute_stamp ascent "${ascent_items[@]}")"
@@ -1514,11 +1587,18 @@ check_stack() {
   fi
 
   if [[ -d "$STACK_ASCENT" ]]; then
-    if [[ ! -f "$STACK_ASCENT/ascent-checkout/lib/cmake/ascent/AscentConfig.cmake" ]]; then
+    local ascent_config="$STACK_ASCENT/ascent-checkout/lib/cmake/ascent/AscentConfig.cmake"
+    if [[ ! -f "$ascent_config" ]]; then
       err "AscentConfig.cmake missing under $STACK_ASCENT"
       failed=1
     fi
-    if [[ -f "$STAMP_DIR/ascent.meta" ]] && grep -q '^profile=extracts$' "$STAMP_DIR/ascent.meta"; then
+    local ascent_build_kind=""
+    local ascent_rendering=""
+    if [[ -f "$STAMP_DIR/ascent.meta" ]]; then
+      ascent_build_kind="$(awk -F= '/^build_kind=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+      ascent_rendering="$(awk -F= '/^rendering=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+    fi
+    if [[ "$ascent_build_kind" == "cross" ]]; then
       for path in "$STACK_ASCENT/python-modules/conduit/conduit_python.so" \
                   "$STACK_ASCENT/python-modules/ascent/mpi/ascent_mpi_python.so"; do
         if [[ ! -f "$path" ]]; then
@@ -1529,6 +1609,37 @@ check_stack() {
     elif [[ -x "$STACK_VENV_BIN" ]] && ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
       err "conduit not importable from stack venv"
       failed=1
+    fi
+    if [[ -f "$ascent_config" ]]; then
+      if [[ "$ascent_rendering" == true ]]; then
+        if ! grep -Eq 'set\([[:space:]]*ASCENT_VTKH_ENABLED[[:space:]]+(ON|TRUE|1)' "$ascent_config"; then
+          err "Ascent rendering was requested but VTK-h is not enabled"
+          failed=1
+        fi
+        local vtkm_found=false vtkm_dir
+        for vtkm_dir in "$STACK_ASCENT"/vtkm-* "$STACK_ASCENT"/vtk-m-*; do
+          if [[ -d "$vtkm_dir/lib" ]]; then
+            vtkm_found=true
+            break
+          fi
+        done
+        if [[ "$vtkm_found" != true ]]; then
+          err "Ascent rendering was requested but no VTK-m installation was found"
+          failed=1
+        fi
+      else
+        if grep -Eq 'set\([[:space:]]*ASCENT_VTKH_ENABLED[[:space:]]+(ON|TRUE|1)' "$ascent_config"; then
+          err "Ascent metadata says rendering is disabled but VTK-h is enabled"
+          failed=1
+        fi
+        local vtkm_dir
+        for vtkm_dir in "$STACK_ASCENT"/vtkm-* "$STACK_ASCENT"/vtk-m-*; do
+          if [[ -d "$vtkm_dir/lib" ]]; then
+            err "Ascent metadata says rendering is disabled but VTK-m is installed: $vtkm_dir"
+            failed=1
+          fi
+        done
+      fi
     fi
   fi
 
@@ -1550,13 +1661,31 @@ main() {
   if [[ "$CHECK_ONLY" == true ]]; then
     [[ -d "$STACK_DIR" ]] || die "stack directory not found: $STACK_DIR"
     # Recover the cache used at install time so the fingerprint (and stamp
-    # recompute) match when the user omits --cache.
-    if [[ -z "$CACHE_FILE" && -f "$STAMP_DIR/deps.meta" ]]; then
-      local meta_cache
-      meta_cache="$(sed -n 's/^cache://p' "$STAMP_DIR/deps.meta" | head -n 1)"
+    # recompute) match when the user omits --cache. Ascent-only stacks may not
+    # have deps.meta, so prefer the Ascent metadata when it is available.
+    if [[ -z "$CACHE_FILE" ]]; then
+      local meta_cache=""
+      if [[ -f "$STAMP_DIR/ascent.meta" ]]; then
+        meta_cache="$(awk -F= '/^cache_path=/ {print $2; exit}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+      fi
+      if [[ -z "$meta_cache" && -f "$STAMP_DIR/deps.meta" ]]; then
+        meta_cache="$(sed -n 's/^cache://p' "$STAMP_DIR/deps.meta" | head -n 1)"
+      fi
       if [[ -n "$meta_cache" && -f "$meta_cache" ]]; then
         CACHE_FILE="$meta_cache"
-        log "Using cache from deps.meta: $CACHE_FILE"
+        log "Using cache from stack metadata: $CACHE_FILE"
+      fi
+    fi
+    # Initial caches commonly contain wrapper names such as `mpicxx`, while
+    # env.sh records the absolute wrappers used to build the stack. Prefer
+    # those recorded paths when checking an existing stack so validation does
+    # not depend on the MPI module currently being on PATH.
+    if [[ -f "$ENV_SH" ]]; then
+      if [[ -z "$MPICC_EXPLICIT" ]]; then
+        MPICC_EXPLICIT="$(awk -F'"' '/^export MPICC="/ {print $2; exit}' "$ENV_SH" 2>/dev/null || true)"
+      fi
+      if [[ -z "$MPICXX_EXPLICIT" ]]; then
+        MPICXX_EXPLICIT="$(awk -F'"' '/^export MPICXX="/ {print $2; exit}' "$ENV_SH" 2>/dev/null || true)"
       fi
     fi
     if [[ -n "$CACHE_FILE" || -n "$MPICC_EXPLICIT" || -n "$MPICXX_EXPLICIT" ]]; then
@@ -1587,18 +1716,15 @@ main() {
   resolve_compiler
   build_fingerprint
 
-  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
-    if [[ "$IS_CROSS" != true || -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ]]; then
-      die "--with-ascent-rendering requires a Fugaku aarch64 cross-compilation cache"
+  if [[ "$IS_CROSS" == true && "$WITH_ASCENT" == true ]]; then
+    if [[ -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ]]; then
+      die "Ascent cross-builds require a Fugaku aarch64 cross-compilation cache"
     fi
     if [[ "$ASCENT_FULL" == true ]]; then
-      die "--with-ascent-full cannot be combined with --with-ascent-rendering"
+      die "--with-ascent-full is not supported for cross-compilation"
     fi
   fi
   if [[ "$IS_CROSS" == true ]]; then
-    if [[ ( "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ) ]]; then
-      die "cross-compilation cache detected; --with-ascent needs --with-ascent-rendering"
-    fi
     if [[ "$WITH_ADIOS2" == true && ( -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ) ]]; then
       die "cross-built ADIOS2 requires an aarch64 CMake cache (FFS float format is target-specific)"
     fi
@@ -1619,7 +1745,7 @@ main() {
   wire_python_paths
   write_env_sh
   local target_python="" target_numpy="" target_mpi4py=""
-  if [[ "$IS_CROSS" == true && ( "$WITH_ADIOS2_PYTHON" == true || "$ASCENT_EXTRACTS_ONLY" == true ) ]]; then
+  if [[ "$IS_CROSS" == true && ( "$WITH_ADIOS2_PYTHON" == true || "$WITH_ASCENT" == true ) ]]; then
     target_python="${PICNIX_ASCENT_TARGET_PYTHON_PREFIX:-${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}}"
     target_numpy="${PICNIX_ASCENT_TARGET_NUMPY_PREFIX:-${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}}"
     target_mpi4py="${PICNIX_ASCENT_TARGET_MPI4PY_PREFIX:-${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}}"

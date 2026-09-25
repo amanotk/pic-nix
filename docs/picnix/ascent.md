@@ -39,17 +39,29 @@ Activate the environment with `source <stack>/env.sh` before running Python
 extract tests.  
 
 Both slim and full profiles disable Ascent HTML docs and example apps (no
-Sphinx required). Full only restores the upstream third-party library set
-(HDF5, Silo, ZFP, MFEM, RAJA, …) and still needs `cython` in the target
-environment for ZFP Python bindings.  
+Sphinx required). Rendering is an independent capability selected with
+`--with-ascent-rendering`.  
+
+### Stack profiles
+
+| Flag | Profile | Rendering | Native | Fugaku cross |
+| --- | --- | --- | --- | --- |
+| `--with-ascent` | Slim | No VTK-h | Yes | Yes, target Python extracts |
+| `--with-ascent-rendering` | Slim | VTK-m/VTK-h | Yes | Yes, target Python extracts |
+| `--with-ascent-full` | Full | Disabled unless combined with rendering | Yes | No |
+
+The full profile restores the upstream third-party library set (HDF5, Silo,
+ZFP, MFEM, RAJA, ...) and needs `cython` in the native environment for ZFP
+Python bindings.  
 
 Advanced users may still pass `-DAscent_DIR=/path/to/lib/cmake/ascent`
 directly.  
 
 The Ascent package must provide `ascent::ascent_mpi`. Python extract tests are
 enabled when Ascent and Conduit have Python support; rendering tests are enabled
-when Ascent has VTK-h support. Without `-DPICNIX_ENABLE_ASCENT=ON`, PIC-NIX does
-not search for or link Ascent.  
+when Ascent has VTK-h support. A stack created with `--with-ascent` does not
+provide VTK-h; use `--with-ascent-rendering` for rendering tests and examples.
+Without `-DPICNIX_ENABLE_ASCENT=ON`, PIC-NIX does not search for or link Ascent.
 
 Run the Ascent-focused C++ and MPI tests with:  
 
@@ -71,7 +83,9 @@ superbuild installation:
 ```
 
 Runnable rendering and Python-extract examples are available under
-[`pic/example/diagnostics/ascent/`](https://github.com/amanotk/pic-nix/tree/main/pic/example/diagnostics/ascent).  
+[`pic/example/diagnostics/ascent/`](https://github.com/amanotk/pic-nix/tree/main/pic/example/diagnostics/ascent). The rendering example requires
+an Ascent stack created with `--with-ascent-rendering`; the Python-extract
+example works with either Ascent profile.  
 
 ## Runtime environment
 
@@ -122,9 +136,9 @@ commands and the installed modules. On an x86_64 login node targeting aarch64
 compute nodes, those roles must use separate interpreters and matching target
 Python headers and libraries, as in the Fugaku workflow below.  
 
-### Fugaku cross-build for Python extracts
+### Fugaku cross-builds
 
-On a Fugaku login node, the extract-only stack separates build-time x86_64
+On a Fugaku login node, the Ascent stack separates build-time x86_64
 Python from aarch64 Python 3.11. It uses preinstalled, matching public Spack
 packages for target Python, NumPy, and mpi4py; it does not compile Python
 itself. With LLVM 23 and a separate stack prefix:  
@@ -133,12 +147,13 @@ itself. With LLVM 23 and a separate stack prefix:
 module load LLVM/llvmorg-23.1.0
 scripts/prepare_build_stack.sh "$HOME/picnix-llvm23" \
   --cache cmake/fugaku-llvm23-cross.cmake \
-  --with-adios2 --with-ascent-rendering --jobs 2
+  --with-adios2 --with-ascent --jobs 2
 ```
 
-`--with-ascent-rendering` implies `--with-ascent`; omit `--with-adios2` if it is
-not needed. The stack contains MPI-enabled Conduit and Ascent 0.9.5 with
-Python extracts and VTK-h rendering. The login-node environment
+Use `--with-ascent-rendering` instead of `--with-ascent` to add VTK-m and VTK-h
+rendering. Both options imply Ascent; omit `--with-adios2` if it is not needed.
+The non-rendering stack contains MPI-enabled Conduit and Ascent 0.9.5 with
+target Python extracts. The login-node environment
 remains `<stack>/env.sh` for compilation. In compute-node jobs, load the same
 LLVM module and source `<stack>/compute-env.sh` instead. That script
 selects the aarch64 Python interpreter, adds the matching NumPy and mpi4py
@@ -154,7 +169,7 @@ Python must both be 3.11; this recipe uses NumPy 1.26.4.
 
 The LLVM 23 login-node build produced aarch64 Conduit/Ascent Python modules,
 passed the stack check, and linked a PIC-NIX example. The rendering variant
-also produced aarch64 VTK-m and VTK-h libraries. Python extract execution
+also produces aarch64 VTK-m and VTK-h libraries. Python extract execution
 on a compute node is not yet validated; the link also warned about Fujitsu
 runtime libraries needed by the site Python. Verify the module and library
 environment before relying on extracts in a simulation.  

@@ -94,12 +94,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ASCENT_PREFIX }}
-          key: ascent-${{ runner.os }}-${{ runner.arch }}-python-3.12-${{ hashFiles('scripts/install_ascent.sh') }}
+          key: ascent-rendering-${{ runner.os }}-${{ runner.arch }}-python-3.12-${{ hashFiles('scripts/install_ascent.sh') }}
 
       - name: Install Ascent
         if: steps.cache-ascent.outputs.cache-hit != 'true'
         run: |
-          scripts/install_ascent.sh "$ASCENT_PREFIX" --python "$(command -v python)"
+          scripts/install_ascent.sh "$ASCENT_PREFIX" --python "$(command -v python)" --slim --rendering
 
       - name: Validate Ascent installation
         run: |
