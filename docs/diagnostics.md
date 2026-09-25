@@ -173,11 +173,12 @@ tracker data is stored:
 | --- | --- |
 | `mpiio` | Shared files below `<basedir>/<prefix>/`. This is the default. |
 | `posix` | Per-node files below `<basedir>/nodeXXXXXX/<prefix>/`. |
-| `adios` | Numbered BP5 datasets at `<basedir>/<prefix>.0000.bp`; restarts add `.0001.bp`, `.0002.bp`, and so on. |
+| `adios` | Numbered BP5 datasets at `<basedir>/<prefix>/0000.bp`; restarts add `0001.bp`, `0002.bp`, and so on. |
 
-Each `.bp` path is a BP5 dataset directory managed by ADIOS2. On restart, the
-PIC-NIX reader combines numbered datasets into one logical time series, with a
-later segment replacing earlier output from its restart step onward.  
+Each `<prefix>` directory contains BP5 dataset directories managed by ADIOS2.  
+On restart, the PIC-NIX reader combines numbered datasets into one logical time  
+series, with a later segment replacing earlier output from its restart step  
+onward.  
 
 Every new run writes `<basedir>/profile.msgpack`. It contains the configuration,
 process count, chunk mapping, and metadata used by `picnix.Run` to discover the
@@ -203,6 +204,24 @@ The engine is always BP5. Install the optional Python reader with:
 ```sh
 uv pip install --python .venv -e "./python[adios]"
 ```
+
+ADIOS2 segments remain open as `.bp.tmp` directories while a run is active. To  
+finalize segments periodically, set `segment_steps` to the number of completed  
+ADIOS2 diagnostic steps per segment:  
+
+```toml
+[application.adios]
+  AsyncWrite = true
+  segment_steps = 100
+```
+
+The default `segment_steps = 0` keeps one segment open until shutdown. At a  
+rotation boundary PIC-NIX closes the current engine, renames the temporary  
+directory to `.bp`, and opens the next segment only when the next diagnostic  
+step is written. On restart, finalized segments are preserved, while matching  
+`.bp.tmp` directories are removed as incomplete. Each segment retains its  
+`segment_index` and `restart_step` metadata so readers can merge restart  
+segments correctly.
 
 Raw MPI-I/O and POSIX field or particle diagnostics can instead be converted to
 HDF5; see [HDF5 Converter](picnix/hdf5-converter.md).  

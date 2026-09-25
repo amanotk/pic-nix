@@ -49,10 +49,10 @@ def write_diagnostic(
 
 def make_profile(tmp_path):
     data_dir = tmp_path / "data"
-    write_diagnostic(data_dir / "field.0000.bp", "field", "field")
-    write_diagnostic(data_dir / "load.0000.bp", "load", "load")
-    write_diagnostic(data_dir / "particle.0000.bp", "particle", "particle")
-    write_diagnostic(data_dir / "tracker.0000.bp", "tracker", "tracker")
+    write_diagnostic(data_dir / "field" / "0000.bp", "field", "field")
+    write_diagnostic(data_dir / "load" / "0000.bp", "load", "load")
+    write_diagnostic(data_dir / "particle" / "0000.bp", "particle", "particle")
+    write_diagnostic(data_dir / "tracker" / "0000.bp", "tracker", "tracker")
 
     config = {
         "application": {"basedir": "data", "iomode": "adios"},
@@ -133,13 +133,13 @@ def test_run_prefers_adios_over_stale_hdf5_vds(tmp_path):
 def test_run_merges_adios_restart_segments(tmp_path):
     profile = make_profile(tmp_path)
     write_diagnostic(
-        profile.parent / "field.0000.bp",
+        profile.parent / "field" / "0000.bp",
         "field",
         "field",
         steps=range(5),
     )
     write_diagnostic(
-        profile.parent / "field.0001.bp",
+        profile.parent / "field" / "0001.bp",
         "field",
         "field",
         steps=range(4, 7),
@@ -147,7 +147,7 @@ def test_run_merges_adios_restart_segments(tmp_path):
         segment_index=1,
         restart_step=3,
     )
-    (profile.parent / "field.0002.bp.tmp").mkdir()
+    (profile.parent / "field" / "0002.bp.tmp").mkdir()
 
     run = Run(str(profile))
 
@@ -162,9 +162,9 @@ def test_run_merges_adios_restart_segments(tmp_path):
 @pytest.mark.parametrize(
     ("filename", "segment_index", "message"),
     [
-        ("field.0002.bp", 2, "missing ADIOS2 segment"),
-        ("field.1.bp", 1, "noncanonical ADIOS2 segment name"),
-        ("field.00000.bp", 0, "noncanonical ADIOS2 segment name"),
+        ("0002.bp", 2, "missing ADIOS2 segment"),
+        ("1.bp", 1, "noncanonical ADIOS2 segment name"),
+        ("00000.bp", 0, "noncanonical ADIOS2 segment name"),
     ],
 )
 def test_run_rejects_invalid_adios_segment_sequences(
@@ -172,7 +172,7 @@ def test_run_rejects_invalid_adios_segment_sequences(
 ):
     profile = make_profile(tmp_path)
     write_diagnostic(
-        profile.parent / filename,
+        profile.parent / "field" / filename,
         "field",
         "field",
         steps=[2],

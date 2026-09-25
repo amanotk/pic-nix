@@ -42,11 +42,15 @@ public:
   void put_joined_double(const std::string& name, std::size_t count, const double* data);
   void put_joined_uint64(const std::string& name, std::size_t count, const std::uint64_t* data);
   void end_step();
+  void rotate();
   void close();
 
 private:
   struct Impl;
   std::unique_ptr<Impl> impl;
+
+  void open_segment(int segment, std::int64_t restart_step);
+  void close_segment();
 };
 } // namespace nix
 

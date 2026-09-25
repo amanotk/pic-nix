@@ -302,8 +302,19 @@ TEST_CASE("check_adios_configuration")
         {"AsyncWrite", false},
         {"NumSubFiles", 4},
         {"MaxShmSize", "1GB"},
+        {"segment_steps", 10},
     };
     REQUIRE(parser.check_adios_configuration(adios));
+  }
+
+  SECTION("segment steps must be a non-negative integer")
+  {
+    json negative_steps   = {{"segment_steps", -1}};
+    json fractional_steps = {{"segment_steps", 1.5}};
+    json string_steps     = {{"segment_steps", "10"}};
+    REQUIRE_FALSE(parser.check_adios_configuration(negative_steps));
+    REQUIRE_FALSE(parser.check_adios_configuration(fractional_steps));
+    REQUIRE_FALSE(parser.check_adios_configuration(string_steps));
   }
 
   SECTION("configuration tables and fixed engine are validated")

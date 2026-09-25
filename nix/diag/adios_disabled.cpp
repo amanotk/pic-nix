@@ -96,6 +96,11 @@ void AdiosWriter::end_step()
   unavailable();
 }
 
+void AdiosWriter::rotate()
+{
+  unavailable();
+}
+
 void AdiosWriter::close()
 {
   unavailable();
