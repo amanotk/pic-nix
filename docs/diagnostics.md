@@ -196,7 +196,7 @@ optionally pass scalar BP5 parameters directly under `application.adios`:
   iomode = "adios"
 
   [application.adios]
-    AsyncWrite = false
+    AsyncWrite = true
 ```
 
 The engine is always BP5. Install the optional Python reader with:  
@@ -205,23 +205,23 @@ The engine is always BP5. Install the optional Python reader with:
 uv pip install --python .venv -e "./python[adios]"
 ```
 
-ADIOS2 segments remain open as `.bp.tmp` directories while a run is active. To  
-finalize segments periodically, set `segment_steps` to the number of completed  
-ADIOS2 diagnostic steps per segment:  
+ADIOS2 segments remain open as `.bp.tmp` directories while a run is active.  
+Segments are finalized every 100 completed ADIOS2 diagnostic steps by default.  
+Override this with `steps_per_segment`, or set it to `0` to disable rotation:  
 
 ```toml
 [application.adios]
   AsyncWrite = true
-  segment_steps = 100
+  steps_per_segment = 100
 ```
 
-The default `segment_steps = 0` keeps one segment open until shutdown. At a  
-rotation boundary PIC-NIX closes the current engine, renames the temporary  
+At a rotation boundary PIC-NIX closes the current engine, renames the temporary  
 directory to `.bp`, and opens the next segment only when the next diagnostic  
-step is written. On restart, finalized segments are preserved, while matching  
-`.bp.tmp` directories are removed as incomplete. Each segment retains its  
-`segment_index` and `restart_step` metadata so readers can merge restart  
-segments correctly.
+step is written. On restart, recoverable temporary segments are promoted, while  
+invalid `.bp.tmp` directories remain ignored and their indices are not reused.  
+Segment indices may contain gaps, and readers use the record from the highest  
+segment index when simulation steps overlap. Each segment retains its  
+`segment_index` and `restart_step` metadata.
 
 Raw MPI-I/O and POSIX field or particle diagnostics can instead be converted to
 HDF5; see [HDF5 Converter](picnix/hdf5-converter.md).  

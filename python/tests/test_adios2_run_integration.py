@@ -151,23 +151,38 @@ def test_run_merges_adios_restart_segments(tmp_path):
 
     run = Run(str(profile))
 
-    assert run.get_step("field").tolist() == [0, 1, 2, 4, 5, 6]
-    assert run.get_time("field").tolist() == [0.0, 0.5, 1.0, 2.0, 2.5, 3.0]
+    assert run.get_step("field").tolist() == [0, 1, 2, 3, 4, 5, 6]
+    assert run.get_time("field").tolist() == [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
     np.testing.assert_array_equal(run.read_at("field", 0)["uf"], 0.0)
     np.testing.assert_array_equal(run.read_at("field", 2)["uf"], 2.0)
+    np.testing.assert_array_equal(run.read_at("field", 3)["uf"], 3.0)
     np.testing.assert_array_equal(run.read_at("field", 4)["uf"], 104.0)
     np.testing.assert_array_equal(run.read_at("field", 6)["uf"], 106.0)
+
+
+def test_run_accepts_gapped_adios_segments(tmp_path):
+    profile = make_profile(tmp_path)
+    write_diagnostic(
+        profile.parent / "field" / "0002.bp",
+        "field",
+        "field",
+        steps=[2],
+        segment_index=2,
+    )
+
+    run = Run(str(profile))
+
+    assert run.get_step("field").tolist() == [0, 1, 2]
 
 
 @pytest.mark.parametrize(
     ("filename", "segment_index", "message"),
     [
-        ("0002.bp", 2, "missing ADIOS2 segment"),
         ("1.bp", 1, "noncanonical ADIOS2 segment name"),
         ("00000.bp", 0, "noncanonical ADIOS2 segment name"),
     ],
 )
-def test_run_rejects_invalid_adios_segment_sequences(
+def test_run_rejects_invalid_adios_segment_names(
     tmp_path, filename, segment_index, message
 ):
     profile = make_profile(tmp_path)

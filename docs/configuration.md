@@ -71,11 +71,11 @@ layout, while `"adios"` additionally requires an ADIOS2-enabled build. See
 [Diagnostics and I/O](diagnostics.md#output-location-and-io-mode) for the
 resulting paths and backend details.  
 
-When `iomode = "adios"`, `[application.adios]` accepts `segment_steps`, which  
-defaults to `0` (disabled). A positive value finalizes each BP5 segment after  
-that many completed diagnostic steps, preserving finalized `.bp` datasets if a  
-run is interrupted. See [ADIOS2 output](diagnostics.md#adios2-output) for the  
-restart and temporary-segment behavior.  
+When `iomode = "adios"`, `[application.adios]` accepts `steps_per_segment`,  
+which defaults to `100`. A value of `0` disables rotation; otherwise each BP5  
+segment is finalized after that many completed diagnostic steps, preserving  
+finalized `.bp` datasets if a run is interrupted. See [ADIOS2 output](diagnostics.md#adios2-output)  
+for restart and temporary-segment behavior.  
 
 ## Application options
 
