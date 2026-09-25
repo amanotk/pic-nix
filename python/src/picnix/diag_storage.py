@@ -350,7 +350,7 @@ class AdiosDiagStorage(DiagStorage):
         self.prefix = prefix
         self.basedir = Path(basedir)
         self.iomode = iomode
-        self.path = self.basedir / f"{prefix}.0000.bp"
+        self.path = self.basedir / prefix / "0000.bp"
         self.paths = []
         self.reader = None
         self.readers = []
@@ -371,8 +371,7 @@ class AdiosDiagStorage(DiagStorage):
             raise FileNotFoundError(f"ADIOS2 dataset not found: {self.path}")
         self.paths = [path for _, path in segments]
 
-        steps = []
-        times = []
+        step_records = {}
         for segment_index, path in segments:
             reader = adios2.FileReader(str(path))
             variables = reader.available_variables()
@@ -400,65 +399,42 @@ class AdiosDiagStorage(DiagStorage):
             if np.any(np.diff(segment_steps) <= 0):
                 raise ValueError(f"ADIOS2 steps are not strictly increasing: {path}")
 
-            restart_step = self._read_integer_attribute(
-                reader, "restart_step", default=-1 if segment_index == 0 else None
-            )
-            if segment_index > 0:
-                if restart_step < 0:
-                    raise ValueError(f"invalid ADIOS2 restart step in segment: {path}")
-                if segment_steps[0] < restart_step:
-                    raise ValueError(
-                        f"ADIOS2 segment starts before its restart step: {path}"
-                    )
-
             reader_index = len(self.readers)
             self.readers.append(reader)
-            while segment_index > 0 and steps and steps[-1] >= restart_step:
-                steps.pop()
-                times.pop()
-                self.step_locations.pop()
-            if steps and steps[-1] >= segment_steps[0]:
-                raise ValueError(f"ADIOS2 segment steps overlap unexpectedly: {path}")
-            steps.extend(segment_steps)
-            times.extend(segment_times)
-            self.step_locations.extend(
-                (reader_index, local_index) for local_index in range(nsteps)
-            )
+            for local_index, (step, time) in enumerate(
+                zip(segment_steps, segment_times)
+            ):
+                step_records[int(step)] = (float(time), reader_index, local_index)
 
         self.reader = self.readers[0]
-        self.step = np.asarray(steps, dtype=np.int64)
-        self.time = np.asarray(times, dtype=np.float64)
+        ordered_steps = sorted(step_records)
+        self.step = np.asarray(ordered_steps, dtype=np.int64)
+        self.time = np.asarray(
+            [step_records[step][0] for step in ordered_steps], dtype=np.float64
+        )
+        self.step_locations = [
+            (step_records[step][1], step_records[step][2]) for step in ordered_steps
+        ]
 
     def _segment_paths(self):
         paths = []
-        if self.path.exists():
-            paths.append((0, self.path))
         if not self.path.parent.exists():
-            return []
+            return paths
 
-        pattern = re.compile(
-            rf"{re.escape(self.prefix)}\.(\d{{4,}}){re.escape(self.path.suffix)}"
-        )
-        broad_pattern = re.compile(
-            rf"{re.escape(self.prefix)}\.(\d+){re.escape(self.path.suffix)}"
-        )
+        pattern = re.compile(r"(\d{4,})\.bp")
+        broad_pattern = re.compile(r"(\d+)\.bp")
         for candidate in self.path.parent.iterdir():
-            if candidate == self.path:
-                continue
             match = pattern.fullmatch(candidate.name)
             if match:
                 index = int(match.group(1))
-                expected = f"{self.prefix}.{index:04d}{self.path.suffix}"
-                if index == 0 or candidate.name != expected:
+                expected = f"{index:04d}.bp"
+                if candidate.name != expected:
                     raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
                 paths.append((index, candidate))
             elif broad_pattern.fullmatch(candidate.name):
                 raise ValueError(f"noncanonical ADIOS2 segment name: {candidate}")
 
         paths.sort()
-        for expected, (index, path) in enumerate(paths):
-            if index != expected:
-                raise ValueError(f"missing ADIOS2 segment before: {path}")
         return paths
 
     def _validate_segment(self, reader, expected_index, path):

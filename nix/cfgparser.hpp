@@ -298,6 +298,14 @@ public:
       return false;
     }
 
+    if (adios.contains("steps_per_segment")) {
+      if (adios["steps_per_segment"].is_number_integer() == false ||
+          adios["steps_per_segment"].get<std::int64_t>() < 0) {
+        std::cerr << "`application.adios.steps_per_segment` must be a non-negative integer\n";
+        return false;
+      }
+    }
+
     for (auto it = adios.begin(); it != adios.end(); ++it) {
       if (it.value().is_string() == false && it.value().is_boolean() == false &&
           it.value().is_number() == false) {

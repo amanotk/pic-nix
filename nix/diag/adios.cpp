@@ -32,9 +32,7 @@ std::string parameter_value(const nix::json& value)
 
 std::filesystem::path segment_path(const std::filesystem::path& base, int index)
 {
-  const std::string name =
-      fmt::format("{}.{:04d}{}", base.stem().string(), index, base.extension().string());
-  return base.parent_path() / name;
+  return base / fmt::format("{:04d}.bp", index);
 }
 
 std::filesystem::path temporary_path(const std::filesystem::path& path)
@@ -45,17 +43,11 @@ std::filesystem::path temporary_path(const std::filesystem::path& path)
 std::optional<int> segment_index(const std::filesystem::path& base,
                                  const std::filesystem::path& candidate)
 {
-  if (candidate.extension() != base.extension()) {
+  if (candidate.extension() != ".bp") {
     return std::nullopt;
   }
+  const std::string digits = candidate.stem().string();
 
-  const std::string prefix = base.stem().string() + ".";
-  const std::string stem   = candidate.stem().string();
-  if (stem.size() <= prefix.size() || stem.compare(0, prefix.size(), prefix) != 0) {
-    return std::nullopt;
-  }
-
-  const std::string digits = stem.substr(prefix.size());
   if (std::all_of(digits.begin(), digits.end(),
                   [](unsigned char ch) { return std::isdigit(ch); }) == false) {
     return std::nullopt;
@@ -93,66 +85,72 @@ std::optional<int> temporary_dataset_index(const std::filesystem::path& base,
   return dataset_index(base, name.substr(0, name.size() - suffix.size()));
 }
 
+bool recoverable_temporary_segment(const std::filesystem::path& path)
+{
+  try {
+    adios2::ADIOS adios;
+    auto          io = adios.DeclareIO("PICNIXRecovery");
+    io.SetEngine("BP5");
+    auto       engine = io.Open(path.string(), adios2::Mode::ReadRandomAccess);
+    auto       step   = io.InquireVariable<std::int64_t>("step");
+    auto       time   = io.InquireVariable<double>("time");
+    const bool valid  = step && time && step.Steps() > 0 && step.Steps() == time.Steps();
+    engine.Close();
+    return valid;
+  } catch (...) {
+    return false;
+  }
+}
+
 int next_segment_index(const std::filesystem::path& base)
 {
-  std::vector<int> indices;
-  if (std::filesystem::exists(base.parent_path())) {
-    for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
-      const auto index = segment_index(base, entry.path());
+  int max_index = -1;
+  if (std::filesystem::exists(base)) {
+    for (const auto& entry : std::filesystem::directory_iterator(base)) {
+      auto index = dataset_index(base, entry.path());
+      if (index.has_value() == false) {
+        index = temporary_dataset_index(base, entry.path());
+      }
       if (index.has_value()) {
-        indices.push_back(*index);
+        max_index = std::max(max_index, *index);
       }
     }
   }
-  if (indices.empty()) {
+  if (max_index < 0) {
     return 0;
   }
-
-  std::sort(indices.begin(), indices.end());
-  for (int expected = 0; expected < static_cast<int>(indices.size()); expected++) {
-    if (indices[expected] != expected) {
-      throw std::runtime_error("ADIOS2 diagnostic segments are not contiguous");
-    }
-  }
-  if (indices.back() == std::numeric_limits<int>::max()) {
+  if (max_index == std::numeric_limits<int>::max()) {
     throw std::overflow_error("ADIOS2 diagnostic segment index overflow");
   }
-  return indices.back() + 1;
+  return max_index + 1;
 }
 
 void remove_segments(const std::filesystem::path& base)
 {
   std::filesystem::remove_all(base);
-  if (std::filesystem::exists(base.parent_path()) == false) {
-    return;
-  }
-
-  std::vector<std::filesystem::path> segments;
-  for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
-    if (dataset_index(base, entry.path()).has_value() ||
-        temporary_dataset_index(base, entry.path()).has_value()) {
-      segments.push_back(entry.path());
-    }
-  }
-  for (const auto& segment : segments) {
-    std::filesystem::remove_all(segment);
-  }
 }
 
-void remove_temporary_segments(const std::filesystem::path& base)
+void recover_temporary_segments(const std::filesystem::path& base)
 {
-  if (std::filesystem::exists(base.parent_path()) == false) {
+  if (std::filesystem::exists(base) == false) {
     return;
   }
 
-  std::vector<std::filesystem::path> segments;
-  for (const auto& entry : std::filesystem::directory_iterator(base.parent_path())) {
-    if (temporary_dataset_index(base, entry.path()).has_value()) {
-      segments.push_back(entry.path());
+  std::vector<std::pair<int, std::filesystem::path>> segments;
+  for (const auto& entry : std::filesystem::directory_iterator(base)) {
+    const auto index = temporary_dataset_index(base, entry.path());
+    if (index.has_value()) {
+      segments.emplace_back(*index, entry.path());
     }
   }
-  for (const auto& segment : segments) {
-    std::filesystem::remove_all(segment);
+  std::sort(segments.begin(), segments.end());
+  for (const auto& [index, temporary] : segments) {
+    const auto finalized = segment_path(base, index);
+    if (std::filesystem::exists(finalized) || recoverable_temporary_segment(temporary) == false) {
+      continue;
+    }
+    std::filesystem::rename(temporary, finalized);
+    nix::sync_directory(base.string());
   }
 }
 
@@ -188,6 +186,7 @@ struct AdiosWriter::Impl {
   std::unique_ptr<adios2::ADIOS>   adios;
   std::unique_ptr<adios2::IO>      io;
   std::unique_ptr<adios2::Engine>  engine;
+  std::filesystem::path            base_path;
   std::filesystem::path            filename;
   std::filesystem::path            temporary_filename;
 
@@ -197,7 +196,11 @@ struct AdiosWriter::Impl {
   std::map<std::string, adios2::Variable<std::int32_t>>  int32_variables;
   std::map<std::string, adios2::Variable<std::uint64_t>> uint64_variables;
 
-  bool step_open = false;
+  std::int64_t steps_per_segment  = 100;
+  std::int64_t segment_step_count = 0;
+  int          segment            = -1;
+  bool         writer_open        = false;
+  bool         step_open          = false;
 
   explicit Impl(std::shared_ptr<Diag::info_type> info) : info(std::move(info))
   {
@@ -217,8 +220,8 @@ void AdiosWriter::prepare_fresh_run(const std::string& basedir, const std::strin
   std::string error;
   if (rank == 0) {
     try {
-      const std::filesystem::path base = std::filesystem::path(basedir) / (prefix + ".bp");
-      std::filesystem::create_directories(base.parent_path());
+      const std::filesystem::path base = std::filesystem::path(basedir) / prefix;
+      std::filesystem::create_directories(base);
       remove_segments(base);
     } catch (const std::exception& exception) {
       error = exception.what();
@@ -261,10 +264,19 @@ void AdiosWriter::initialize(const std::string& diagnostic, const std::string& p
   impl->adios = std::make_unique<adios2::ADIOS>(MPI_COMM_WORLD);
   impl->io    = std::make_unique<adios2::IO>(impl->adios->DeclareIO("PICNIX"));
   impl->io->SetEngine("BP5");
-  impl->filename = std::filesystem::path(impl->info->basedir) / (prefix + ".bp");
+  impl->base_path = std::filesystem::path(impl->info->basedir) / prefix;
+  impl->filename  = impl->base_path;
 
-  adios2::Params adios_parameters{{"AsyncWrite", "false"}};
+  adios2::Params adios_parameters{{"AsyncWrite", "true"}};
   for (auto it = adios_config.begin(); it != adios_config.end(); ++it) {
+    if (it.key() == "steps_per_segment") {
+      if (it.value().is_number_integer() == false || it.value().get<std::int64_t>() < 0) {
+        throw std::invalid_argument(
+            "application.adios.steps_per_segment must be a non-negative integer");
+      }
+      impl->steps_per_segment = it.value().get<std::int64_t>();
+      continue;
+    }
     adios_parameters[it.key()] = parameter_value(it.value());
   }
   impl->io->SetParameters(adios_parameters);
@@ -339,25 +351,25 @@ void AdiosWriter::define_joined_uint64(const std::string& name, std::size_t coun
 
 void AdiosWriter::open()
 {
-  if (impl->io == nullptr || impl->engine != nullptr) {
+  if (impl->io == nullptr || impl->engine != nullptr || impl->writer_open) {
     throw std::logic_error("invalid ADIOS2 engine open state");
   }
 
-  const std::filesystem::path directory = impl->filename.parent_path();
-  int                         segment   = 0;
+  const std::filesystem::path base    = impl->base_path;
+  int                         segment = 0;
   std::string                 error;
   if (impl->info->world_rank == 0) {
     try {
-      std::filesystem::create_directories(directory);
       if (impl->info->is_restart) {
         if (impl->info->restart_step < 0) {
           throw std::logic_error("ADIOS2 restart step was not initialized");
         }
-        remove_temporary_segments(impl->filename);
-        segment = next_segment_index(impl->filename);
+        recover_temporary_segments(base);
+        segment = next_segment_index(base);
       } else {
-        remove_segments(impl->filename);
+        remove_segments(base);
       }
+      std::filesystem::create_directories(base);
     } catch (const std::exception& exception) {
       error = exception.what();
     }
@@ -365,19 +377,37 @@ void AdiosWriter::open()
   broadcast_rank0_error(error);
   MPI_Bcast(&segment, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  impl->filename           = segment_path(impl->filename, segment);
+  open_segment(segment, impl->info->restart_step);
+  impl->writer_open = true;
+}
+
+void AdiosWriter::open_segment(int segment, std::int64_t restart_step)
+{
+  if (impl->io == nullptr || impl->engine != nullptr) {
+    throw std::logic_error("invalid ADIOS2 segment open state");
+  }
+
+  impl->filename           = segment_path(impl->base_path, segment);
   impl->temporary_filename = temporary_path(impl->filename);
+  impl->io->RemoveAttribute("segment_index");
+  impl->io->RemoveAttribute("restart_step");
   impl->io->DefineAttribute<std::int32_t>("segment_index", segment);
-  impl->io->DefineAttribute<std::int64_t>("restart_step", impl->info->restart_step);
+  impl->io->DefineAttribute<std::int64_t>("restart_step", restart_step);
 
   impl->engine = std::make_unique<adios2::Engine>(
       impl->io->Open(impl->temporary_filename.string(), adios2::Mode::Write));
+  impl->segment            = segment;
+  impl->segment_step_count = 0;
 }
 
 void AdiosWriter::begin_step(std::int64_t step, double time)
 {
-  if (impl->engine == nullptr || impl->step_open) {
+  if (impl->writer_open == false || impl->step_open) {
     throw std::logic_error("invalid ADIOS2 BeginStep state");
+  }
+
+  if (impl->engine == nullptr) {
+    open_segment(impl->segment + 1, step);
   }
 
   impl->engine->BeginStep();
@@ -450,9 +480,29 @@ void AdiosWriter::end_step()
   }
   impl->engine->EndStep();
   impl->step_open = false;
+  impl->segment_step_count++;
+  if (impl->steps_per_segment > 0 && impl->segment_step_count >= impl->steps_per_segment) {
+    rotate();
+  }
 }
 
-void AdiosWriter::close()
+void AdiosWriter::rotate()
+{
+  if (impl->writer_open == false) {
+    throw std::logic_error("invalid ADIOS2 segment rotation state");
+  }
+  if (impl->step_open) {
+    throw std::logic_error("cannot rotate ADIOS2 output during a step");
+  }
+  if (impl->engine == nullptr) {
+    return;
+  }
+
+  close_segment();
+  impl->segment_step_count = 0;
+}
+
+void AdiosWriter::close_segment()
 {
   if (impl->engine == nullptr) {
     return;
@@ -461,7 +511,8 @@ void AdiosWriter::close()
   std::string error;
   try {
     if (impl->step_open) {
-      end_step();
+      impl->engine->EndStep();
+      impl->step_open = false;
     }
     impl->engine->Close();
   } catch (const std::exception& exception) {
@@ -489,5 +540,20 @@ void AdiosWriter::close()
     }
   }
   broadcast_rank0_error(error);
+}
+
+void AdiosWriter::close()
+{
+  if (impl->writer_open == false) {
+    return;
+  }
+
+  try {
+    close_segment();
+  } catch (...) {
+    impl->writer_open = false;
+    throw;
+  }
+  impl->writer_open = false;
 }
 } // namespace nix

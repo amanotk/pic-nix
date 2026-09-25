@@ -39,7 +39,7 @@ void write_segment(const std::filesystem::path& basedir, bool is_restart, std::i
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", nix::json::object()}}},
+        {"application", {{"adios", {{"AsyncWrite", false}}}}},
     };
 
     writer.initialize("field", "segments", config);
@@ -80,6 +80,19 @@ std::pair<std::int64_t, double> read_segment(const std::filesystem::path& path)
   engine.Close();
   return {actual_step, actual_value[0]};
 }
+
+std::int64_t read_restart_step(const std::filesystem::path& path)
+{
+  adios2::ADIOS adios(MPI_COMM_WORLD);
+  auto          io        = adios.DeclareIO("segment-metadata-reader");
+  auto          engine    = io.Open(path.string(), adios2::Mode::ReadRandomAccess);
+  auto          attribute = io.InquireAttribute<std::int64_t>("restart_step");
+  REQUIRE(attribute);
+  const auto values = attribute.Data();
+  REQUIRE(values.size() == 1);
+  engine.Close();
+  return values[0];
+}
 } // namespace
 
 TEST_CASE("ADIOS writer round trip")
@@ -98,7 +111,7 @@ TEST_CASE("ADIOS writer round trip")
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", nix::json::object()}}},
+        {"application", {{"adios", {{"AsyncWrite", false}}}}},
     };
 
     writer.initialize("field", "roundtrip", config);
@@ -125,8 +138,9 @@ TEST_CASE("ADIOS writer round trip")
 
     adios2::ADIOS adios(MPI_COMM_WORLD);
     auto          io = adios.DeclareIO("reader");
-    auto engine = io.Open((basedir / "roundtrip.0000.bp").string(), adios2::Mode::ReadRandomAccess);
-    auto field  = io.InquireVariable<double>("field");
+    auto          engine =
+        io.Open((basedir / "roundtrip" / "0000.bp").string(), adios2::Mode::ReadRandomAccess);
+    auto field        = io.InquireVariable<double>("field");
     auto particles    = io.InquireVariable<double>("particles");
     auto particle_ids = io.InquireVariable<std::uint64_t>("particles_id");
     auto rank         = io.InquireVariable<std::int32_t>("rank");
@@ -197,7 +211,7 @@ TEST_CASE("ADIOS writer completes asynchronous BP5 output on close")
     TestDiag         diag;
     nix::AdiosWriter writer(diag.get_info());
     const nix::json  config = {
-        {"application", {{"adios", {{"AsyncWrite", true}}}}},
+        {"application", {{"adios", nix::json::object()}}},
     };
 
     writer.initialize("field", "async", config);
@@ -211,7 +225,7 @@ TEST_CASE("ADIOS writer completes asynchronous BP5 output on close")
 
     adios2::ADIOS adios(MPI_COMM_WORLD);
     auto          io = adios.DeclareIO("async-reader");
-    auto engine = io.Open((basedir / "async.0000.bp").string(), adios2::Mode::ReadRandomAccess);
+    auto engine = io.Open((basedir / "async" / "0000.bp").string(), adios2::Mode::ReadRandomAccess);
     auto field  = io.InquireVariable<double>("field");
     REQUIRE(field);
 
@@ -221,6 +235,99 @@ TEST_CASE("ADIOS writer completes asynchronous BP5 output on close")
     engine.Get(field, actual, adios2::Mode::Sync);
     REQUIRE(actual[0] == value);
     engine.Close();
+  }
+  nix::Diag::finalize();
+  std::filesystem::remove_all(basedir);
+}
+
+TEST_CASE("ADIOS writer rotates at the default segment interval")
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  REQUIRE(rank == 0);
+
+  const auto basedir =
+      std::filesystem::temp_directory_path() / "picnix-adios-default-rotation-test";
+  std::filesystem::remove_all(basedir);
+  std::filesystem::create_directories(basedir);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  nix::Diag::initialize(basedir.string(), "adios", "");
+  {
+    TestDiag         diag;
+    nix::AdiosWriter writer(diag.get_info());
+    const nix::json  config = {
+        {"application", {{"adios", nix::json::object()}}},
+    };
+
+    writer.initialize("field", "default-rotation", config);
+    writer.define_global_double("field", {1}, {0}, {1});
+    writer.open();
+    for (std::int64_t step = 0; step <= 100; step++) {
+      writer.begin_step(step, 0.5 * step);
+      const double value = static_cast<double>(step);
+      writer.put_global_double("field", {0}, {1}, &value, 1);
+      writer.end_step();
+    }
+    writer.close();
+
+    REQUIRE(std::filesystem::exists(basedir / "default-rotation" / "0000.bp"));
+    REQUIRE(std::filesystem::exists(basedir / "default-rotation" / "0001.bp"));
+  }
+  nix::Diag::finalize();
+  std::filesystem::remove_all(basedir);
+}
+
+TEST_CASE("ADIOS writer rotates asynchronous BP5 output")
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  REQUIRE(rank == 0);
+
+  const auto basedir = std::filesystem::temp_directory_path() / "picnix-adios-rotation-test";
+  std::filesystem::remove_all(basedir);
+  std::filesystem::create_directories(basedir);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  nix::Diag::initialize(basedir.string(), "adios", "");
+  {
+    TestDiag         diag;
+    nix::AdiosWriter writer(diag.get_info());
+    const nix::json  config = {
+        {"application", {{"adios", {{"AsyncWrite", true}, {"steps_per_segment", 2}}}}},
+    };
+
+    writer.initialize("field", "rotation", config);
+    writer.define_global_double("field", {1}, {0}, {1});
+    writer.open();
+
+    for (std::int64_t step = 0; step < 5; step++) {
+      writer.begin_step(step, 0.5 * step);
+      const double value = 10.0 + step;
+      writer.put_global_double("field", {0}, {1}, &value, 1);
+      writer.end_step();
+
+      if (step == 1) {
+        REQUIRE(std::filesystem::exists(basedir / "rotation" / "0000.bp"));
+      }
+      if (step == 3) {
+        REQUIRE(std::filesystem::exists(basedir / "rotation" / "0001.bp"));
+      }
+    }
+
+    REQUIRE(std::filesystem::exists(basedir / "rotation" / "0002.bp.tmp"));
+    writer.close();
+
+    REQUIRE(read_segment(basedir / "rotation" / "0000.bp") ==
+            std::pair<std::int64_t, double>{0, 10.0});
+    REQUIRE(read_segment(basedir / "rotation" / "0001.bp") ==
+            std::pair<std::int64_t, double>{2, 12.0});
+    REQUIRE(read_segment(basedir / "rotation" / "0002.bp") ==
+            std::pair<std::int64_t, double>{4, 14.0});
+    REQUIRE(read_restart_step(basedir / "rotation" / "0000.bp") == -1);
+    REQUIRE(read_restart_step(basedir / "rotation" / "0001.bp") == 2);
+    REQUIRE(read_restart_step(basedir / "rotation" / "0002.bp") == 4);
+    REQUIRE_FALSE(std::filesystem::exists(basedir / "rotation" / "0002.bp.tmp"));
   }
   nix::Diag::finalize();
   std::filesystem::remove_all(basedir);
@@ -237,10 +344,11 @@ TEST_CASE("ADIOS writer segments restart output and replaces fresh output")
   std::filesystem::create_directories(basedir);
   MPI_Barrier(MPI_COMM_WORLD);
 
-  const auto base  = basedir / "segments.0000.bp";
-  const auto part1 = basedir / "segments.0001.bp";
-  const auto part2 = basedir / "segments.0002.bp";
-  const auto temp2 = basedir / "segments.0002.bp.tmp";
+  const auto base  = basedir / "segments" / "0000.bp";
+  const auto part1 = basedir / "segments" / "0001.bp";
+  const auto part2 = basedir / "segments" / "0002.bp";
+  const auto part3 = basedir / "segments" / "0003.bp";
+  const auto temp2 = basedir / "segments" / "0002.bp.tmp";
   write_segment(basedir, false, 0, 10.0);
   write_segment(basedir, true, 1, 20.0);
   std::filesystem::create_directories(temp2);
@@ -248,16 +356,18 @@ TEST_CASE("ADIOS writer segments restart output and replaces fresh output")
 
   REQUIRE(std::filesystem::exists(base));
   REQUIRE(std::filesystem::exists(part1));
-  REQUIRE(std::filesystem::exists(part2));
-  REQUIRE_FALSE(std::filesystem::exists(temp2));
+  REQUIRE(std::filesystem::exists(part3));
+  REQUIRE(std::filesystem::exists(temp2));
+  REQUIRE_FALSE(std::filesystem::exists(part2));
   REQUIRE(read_segment(base) == std::pair<std::int64_t, double>{0, 10.0});
   REQUIRE(read_segment(part1) == std::pair<std::int64_t, double>{1, 20.0});
-  REQUIRE(read_segment(part2) == std::pair<std::int64_t, double>{2, 30.0});
+  REQUIRE(read_segment(part3) == std::pair<std::int64_t, double>{2, 30.0});
 
   write_segment(basedir, false, 3, 40.0);
   REQUIRE(std::filesystem::exists(base));
   REQUIRE_FALSE(std::filesystem::exists(part1));
-  REQUIRE_FALSE(std::filesystem::exists(part2));
+  REQUIRE_FALSE(std::filesystem::exists(part3));
+  REQUIRE_FALSE(std::filesystem::exists(temp2));
   REQUIRE(read_segment(base) == std::pair<std::int64_t, double>{3, 40.0});
 
   std::filesystem::remove_all(basedir);
@@ -277,8 +387,8 @@ TEST_CASE("ADIOS writer rejects invalid restart segment state")
   const nix::json config = {
       {"application", {{"adios", nix::json::object()}}},
   };
-  const auto base = basedir / "segments.0000.bp";
-  const auto temp = basedir / "segments.0000.bp.tmp";
+  const auto base = basedir / "segments" / "0000.bp";
+  const auto temp = basedir / "segments" / "0000.bp.tmp";
 
   SECTION("engine is fixed to BP5")
   {
@@ -313,27 +423,46 @@ TEST_CASE("ADIOS writer rejects invalid restart segment state")
     REQUIRE_FALSE(std::filesystem::exists(temp));
   }
 
-  SECTION("segments must be contiguous")
+  SECTION("segments may contain gaps")
   {
     write_segment(basedir, false, 0, 10.0);
-    std::filesystem::rename(base, basedir / "segments.0002.bp");
+    std::filesystem::rename(base, basedir / "segments" / "0002.bp");
 
-    nix::Diag::initialize(basedir.string(), "adios", "", true);
-    nix::Diag::set_restart_step(1);
-    {
-      TestDiag         diag;
-      nix::AdiosWriter writer(diag.get_info());
-      writer.initialize("field", "segments", config);
-      writer.define_global_double("field", {1}, {0}, {1});
-      REQUIRE(thrown_message([&] { writer.open(); }) ==
-              "ADIOS2 diagnostic segments are not contiguous");
-    }
-    nix::Diag::finalize();
+    write_segment(basedir, true, 1, 20.0);
 
-    REQUIRE(std::filesystem::exists(basedir / "segments.0002.bp"));
+    REQUIRE(std::filesystem::exists(basedir / "segments" / "0002.bp"));
+    REQUIRE(std::filesystem::exists(basedir / "segments" / "0003.bp"));
     REQUIRE_FALSE(std::filesystem::exists(temp));
+    REQUIRE(read_segment(basedir / "segments" / "0003.bp") ==
+            std::pair<std::int64_t, double>{1, 20.0});
   }
 
+  std::filesystem::remove_all(basedir);
+}
+
+TEST_CASE("ADIOS writer promotes recoverable temporary segments")
+{
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  REQUIRE(rank == 0);
+
+  const auto basedir = std::filesystem::temp_directory_path() / "picnix-adios-recovery-test";
+  std::filesystem::remove_all(basedir);
+  std::filesystem::create_directories(basedir);
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  write_segment(basedir, false, 0, 10.0);
+  write_segment(basedir, true, 1, 20.0);
+  std::filesystem::rename(basedir / "segments" / "0001.bp", basedir / "segments" / "0001.bp.tmp");
+  write_segment(basedir, true, 2, 30.0);
+
+  REQUIRE(std::filesystem::exists(basedir / "segments" / "0001.bp"));
+  REQUIRE(std::filesystem::exists(basedir / "segments" / "0002.bp"));
+  REQUIRE_FALSE(std::filesystem::exists(basedir / "segments" / "0001.bp.tmp"));
+  REQUIRE(read_segment(basedir / "segments" / "0001.bp") ==
+          std::pair<std::int64_t, double>{1, 20.0});
+  REQUIRE(read_segment(basedir / "segments" / "0002.bp") ==
+          std::pair<std::int64_t, double>{2, 30.0});
   std::filesystem::remove_all(basedir);
 }
 
@@ -348,9 +477,9 @@ TEST_CASE("ADIOS fresh run cleanup is eager")
   std::filesystem::create_directories(basedir);
   MPI_Barrier(MPI_COMM_WORLD);
 
-  const auto base  = basedir / "segments.0000.bp";
-  const auto part1 = basedir / "segments.0001.bp";
-  const auto temp2 = basedir / "segments.0002.bp.tmp";
+  const auto base  = basedir / "segments" / "0000.bp";
+  const auto part1 = basedir / "segments" / "0001.bp";
+  const auto temp2 = basedir / "segments" / "0002.bp.tmp";
   write_segment(basedir, false, 0, 10.0);
   write_segment(basedir, true, 1, 20.0);
   std::filesystem::create_directories(temp2);

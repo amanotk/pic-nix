@@ -173,11 +173,12 @@ tracker data is stored:
 | --- | --- |
 | `mpiio` | Shared files below `<basedir>/<prefix>/`. This is the default. |
 | `posix` | Per-node files below `<basedir>/nodeXXXXXX/<prefix>/`. |
-| `adios` | Numbered BP5 datasets at `<basedir>/<prefix>.0000.bp`; restarts add `.0001.bp`, `.0002.bp`, and so on. |
+| `adios` | Numbered BP5 datasets at `<basedir>/<prefix>/0000.bp`; restarts add `0001.bp`, `0002.bp`, and so on. |
 
-Each `.bp` path is a BP5 dataset directory managed by ADIOS2. On restart, the
-PIC-NIX reader combines numbered datasets into one logical time series, with a
-later segment replacing earlier output from its restart step onward.  
+Each `<prefix>` directory contains BP5 dataset directories managed by ADIOS2.  
+On restart, the PIC-NIX reader combines numbered datasets into one logical time  
+series, with a later segment replacing earlier output from its restart step  
+onward.  
 
 Every new run writes `<basedir>/profile.msgpack`. It contains the configuration,
 process count, chunk mapping, and metadata used by `picnix.Run` to discover the
@@ -195,7 +196,7 @@ optionally pass scalar BP5 parameters directly under `application.adios`:
   iomode = "adios"
 
   [application.adios]
-    AsyncWrite = false
+    AsyncWrite = true
 ```
 
 The engine is always BP5. Install the optional Python reader with:  
@@ -203,6 +204,24 @@ The engine is always BP5. Install the optional Python reader with:
 ```sh
 uv pip install --python .venv -e "./python[adios]"
 ```
+
+ADIOS2 segments remain open as `.bp.tmp` directories while a run is active.  
+Segments are finalized every 100 completed ADIOS2 diagnostic steps by default.  
+Override this with `steps_per_segment`, or set it to `0` to disable rotation:  
+
+```toml
+[application.adios]
+  AsyncWrite = true
+  steps_per_segment = 100
+```
+
+At a rotation boundary PIC-NIX closes the current engine, renames the temporary  
+directory to `.bp`, and opens the next segment only when the next diagnostic  
+step is written. On restart, recoverable temporary segments are promoted, while  
+invalid `.bp.tmp` directories remain ignored and their indices are not reused.  
+Segment indices may contain gaps, and readers use the record from the highest  
+segment index when simulation steps overlap. Each segment retains its  
+`segment_index` and `restart_step` metadata.
 
 Raw MPI-I/O and POSIX field or particle diagnostics can instead be converted to
 HDF5; see [HDF5 Converter](picnix/hdf5-converter.md).  
