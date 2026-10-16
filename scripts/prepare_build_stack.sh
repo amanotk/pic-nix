@@ -14,18 +14,8 @@ stamps, env.sh, and CMake caches store absolute paths.
 
 By default this installs:
   - a uv-managed virtual environment (system Python preferred) with
-    mpi4py, numpy, and an editable picnix install
+    mpi4py, numpy, and an editable picnix install (cross-builds omit mpi4py)
   - the ordinary C++ dependencies into <stack_dir>/deps
-
-When --with-ascent is used, the Ascent superbuild runs in **slim** profile
-(zlib + Conduit + VTK-m + Ascent only; no HDF5/Silo/ZFP/MFEM/RAJA/Sphinx).
-Use --ascent-full for upstream's full third-party set (still no Sphinx/docs;
-Cython only). 
-
-Optional long builds (off by default):
-  --with-adios2         ADIOS2 C++/MPI library (Python bindings off)
-  --with-adios2-python  ADIOS2 Python bindings as well (implies --with-adios2)
-  --with-ascent         Ascent + Conduit (slim); Python modules go into the stack venv
 
 Options:
   --cache <file.cmake>     CMake initial-cache that selects the compiler
@@ -36,8 +26,10 @@ Options:
                            exists (default: 3.12)
   --with-adios2            Build ADIOS2 (C++ only)
   --with-adios2-python     Build ADIOS2 with Python bindings
-  --with-ascent            Build Ascent into the stack Python environment
-  --ascent-full            With --with-ascent: upstream full TPL set (slow;
+  --with-ascent            Build Ascent + Conduit (slim profile)
+  --with-ascent-rendering  With --with-ascent and a cross-compilation cache:
+                            build MPI + Python extracts with VTK-h rendering
+  --with-ascent-full       With --with-ascent: upstream full TPL set (slow;
                            no Sphinx/docs; needs Cython for ZFP)
   --no-deps                Skip the ordinary C++ dependencies
   --no-picnix              Skip the editable picnix install
@@ -58,8 +50,11 @@ Example (default stack):
     -DCMAKE_PREFIX_PATH=<stack_dir>/deps \
     -DPICNIX_USE_SYSTEM_LIBS=ON
 
-Cross-compilation caches may build the default (deps-only) stack.
---with-adios2 and --with-ascent require a native build.
+Cross-compilation caches may build the default stack. Cross-compilation
+caches with Python target support also allow --with-adios2, --with-adios2-python
+(C++/MPI and Python bindings for the target), and --with-ascent-rendering
+(MPI and Python extracts with VTK-h rendering).
+--with-ascent-full requires a native build.
 
 Parallelism defaults to 4 jobs to avoid OOM on large hosts. Raise it with
 --jobs N or CMAKE_BUILD_PARALLEL_LEVEL if you have memory headroom.
@@ -75,6 +70,8 @@ WITH_ADIOS2=false
 WITH_ADIOS2_PYTHON=false
 WITH_ASCENT=false
 ASCENT_FULL=false
+ASCENT_EXTRACTS_ONLY=false
+ASCENT_RENDERING=false
 WITH_DEPS=true
 WITH_PICNIX=true
 CHECK_ONLY=false
@@ -151,7 +148,13 @@ while (( $# > 0 )); do
       WITH_ASCENT=true
       shift
       ;;
-    --ascent-full)
+    --with-ascent-rendering)
+      WITH_ASCENT=true
+      ASCENT_EXTRACTS_ONLY=true
+      ASCENT_RENDERING=true
+      shift
+      ;;
+    --with-ascent-full)
       WITH_ASCENT=true
       ASCENT_FULL=true
       shift
@@ -619,6 +622,11 @@ prepare_python() {
   fi
 
   local py_packages="mpi4py,numpy,pip,setuptools,wheel"
+  if [[ "$IS_CROSS" == true ]]; then
+    # The stack Python runs on the login node; cross-built mpi4py cannot be
+    # imported there. Keep the target MPI wrappers for C++ dependencies only.
+    py_packages="numpy,pip,setuptools,wheel"
+  fi
   if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
     # Full Ascent profile builds ZFP Python bindings and needs Cython.
     # Slim profile (default) skips ZFP entirely.
@@ -626,6 +634,20 @@ prepare_python() {
   fi
   if [[ "$WITH_PICNIX" == true ]]; then
     py_packages+=",picnix"
+  fi
+
+  # Editable picnix extras. Cross builds keep the PyPI ADIOS2 reader on the
+  # login node; the built bindings are target-only and exposed through
+  # compute-env.sh.
+  local picnix_extras=""
+  if [[ "$WITH_PICNIX" == true ]]; then
+    picnix_extras="mpi,test"
+    if [[ "$IS_CROSS" == true ]]; then
+      picnix_extras="test"
+    fi
+    if [[ "$WITH_ADIOS2" == true && ( "$WITH_ADIOS2_PYTHON" != true || "$IS_CROSS" == true ) ]]; then
+      picnix_extras="${picnix_extras},adios"
+    fi
   fi
 
   local expected
@@ -637,6 +659,7 @@ prepare_python() {
     "ascent_full=$ASCENT_FULL"
     "desired_python=$desired"
     "packages=$py_packages"
+    "extras=$picnix_extras"
   )
   if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
     # Editable installs do not pick up new declared deps/entry points.
@@ -671,27 +694,27 @@ prepare_python() {
       "with_ascent=$WITH_ASCENT" \
       "ascent_full=$ASCENT_FULL" \
       "desired_python=$desired" \
-      "packages=$py_packages"
+      "packages=$py_packages" \
+      "extras=$picnix_extras"
     if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
       printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
     fi
   elif [[ "$need_recreate" == false ]]; then
     log "--- Refreshing Python packages in existing venv ---"
-    local base_pkgs=(mpi4py numpy setuptools wheel)
+    local base_pkgs=(numpy setuptools wheel)
+    if [[ "$IS_CROSS" != true ]]; then
+      base_pkgs=(mpi4py "${base_pkgs[@]}")
+    fi
     if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
       base_pkgs+=(cython)
     fi
-    if [[ -n "$MPICC_EXECUTABLE" ]]; then
+    if [[ "$IS_CROSS" != true && -n "$MPICC_EXECUTABLE" ]]; then
       MPICC="$MPICC_EXECUTABLE" uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     else
       uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     fi
     if [[ "$WITH_PICNIX" == true ]]; then
-      local extras="mpi,test"
-      if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
-        extras="mpi,test,adios"
-      fi
-      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
+      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$picnix_extras]"
     fi
     write_stamp python "$expected"
     write_stamp_meta python \
@@ -701,7 +724,8 @@ prepare_python() {
       "with_ascent=$WITH_ASCENT" \
       "ascent_full=$ASCENT_FULL" \
       "desired_python=$desired" \
-      "packages=$py_packages"
+      "packages=$py_packages" \
+      "extras=$picnix_extras"
     if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
       printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
     fi
@@ -717,28 +741,27 @@ prepare_python() {
     # --seed adds pip; Conduit's superbuild runs
     # `python -m pip install . --no-build-isolation`, which also needs
     # setuptools and wheel already present in the environment.
-    uv venv "$STACK_PYTHON" --python "$desired" --seed
+    uv venv "$STACK_PYTHON" --python "$desired" --seed --clear
     [[ -x "$STACK_VENV_BIN" ]] || die "failed to create virtual environment at $STACK_PYTHON"
 
-    local base_pkgs=(mpi4py numpy setuptools wheel)
+    local base_pkgs=(numpy setuptools wheel)
+    if [[ "$IS_CROSS" != true ]]; then
+      base_pkgs=(mpi4py "${base_pkgs[@]}")
+    fi
     if [[ "$WITH_ASCENT" == true && "$ASCENT_FULL" == true ]]; then
       base_pkgs+=(cython)
     fi
     log "--- Installing Python packages (${base_pkgs[*]}) ---"
-    if [[ -n "$MPICC_EXECUTABLE" ]]; then
+    if [[ "$IS_CROSS" != true && -n "$MPICC_EXECUTABLE" ]]; then
       MPICC="$MPICC_EXECUTABLE" uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     else
       uv pip install --python "$STACK_VENV_BIN" --no-binary mpi4py "${base_pkgs[@]}"
     fi
 
     if [[ "$WITH_PICNIX" == true ]]; then
-      local extras="mpi,test"
-      if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" != true ]]; then
-        extras="mpi,test,adios"
-      fi
-      log "--- Installing editable picnix [$extras] ---"
-      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$extras]"
-      if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+      log "--- Installing editable picnix [$picnix_extras] ---"
+      uv pip install --python "$STACK_VENV_BIN" -e "$REPO_ROOT/python[$picnix_extras]"
+      if [[ "$WITH_ADIOS2_PYTHON" == true && "$IS_CROSS" != true ]]; then
         uv pip uninstall --python "$STACK_VENV_BIN" adios2 >/dev/null 2>&1 || true
       fi
     fi
@@ -751,7 +774,8 @@ prepare_python() {
       "with_ascent=$WITH_ASCENT" \
       "ascent_full=$ASCENT_FULL" \
       "desired_python=$desired" \
-      "packages=$py_packages"
+      "packages=$py_packages" \
+      "extras=$picnix_extras"
     if [[ "$WITH_PICNIX" == true && -f "$REPO_ROOT/python/pyproject.toml" ]]; then
       printf 'pyproject_hash=%s\n' "$(hash_file "$REPO_ROOT/python/pyproject.toml")" >>"$STAMP_DIR/python.meta"
     fi
@@ -794,21 +818,37 @@ install_adios2_component() {
   if [[ "$WITH_ADIOS2" != true ]]; then
     return 0
   fi
-  if [[ "$IS_CROSS" == true ]]; then
-    die "--with-adios2 requires a native build (cross-compilation cache detected); rerun without --with-adios2"
-  fi
-  local py_tag=""
+  local python_mode
+  python_mode="$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)"
+  local py_tag="" target_python="" target_numpy="" target_mpi4py="" host_python=""
   if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
-    py_tag="$(venv_python_tag)"
+    if [[ "$IS_CROSS" == true ]]; then
+      # Resolve the target ABI before the stamp check so a prefix change
+      # invalidates a previously built extension.
+      target_python="${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
+      target_numpy="${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+      target_mpi4py="${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
+      host_python="${PICNIX_ADIOS2_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
+      py_tag="${target_python}:${target_numpy}:${target_mpi4py}:${host_python}"
+    else
+      py_tag="$(venv_python_tag)"
+    fi
+  fi
+  local stamp_items=(
+    "script:$REPO_ROOT/scripts/install_adios2.sh"
+    "python_mode=$python_mode"
+  )
+  local meta_items=("python_mode=$python_mode" "venv_python=$py_tag")
+  if [[ -n "$target_python" ]]; then
+    stamp_items+=("target_python=$target_python" "target_numpy=$target_numpy" "target_mpi4py=$target_mpi4py" "host_python=$host_python")
+    meta_items+=("target_python=$target_python" "target_numpy=$target_numpy" "target_mpi4py=$target_mpi4py" "host_python=$host_python")
   fi
   local expected
-  expected="$(compute_stamp adios2 \
-    "script:$REPO_ROOT/scripts/install_adios2.sh" \
-    "python_mode=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)")"
+  expected="$(compute_stamp adios2 "${stamp_items[@]}")"
   if [[ "$FORCE" == true ]]; then
     clear_stamp adios2
   fi
-  # ABI check: native bindings must match the current interpreter even if
+  # ABI check: bindings must match the current interpreter/target even if
   # other stamp inputs are unchanged.
   if [[ "$WITH_ADIOS2_PYTHON" == true && -f "$STAMP_DIR/adios2.meta" && -n "$py_tag" ]]; then
     local old_py
@@ -820,9 +860,7 @@ install_adios2_component() {
   fi
   if [[ -d "$STACK_ADIOS2" ]] && stamp_matches adios2 "$expected"; then
     log "ADIOS2 up to date: $STACK_ADIOS2"
-    write_stamp_meta adios2 \
-      "python_mode=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)" \
-      "venv_python=$py_tag"
+    write_stamp_meta adios2 "${meta_items[@]}"
     return 0
   fi
   log "--- Installing ADIOS2 into $STACK_ADIOS2 ---"
@@ -835,13 +873,35 @@ install_adios2_component() {
   if [[ -n "$CACHE_FILE" ]]; then
     args+=(-C "$CACHE_FILE")
   fi
+  if [[ "$IS_CROSS" == true ]]; then
+    args+=(
+      --cross-build
+      -DFFS_FLOAT_FORMAT_TEST:STRING=0
+      -DFFS_FLOAT_FORMAT_TEST__TRYRUN_OUTPUT:STRING=Format_IEEE_754_littleendian
+      -DADIOS2_USE_MHS=OFF -DADIOS2_USE_PNG=OFF
+      -DADIOS2_USE_Sodium=OFF -DADIOS2_USE_OpenSSL=OFF
+      -DADIOS2_USE_CURL=OFF -DADIOS2_USE_Campaign=OFF
+      -DADIOS2_USE_Profiling=OFF
+    )
+    if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+      local host_venv="$STACK_ADIOS2/build-python-venv"
+      mkdir -p "$STACK_ADIOS2"
+      uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed --clear
+      uv pip install --python "$host_venv/bin/python" pip 'numpy==1.26.4'
+      args+=(
+        --python "$host_venv/bin/python"
+        --cross-python
+        --target-python "$target_python"
+        --target-numpy "$target_numpy"
+        --target-mpi4py "$target_mpi4py"
+      )
+    fi
+  fi
   apply_cache_compiler_env
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
     "$REPO_ROOT/scripts/install_adios2.sh" "${args[@]}"
   write_stamp adios2 "$expected"
-  write_stamp_meta adios2 \
-    "python_mode=$([[ "$WITH_ADIOS2_PYTHON" == true ]] && echo on || echo off)" \
-    "venv_python=$py_tag"
+  write_stamp_meta adios2 "${meta_items[@]}"
 }
 
 find_adios2_site_packages() {
@@ -867,7 +927,9 @@ wire_python_paths() {
   [[ -n "$SITE_PACKAGES" && -d "$SITE_PACKAGES" ]] || return 0
   local pth="$SITE_PACKAGES/zz-picnix-stack.pth"
   local lines=()
-  if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" == true ]]; then
+  # Cross builds compile extensions for the target Python; expose them only
+  # through compute-env.sh, never through the login-node venv.
+  if [[ "$WITH_ADIOS2" == true && "$WITH_ADIOS2_PYTHON" == true && "$IS_CROSS" != true ]]; then
     local sp
     if sp="$(find_adios2_site_packages)"; then
       lines+=("$sp")
@@ -875,7 +937,7 @@ wire_python_paths() {
       die "ADIOS2 Python site-packages not found under $STACK_ADIOS2"
     fi
   fi
-  if [[ "$WITH_ASCENT" == true ]]; then
+  if [[ "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ]]; then
     if ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
       local candidate
       for candidate in \
@@ -896,25 +958,120 @@ wire_python_paths() {
   if [[ "${#lines[@]}" -gt 0 ]]; then
     printf '%s\n' "${lines[@]}" >"$pth"
     log "Wrote $pth"
-  elif [[ -f "$pth" && "$WITH_ADIOS2_PYTHON" != true ]]; then
+  elif [[ -f "$pth" ]]; then
     rm -f "$pth"
   fi
+}
+
+spack_public_prefix() {
+  local setup="/vol0004/apps/oss/spack/share/spack/setup-env.sh"
+  [[ -f "$setup" ]] || die "Fugaku public Spack setup not found: $setup"
+  bash -c '. "$1" && spack location -i "/$2"' _ "$setup" "$1"
+}
+
+write_compute_env() {
+  local target_python="$1" target_numpy="$2" target_mpi4py="$3"
+
+  # Older stacks wrote this file under ascent/; drop it to avoid confusion.
+  rm -f "$STACK_ASCENT/compute-env.sh"
+
+  # Native builds run the same environment on login and compute nodes, so
+  # delegate to env.sh instead of duplicating it.
+  if [[ "$IS_CROSS" != true ]]; then
+    cat >"$STACK_DIR/compute-env.sh" <<EOF
+# Generated by scripts/prepare_build_stack.sh -- do not edit.
+# Native build: the same environment runs on login and compute nodes.
+#
+# Usage in a job script:
+#   source $STACK_DIR/compute-env.sh
+
+. "$ENV_SH"
+EOF
+    return 0
+  fi
+
+  local adios_py="" py_parts=() ld_parts=()
+
+  if [[ "$WITH_ADIOS2_PYTHON" == true ]]; then
+    for d in "$STACK_ADIOS2"/lib/python3.11/site-packages "$STACK_ADIOS2"/lib64/python3.11/site-packages; do
+      [[ -d "$d/adios2" ]] && adios_py="$d"
+    done
+  fi
+
+  if [[ -n "$target_python" ]]; then
+    [[ -d "$STACK_ASCENT/python-modules" ]] && py_parts+=("$STACK_ASCENT/python-modules")
+    [[ -n "$adios_py" ]] && py_parts+=("$adios_py")
+    py_parts+=("$target_numpy/lib/python3.11/site-packages" "$target_mpi4py/lib/python3.11/site-packages")
+    ld_parts+=("$target_python/lib")
+  fi
+  py_parts+=("$REPO_ROOT/python/src")
+
+  [[ -d "$STACK_ADIOS2/lib" ]] && ld_parts+=("$STACK_ADIOS2/lib")
+  for d in "$STACK_ASCENT"/ascent-checkout/lib "$STACK_ASCENT"/conduit-*/lib "$STACK_ASCENT"/vtkm-*/lib; do
+    [[ -d "$d" ]] && ld_parts+=("$d")
+  done
+
+  local python_path ld_path
+  python_path="$(IFS=:; printf '%s' "${py_parts[*]}")"
+  ld_path="$(IFS=:; printf '%s' "${ld_parts[*]}")"
+
+  {
+    cat <<EOF
+# Generated by scripts/prepare_build_stack.sh -- do not edit.
+# Compute-node environment (aarch64). Source after loading the matching LLVM
+# module; do not source the login-node env.sh on compute nodes.
+#
+# Usage in a job script:
+#   source $STACK_DIR/compute-env.sh
+EOF
+    if [[ -n "$target_python" ]]; then
+      cat <<EOF
+export PYTHONHOME="$target_python:$target_python"
+export PATH="$target_python/bin:\$PATH"
+EOF
+    fi
+    cat <<EOF
+
+export PYTHONPATH="$python_path\${PYTHONPATH:+:\$PYTHONPATH}"
+export LD_LIBRARY_PATH="$ld_path\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+EOF
+  } >"$STACK_DIR/compute-env.sh"
 }
 
 install_ascent_component() {
   if [[ "$WITH_ASCENT" != true ]]; then
     return 0
   fi
-  if [[ "$IS_CROSS" == true ]]; then
+  if [[ "$IS_CROSS" == true && "$ASCENT_EXTRACTS_ONLY" != true ]]; then
     die "--with-ascent requires a native build (cross-compilation cache detected); rerun without --with-ascent"
   fi
   local py_tag
-  py_tag="$(venv_python_tag)"
+  local profile="slim" target_python="" target_numpy="" target_mpi4py="" host_python=""
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    profile="extracts"
+    # Site-provided Python/NumPy/mpi4py share the same aarch64 Python 3.11.
+    # Environment overrides allow using another compatible public installation.
+    target_python="${PICNIX_ASCENT_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}"
+    target_numpy="${PICNIX_ASCENT_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}"
+    target_mpi4py="${PICNIX_ASCENT_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}"
+    host_python="${PICNIX_ASCENT_HOST_PYTHON_PREFIX:-$(spack_public_prefix k6mf2vt)}"
+    py_tag="${target_python}:${target_numpy}:${target_mpi4py}:${host_python}"
+  else
+    py_tag="$(venv_python_tag)"
+    if [[ "$ASCENT_FULL" == true ]]; then
+      profile="full"
+    fi
+  fi
+  local stamp_items=(
+    "script:$REPO_ROOT/scripts/install_ascent.sh"
+    "python_is_venv=true"
+    "profile=$profile"
+  )
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    stamp_items+=("target_python=$py_tag" "rendering=$ASCENT_RENDERING")
+  fi
   local expected
-  expected="$(compute_stamp ascent \
-    "script:$REPO_ROOT/scripts/install_ascent.sh" \
-    "python_is_venv=true" \
-    "profile=$([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)")"
+  expected="$(compute_stamp ascent "${stamp_items[@]}")"
   if [[ "$FORCE" == true ]]; then
     clear_stamp ascent
   fi
@@ -929,25 +1086,42 @@ install_ascent_component() {
   fi
   if [[ -d "$STACK_ASCENT" ]] && stamp_matches ascent "$expected"; then
     log "Ascent up to date: $STACK_ASCENT"
-    write_stamp_meta ascent \
-      "venv_python=$py_tag" \
-      "profile=$([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)"
+    write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
+    if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+      printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
+      printf 'rendering=%s\n' "$ASCENT_RENDERING" >>"$STAMP_DIR/ascent.meta"
+    fi
     return 0
   fi
-  log "--- Installing Ascent into $STACK_ASCENT ($([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)) ---"
+  log "--- Installing Ascent into $STACK_ASCENT ($profile) ---"
   apply_cache_compiler_env
-  local ascent_args=("$STACK_ASCENT" --python "$STACK_VENV_BIN" --python-is-venv)
-  if [[ "$ASCENT_FULL" == true ]]; then
+  local ascent_args=("$STACK_ASCENT")
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    local host_venv="$STACK_ASCENT/build-python-venv"
+    mkdir -p "$STACK_ASCENT"
+    uv venv "$host_venv" --python "$host_python/bin/python3.11" --seed --clear
+    uv pip install --python "$host_venv/bin/python" pip 'numpy==1.26.4'
+    ascent_args+=(--python "$host_venv/bin/python" --python-is-venv --slim
+      --cross-python-extracts --cache "$CACHE_FILE"
+      --target-python "$target_python" --target-numpy "$target_numpy")
+    if [[ "$ASCENT_RENDERING" == true ]]; then
+      ascent_args+=(--rendering)
+    fi
+  elif [[ "$ASCENT_FULL" == true ]]; then
+    ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--full)
   else
+    ascent_args+=(--python "$STACK_VENV_BIN" --python-is-venv)
     ascent_args+=(--slim)
   fi
   MPICC="$MPICC_EXECUTABLE" MPICXX="$MPICXX_EXECUTABLE" \
     "$REPO_ROOT/scripts/install_ascent.sh" "${ascent_args[@]}"
   write_stamp ascent "$expected"
-  write_stamp_meta ascent \
-    "venv_python=$py_tag" \
-    "profile=$([[ "$ASCENT_FULL" == true ]] && echo full || echo slim)"
+  write_stamp_meta ascent "venv_python=$py_tag" "profile=$profile"
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    printf 'target_python=%s\n' "$py_tag" >>"$STAMP_DIR/ascent.meta"
+    printf 'rendering=%s\n' "$ASCENT_RENDERING" >>"$STAMP_DIR/ascent.meta"
+  fi
 }
 
 ld_path_parts() {
@@ -958,7 +1132,8 @@ ld_path_parts() {
     local d
     for d in \
       "$STACK_ASCENT/ascent-checkout/lib" \
-      "$STACK_ASCENT"/conduit-*/lib
+      "$STACK_ASCENT"/conduit-*/lib \
+      "$STACK_ASCENT"/vtkm-*/lib
     do
       [[ -d "$d" ]] && parts+=("$d")
     done
@@ -1012,8 +1187,9 @@ write_env_sh() {
 #   source $ENV_SH
 #
 # Sets PATH/VIRTUAL_ENV without sourcing venv activate, so your shell prompt
-# does not change. Source this in job scripts too: it exports LD_LIBRARY_PATH
-# (Ascent/Conduit/ADIOS2) and puts the stack Python on PATH.
+# does not change. For native builds, compute-env.sh sources this file.
+# For cross builds, use compute-env.sh in the job instead: this login-node
+# venv cannot run on compute nodes.
 #
 # Compiler fingerprint: $COMPILER_FINGERPRINT
 # MPI C wrapper:   $MPICC_EXECUTABLE
@@ -1134,6 +1310,12 @@ Activate with:
 
   source $ENV_SH
 
+Compute nodes (after loading the matching modules):
+
+  source $STACK_DIR/compute-env.sh
+EOF
+  cat <<EOF
+
 Suggested configure:
 
 $suggested
@@ -1153,7 +1335,11 @@ check_stack() {
     failed=1
   else
     local mod
-    for mod in mpi4py numpy; do
+    local python_modules=(numpy)
+    if [[ "$IS_CROSS" != true ]]; then
+      python_modules+=(mpi4py)
+    fi
+    for mod in "${python_modules[@]}"; do
       if ! "$STACK_VENV_BIN" -c "import $mod" >/dev/null 2>&1; then
         err "python module not importable: $mod"
         failed=1
@@ -1213,10 +1399,22 @@ check_stack() {
     local adios_mode
     adios_mode="$(awk -F= '/^python_mode=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
     if [[ -n "$adios_mode" ]]; then
+      local adios_items=(
+        "script:$REPO_ROOT/scripts/install_adios2.sh"
+        "python_mode=$adios_mode"
+      )
+      local meta_target_python
+      meta_target_python="$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
+      if [[ -n "$meta_target_python" ]]; then
+        adios_items+=(
+          "target_python=$meta_target_python"
+          "target_numpy=$(awk -F= '/^target_numpy=/ {print $2}' "$STAMP_DIR/adios2.meta")"
+          "target_mpi4py=$(awk -F= '/^target_mpi4py=/ {print $2}' "$STAMP_DIR/adios2.meta")"
+          "host_python=$(awk -F= '/^host_python=/ {print $2}' "$STAMP_DIR/adios2.meta")"
+        )
+      fi
       local expected
-      expected="$(compute_stamp adios2 \
-        "script:$REPO_ROOT/scripts/install_adios2.sh" \
-        "python_mode=$adios_mode")"
+      expected="$(compute_stamp adios2 "${adios_items[@]}")"
       if [[ "$(cat "$(stamp_path adios2)")" != "$expected" ]]; then
         err "adios2 stamp does not match current fingerprint/script (rerun with --force if intended)"
         failed=1
@@ -1228,11 +1426,19 @@ check_stack() {
     local ascent_profile
     ascent_profile="$(awk -F= '/^profile=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
     if [[ -n "$ascent_profile" ]]; then
+      local ascent_items=(
+        "script:$REPO_ROOT/scripts/install_ascent.sh"
+        "python_is_venv=true"
+        "profile=$ascent_profile"
+      )
+      if [[ "$ascent_profile" == "extracts" ]]; then
+        local target_tag render_tag
+        target_tag="$(awk -F= '/^target_python=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+        render_tag="$(awk -F= '/^rendering=/ {print $2}' "$STAMP_DIR/ascent.meta" 2>/dev/null || true)"
+        ascent_items+=("target_python=$target_tag" "rendering=$render_tag")
+      fi
       local expected
-      expected="$(compute_stamp ascent \
-        "script:$REPO_ROOT/scripts/install_ascent.sh" \
-        "python_is_venv=true" \
-        "profile=$ascent_profile")"
+      expected="$(compute_stamp ascent "${ascent_items[@]}")"
       if [[ "$(cat "$(stamp_path ascent)")" != "$expected" ]]; then
         err "ascent stamp does not match current fingerprint/script (rerun with --force if intended)"
         failed=1
@@ -1241,7 +1447,7 @@ check_stack() {
   fi
 
   if [[ -f "$(stamp_path python)" && -f "$STAMP_DIR/python.meta" ]]; then
-    local want_picnix want_adios want_adios_py want_ascent want_full desired_py packages
+    local want_picnix want_adios want_adios_py want_ascent want_full desired_py packages want_extras
     want_picnix="$(awk -F= '/^with_picnix=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     want_adios="$(awk -F= '/^with_adios2=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     want_adios_py="$(awk -F= '/^with_adios2_python=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
@@ -1249,6 +1455,7 @@ check_stack() {
     want_full="$(awk -F= '/^ascent_full=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     desired_py="$(awk -F= '/^desired_python=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     packages="$(awk -F= '/^packages=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
+    want_extras="$(awk -F= '/^extras=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
     if [[ -n "$desired_py" && -n "$packages" ]]; then
       local py_items=(
         "with_picnix=$want_picnix"
@@ -1258,6 +1465,7 @@ check_stack() {
         "ascent_full=$want_full"
         "desired_python=$desired_py"
         "packages=$packages"
+        "extras=$want_extras"
       )
       local pyproject_hash
       pyproject_hash="$(awk -F= '/^pyproject_hash=/ {print $2}' "$STAMP_DIR/python.meta" || true)"
@@ -1278,8 +1486,28 @@ check_stack() {
       err "ADIOS2 CMake package missing under $STACK_ADIOS2"
       failed=1
     fi
-    if [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
-      log "python import adios2: ok"
+    local adios_python_mode=""
+    adios_python_mode="$(awk -F= '/^python_mode=/ {print $2}' "$STAMP_DIR/adios2.meta" 2>/dev/null || true)"
+    if [[ "$IS_CROSS" == true && "$adios_python_mode" == "on" ]]; then
+      local adios_py_mod=""
+      for d in "$STACK_ADIOS2"/lib/python3.11/site-packages/adios2 "$STACK_ADIOS2"/lib64/python3.11/site-packages/adios2; do
+        [[ -d "$d" ]] && adios_py_mod="$d"
+      done
+      if [[ -z "$adios_py_mod" ]]; then
+        err "ADIOS2 target Python module missing under $STACK_ADIOS2"
+        failed=1
+      else
+        log "ADIOS2 target Python module: $adios_py_mod"
+      fi
+    elif [[ "$adios_python_mode" == "on" ]]; then
+      if [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
+        log "python import adios2: ok"
+      else
+        err "adios2 not importable from stack venv (python_mode=on)"
+        failed=1
+      fi
+    elif [[ -x "$STACK_VENV_BIN" ]] && "$STACK_VENV_BIN" -c 'import adios2' >/dev/null 2>&1; then
+      log "python import adios2: ok (PyPI reader)"
     else
       log "python import adios2: not in stack venv (expected for C++-only ADIOS2; use python[adios] to read)"
     fi
@@ -1290,10 +1518,25 @@ check_stack() {
       err "AscentConfig.cmake missing under $STACK_ASCENT"
       failed=1
     fi
-    if [[ -x "$STACK_VENV_BIN" ]] && ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
+    if [[ -f "$STAMP_DIR/ascent.meta" ]] && grep -q '^profile=extracts$' "$STAMP_DIR/ascent.meta"; then
+      for path in "$STACK_ASCENT/python-modules/conduit/conduit_python.so" \
+                  "$STACK_ASCENT/python-modules/ascent/mpi/ascent_mpi_python.so"; do
+        if [[ ! -f "$path" ]]; then
+          err "missing Ascent cross-build artifact: $path"
+          failed=1
+        fi
+      done
+    elif [[ -x "$STACK_VENV_BIN" ]] && ! "$STACK_VENV_BIN" -c 'import conduit' >/dev/null 2>&1; then
       err "conduit not importable from stack venv"
       failed=1
     fi
+  fi
+
+  if [[ ! -f "$STACK_DIR/compute-env.sh" ]]; then
+    err "compute-env.sh missing under $STACK_DIR"
+    failed=1
+  else
+    log "compute-node environment: $STACK_DIR/compute-env.sh"
   fi
 
   if (( failed > 0 )); then
@@ -1344,11 +1587,22 @@ main() {
   resolve_compiler
   build_fingerprint
 
-  if [[ "$IS_CROSS" == true ]]; then
-    if [[ "$WITH_ADIOS2" == true || "$WITH_ASCENT" == true ]]; then
-      die "cross-compilation cache detected; --with-adios2/--with-ascent require a native build (default deps-only stack is OK)"
+  if [[ "$ASCENT_EXTRACTS_ONLY" == true ]]; then
+    if [[ "$IS_CROSS" != true || -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ]]; then
+      die "--with-ascent-rendering requires a Fugaku aarch64 cross-compilation cache"
     fi
-    log "--- Cross-compilation stack (deps only) ---"
+    if [[ "$ASCENT_FULL" == true ]]; then
+      die "--with-ascent-full cannot be combined with --with-ascent-rendering"
+    fi
+  fi
+  if [[ "$IS_CROSS" == true ]]; then
+    if [[ ( "$WITH_ASCENT" == true && "$ASCENT_EXTRACTS_ONLY" != true ) ]]; then
+      die "cross-compilation cache detected; --with-ascent needs --with-ascent-rendering"
+    fi
+    if [[ "$WITH_ADIOS2" == true && ( -z "$CACHE_FILE" || "$(cache_system_processor)" != "aarch64" ) ]]; then
+      die "cross-built ADIOS2 requires an aarch64 CMake cache (FFS float format is target-specific)"
+    fi
+    log "--- Cross-compilation stack (host Python, target C++ libraries) ---"
   fi
 
   log "--- Build stack: $STACK_DIR ---"
@@ -1364,6 +1618,13 @@ main() {
   install_ascent_component
   wire_python_paths
   write_env_sh
+  local target_python="" target_numpy="" target_mpi4py=""
+  if [[ "$IS_CROSS" == true && ( "$WITH_ADIOS2_PYTHON" == true || "$ASCENT_EXTRACTS_ONLY" == true ) ]]; then
+    target_python="${PICNIX_ASCENT_TARGET_PYTHON_PREFIX:-${PICNIX_ADIOS2_TARGET_PYTHON_PREFIX:-$(spack_public_prefix 6pchiok)}}"
+    target_numpy="${PICNIX_ASCENT_TARGET_NUMPY_PREFIX:-${PICNIX_ADIOS2_TARGET_NUMPY_PREFIX:-$(spack_public_prefix irn3kud)}}"
+    target_mpi4py="${PICNIX_ASCENT_TARGET_MPI4PY_PREFIX:-${PICNIX_ADIOS2_TARGET_MPI4PY_PREFIX:-$(spack_public_prefix qx6sbio)}}"
+  fi
+  write_compute_env "$target_python" "$target_numpy" "$target_mpi4py"
   print_summary
 }
 

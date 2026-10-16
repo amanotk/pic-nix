@@ -9,6 +9,9 @@ usage() {
   cat <<'EOF'
 Usage: scripts/install_ascent.sh [install_prefix] --python <python_executable> \
          [--python-is-venv] [--slim|--full]
+       scripts/install_ascent.sh [install_prefix] --python <host_python_venv> \
+         --cross-python-extracts [--rendering] --cache <fugaku_cache> \
+         --target-python <aarch64_python_prefix> --target-numpy <aarch64_numpy_prefix>
 
 Build Ascent, Conduit, and Ascent's visualization dependencies with MPI and
 Python support. The default installation prefix is "$HOME/usr".
@@ -25,8 +28,13 @@ Profiles:
            Build only what PIC-NIX needs: zlib, Conduit, VTK-m, Ascent.
            Skips HDF5, Silo, ZFP, MFEM, RAJA, Camp, Umpire.
   --full   Upstream build_ascent.sh TPL defaults (all packages above).
-           Docs/examples are still disabled (no Sphinx); Cython is required
-           in the target environment for ZFP Python bindings.
+            Docs/examples are still disabled (no Sphinx); Cython is required
+            in the target environment for ZFP Python bindings.
+  --cross-python-extracts
+            Build Conduit and Ascent with MPI and Python extracts for aarch64.
+            The host venv runs configure-time Python; the target prefixes
+            provide Python 3.11 and NumPy headers. Add --rendering to
+            also build VTK-m and VTK-h for scene rendering and volume rendering.
 
 Examples:
 
@@ -45,6 +53,11 @@ PREFIX="$HOME/usr"
 PYTHON_EXECUTABLE=""
 PYTHON_IS_VENV=false
 ASCENT_PROFILE="full"
+CROSS_PYTHON_EXTRACTS=false
+RENDERING=false
+CROSS_CACHE=""
+TARGET_PYTHON=""
+TARGET_NUMPY=""
 
 if (( $# > 0 )) && [[ "$1" != -* ]]; then
   PREFIX="$1"
@@ -64,6 +77,26 @@ while (( $# > 0 )); do
     --python-is-venv)
       PYTHON_IS_VENV=true
       shift
+      ;;
+    --cross-python-extracts)
+      CROSS_PYTHON_EXTRACTS=true
+      shift
+      ;;
+    --rendering)
+      RENDERING=true
+      shift
+      ;;
+    --cache|--target-python|--target-numpy)
+      if (( $# < 2 )); then
+        echo "Missing path after $1" >&2
+        exit 2
+      fi
+      case "$1" in
+        --cache) CROSS_CACHE="$2" ;;
+        --target-python) TARGET_PYTHON="$2" ;;
+        --target-numpy) TARGET_NUMPY="$2" ;;
+      esac
+      shift 2
       ;;
     --slim)
       ASCENT_PROFILE="slim"
@@ -93,6 +126,31 @@ fi
 
 if [[ "$PREFIX" != /* ]]; then
   PREFIX="$PWD/$PREFIX"
+fi
+
+if [[ "$RENDERING" == true && "$CROSS_PYTHON_EXTRACTS" != true ]]; then
+  echo "--rendering requires --cross-python-extracts" >&2
+  exit 2
+fi
+
+if [[ "$CROSS_PYTHON_EXTRACTS" == true ]]; then
+  if [[ "$ASCENT_PROFILE" == "full" || "$PYTHON_IS_VENV" != true ]]; then
+    echo "--cross-python-extracts requires --slim and --python-is-venv" >&2
+    exit 2
+  fi
+  if [[ -z "$CROSS_CACHE" || -z "$TARGET_PYTHON" || -z "$TARGET_NUMPY" ]]; then
+    echo "--cross-python-extracts requires --cache, --target-python, and --target-numpy" >&2
+    exit 2
+  fi
+  for variable in CROSS_CACHE TARGET_PYTHON TARGET_NUMPY; do
+    if [[ "${!variable}" != /* ]]; then
+      printf -v "$variable" '%s/%s' "$PWD" "${!variable}"
+    fi
+  done
+  if [[ ! -f "$CROSS_CACHE" || ! -f "$TARGET_PYTHON/include/python3.11/Python.h" || ! -f "$TARGET_NUMPY/lib/python3.11/site-packages/numpy/core/include/numpy/arrayobject.h" ]]; then
+    echo "Missing cross cache, target Python 3.11 headers, or target NumPy headers" >&2
+    exit 2
+  fi
 fi
 
 if [[ "$PYTHON_EXECUTABLE" != */* ]]; then
@@ -165,6 +223,146 @@ if ! cmake_is_supported; then
   "$BUILDDIR/cmake-venv/bin/python" -m pip install \
     "cmake==$CMAKE_BOOTSTRAP_VERSION"
   export PATH="$BUILDDIR/cmake-venv/bin:$PATH"
+fi
+
+install_cross_python_extracts() {
+  local conduit_dir="$BUILDDIR/conduit" ascent_dir="$BUILDDIR/ascent"
+  local conduit_prefix="$PREFIX/conduit-v$ASCENT_VERSION"
+  local ascent_prefix="$PREFIX/ascent-checkout"
+  local python_modules="$PREFIX/python-modules"
+
+  if ! "$PYTHON_EXECUTABLE" -c 'import pip, numpy; assert numpy.__version__ == "1.26.4"; import sys; assert sys.version_info[:2] == (3, 11)' >/dev/null 2>&1; then
+    echo "Cross-build host Python must be 3.11 with pip and NumPy 1.26.4: $PYTHON_EXECUTABLE" >&2
+    exit 2
+  fi
+  if [[ ! -f "$TARGET_PYTHON/lib/libpython3.11.so" ]]; then
+    echo "Target Python library not found under $TARGET_PYTHON" >&2
+    exit 2
+  fi
+
+  git clone https://github.com/LLNL/conduit.git "$conduit_dir" \
+    --branch "v$ASCENT_VERSION" --depth 1 --recurse-submodules --shallow-submodules
+  git clone https://github.com/Alpine-DAV/ascent.git "$ascent_dir" \
+    --branch "v$ASCENT_VERSION" --depth 1 --recurse-submodules --shallow-submodules
+
+  # Upstream derives Python headers and libpython from the executable. Run
+  # pure-Python build steps with the x86_64 venv, but compile against the
+  # matching aarch64 Python/NumPy ABI. Fail if the pinned upstream layout moves.
+  "$PYTHON_EXECUTABLE" - "$conduit_dir" "$ascent_dir" "$TARGET_PYTHON" "$TARGET_NUMPY" <<'PY'
+import sys
+from pathlib import Path
+
+conduit, ascent, target_python, target_numpy = map(Path, sys.argv[1:])
+python_library = target_python / "lib/libpython3.11.so"
+python_include = target_python / "include/python3.11"
+python_site = target_python / "lib/python3.11/site-packages"
+numpy_include = target_numpy / "lib/python3.11/site-packages/numpy/core/include"
+
+
+def insert_before(path, marker, insertion):
+    text = path.read_text()
+    if text.count(marker) != 1:
+        raise RuntimeError("Unexpected upstream CMake layout: {}".format(path))
+    path.write_text(text.replace(marker, insertion + marker, 1))
+
+
+python_override = (
+    "# Use the target Python ABI for cross-compiled extensions.\n"
+    'set(PYTHON_LIBRARY "{}")\n'
+    'set(PYTHON_INCLUDE_DIR "{}")\n'
+    'set(PYTHON_LIBRARY "${{PYTHON_LIBRARY}}" CACHE FILEPATH "" FORCE)\n'
+    'set(PYTHON_INCLUDE_DIR "${{PYTHON_INCLUDE_DIR}}" CACHE PATH "" FORCE)\n'
+).format(python_library, python_include)
+marker = 'MESSAGE(STATUS "{PythonLibs from PythonInterp} using: PYTHON_LIBRARY=${PYTHON_LIBRARY}")'
+for project in (conduit, ascent):
+    insert_before(
+        project / "src/cmake/thirdparty/SetupPython.cmake", marker, python_override
+    )
+
+insert_before(
+    conduit / "src/cmake/Setup3rdParty.cmake",
+    "include(cmake/thirdparty/FindNumPy.cmake)",
+    'set(NUMPY_INCLUDE_DIRS "{}")\n'.format(numpy_include),
+)
+insert_before(
+    ascent / "src/cmake/thirdparty/SetupPython.cmake",
+    "# for embedded python, we need to know where the site packages dir is",
+    'set(PYTHON_SITE_PACKAGES_DIR "{}")\n'.format(python_site),
+)
+PY
+
+  echo "--- Cross-building Conduit with Python extracts ---"
+  cmake -S "$conduit_dir/src" -B "$conduit_dir/build" -C "$CROSS_CACHE" \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$conduit_prefix" \
+    -DENABLE_MPI=ON -DENABLE_PYTHON=ON -DENABLE_FORTRAN=OFF \
+    -DENABLE_TESTS=OFF -DENABLE_EXAMPLES=OFF -DENABLE_UTILS=OFF \
+    -DENABLE_DOCS=OFF -DENABLE_RELAY_WEBSERVER=ON \
+    -DPYTHON_EXECUTABLE="$PYTHON_EXECUTABLE" \
+    -DPYTHON_MODULE_INSTALL_PREFIX="$python_modules"
+  cmake --build "$conduit_dir/build" --parallel "$BUILD_JOBS"
+  cmake --install "$conduit_dir/build"
+
+  local ascent_vtkh=OFF ascent_apcomp=OFF ascent_vtkm_args=()
+  if [[ "$RENDERING" == true ]]; then
+    local vtkm_dir="$BUILDDIR/vtkm" vtkm_prefix="$PREFIX/vtkm-v2.3.0"
+    echo "--- Cross-building VTK-m 2.3.0 with rendering ---"
+    git clone https://gitlab.kitware.com/vtk/vtk-m.git "$vtkm_dir" \
+      --branch v2.3.0 --depth 1
+    git -C "$vtkm_dir" apply \
+      "$ascent_dir/scripts/build_ascent/2025_06_18_vtkm_z_extents_ray_culling_bugfix_viskores_mr109.patch"
+    cmake -S "$vtkm_dir" -B "$vtkm_dir/build" -C "$CROSS_CACHE" \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$vtkm_prefix" \
+      -DBUILD_SHARED_LIBS=ON -DVTKm_USE_64BIT_IDS=OFF \
+      -DVTKm_USE_DOUBLE_PRECISION=ON \
+      -DVTKm_USE_DEFAULT_TYPES_FOR_ASCENT=ON \
+      -DVTKm_ENABLE_MPI=ON -DVTKm_ENABLE_OPENMP=ON \
+      -DVTKm_ENABLE_RENDERING=ON -DVTKm_ENABLE_TESTING=OFF \
+      -DBUILD_TESTING=OFF -DVTKm_ENABLE_BENCHMARKS=OFF
+    cmake --build "$vtkm_dir/build" --parallel "$BUILD_JOBS"
+    cmake --install "$vtkm_dir/build"
+    ascent_vtkh=ON
+    ascent_apcomp=ON
+    ascent_vtkm_args=(-DVTKM_DIR="$vtkm_prefix")
+  fi
+
+  echo "--- Cross-building Ascent with Python extracts ---"
+  cmake -S "$ascent_dir/src" -B "$ascent_dir/build" -C "$CROSS_CACHE" \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$ascent_prefix" \
+    -DENABLE_MPI=ON -DENABLE_SERIAL=OFF -DENABLE_PYTHON=ON \
+    -DENABLE_FORTRAN=OFF -DENABLE_TESTS=OFF -DENABLE_EXAMPLES=OFF \
+    -DENABLE_UTILS=OFF -DENABLE_DOCS=OFF \
+    "-DENABLE_VTKH=$ascent_vtkh" \
+    "-DENABLE_APCOMP=$ascent_apcomp" \
+    -DENABLE_DRAY=OFF \
+    "${ascent_vtkm_args[@]+"${ascent_vtkm_args[@]}"}" \
+    -DCONDUIT_DIR="$conduit_prefix" \
+    -DCONDUIT_PYTHON_MODULE_DIR="$python_modules" \
+    -DPYTHON_EXECUTABLE="$PYTHON_EXECUTABLE" \
+    -DPYTHON_MODULE_INSTALL_PREFIX="$python_modules"
+  cmake --build "$ascent_dir/build" --parallel "$BUILD_JOBS"
+  cmake --install "$ascent_dir/build"
+
+  [[ -f "$ascent_prefix/lib/cmake/ascent/AscentConfig.cmake" ]] || {
+    echo "Ascent CMake package not installed under $ascent_prefix" >&2
+    exit 1
+  }
+  [[ -f "$python_modules/ascent/mpi/ascent_mpi_python.so" ]] || {
+    echo "Ascent aarch64 Python module not installed under $python_modules" >&2
+    exit 1
+  }
+  local rendering_desc="without rendering"
+  [[ "$RENDERING" == true ]] && rendering_desc="with VTK-h rendering"
+  cat <<EOF
+
+Ascent $ASCENT_VERSION (MPI + Python extracts, $rendering_desc) installed to $PREFIX.
+Target Python modules: $python_modules
+EOF
+}
+
+if [[ "$CROSS_PYTHON_EXTRACTS" == true ]]; then
+  mkdir -p "$PREFIX"
+  install_cross_python_extracts
+  exit 0
 fi
 
 mkdir -p "$PREFIX"
